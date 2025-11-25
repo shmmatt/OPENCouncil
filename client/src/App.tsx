@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import AdminLogin from "@/pages/admin-login";
 import AdminDocuments from "@/pages/admin-documents";
+import AdminBulkUpload from "@/pages/admin-bulk-upload";
 import Chat from "@/pages/chat";
 
 function Router() {
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/chat" component={Chat} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/documents" component={AdminDocuments} />
+      <Route path="/admin/bulk-upload" component={AdminBulkUpload} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -11,7 +11,9 @@ import type {
   ChatSession, 
   InsertChatSession,
   ChatMessage,
-  InsertChatMessage 
+  InsertChatMessage,
+  TempUpload,
+  InsertTempUpload
 } from "@shared/schema";
 
 // Configure WebSocket for Neon
@@ -40,6 +42,11 @@ export interface IStorage {
   // Chat message operations
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   getMessagesBySessionId(sessionId: string): Promise<ChatMessage[]>;
+
+  // Temp upload operations
+  createTempUpload(upload: InsertTempUpload): Promise<TempUpload>;
+  getTempUploadById(id: string): Promise<TempUpload | undefined>;
+  deleteTempUpload(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -111,6 +118,23 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(schema.chatMessages)
       .where(eq(schema.chatMessages.sessionId, sessionId));
+  }
+
+  async createTempUpload(upload: InsertTempUpload): Promise<TempUpload> {
+    const [result] = await db.insert(schema.tempUploads).values(upload).returning();
+    return result;
+  }
+
+  async getTempUploadById(id: string): Promise<TempUpload | undefined> {
+    const [result] = await db
+      .select()
+      .from(schema.tempUploads)
+      .where(eq(schema.tempUploads.id, id));
+    return result;
+  }
+
+  async deleteTempUpload(id: string): Promise<void> {
+    await db.delete(schema.tempUploads).where(eq(schema.tempUploads.id, id));
   }
 }
 

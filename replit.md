@@ -36,6 +36,7 @@ Preferred communication style: Simple, everyday language.
 - `/chat` - Main chat interface (default)
 - `/admin/login` - Admin authentication
 - `/admin/documents` - Document management dashboard
+- `/admin/bulk-upload` - Bulk document upload with AI metadata suggestions
 
 **Design Rationale:** 
 The choice of shadcn/ui provides a professional, accessible component library that can be customized while maintaining consistency. Vite offers fast development builds. The lightweight stack (Wouter vs React Router, TanStack Query for data fetching) keeps bundle sizes small while providing necessary functionality.
@@ -51,6 +52,8 @@ The choice of shadcn/ui provides a professional, accessible component library th
 - `GET /api/admin/documents` - Retrieve document list (protected)
 - `POST /api/admin/documents/upload` - Upload documents to Gemini File Search (protected)
 - `DELETE /api/admin/documents/:id` - Remove documents (protected)
+- `POST /api/admin/bulk-upload/analyze` - Upload multiple files, extract text preview, and get AI-suggested metadata (protected)
+- `POST /api/admin/bulk-upload/finalize` - Confirm metadata and upload files to Gemini File Search (protected)
 - `POST /api/chat/sessions` - Create new chat session
 - `GET /api/chat/sessions` - List all chat sessions
 - `GET /api/chat/sessions/:id/messages` - Retrieve messages for a session
@@ -105,6 +108,15 @@ Express provides flexibility and a mature ecosystem. JWT tokens enable stateless
    - `role` (user/assistant)
    - `content` (message text)
    - `citations` (JSON string of source documents)
+   - `createdAt`
+
+5. **tempUploads** - Temporary file storage during bulk upload analysis
+   - `id` (UUID primary key)
+   - `filename` (storage filename)
+   - `originalName` (user-provided name)
+   - `filePath` (path to temp file on disk)
+   - `previewText` (extracted text for AI analysis)
+   - `suggestedCategory`, `suggestedTown`, `suggestedBoard`, `suggestedYear`, `suggestedNotes` (AI-suggested metadata)
    - `createdAt`
 
 **Migration Strategy:** Drizzle Kit with migrations stored in `/migrations` directory

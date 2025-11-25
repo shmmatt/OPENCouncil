@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { authenticateAdmin, generateToken } from "./middleware/auth";
 import { uploadDocumentToFileStore, askQuestionWithFileSearch } from "./gemini-client";
+import { extractPreviewText, suggestMetadataFromContent } from "./bulk-upload-helper";
 import { insertDocumentSchema, insertChatMessageSchema } from "@shared/schema";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -182,6 +183,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to delete document" });
     }
   });
+
+  // Bulk upload - Analyze files and suggest metadata (protected)
+  app.post(
+    "/api/admin/bulk-upload/analyze",
+    authenticateAdmin,
+    upload.array("files", 50),
+    async (req, res) => {
+      const uploadedFiles = req.files as Express.Multer.File[];
+      
+      try {
+        if (!uploadedFiles || uploadedFiles.length === 0) {
+          return res.status(400).json({ message: "No files uploaded" });
+        }
+
+        const results = [];
+
+        for (const file of uploadedFiles) {
+          try {
+            const previewText = await extractPreviewText(file.path, file.originalname);
+            const suggestedMetadata = await suggestMetadataFromContent(file.originalname, previewText);
+            
+            const tempUpload = await storage.createTempUpload({
+              filename: file.filename,
+              originalName: file.originalname,
+              filePath: file.path,
+              previewText: previewText.slice(0, 5000),
+              suggestedCategory: suggestedMetadata.category,
+              suggestedTown: suggestedMetadata.town,
+              suggestedBoard: suggestedMetadata.board,
+              suggestedYear: suggestedMetadata.year,
+              suggestedNotes: suggestedMetadata.notes,
+            });
+
+            results.push({
+              tempId: tempUpload.id,
+              filename: file.originalname,
+              suggestedMetadata,
+            });
+          } catch (fileError) {
+            console.error(`Error processing file ${file.originalname}:`, fileError);
+            try {
+              await fs.unlink(file.path);
+            } catch (e) {
+              console.error("Error cleaning up failed file:", e);
+            }
+            results.push({
+              tempId: null,
+              filename: file.originalname,
+              error: fileError instanceof Error ? fileError.message : "Processing failed",
+              suggestedMetadata: {
+                category: "misc_other",
+                town: "",
+                board: "",
+                year: "",
+                notes: "",
+              },
+            });
+          }
+        }
+
+        res.json({ files: results });
+      } catch (error) {
+        console.error("Error in bulk upload analyze:", error);
+        
+        for (const file of uploadedFiles) {
+          try {
+            await fs.unlink(file.path);
+          } catch (e) {
+            console.error("Error cleaning up file:", e);
+          }
+        }
+        
+        res.status(500).json({ message: "Failed to analyze files" });
+      }
+    }
+  );
+
+  // Bulk upload - Finalize and upload to File Search (protected)
+  app.post("/api/admin/bulk-upload/finalize", authenticateAdmin, async (req, res) => {
+    try {
+      const { files } = req.body;
+      
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        return res.status(400).json({ message: "No files to upload" });
+      }
+
+      const uploaded: Array<{ filename: string; id: string }> = [];
+      const failed: Array<{ filename: string; error: string }> = [];
+
+      for (const fileData of files) {
+        const { tempId, metadata } = fileData;
+        let tempUpload = null;
+        
+        try {
+          if (!tempId) {
+            failed.push({ filename: fileData.filename || "Unknown", error: "No temp ID provided" });
+            continue;
+          }
+
+          tempUpload = await storage.getTempUploadById(tempId);
+          if (!tempUpload) {
+            failed.push({ filename: fileData.filename || "Unknown", error: "Temporary file not found or expired" });
+            continue;
+          }
+
+          let parsedMetadata;
+          try {
+            parsedMetadata = documentMetadataSchema.parse(metadata);
+          } catch (validationError) {
+            const errorMsg = validationError instanceof z.ZodError 
+              ? validationError.errors.map(e => e.message).join(", ")
+              : "Invalid metadata";
+            failed.push({ filename: tempUpload.originalName, error: errorMsg });
+            await cleanupTempUpload(tempId, tempUpload.filePath);
+            continue;
+          }
+
+          const { fileId, storeId } = await uploadDocumentToFileStore(
+            tempUpload.filePath,
+            tempUpload.originalName,
+            parsedMetadata
+          );
+
+          const yearValue = parsedMetadata.year && /^\d{4}$/.test(parsedMetadata.year) 
+            ? parseInt(parsedMetadata.year, 10) 
+            : null;
+
+          const document = await storage.createDocument({
+            filename: tempUpload.filename,
+            originalName: tempUpload.originalName,
+            fileSearchFileId: fileId,
+            fileSearchStoreId: storeId,
+            category: parsedMetadata.category,
+            town: parsedMetadata.town || null,
+            board: parsedMetadata.board || null,
+            year: yearValue,
+            notes: parsedMetadata.notes || null,
+          });
+
+          await cleanupTempUpload(tempId, tempUpload.filePath);
+
+          uploaded.push({ filename: tempUpload.originalName, id: document.id });
+        } catch (fileError) {
+          console.error(`Error finalizing file ${tempId}:`, fileError);
+          
+          if (tempUpload) {
+            await cleanupTempUpload(tempId, tempUpload.filePath);
+          }
+          
+          failed.push({ 
+            filename: tempUpload?.originalName || fileData.filename || "Unknown", 
+            error: fileError instanceof Error ? fileError.message : "Upload failed" 
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        uploaded,
+        failed,
+      });
+    } catch (error) {
+      console.error("Error in bulk upload finalize:", error);
+      res.status(500).json({ message: "Failed to finalize uploads" });
+    }
+  });
+
+  async function cleanupTempUpload(tempId: string, filePath: string) {
+    try {
+      await fs.unlink(filePath);
+    } catch (e) {
+      console.log("Could not delete temp file:", e);
+    }
+    try {
+      await storage.deleteTempUpload(tempId);
+    } catch (e) {
+      console.log("Could not delete temp upload record:", e);
+    }
+  }
 
   // Get all chat sessions
   app.get("/api/chat/sessions", async (req, res) => {

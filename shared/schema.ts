@@ -40,6 +40,20 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const tempUploads = pgTable("temp_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  filename: text("filename").notNull(),
+  originalName: text("original_name").notNull(),
+  filePath: text("file_path").notNull(),
+  previewText: text("preview_text"),
+  suggestedCategory: text("suggested_category"),
+  suggestedTown: text("suggested_town"),
+  suggestedBoard: text("suggested_board"),
+  suggestedYear: text("suggested_year"),
+  suggestedNotes: text("suggested_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
   createdAt: true,
@@ -61,6 +75,11 @@ export const insertAdminSchema = createInsertSchema(admins).omit({
   createdAt: true,
 });
 
+export const insertTempUploadSchema = createInsertSchema(tempUploads).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
 
@@ -72,3 +91,6 @@ export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;
 
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+
+export type TempUpload = typeof tempUploads.$inferSelect;
+export type InsertTempUpload = z.infer<typeof insertTempUploadSchema>;
