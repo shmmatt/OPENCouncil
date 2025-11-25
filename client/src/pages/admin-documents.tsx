@@ -66,6 +66,21 @@ export default function AdminDocuments() {
 
   const { data: documents, isLoading } = useQuery<Document[]>({
     queryKey: ["/api/admin/documents"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/documents", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("adminToken");
+          setLocation("/admin/login");
+          throw new Error("Session expired");
+        }
+        throw new Error("Failed to fetch documents");
+      }
+      return response.json();
+    },
   });
 
   const uploadMutation = useMutation({
