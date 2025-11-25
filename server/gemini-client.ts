@@ -1,9 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
-import * as fs from "fs";
 import { getOrCreateFileSearchStoreId, setFileSearchStoreId } from "./gemini-store";
 
 // Initialize Gemini client with API key
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+export interface DocumentMetadata {
+  category: string;
+  town?: string;
+  board?: string;
+  year?: string;
+  notes?: string;
+}
 
 interface UploadResult {
   fileId: string;
@@ -13,7 +20,7 @@ interface UploadResult {
 export async function uploadDocumentToFileStore(
   filePath: string,
   filename: string,
-  metadata: Record<string, string>
+  metadata: DocumentMetadata
 ): Promise<UploadResult> {
   try {
     // Get or create File Search store
@@ -21,36 +28,68 @@ export async function uploadDocumentToFileStore(
     
     if (!storeId) {
       const store = await ai.fileSearchStores.create({
-        config: { display_name: "OPENCouncil Municipal Documents" },
+        config: { displayName: "OPENCouncil Municipal Documents" },
       });
-      storeId = store.name;
-      setFileSearchStoreId(storeId);
-      console.log(`Created File Search store: ${storeId}`);
+      storeId = store.name || "";
+      if (storeId) {
+        setFileSearchStoreId(storeId);
+        console.log(`Created File Search store: ${storeId}`);
+      } else {
+        throw new Error("Failed to create File Search store");
+      }
+    }
+
+    // Build display name with metadata for better searchability
+    const displayName = buildDisplayName(filename, metadata);
+
+    // Build custom metadata for filtering (only include non-empty values)
+    const customMetadata: Array<{ key: string; stringValue: string }> = [];
+    
+    // Category is always required
+    customMetadata.push({ key: "category", stringValue: metadata.category });
+    
+    // Only add optional fields if they have values
+    if (metadata.town) {
+      customMetadata.push({ key: "town", stringValue: metadata.town });
+    }
+    if (metadata.board) {
+      customMetadata.push({ key: "board", stringValue: metadata.board });
+    }
+    if (metadata.year) {
+      customMetadata.push({ key: "year", stringValue: metadata.year });
+    }
+    if (metadata.notes) {
+      customMetadata.push({ key: "notes", stringValue: metadata.notes });
     }
 
     // Upload and import file to File Search store
     const operation = await ai.fileSearchStores.uploadToFileSearchStore({
       file: filePath,
-      file_search_store_name: storeId,
+      fileSearchStoreName: storeId,
       config: {
-        display_name: filename,
-        chunking_config: {
-          white_space_config: {
-            max_tokens_per_chunk: 200,
-            max_overlap_tokens: 20,
+        displayName: displayName,
+        customMetadata: customMetadata,
+        chunkingConfig: {
+          whiteSpaceConfig: {
+            maxTokensPerChunk: 200,
+            maxOverlapTokens: 20,
           },
         },
       },
     });
 
     // Wait for operation to complete
-    let completedOp = operation;
+    let completedOp: any = operation;
     let attempts = 0;
     const maxAttempts = 30;
     
     while (!completedOp.done && attempts < maxAttempts) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      completedOp = await ai.operations.get(completedOp);
+      // Use { name: opName } per SDK contract
+      const opName = completedOp.name;
+      if (opName) {
+        completedOp = await ai.operations.get({ name: opName } as any);
+      }
       attempts++;
     }
 
@@ -58,16 +97,38 @@ export async function uploadDocumentToFileStore(
       throw new Error("Document indexing timed out");
     }
 
-    console.log(`Document uploaded and indexed: ${filename}`);
+    // Extract the file ID from response.files[0].name per IUploadFileResponse structure
+    const fileId = completedOp.response?.files?.[0]?.name;
+    
+    if (!fileId) {
+      console.error("Upload response structure:", JSON.stringify(completedOp, null, 2));
+      throw new Error("Failed to extract file ID from Gemini upload response");
+    }
+
+    console.log(`Document uploaded and indexed: ${displayName}`);
+    console.log(`File ID: ${fileId}`);
+    console.log(`Metadata: category=${metadata.category}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}`);
 
     return {
-      fileId: completedOp.name || "uploaded",
+      fileId,
       storeId: storeId,
     };
   } catch (error) {
     console.error("Error uploading to File Search:", error);
     throw new Error(`Failed to upload document: ${error}`);
   }
+}
+
+function buildDisplayName(filename: string, metadata: DocumentMetadata): string {
+  const parts: string[] = [];
+  
+  if (metadata.town) parts.push(metadata.town);
+  if (metadata.board) parts.push(metadata.board);
+  if (metadata.category) parts.push(metadata.category.replace(/_/g, ' '));
+  if (metadata.year) parts.push(metadata.year);
+  
+  const prefix = parts.length > 0 ? `[${parts.join(' - ')}] ` : '';
+  return `${prefix}${filename}`;
 }
 
 interface AskQuestionOptions {
@@ -94,7 +155,7 @@ export async function askQuestionWithFileSearch(
     }
 
     // Build conversation history
-    const contents: any[] = [];
+    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     
     // Add chat history
     options.chatHistory.slice(-10).forEach((msg) => {
@@ -132,10 +193,10 @@ Guidelines:
         systemInstruction: systemInstruction,
         tools: [
           {
-            file_search: {
-              file_search_store_names: [storeId],
+            fileSearch: {
+              fileSearchStoreNames: [storeId],
             },
-          },
+          } as any,
         ],
       },
     });

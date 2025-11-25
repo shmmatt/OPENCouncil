@@ -9,6 +9,26 @@ import { uploadDocumentToFileStore, askQuestionWithFileSearch } from "./gemini-c
 import { insertDocumentSchema, insertChatMessageSchema } from "@shared/schema";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { z } from "zod";
+
+const ALLOWED_CATEGORIES = [
+  "budget", "zoning", "meeting_minutes", "town_report", "warrant_article",
+  "ordinance", "policy", "planning_board_docs", "zba_docs", "licensing_permits",
+  "cip", "elections", "misc_other"
+] as const;
+
+const documentMetadataSchema = z.object({
+  category: z.enum(ALLOWED_CATEGORIES),
+  town: z.string().optional().transform(v => v?.trim() || ""),
+  board: z.string().optional().transform(v => v?.trim() || ""),
+  year: z.string().optional().transform(v => {
+    const trimmed = v?.trim() || "";
+    return /^\d{4}$/.test(trimmed) ? trimmed : "";
+  }),
+  notes: z.string().optional().transform(v => v?.trim() || ""),
+});
+
+export type DocumentMetadata = z.infer<typeof documentMetadataSchema>;
 
 // Configure multer for file uploads
 const upload = multer({
@@ -81,18 +101,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "No file uploaded" });
         }
 
-        const { category, town, board, year, notes } = req.body;
+        // Parse and validate metadata JSON
+        const metadataRaw = req.body.metadata;
+        if (!metadataRaw) {
+          return res.status(400).json({ message: "Document metadata is required" });
+        }
 
-        // Upload to Gemini File Search
+        let parsedMetadata: DocumentMetadata;
+        try {
+          const metadataJson = JSON.parse(metadataRaw);
+          parsedMetadata = documentMetadataSchema.parse(metadataJson);
+        } catch (parseError) {
+          console.error("Metadata validation error:", parseError);
+          return res.status(400).json({ 
+            message: parseError instanceof z.ZodError 
+              ? `Invalid metadata: ${parseError.errors.map(e => e.message).join(", ")}`
+              : "Invalid metadata format" 
+          });
+        }
+
+        // Upload to Gemini File Search with validated metadata
         const { fileId, storeId } = await uploadDocumentToFileStore(
           req.file.path,
           req.file.originalname,
-          {
-            category: category || "",
-            town: town || "",
-            board: board || "",
-            year: year || "",
-          }
+          parsedMetadata
         );
 
         // Save document metadata to database
@@ -101,11 +133,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           originalName: req.file.originalname,
           fileSearchFileId: fileId,
           fileSearchStoreId: storeId,
-          category: category || null,
-          town: town || null,
-          board: board || null,
-          year: year ? parseInt(year) : null,
-          notes: notes || null,
+          category: parsedMetadata.category,
+          town: parsedMetadata.town || null,
+          board: parsedMetadata.board || null,
+          year: parsedMetadata.year ? parseInt(parsedMetadata.year) : null,
+          notes: parsedMetadata.notes || null,
         });
 
         // Clean up uploaded file

@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -22,6 +29,28 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Upload, Trash2, LogOut, FileText, Loader2 } from "lucide-react";
 import type { Document } from "@shared/schema";
+
+const CATEGORY_OPTIONS = [
+  { label: "Budget", value: "budget" },
+  { label: "Zoning", value: "zoning" },
+  { label: "Meeting Minutes", value: "meeting_minutes" },
+  { label: "Town Report", value: "town_report" },
+  { label: "Warrant Article", value: "warrant_article" },
+  { label: "Ordinance", value: "ordinance" },
+  { label: "Policy", value: "policy" },
+  { label: "Planning Board Docs", value: "planning_board_docs" },
+  { label: "ZBA Docs", value: "zba_docs" },
+  { label: "Licensing/Permits", value: "licensing_permits" },
+  { label: "CIP", value: "cip" },
+  { label: "Elections", value: "elections" },
+  { label: "Misc / Other", value: "misc_other" },
+];
+
+function getCategoryLabel(value: string | null): string {
+  if (!value) return "-";
+  const option = CATEGORY_OPTIONS.find((opt) => opt.value === value);
+  return option ? option.label : value;
+}
 
 export default function AdminDocuments() {
   const [, setLocation] = useLocation();
@@ -82,9 +111,15 @@ export default function AdminDocuments() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const token = localStorage.getItem("adminToken");
-      await apiRequest("DELETE", `/api/admin/documents/${id}`, undefined, {
+      const response = await fetch(`/api/admin/documents/${id}`, {
+        method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Delete failed");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
@@ -97,15 +132,19 @@ export default function AdminDocuments() {
 
   const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || !category) return;
+
+    const metadata = {
+      category,
+      town: town.trim(),
+      board: board.trim(),
+      year: year.trim(),
+      notes: notes.trim(),
+    };
 
     const formData = new FormData();
     formData.append("file", file);
-    if (category) formData.append("category", category);
-    if (town) formData.append("town", town);
-    if (board) formData.append("board", board);
-    if (year) formData.append("year", year);
-    if (notes) formData.append("notes", notes);
+    formData.append("metadata", JSON.stringify(metadata));
 
     uploadMutation.mutate(formData);
   };
@@ -164,7 +203,7 @@ export default function AdminDocuments() {
                   id="file-upload"
                   type="file"
                   accept=".pdf,.docx,.txt"
-                  onChange={(e) => setFile(e.files?.[0] || null)}
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
                   required
                   data-testid="input-file"
                 />
@@ -175,14 +214,19 @@ export default function AdminDocuments() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Input
-                    id="category"
-                    placeholder="e.g., Budget, Zoning, Meeting Minutes"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    data-testid="input-category"
-                  />
+                  <Label htmlFor="category">Category *</Label>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger id="category" data-testid="select-category">
+                      <SelectValue placeholder="Select category..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="town">Town</Label>
@@ -231,7 +275,7 @@ export default function AdminDocuments() {
 
               <Button 
                 type="submit" 
-                disabled={!file || uploadMutation.isPending}
+                disabled={!file || !category || uploadMutation.isPending}
                 data-testid="button-upload"
               >
                 {uploadMutation.isPending ? (
@@ -288,7 +332,7 @@ export default function AdminDocuments() {
                         <TableCell className="font-medium font-mono text-sm">
                           {doc.originalName}
                         </TableCell>
-                        <TableCell>{doc.category || "-"}</TableCell>
+                        <TableCell>{getCategoryLabel(doc.category)}</TableCell>
                         <TableCell>{doc.town || "-"}</TableCell>
                         <TableCell>{doc.board || "-"}</TableCell>
                         <TableCell>{doc.year || "-"}</TableCell>
