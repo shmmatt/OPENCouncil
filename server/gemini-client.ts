@@ -99,47 +99,20 @@ export async function uploadDocumentToFileStore(
     });
 
     // Log initial operation structure for debugging
-    console.log("Initial upload operation:", JSON.stringify(operation, null, 2));
+    console.log("Upload operation response:", JSON.stringify(operation, null, 2));
 
-    // Wait for operation to complete
-    let completedOp: any = operation;
-    let attempts = 0;
-    const maxAttempts = 30;
+    // The upload operation returns documentName directly in response - that's our file ID
+    // No polling needed - the upload completes synchronously
+    const opResponse = operation as any;
     
-    // Check if already done
-    if (!completedOp.done && completedOp.name) {
-      while (!completedOp.done && attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const opName = completedOp.name;
-        console.log(`Polling operation: ${opName}, attempt ${attempts + 1}`);
-        try {
-          // Pass the operation name string directly
-          completedOp = await ai.operations.get(opName);
-        } catch (pollError) {
-          console.error("Error polling operation:", pollError);
-          // If polling fails, assume the original operation is still valid
-          break;
-        }
-        attempts++;
-      }
-    }
-
-    console.log("Completed operation:", JSON.stringify(completedOp, null, 2));
-
-    if (!completedOp.done) {
-      throw new Error("Document indexing timed out");
-    }
-
-    // Extract the file ID - try multiple possible paths
-    let fileId = completedOp.response?.files?.[0]?.name 
-              || completedOp.result?.files?.[0]?.name
-              || completedOp.response?.file?.name
-              || completedOp.metadata?.file;
+    // Extract the file ID from response.documentName
+    let fileId = opResponse.response?.documentName 
+              || opResponse.documentName
+              || opResponse.response?.files?.[0]?.name;
     
     if (!fileId) {
-      // If we still can't find it, use the operation name as a fallback identifier
-      console.warn("Could not extract standard file ID, using operation-based identifier");
-      fileId = `op:${completedOp.name || Date.now()}`;
+      console.error("Could not find documentName in response");
+      throw new Error("Failed to extract document ID from Gemini upload response");
     }
     
     console.log(`Extracted file ID: ${fileId}`);

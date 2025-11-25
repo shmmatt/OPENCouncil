@@ -1,0 +1,67 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index-dev.ts
+
+Admin account already exists for: shmmatt@gmail.com
+4:42:33 PM [express] serving on port 5000
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+4:42:37 PM [express] GET /api/chat/sessions 304 in 38ms :: []
+4:43:53 PM [express] GET /api/chat/sessions 304 in 109ms :: []
+4:44:14 PM [express] POST /api/admin/login 200 in 196ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp…
+4:44:15 PM [express] GET /api/admin/documents 304 in 30ms :: []
+Created File Search store: fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr
+Initial upload operation: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/099cad532c0729c843f53ea28a0-6u2mfkbpaobo",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/documents/099cad532c0729c843f53ea28a0-6u2mfkbpaobo"
+  }
+}
+Polling operation: fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/099cad532c0729c843f53ea28a0-6u2mfkbpaobo, attempt 1
+Error polling operation: TypeError: Cannot read properties of undefined (reading 'name')
+    at Operations.get (/home/runner/workspace/node_modules/@google/genai/src/operations.ts:81:19)
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:117:45)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+Completed operation: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/099cad532c0729c843f53ea28a0-6u2mfkbpaobo",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/documents/099cad532c0729c843f53ea28a0-6u2mfkbpaobo"
+  }
+}
+Error uploading to File Search: Error: Document indexing timed out
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:130:13)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+Error uploading document: Error: Failed to upload document: Error: Document indexing timed out
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:157:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+4:46:39 PM [express] GET /api/chat/sessions 304 in 121ms :: []2012ms :: {"message":"Failed to upload…
+4:47:04 PM [express] POST /api/admin/login 200 in 206ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp…
+4:47:05 PM [express] GET /api/admin/documents 304 in 26ms :: []
+Initial upload operation: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/83f17050377200b08c84ce471cf-jzuoc91zmqkk",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/documents/83f17050377200b08c84ce471cf-jzuoc91zmqkk"
+  }
+}
+Polling operation: fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/83f17050377200b08c84ce471cf-jzuoc91zmqkk, attempt 1
+Error polling operation: TypeError: Cannot read properties of undefined (reading 'name')
+    at Operations.get (/home/runner/workspace/node_modules/@google/genai/src/operations.ts:81:19)
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:117:45)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+Completed operation: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/upload/operations/83f17050377200b08c84ce471cf-jzuoc91zmqkk",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-zkgkm526qymr/documents/83f17050377200b08c84ce471cf-jzuoc91zmqkk"
+  }
+}
+Error uploading to File Search: Error: Document indexing timed out
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:130:13)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+Error uploading document: Error: Failed to upload document: Error: Document indexing timed out
+    at uploadDocumentToFileStore (/home/runner/workspace/server/gemini-client.ts:157:11)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:124:37)
+4:47:47 PM [express] POST /api/admin/documents/upload 500 in 8926ms :: {"message":"Failed to upload …
