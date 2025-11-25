@@ -188,7 +188,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/admin/bulk-upload/analyze",
     authenticateAdmin,
-    upload.array("files", 50),
+    (req, res, next) => {
+      upload.array("files", 100)(req, res, (err) => {
+        if (err) {
+          if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+            return res.status(400).json({ message: "Too many files. Maximum 100 files allowed per batch." });
+          }
+          return res.status(400).json({ message: err.message || "File upload error" });
+        }
+        next();
+      });
+    },
     async (req, res) => {
       const uploadedFiles = req.files as Express.Multer.File[];
       

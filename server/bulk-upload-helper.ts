@@ -1,10 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { createRequire } from "module";
 
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+let pdfParseModule: ((buffer: Buffer, options?: any) => Promise<{ text: string }>) | null = null;
+
+async function getPdfParser(): Promise<(buffer: Buffer, options?: any) => Promise<{ text: string }>> {
+  if (!pdfParseModule) {
+    const mod = await import("pdf-parse");
+    pdfParseModule = (mod as any).default || mod;
+  }
+  return pdfParseModule!;
+}
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -27,6 +33,7 @@ export async function extractPreviewText(filePath: string, filename: string): Pr
   
   try {
     if (ext === ".pdf") {
+      const pdfParse = await getPdfParser();
       const dataBuffer = await fs.readFile(filePath);
       const pdfData = await pdfParse(dataBuffer, {
         max: 5,
