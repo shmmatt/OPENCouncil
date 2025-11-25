@@ -17,6 +17,22 @@ interface UploadResult {
   storeId: string;
 }
 
+function getMimeType(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop();
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'doc':
+      return 'application/msword';
+    case 'txt':
+      return 'text/plain';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 export async function uploadDocumentToFileStore(
   filePath: string,
   filename: string,
@@ -62,12 +78,16 @@ export async function uploadDocumentToFileStore(
       customMetadata.push({ key: "notes", stringValue: metadata.notes });
     }
 
+    // Determine MIME type from filename
+    const mimeType = getMimeType(filename);
+
     // Upload and import file to File Search store
     const operation = await ai.fileSearchStores.uploadToFileSearchStore({
       file: filePath,
       fileSearchStoreName: storeId,
       config: {
         displayName: displayName,
+        mimeType: mimeType,
         customMetadata: customMetadata,
         chunkingConfig: {
           whiteSpaceConfig: {
