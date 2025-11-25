@@ -1,0 +1,273 @@
+FEATURE GOAL
+Add a full “Bulk Upload” flow to the admin panel.
+Admins select multiple files → backend extracts preview → Gemini suggests metadata → admin reviews → final upload pushes to File Search with confirmed metadata.
+
+This must include:
+
+New admin UI page: /admin/bulk-upload
+
+Backend routes for:
+
+Accepting initial files
+
+Generating LLM metadata suggestions
+
+Returning suggestions to frontend
+
+Confirming final metadata & uploading to File Search
+
+Local DB storage of final documents, not temporary uploads
+
+Upload helper that sends metadata along with files into Gemini File Search
+
+Do NOT upload anything to File Search until the admin confirms the metadata.
+
+1. Add ROUTING + UI — Admin Bulk Upload
+
+Create a new admin route:
+
+/admin/bulk-upload (React page)
+
+UI Requirements:
+
+A multi-file upload input:
+
+<input type="file" multiple />
+
+
+A button: “Analyze Files”
+
+When clicked → send files (as FormData) to backend at:
+POST /api/admin/bulk-upload/analyze
+
+Backend returns an array of objects:
+
+{
+  tempId: string,
+  filename: string,
+  suggestedMetadata: {
+    category: string,
+    town: string,
+    board: string,
+    year: string,
+    notes: string
+  }
+}
+
+
+Render a review table for each file:
+
+Filename (read-only)
+
+Category (dropdown)
+
+Town (text input)
+
+Board (text input)
+
+Year (text input)
+
+Notes (text area)
+
+Include a button: “Upload to Knowledge Base”
+
+When clicked, send the corrected metadata for each file to:
+POST /api/admin/bulk-upload/finalize
+
+The UI should store local state for each file’s metadata so the admin can edit before finalizing.
+
+2. Add BACKEND — Bulk Upload Analyze Endpoint
+
+Create new Express routes under /api/admin/bulk-upload:
+
+POST /api/admin/bulk-upload/analyze
+
+Behavior:
+
+Accept multiple file uploads (use multer or busboy).
+
+For each file:
+
+Read first 3–5 pages of text (use pdf-parse for PDFs; for DOCX, docx or textract).
+
+Create a tempId for this file.
+
+Store file temporarily on disk or in memory.
+
+Call a new helper: suggestMetadataFromContent(filename, previewText).
+
+LLM Metadata Suggestion Helper
+
+Implement:
+
+async function suggestMetadataFromContent(filename: string, preview: string) {
+  const prompt = `
+    You classify municipal government documents from New Hampshire.
+    Read the filename and text below and respond with ONLY valid JSON:
+
+    {
+      "category": "...",
+      "town": "...",
+      "board": "...",
+      "year": "...",
+      "notes": "..."
+    }
+
+    category MUST be one of:
+      budget, zoning, meeting_minutes, town_report, warrant_article,
+      ordinance, policy, planning_board_docs, zba_docs,
+      licensing_permits, cip, elections, misc_other
+
+    If document is statewide (laws, handbooks, state guidance) use:
+      "town": "statewide"
+
+    Keep notes very short.
+  `;
+
+  // Call Gemini using generateContent
+  return await geminiClient.generateJSON(prompt, { filename, preview });
+}
+
+
+For each file, return:
+
+{
+  "tempId": "...",
+  "filename": "...",
+  "suggestedMetadata": { ... }
+}
+
+
+Do NOT index into File Search yet.
+
+3. Add BACKEND — Bulk Finalize Endpoint
+POST /api/admin/bulk-upload/finalize
+
+Request body example:
+
+{
+  "files": [
+    {
+      "tempId": "abc123",
+      "metadata": {
+        "category": "planning_board_docs",
+        "town": "statewide",
+        "board": "Planning Board",
+        "year": "2024",
+        "notes": "OPD Planning Board Handbook"
+      }
+    }
+  ]
+}
+
+
+Behavior per file:
+
+Retrieve temporary file by tempId.
+
+Validate metadata (ensure category is allowed).
+
+Call your existing uploadDocumentToFileStore(buffer, filename, metadata).
+
+Store result in main documents table:
+
+id
+
+filename
+
+fileSearchStoreId
+
+fileSearchDocumentId
+
+category
+
+town
+
+board
+
+year
+
+notes
+
+Delete temporary file.
+
+Response:
+
+{
+  "success": true,
+  "uploaded": [
+    { "filename": "...", "id": "..." }
+  ],
+  "failed": []
+}
+
+4. Metadata Schema for UI & Backend
+
+Use this TypeScript interface across your app:
+
+export interface DocumentMetadata {
+  category: 
+    | "budget"
+    | "zoning"
+    | "meeting_minutes"
+    | "town_report"
+    | "warrant_article"
+    | "ordinance"
+    | "policy"
+    | "planning_board_docs"
+    | "zba_docs"
+    | "licensing_permits"
+    | "cip"
+    | "elections"
+    | "misc_other";
+
+  town: string;   // "statewide" or Town Name
+  board?: string;
+  year?: string;
+  notes?: string;
+}
+
+5. Update File Search Upload Helper
+
+Modify your uploadDocumentToFileStore function to expect metadata and pass it to Gemini File Search as:
+
+{
+  metadata: {
+    category: "...",
+    town: "...",
+    board: "...",
+    year: "...",
+    notes: "..."
+  }
+}
+
+
+(Use the exact metadata key/value pairs so retrieval filters work consistently.)
+
+6. Final Requirements
+
+Do not break the existing single-file upload functionality.
+
+Reuse the same metadata dropdown options as the rest of the admin UI.
+
+Bulk upload should integrate into the existing Documents list page automatically after finalization.
+
+Provide clean error handling and per-file statuses.
+
+Add TODO comments for future refinements (town auto-inference, improved previews, etc.).
+
+Please generate:
+
+All frontend components
+
+All backend routes
+
+The metadata extractor helper
+
+Updated File Search upload helper
+
+Any DB schema adjustments
+
+Integration into the admin navbar
+
+Keep code clean and types consistent.
