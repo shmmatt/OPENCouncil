@@ -276,3 +276,89 @@ Designed for single-server deployment with:
 - JWT tokens with 7-day expiration
 - Bcrypt with 10 salt rounds for password hashing
 - No external authentication providers (self-contained)
+
+## V2 Document Pipeline
+
+### Overview
+
+The v2 document pipeline introduces a staged ingestion workflow with duplicate detection, LLM-powered metadata extraction, admin review, and versioning. This system runs alongside the legacy document upload and maintains full backwards compatibility.
+
+### Key Routes
+
+- `/admin/ingestion` - v2 ingestion pipeline with upload, review, and approval workflow
+- `/admin/documents-v2` - v2 documents listing with version history
+
+### New Database Tables
+
+1. **fileBlobs** - Raw file storage with SHA-256 hashing
+   - `id` (UUID primary key)
+   - `rawHash` (SHA-256 of file content for duplicate detection)
+   - `previewHash` (SHA-256 of extracted text for near-duplicate detection)
+   - `originalFilename`, `storagePath`, `mimeType`, `sizeBytes`
+   - `previewText` (extracted text for LLM analysis)
+   - `createdAt`
+
+2. **logicalDocuments** - Logical document entities
+   - `id` (UUID primary key)
+   - `canonicalTitle` (main document title)
+   - `category`, `town`, `board` (metadata)
+   - `currentVersionId` (reference to current version)
+   - `createdAt`, `updatedAt`
+
+3. **documentVersions** - Individual versions of documents
+   - `id` (UUID primary key)
+   - `documentId` (foreign key to logicalDocuments)
+   - `fileBlobId` (foreign key to fileBlobs)
+   - `year`, `notes` (version-specific metadata)
+   - `fileSearchStoreName`, `fileSearchDocumentName` (Gemini File Search references)
+   - `isCurrent` (boolean flag for current version)
+   - `supersedesVersionId` (tracks version lineage)
+   - `createdAt`
+
+4. **ingestionJobs** - Tracks files through the ingestion pipeline
+   - `id` (UUID primary key)
+   - `fileBlobId` (foreign key to fileBlobs)
+   - `status` (`needs_review`, `approved`, `indexed`, `rejected`)
+   - `suggestedMetadata`, `finalMetadata` (JSON)
+   - `duplicateWarning` (duplicate detection result)
+   - `documentId`, `documentVersionId` (links to final records)
+   - `createdAt`, `updatedAt`
+
+### Pipeline Flow
+
+1. **Upload & Analyze** (`POST /api/admin/ingestion/analyze`)
+   - Files uploaded and stored in `uploads/blobs/`
+   - SHA-256 hash computed for duplicate detection
+   - Text extracted (PDF via pdf-parse, DOCX via mammoth, TXT directly)
+   - LLM analyzes text and suggests metadata
+   - Ingestion job created with status `needs_review`
+
+2. **Admin Review** (UI at `/admin/ingestion`)
+   - Admin reviews suggested metadata
+   - Can edit category, town, board, year, notes
+   - Can link to existing document or create new one
+   - Approve or reject the document
+
+3. **Approve** (`POST /api/admin/ingestion/jobs/:jobId/approve`)
+   - Creates or links LogicalDocument
+   - Validates and stores final metadata
+   - Updates job status to `approved`
+
+4. **Index** (`POST /api/admin/ingestion/jobs/:jobId/index`)
+   - Uploads to Gemini File Search
+   - Creates DocumentVersion with File Search references
+   - Sets version as current (demotes previous versions)
+   - Creates legacy document record for backwards compatibility
+   - Updates job status to `indexed`
+
+### Services
+
+- **fileProcessing.ts** - SHA-256 hashing, text extraction, duplicate detection
+- **metadataExtraction.ts** - LLM-powered metadata suggestion and validation
+
+### Backwards Compatibility
+
+- Legacy `/api/admin/documents` endpoint continues to work
+- Chat endpoint searches the same Gemini File Search store
+- v2 index flow also creates legacy document record
+- Both v1 and v2 documents are searchable through chat
