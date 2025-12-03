@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -17,15 +17,12 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, 
@@ -41,7 +38,11 @@ import {
   FolderUp,
   Clock,
   Archive,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  CheckSquare,
+  Link2,
+  Plus
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 
@@ -61,10 +62,13 @@ const CATEGORY_OPTIONS = [
   { label: "Misc / Other", value: "misc_other" },
 ];
 
-function getCategoryLabel(value: string | null): string {
-  if (!value) return "-";
-  const option = CATEGORY_OPTIONS.find((opt) => opt.value === value);
-  return option ? option.label : value;
+interface JobMetadataEdits {
+  category: string;
+  town: string;
+  board: string;
+  year: string;
+  documentLinkMode: "new" | "existing";
+  documentId: string;
 }
 
 function getStatusBadge(status: string) {
@@ -82,34 +86,125 @@ function getStatusBadge(status: string) {
   }
 }
 
-interface ReviewFormState {
-  category: string;
-  town: string;
-  board: string;
-  year: string;
-  notes: string;
-  documentLinkMode: "new" | "existing";
-  documentId: string;
+function JobDetailsPopover({ job }: { job: IngestionJobWithBlob }) {
+  const getDuplicateWarningDisplay = (warning: string | null) => {
+    if (!warning) return null;
+    
+    if (warning.startsWith("exact_duplicate:")) {
+      const filename = warning.replace("exact_duplicate:", "");
+      return (
+        <div className="flex items-center gap-2 text-red-600 text-sm p-2 rounded bg-red-50 dark:bg-red-950">
+          <AlertTriangle className="w-4 h-4" />
+          <span>Exact duplicate of: {filename}</span>
+        </div>
+      );
+    }
+    
+    if (warning.startsWith("preview_match:")) {
+      const filename = warning.replace("preview_match:", "");
+      return (
+        <div className="flex items-center gap-2 text-yellow-600 text-sm p-2 rounded bg-yellow-50 dark:bg-yellow-950">
+          <AlertTriangle className="w-4 h-4" />
+          <span>Similar content to: {filename}</span>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" title="View Details" data-testid={`button-details-${job.id}`}>
+          <Eye className="w-4 h-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-96" align="end">
+        <div className="space-y-4">
+          <div>
+            <h4 className="font-medium mb-1">File Information</h4>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <div className="font-mono break-all">{job.fileBlob.originalFilename}</div>
+              <div>Size: {(job.fileBlob.sizeBytes / 1024 / 1024).toFixed(2)} MB</div>
+              <div>Type: {job.fileBlob.mimeType}</div>
+            </div>
+          </div>
+          
+          {job.duplicateWarning && (
+            <div>
+              <h4 className="font-medium mb-1">Warnings</h4>
+              {getDuplicateWarningDisplay(job.duplicateWarning)}
+            </div>
+          )}
+          
+          {job.fileBlob.previewText && (
+            <div>
+              <h4 className="font-medium mb-1">Preview Text</h4>
+              <ScrollArea className="h-32 w-full rounded border p-2">
+                <pre className="text-xs whitespace-pre-wrap font-mono">
+                  {job.fileBlob.previewText.slice(0, 1000)}
+                  {job.fileBlob.previewText.length > 1000 && "..."}
+                </pre>
+              </ScrollArea>
+            </div>
+          )}
+          
+          <div>
+            <h4 className="font-medium mb-1">AI Suggested Metadata</h4>
+            <div className="text-sm text-muted-foreground">
+              {(() => {
+                const suggested = job.suggestedMetadata as any || {};
+                return (
+                  <div className="space-y-1">
+                    <div>Category: {CATEGORY_OPTIONS.find(o => o.value === suggested.category)?.label || suggested.category || "-"}</div>
+                    <div>Town: {suggested.town || "-"}</div>
+                    <div>Board: {suggested.board || "-"}</div>
+                    <div>Year: {suggested.year || "-"}</div>
+                    {suggested.notes && <div>Notes: {suggested.notes}</div>}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function getDefaultMetadataForJob(job: IngestionJobWithBlob): JobMetadataEdits {
+  const suggested = job.suggestedMetadata as any || {};
+  return {
+    category: suggested.category || "misc_other",
+    town: suggested.town || "",
+    board: suggested.board || "",
+    year: suggested.year || "",
+    documentLinkMode: "new",
+    documentId: "",
+  };
+}
+
+function validateJobMetadata(metadata: JobMetadataEdits): { valid: boolean; error?: string } {
+  if (!metadata.category || metadata.category.trim() === "") {
+    return { valid: false, error: "Category is required" };
+  }
+  if (metadata.documentLinkMode === "existing" && !metadata.documentId) {
+    return { valid: false, error: "Must select a document when linking to existing" };
+  }
+  return { valid: true };
 }
 
 export default function AdminIngestion() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("needs_review");
-  const [selectedJob, setSelectedJob] = useState<IngestionJobWithBlob | null>(null);
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [formState, setFormState] = useState<ReviewFormState>({
-    category: "",
-    town: "",
-    board: "",
-    year: "",
-    notes: "",
-    documentLinkMode: "new",
-    documentId: "",
-  });
+  
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [jobEdits, setJobEdits] = useState<Record<string, JobMetadataEdits>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  // Fetch ingestion jobs
   const { data: jobs, isLoading: jobsLoading, refetch: refetchJobs } = useQuery<IngestionJobWithBlob[]>({
     queryKey: ["/api/admin/ingestion/jobs", activeTab],
     queryFn: async () => {
@@ -129,7 +224,6 @@ export default function AdminIngestion() {
     },
   });
 
-  // Fetch existing documents for linking
   const { data: existingDocs } = useQuery<LogicalDocument[]>({
     queryKey: ["/api/admin/v2/documents"],
     queryFn: async () => {
@@ -142,7 +236,38 @@ export default function AdminIngestion() {
     },
   });
 
-  // Analyze mutation
+  const getJobMetadata = useCallback((job: IngestionJobWithBlob): JobMetadataEdits => {
+    if (jobEdits[job.id]) {
+      return jobEdits[job.id];
+    }
+    return getDefaultMetadataForJob(job);
+  }, [jobEdits]);
+
+  const updateJobEdit = useCallback((jobId: string, field: keyof JobMetadataEdits, value: string) => {
+    setJobEdits(prev => {
+      const existingJob = jobs?.find(j => j.id === jobId);
+      const current = prev[jobId] || (existingJob ? getDefaultMetadataForJob(existingJob) : {
+        category: "misc_other",
+        town: "",
+        board: "",
+        year: "",
+        documentLinkMode: "new" as const,
+        documentId: "",
+      });
+      return {
+        ...prev,
+        [jobId]: {
+          ...current,
+          [field]: value,
+        },
+      };
+    });
+    setValidationErrors(prev => {
+      const { [jobId]: _, ...rest } = prev;
+      return rest;
+    });
+  }, [jobs]);
+
   const analyzeMutation = useMutation({
     mutationFn: async (formData: FormData) => {
       const token = localStorage.getItem("adminToken");
@@ -175,12 +300,10 @@ export default function AdminIngestion() {
     },
   });
 
-  // Approve + Index mutation (combined for convenience)
   const approveAndIndexMutation = useMutation({
-    mutationFn: async ({ jobId, metadata }: { jobId: string; metadata: ReviewFormState }) => {
+    mutationFn: async ({ jobId, metadata }: { jobId: string; metadata: JobMetadataEdits }) => {
       const token = localStorage.getItem("adminToken");
       
-      // First approve
       const approveResponse = await fetch(`/api/admin/ingestion/jobs/${jobId}/approve`, {
         method: "POST",
         headers: { 
@@ -193,10 +316,10 @@ export default function AdminIngestion() {
             town: metadata.town,
             board: metadata.board,
             year: metadata.year,
-            notes: metadata.notes,
+            notes: "",
           },
           documentLinkMode: metadata.documentLinkMode,
-          documentId: metadata.documentId || undefined,
+          documentId: metadata.documentLinkMode === "existing" ? metadata.documentId : undefined,
         }),
       });
       
@@ -205,7 +328,6 @@ export default function AdminIngestion() {
         throw new Error(error.message || "Approval failed");
       }
       
-      // Then index
       const indexResponse = await fetch(`/api/admin/ingestion/jobs/${jobId}/index`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -221,12 +343,7 @@ export default function AdminIngestion() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
-      setReviewDialogOpen(false);
-      setSelectedJob(null);
-      toast({
-        title: "Document indexed",
-        description: "Document has been approved and indexed to the knowledge base",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/v2/documents"] });
     },
     onError: (error: Error) => {
       toast({
@@ -237,7 +354,153 @@ export default function AdminIngestion() {
     },
   });
 
-  // Reject mutation
+  const bulkApproveMutation = useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const token = localStorage.getItem("adminToken");
+      const results = [];
+      
+      for (const jobId of jobIds) {
+        try {
+          const job = jobs?.find(j => j.id === jobId);
+          if (!job) continue;
+          
+          const metadata = getJobMetadata(job);
+          
+          const approveResponse = await fetch(`/api/admin/ingestion/jobs/${jobId}/approve`, {
+            method: "POST",
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              finalMetadata: {
+                category: metadata.category,
+                town: metadata.town,
+                board: metadata.board,
+                year: metadata.year,
+                notes: "",
+              },
+              documentLinkMode: metadata.documentLinkMode,
+              documentId: metadata.documentLinkMode === "existing" ? metadata.documentId : undefined,
+            }),
+          });
+          
+          if (!approveResponse.ok) {
+            const error = await approveResponse.json();
+            results.push({ jobId, success: false, error: error.message });
+            continue;
+          }
+          
+          const indexResponse = await fetch(`/api/admin/ingestion/jobs/${jobId}/index`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          
+          if (!indexResponse.ok) {
+            const error = await indexResponse.json();
+            results.push({ jobId, success: false, error: error.message });
+            continue;
+          }
+          
+          results.push({ jobId, success: true });
+        } catch (err) {
+          results.push({ jobId, success: false, error: String(err) });
+        }
+      }
+      
+      return results;
+    },
+    onSuccess: (results) => {
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/v2/documents"] });
+      setSelectedJobs(new Set());
+      setJobEdits({});
+      
+      if (failCount === 0) {
+        toast({
+          title: "Bulk approve complete",
+          description: `Successfully approved and indexed ${successCount} document(s)`,
+        });
+      } else {
+        toast({
+          title: "Bulk approve partially complete",
+          description: `${successCount} succeeded, ${failCount} failed`,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Bulk approve failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkRejectMutation = useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const token = localStorage.getItem("adminToken");
+      const results = [];
+      
+      for (const jobId of jobIds) {
+        try {
+          const response = await fetch(`/api/admin/ingestion/jobs/${jobId}/reject`, {
+            method: "POST",
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ reason: "Bulk rejected by admin" }),
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            results.push({ jobId, success: false, error: error.message });
+            continue;
+          }
+          
+          results.push({ jobId, success: true });
+        } catch (err) {
+          results.push({ jobId, success: false, error: String(err) });
+        }
+      }
+      
+      return results;
+    },
+    onSuccess: (results) => {
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
+      setSelectedJobs(new Set());
+      
+      if (failCount === 0) {
+        toast({
+          title: "Bulk reject complete",
+          description: `Rejected ${successCount} document(s)`,
+        });
+      } else {
+        toast({
+          title: "Bulk reject partially complete",
+          description: `${successCount} rejected, ${failCount} failed`,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Bulk reject failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const rejectMutation = useMutation({
     mutationFn: async ({ jobId, reason }: { jobId: string; reason?: string }) => {
       const token = localStorage.getItem("adminToken");
@@ -257,8 +520,6 @@ export default function AdminIngestion() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
-      setReviewDialogOpen(false);
-      setSelectedJob(null);
       toast({
         title: "Document rejected",
         description: "The document has been rejected and will not be indexed",
@@ -290,62 +551,115 @@ export default function AdminIngestion() {
     analyzeMutation.mutate(formData);
   };
 
-  const openReviewDialog = (job: IngestionJobWithBlob) => {
-    setSelectedJob(job);
-    const suggested = job.suggestedMetadata as any || {};
-    setFormState({
-      category: suggested.category || "misc_other",
-      town: suggested.town || "",
-      board: suggested.board || "",
-      year: suggested.year || "",
-      notes: suggested.notes || "",
-      documentLinkMode: "new",
-      documentId: "",
-    });
-    setReviewDialogOpen(true);
-  };
-
-  const handleApproveAndIndex = () => {
-    if (!selectedJob || !formState.category) return;
-    approveAndIndexMutation.mutate({
-      jobId: selectedJob.id,
-      metadata: formState,
+  const toggleJobSelection = (jobId: string) => {
+    setSelectedJobs(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
     });
   };
 
-  const handleReject = () => {
-    if (!selectedJob) return;
-    rejectMutation.mutate({
-      jobId: selectedJob.id,
-      reason: "Rejected by admin",
-    });
+  const toggleSelectAll = () => {
+    if (!jobs) return;
+    const needsReviewJobs = jobs.filter(j => j.status === "needs_review");
+    if (selectedJobs.size === needsReviewJobs.length) {
+      setSelectedJobs(new Set());
+    } else {
+      setSelectedJobs(new Set(needsReviewJobs.map(j => j.id)));
+    }
   };
 
-  const getDuplicateWarningDisplay = (warning: string | null) => {
+  const handleBulkApprove = () => {
+    if (selectedJobs.size === 0 || !jobs) return;
+    
+    const errors: Record<string, string> = {};
+    const validJobIds: string[] = [];
+    const selectedArray = Array.from(selectedJobs);
+    
+    for (let i = 0; i < selectedArray.length; i++) {
+      const jobId = selectedArray[i];
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) continue;
+      
+      const metadata = getJobMetadata(job);
+      const validation = validateJobMetadata(metadata);
+      
+      if (!validation.valid) {
+        errors[jobId] = validation.error || "Invalid metadata";
+      } else {
+        validJobIds.push(jobId);
+      }
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(prev => ({ ...prev, ...errors }));
+      toast({
+        title: "Validation failed",
+        description: `${Object.keys(errors).length} job(s) have invalid metadata. Fix errors before approving.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    bulkApproveMutation.mutate(validJobIds);
+  };
+
+  const handleBulkReject = () => {
+    if (selectedJobs.size === 0) return;
+    bulkRejectMutation.mutate(Array.from(selectedJobs));
+  };
+
+  const handleSingleApprove = (job: IngestionJobWithBlob) => {
+    const metadata = getJobMetadata(job);
+    const validation = validateJobMetadata(metadata);
+    
+    if (!validation.valid) {
+      setValidationErrors(prev => ({ ...prev, [job.id]: validation.error || "Invalid metadata" }));
+      toast({
+        title: "Validation failed",
+        description: validation.error || "Invalid metadata",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    approveAndIndexMutation.mutate({ jobId: job.id, metadata });
+  };
+
+  const handleSingleReject = (jobId: string) => {
+    rejectMutation.mutate({ jobId, reason: "Rejected by admin" });
+  };
+
+  const getDuplicateWarningBadge = (warning: string | null) => {
     if (!warning) return null;
     
     if (warning.startsWith("exact_duplicate:")) {
-      const filename = warning.replace("exact_duplicate:", "");
       return (
-        <div className="flex items-center gap-2 text-red-600 text-sm">
-          <AlertTriangle className="w-4 h-4" />
-          <span>Exact duplicate of: {filename}</span>
-        </div>
+        <Badge variant="outline" className="text-red-600 border-red-600 text-xs">
+          <AlertTriangle className="w-3 h-3 mr-1" />
+          Duplicate
+        </Badge>
       );
     }
     
     if (warning.startsWith("preview_match:")) {
-      const filename = warning.replace("preview_match:", "");
       return (
-        <div className="flex items-center gap-2 text-yellow-600 text-sm">
-          <AlertTriangle className="w-4 h-4" />
-          <span>Similar content to: {filename}</span>
-        </div>
+        <Badge variant="outline" className="text-yellow-600 border-yellow-600 text-xs">
+          <AlertTriangle className="w-3 h-3 mr-1" />
+          Similar
+        </Badge>
       );
     }
     
     return null;
   };
+
+  const needsReviewCount = jobs?.filter(j => j.status === "needs_review").length || 0;
+  const isBulkOperating = bulkApproveMutation.isPending || bulkRejectMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background">
@@ -378,7 +692,6 @@ export default function AdminIngestion() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Upload Section */}
         <Card>
           <CardHeader>
             <CardTitle>Upload New Documents</CardTitle>
@@ -440,14 +753,13 @@ export default function AdminIngestion() {
           </CardFooter>
         </Card>
 
-        {/* Jobs Queue Section */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <CardTitle>Ingestion Queue</CardTitle>
                 <CardDescription>
-                  Review and approve documents before they are indexed to the knowledge base
+                  Edit metadata inline, link to existing documents, and use bulk actions to approve or reject
                 </CardDescription>
               </div>
               <Button 
@@ -462,11 +774,11 @@ export default function AdminIngestion() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedJobs(new Set()); }}>
               <TabsList className="mb-4">
                 <TabsTrigger value="needs_review" data-testid="tab-needs-review">
                   <Clock className="w-4 h-4 mr-2" />
-                  Needs Review
+                  Needs Review ({needsReviewCount})
                 </TabsTrigger>
                 <TabsTrigger value="approved" data-testid="tab-approved">
                   <ThumbsUp className="w-4 h-4 mr-2" />
@@ -481,6 +793,56 @@ export default function AdminIngestion() {
                   Rejected
                 </TabsTrigger>
               </TabsList>
+
+              {activeTab === "needs_review" && jobs && jobs.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      id="select-all"
+                      checked={selectedJobs.size === jobs.filter(j => j.status === "needs_review").length && jobs.filter(j => j.status === "needs_review").length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      data-testid="checkbox-select-all"
+                    />
+                    <Label htmlFor="select-all" className="text-sm cursor-pointer">
+                      {selectedJobs.size > 0 
+                        ? `${selectedJobs.size} selected` 
+                        : "Select all"}
+                    </Label>
+                  </div>
+                  
+                  {selectedJobs.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleBulkApprove}
+                        disabled={isBulkOperating}
+                        data-testid="button-bulk-approve"
+                      >
+                        {bulkApproveMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckSquare className="w-4 h-4 mr-2" />
+                        )}
+                        Approve Selected ({selectedJobs.size})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleBulkReject}
+                        disabled={isBulkOperating}
+                        data-testid="button-bulk-reject"
+                      >
+                        {bulkRejectMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4 mr-2" />
+                        )}
+                        Reject Selected
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <TabsContent value={activeTab}>
                 {jobsLoading ? (
@@ -498,256 +860,202 @@ export default function AdminIngestion() {
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Filename</TableHead>
-                          <TableHead>Suggested Category</TableHead>
-                          <TableHead>Suggested Town</TableHead>
-                          <TableHead>Warnings</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead className="w-[100px]">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {jobs.map((job) => {
-                          const suggested = job.suggestedMetadata as any || {};
-                          return (
-                            <TableRow key={job.id} data-testid={`row-job-${job.id}`}>
-                              <TableCell className="font-mono text-sm">
-                                {job.fileBlob.originalFilename}
-                              </TableCell>
-                              <TableCell>{getCategoryLabel(suggested.category)}</TableCell>
-                              <TableCell>{suggested.town || "-"}</TableCell>
-                              <TableCell>
-                                {getDuplicateWarningDisplay(job.duplicateWarning)}
-                              </TableCell>
-                              <TableCell>{getStatusBadge(job.status)}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {new Date(job.createdAt).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openReviewDialog(job)}
-                                  data-testid={`button-review-${job.id}`}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  <ScrollArea className="h-[500px]">
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {activeTab === "needs_review" && (
+                              <TableHead className="w-[40px]"></TableHead>
+                            )}
+                            <TableHead className="min-w-[180px]">Filename</TableHead>
+                            <TableHead className="min-w-[140px]">Category</TableHead>
+                            <TableHead className="min-w-[100px]">Town</TableHead>
+                            <TableHead className="min-w-[100px]">Board</TableHead>
+                            <TableHead className="min-w-[70px]">Year</TableHead>
+                            {activeTab === "needs_review" && (
+                              <TableHead className="min-w-[160px]">Link To</TableHead>
+                            )}
+                            <TableHead>Warnings</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="w-[120px]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {jobs.map((job) => {
+                            const metadata = getJobMetadata(job);
+                            const isNeedsReview = job.status === "needs_review";
+                            const isSelected = selectedJobs.has(job.id);
+                            const isOperating = approveAndIndexMutation.isPending || rejectMutation.isPending;
+                            const hasError = !!validationErrors[job.id];
+                            
+                            return (
+                              <TableRow 
+                                key={job.id} 
+                                data-testid={`row-job-${job.id}`}
+                                className={`${isSelected ? "bg-muted/50" : ""} ${hasError ? "bg-red-50 dark:bg-red-950/20" : ""}`}
+                              >
+                                {activeTab === "needs_review" && (
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => toggleJobSelection(job.id)}
+                                      data-testid={`checkbox-job-${job.id}`}
+                                    />
+                                  </TableCell>
+                                )}
+                                <TableCell className="font-mono text-sm max-w-[180px] truncate" title={job.fileBlob.originalFilename}>
+                                  {job.fileBlob.originalFilename}
+                                </TableCell>
+                                <TableCell>
+                                  {isNeedsReview ? (
+                                    <Select
+                                      value={metadata.category}
+                                      onValueChange={(v) => updateJobEdit(job.id, "category", v)}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs" data-testid={`select-category-${job.id}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {CATEGORY_OPTIONS.map((option) => (
+                                          <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-sm">{CATEGORY_OPTIONS.find(o => o.value === metadata.category)?.label || metadata.category}</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {isNeedsReview ? (
+                                    <Input
+                                      value={metadata.town}
+                                      onChange={(e) => updateJobEdit(job.id, "town", e.target.value)}
+                                      placeholder="Town..."
+                                      className="h-8 text-xs"
+                                      data-testid={`input-town-${job.id}`}
+                                    />
+                                  ) : (
+                                    <span className="text-sm">{metadata.town || "-"}</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {isNeedsReview ? (
+                                    <Input
+                                      value={metadata.board}
+                                      onChange={(e) => updateJobEdit(job.id, "board", e.target.value)}
+                                      placeholder="Board..."
+                                      className="h-8 text-xs"
+                                      data-testid={`input-board-${job.id}`}
+                                    />
+                                  ) : (
+                                    <span className="text-sm">{metadata.board || "-"}</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {isNeedsReview ? (
+                                    <Input
+                                      value={metadata.year}
+                                      onChange={(e) => updateJobEdit(job.id, "year", e.target.value)}
+                                      placeholder="Year"
+                                      className="h-8 text-xs w-16"
+                                      data-testid={`input-year-${job.id}`}
+                                    />
+                                  ) : (
+                                    <span className="text-sm">{metadata.year || "-"}</span>
+                                  )}
+                                </TableCell>
+                                {activeTab === "needs_review" && (
+                                  <TableCell>
+                                    <Select
+                                      value={metadata.documentLinkMode === "existing" && metadata.documentId ? metadata.documentId : "__new__"}
+                                      onValueChange={(v) => {
+                                        if (v === "__new__") {
+                                          updateJobEdit(job.id, "documentLinkMode", "new");
+                                          updateJobEdit(job.id, "documentId", "");
+                                        } else {
+                                          updateJobEdit(job.id, "documentLinkMode", "existing");
+                                          updateJobEdit(job.id, "documentId", v);
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs" data-testid={`select-link-${job.id}`}>
+                                        <SelectValue placeholder="New Document" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__new__">
+                                          <span className="flex items-center gap-1">
+                                            <Plus className="w-3 h-3" />
+                                            New Document
+                                          </span>
+                                        </SelectItem>
+                                        {existingDocs && existingDocs.length > 0 && (
+                                          <>
+                                            <SelectItem value="__divider__" disabled>
+                                              ── Link to existing ──
+                                            </SelectItem>
+                                            {existingDocs.map((doc) => (
+                                              <SelectItem key={doc.id} value={doc.id}>
+                                                <span className="flex items-center gap-1">
+                                                  <Link2 className="w-3 h-3" />
+                                                  {doc.canonicalTitle.slice(0, 25)}{doc.canonicalTitle.length > 25 ? "..." : ""}
+                                                </span>
+                                              </SelectItem>
+                                            ))}
+                                          </>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                )}
+                                <TableCell>
+                                  {getDuplicateWarningBadge(job.duplicateWarning)}
+                                </TableCell>
+                                <TableCell>{getStatusBadge(job.status)}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <JobDetailsPopover job={job} />
+                                    {isNeedsReview && (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleSingleApprove(job)}
+                                          disabled={isOperating || isBulkOperating}
+                                          title="Approve and Index"
+                                          data-testid={`button-approve-${job.id}`}
+                                        >
+                                          <ThumbsUp className="w-4 h-4 text-green-600" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleSingleReject(job.id)}
+                                          disabled={isOperating || isBulkOperating}
+                                          title="Reject"
+                                          data-testid={`button-reject-${job.id}`}
+                                        >
+                                          <ThumbsDown className="w-4 h-4 text-red-600" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </ScrollArea>
                 )}
               </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
       </main>
-
-      {/* Review Dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Review Document</DialogTitle>
-            <DialogDescription>
-              Review and edit metadata before approving for indexing
-            </DialogDescription>
-          </DialogHeader>
-          
-          <ScrollArea className="flex-1 pr-4">
-            {selectedJob && (
-              <div className="space-y-6 py-4">
-                {/* File Info */}
-                <div className="p-4 rounded-lg bg-muted/50 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-muted-foreground" />
-                    <span className="font-mono font-medium">{selectedJob.fileBlob.originalFilename}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Size: {(selectedJob.fileBlob.sizeBytes / 1024 / 1024).toFixed(2)} MB | 
-                    Type: {selectedJob.fileBlob.mimeType}
-                  </div>
-                  {getDuplicateWarningDisplay(selectedJob.duplicateWarning)}
-                </div>
-
-                {/* Preview Text */}
-                {selectedJob.fileBlob.previewText && (
-                  <div className="space-y-2">
-                    <Label>Preview Excerpt</Label>
-                    <div className="p-3 rounded-md border bg-background text-sm max-h-32 overflow-y-auto font-mono">
-                      {selectedJob.fileBlob.previewText.slice(0, 500)}...
-                    </div>
-                  </div>
-                )}
-
-                {/* Metadata Form */}
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="review-category">Category *</Label>
-                    <Select 
-                      value={formState.category} 
-                      onValueChange={(v) => setFormState(prev => ({ ...prev, category: v }))}
-                    >
-                      <SelectTrigger id="review-category" data-testid="select-review-category">
-                        <SelectValue placeholder="Select category..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORY_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="review-town">Town</Label>
-                      <Input
-                        id="review-town"
-                        placeholder="e.g., Manchester, statewide"
-                        value={formState.town}
-                        onChange={(e) => setFormState(prev => ({ ...prev, town: e.target.value }))}
-                        data-testid="input-review-town"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="review-board">Board/Department</Label>
-                      <Input
-                        id="review-board"
-                        placeholder="e.g., Planning Board"
-                        value={formState.board}
-                        onChange={(e) => setFormState(prev => ({ ...prev, board: e.target.value }))}
-                        data-testid="input-review-board"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="review-year">Year</Label>
-                    <Input
-                      id="review-year"
-                      placeholder="e.g., 2024"
-                      value={formState.year}
-                      onChange={(e) => setFormState(prev => ({ ...prev, year: e.target.value }))}
-                      data-testid="input-review-year"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="review-notes">Notes</Label>
-                    <Textarea
-                      id="review-notes"
-                      placeholder="Additional context or notes"
-                      value={formState.notes}
-                      onChange={(e) => setFormState(prev => ({ ...prev, notes: e.target.value }))}
-                      rows={2}
-                      data-testid="input-review-notes"
-                    />
-                  </div>
-
-                  {/* Document Link Mode */}
-                  <div className="space-y-3 pt-2 border-t">
-                    <Label>Document Linking</Label>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="linkMode"
-                          checked={formState.documentLinkMode === "new"}
-                          onChange={() => setFormState(prev => ({ ...prev, documentLinkMode: "new", documentId: "" }))}
-                          className="w-4 h-4"
-                          data-testid="radio-new-document"
-                        />
-                        <span className="text-sm">Create as new document</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="linkMode"
-                          checked={formState.documentLinkMode === "existing"}
-                          onChange={() => setFormState(prev => ({ ...prev, documentLinkMode: "existing" }))}
-                          className="w-4 h-4"
-                          data-testid="radio-existing-document"
-                        />
-                        <span className="text-sm">Add as new version of existing document</span>
-                      </label>
-                    </div>
-
-                    {formState.documentLinkMode === "existing" && existingDocs && existingDocs.length > 0 && (
-                      <Select 
-                        value={formState.documentId} 
-                        onValueChange={(v) => setFormState(prev => ({ ...prev, documentId: v }))}
-                      >
-                        <SelectTrigger data-testid="select-existing-document">
-                          <SelectValue placeholder="Select existing document..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {existingDocs.map((doc) => (
-                            <SelectItem key={doc.id} value={doc.id}>
-                              {doc.canonicalTitle} ({doc.town})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </ScrollArea>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            {selectedJob?.status === "needs_review" && (
-              <>
-                <Button
-                  variant="destructive"
-                  onClick={handleReject}
-                  disabled={rejectMutation.isPending || approveAndIndexMutation.isPending}
-                  data-testid="button-reject"
-                >
-                  {rejectMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <ThumbsDown className="w-4 h-4 mr-2" />
-                  )}
-                  Reject
-                </Button>
-                <Button
-                  onClick={handleApproveAndIndex}
-                  disabled={!formState.category || approveAndIndexMutation.isPending || rejectMutation.isPending}
-                  data-testid="button-approve"
-                >
-                  {approveAndIndexMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <ThumbsUp className="w-4 h-4 mr-2" />
-                      Approve & Index
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
-            {selectedJob?.status !== "needs_review" && (
-              <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
-                Close
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
