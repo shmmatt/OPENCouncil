@@ -14,6 +14,7 @@ import type { DocumentMetadata, IngestionJobStatus } from "@shared/schema";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { z } from "zod";
+import { registerChatV2Routes } from "./chatV2/chatV2Route";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -855,6 +856,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Register v2 Chat Pipeline Routes
+  registerChatV2Routes(app);
 
   const httpServer = createServer(app);
   return httpServer;

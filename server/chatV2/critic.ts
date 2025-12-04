@@ -1,0 +1,176 @@
+import { GoogleGenAI } from "@google/genai";
+import type { RouterOutput, RetrievalPlan, CriticScore } from "./types";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+const CRITIC_SYSTEM_PROMPT = `You are a careful municipal governance QA critic for New Hampshire. Your role is to evaluate and improve draft answers to ensure they are accurate, helpful, and appropriately cautious.
+
+EVALUATION CRITERIA (score each 0.0 to 1.0):
+1. Relevance: Does the answer directly address the question asked?
+2. Completeness: Does it cover all important aspects of the question?
+3. Clarity: Is the answer well-organized and easy to understand?
+4. Risk of Misleading: How likely is this answer to mislead the user? (0 = safe, 1 = high risk)
+
+IMPROVEMENT GUIDELINES:
+- Fix obvious gaps or errors
+- Tighten structure (add headings, bullet points if helpful)
+- Make uncertainty explicit (e.g., "Ordinances differ by town...")
+- Add appropriate caveats about consulting professionals
+- Remove any speculation not grounded in documents
+- Ensure the answer distinguishes between legal requirements and best practices
+
+FOLLOW-UP QUESTIONS:
+- Suggest 0-3 follow-up questions that would help the user dig deeper
+- Questions should be practical and relevant to municipal governance
+
+LIMITATIONS NOTE:
+- If the answer has significant gaps, note them briefly
+- If the topic requires professional legal advice, state this clearly
+
+You MUST respond with valid JSON only:
+{
+  "criticScore": {
+    "relevance": 0.0-1.0,
+    "completeness": 0.0-1.0,
+    "clarity": 0.0-1.0,
+    "riskOfMisleading": 0.0-1.0
+  },
+  "improvedAnswerText": "the improved answer text",
+  "limitationsNote": "brief note about limitations or null",
+  "suggestedFollowUps": ["question1", "question2", "question3"]
+}`;
+
+interface CritiqueOptions {
+  question: string;
+  draftAnswerText: string;
+  routerOutput: RouterOutput;
+  retrievalPlan?: RetrievalPlan;
+}
+
+interface CritiqueResult {
+  improvedAnswerText: string;
+  criticScore: CriticScore;
+  limitationsNote?: string;
+  suggestedFollowUps: string[];
+}
+
+export async function critiqueAndImproveAnswer(
+  options: CritiqueOptions
+): Promise<CritiqueResult> {
+  const { question, draftAnswerText, routerOutput, retrievalPlan } = options;
+
+  const contextInfo = buildContextInfo(routerOutput, retrievalPlan);
+
+  const userPrompt = `Evaluate and improve this draft answer.
+
+QUESTION: "${question}"
+
+DRAFT ANSWER:
+${draftAnswerText}
+
+CONTEXT:
+- Complexity: ${routerOutput.complexity}
+- Domains: ${routerOutput.domains.join(", ")}
+${contextInfo}
+
+Remember:
+- This is for municipal officials in New Hampshire
+- Accuracy and appropriate caution are critical
+- If uncertain, say so rather than speculate
+- Include the standard disclaimer about seeking professional legal advice when appropriate
+
+Respond with valid JSON only.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: CRITIC_SYSTEM_PROMPT,
+        temperature: 0.3,
+      },
+    });
+
+    const responseText = response.text || "";
+    const cleanedText = responseText
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleanedText);
+
+      const criticScore: CriticScore = {
+        relevance: parseScore(parsed.criticScore?.relevance, 0.8),
+        completeness: parseScore(parsed.criticScore?.completeness, 0.7),
+        clarity: parseScore(parsed.criticScore?.clarity, 0.8),
+        riskOfMisleading: parseScore(parsed.criticScore?.riskOfMisleading, 0.2),
+      };
+
+      return {
+        improvedAnswerText: parsed.improvedAnswerText || draftAnswerText,
+        criticScore,
+        limitationsNote: parsed.limitationsNote || undefined,
+        suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps)
+          ? parsed.suggestedFollowUps.slice(0, 3)
+          : [],
+      };
+    } catch (parseError) {
+      console.error("Failed to parse critic response:", cleanedText);
+      return getDefaultCritiqueResult(draftAnswerText);
+    }
+  } catch (error) {
+    console.error("Critic error:", error);
+    return getDefaultCritiqueResult(draftAnswerText);
+  }
+}
+
+function buildContextInfo(
+  routerOutput: RouterOutput,
+  retrievalPlan?: RetrievalPlan
+): string {
+  const parts: string[] = [];
+
+  if (retrievalPlan) {
+    if (retrievalPlan.filters.townPreference) {
+      parts.push(`- Town focus: ${retrievalPlan.filters.townPreference}`);
+    }
+    if (retrievalPlan.filters.categories.length > 0) {
+      parts.push(`- Document categories: ${retrievalPlan.filters.categories.join(", ")}`);
+    }
+    if (retrievalPlan.infoNeeds.length > 0) {
+      parts.push(`- Information needs: ${retrievalPlan.infoNeeds.join("; ")}`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+function parseScore(value: any, defaultValue: number): number {
+  if (typeof value === "number" && value >= 0 && value <= 1) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+      return parsed;
+    }
+  }
+  return defaultValue;
+}
+
+function getDefaultCritiqueResult(draftAnswerText: string): CritiqueResult {
+  const disclaimer = "\n\n*Note: This is informational only, not legal advice. For specific legal questions, please consult your municipal attorney or NHMA.*";
+
+  return {
+    improvedAnswerText: draftAnswerText + (draftAnswerText.includes("not legal advice") ? "" : disclaimer),
+    criticScore: {
+      relevance: 0.7,
+      completeness: 0.7,
+      clarity: 0.7,
+      riskOfMisleading: 0.3,
+    },
+    limitationsNote: "Unable to perform full quality review. Please verify information with official sources.",
+    suggestedFollowUps: [],
+  };
+}

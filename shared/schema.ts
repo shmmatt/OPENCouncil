@@ -221,3 +221,42 @@ export interface LogicalDocumentWithVersions extends LogicalDocument {
   versions: DocumentVersionWithBlob[];
   currentVersion?: DocumentVersionWithBlob;
 }
+
+// Chat V2 Pipeline Types
+export type ComplexityLevel = "simple" | "complex";
+
+export interface CriticScore {
+  relevance: number;
+  completeness: number;
+  clarity: number;
+  riskOfMisleading: number;
+}
+
+export interface SourceCitation {
+  id: string;
+  title: string;
+  town?: string;
+  year?: string;
+  category?: string;
+  url?: string;
+}
+
+export interface ChatV2AnswerMeta {
+  complexity: ComplexityLevel;
+  requiresClarification: boolean;
+  criticScore: CriticScore;
+  limitationsNote?: string;
+}
+
+export interface ChatV2Response {
+  message: {
+    id: string;
+    sessionId: string;
+    role: string;
+    content: string;
+    createdAt: string;
+  };
+  answerMeta: ChatV2AnswerMeta;
+  sources: SourceCitation[];
+  suggestedFollowUps: string[];
+}
