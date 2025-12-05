@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import type { RouterOutput, ChatHistoryMessage } from "./types";
+import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
+import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -30,10 +31,13 @@ You MUST respond with valid JSON only, no other text. Use this exact format:
   "rerankedQuestion": "cleaned up question text"
 }`;
 
+const MODEL_NAME = "gemini-2.5-flash";
+
 export async function routeQuestion(
   question: string,
   recentHistory: ChatHistoryMessage[],
-  userHints?: { town?: string; board?: string }
+  userHints?: { town?: string; board?: string },
+  logContext?: PipelineLogContext
 ): Promise<RouterOutput> {
   const historyContext = recentHistory.length > 0
     ? `\nRecent conversation context:\n${recentHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join("\n")}`
@@ -49,9 +53,25 @@ Question: "${question}"${historyContext}${hintsContext}
 
 Remember: Respond with valid JSON only, no other text.`;
 
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "router",
+    model: MODEL_NAME,
+    systemPrompt: ROUTER_SYSTEM_PROMPT,
+    userPrompt,
+    temperature: 0.2,
+    extra: {
+      historyLength: recentHistory.length,
+      hasUserHints: !!userHints,
+    },
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: MODEL_NAME,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: ROUTER_SYSTEM_PROMPT,
@@ -60,6 +80,17 @@ Remember: Respond with valid JSON only, no other text.`;
     });
 
     const responseText = response.text || "";
+    const durationMs = Date.now() - startTime;
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "router",
+      model: MODEL_NAME,
+      responseText,
+      durationMs,
+    });
+
     const cleanedText = responseText
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
@@ -77,11 +108,23 @@ Remember: Respond with valid JSON only, no other text.`;
         rerankedQuestion: parsed.rerankedQuestion || question,
       };
     } catch (parseError) {
-      console.error("Failed to parse router response:", cleanedText);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "router_parse",
+        model: MODEL_NAME,
+        error: parseError instanceof Error ? parseError : new Error(String(parseError)),
+      });
       return getDefaultRouterOutput(question);
     }
   } catch (error) {
-    console.error("Router error:", error);
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "router",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return getDefaultRouterOutput(question);
   }
 }

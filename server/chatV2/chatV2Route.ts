@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { routeQuestion } from "./router";
@@ -6,6 +7,7 @@ import { planRetrieval } from "./retrievalPlanner";
 import { generateComplexDraftAnswer } from "./complexAnswer";
 import { critiqueAndImproveAnswer } from "./critic";
 import { mapFileSearchDocumentsToCitations } from "./sources";
+import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -13,22 +15,42 @@ import type {
   CriticScore,
   FinalAnswerMeta,
   SourceCitation,
+  PipelineLogContext,
 } from "./types";
 
 export function registerChatV2Routes(app: Express): void {
   app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: Request, res: Response) => {
     const startTime = Date.now();
+    const requestId = randomUUID();
+    const { sessionId } = req.params;
+
+    const logCtx: PipelineLogContext = { requestId, sessionId };
 
     try {
-      const { sessionId } = req.params;
       const { content, metadata }: ChatV2Request = req.body;
 
+      logInfo("chat_v2_request_received", {
+        ...logCtx,
+        stage: "entry",
+        userQuestion: sanitizeUserContent(content, 200),
+        userMetadata: metadata,
+      });
+
       if (!content || !content.trim()) {
+        logWarn("chat_v2_invalid_request", {
+          ...logCtx,
+          stage: "validation",
+          reason: "empty_content",
+        });
         return res.status(400).json({ message: "Message content is required" });
       }
 
       const session = await storage.getChatSessionById(sessionId);
       if (!session) {
+        logWarn("chat_v2_session_not_found", {
+          ...logCtx,
+          stage: "validation",
+        });
         return res.status(404).json({ message: "Chat session not found" });
       }
 
@@ -46,7 +68,11 @@ export function registerChatV2Routes(app: Express): void {
       });
 
       if (recentDuplicate) {
-        console.log(`[ChatV2] Detected duplicate message within ${recentDuplicateWindow}ms window, checking for existing response...`);
+        logDebug("chat_v2_duplicate_detected", {
+          ...logCtx,
+          stage: "dedup",
+          duplicateWindowMs: recentDuplicateWindow,
+        });
 
         const messagesAfterDuplicate = allMessages.filter(
           (m) => new Date(m.createdAt) > new Date(recentDuplicate.createdAt) && m.role === "assistant"
@@ -54,7 +80,10 @@ export function registerChatV2Routes(app: Express): void {
 
         if (messagesAfterDuplicate.length > 0) {
           const existingResponse = messagesAfterDuplicate[0];
-          console.log("[ChatV2] Found existing response, returning cached result");
+          logInfo("chat_v2_cached_response_returned", {
+            ...logCtx,
+            stage: "dedup",
+          });
 
           const cachedData = parseCachedV2Response(existingResponse.citations);
           const response: ChatV2Response = {
@@ -72,7 +101,10 @@ export function registerChatV2Routes(app: Express): void {
           return res.json(response);
         }
 
-        console.log("[ChatV2] No response found for duplicate message, processing may still be in progress. Waiting...");
+        logDebug("chat_v2_duplicate_waiting", {
+          ...logCtx,
+          stage: "dedup",
+        });
         await new Promise((resolve) => setTimeout(resolve, 5000));
 
         const refreshedMessages = await storage.getMessagesBySessionId(sessionId);
@@ -82,7 +114,10 @@ export function registerChatV2Routes(app: Express): void {
 
         if (laterResponses.length > 0) {
           const existingResponse = laterResponses[0];
-          console.log("[ChatV2] Found response after waiting, returning cached result");
+          logInfo("chat_v2_cached_response_after_wait", {
+            ...logCtx,
+            stage: "dedup",
+          });
 
           const cachedData = parseCachedV2Response(existingResponse.citations);
           const response: ChatV2Response = {
@@ -114,17 +149,35 @@ export function registerChatV2Routes(app: Express): void {
           content: m.content,
         }));
 
-      console.log(`[ChatV2] Starting pipeline for question: "${content.trim().slice(0, 100)}..."`);
+      logDebug("chat_v2_pipeline_start", {
+        ...logCtx,
+        stage: "pipeline_start",
+        historyLength: chatHistory.length,
+      });
 
       const routerOutput = await routeQuestion(
         content.trim(),
         chatHistory.slice(-6),
-        metadata
+        metadata,
+        logCtx
       );
 
-      console.log(`[ChatV2] Router decision: complexity=${routerOutput.complexity}, domains=${routerOutput.domains.join(",")}, clarification=${routerOutput.requiresClarification}`);
+      logDebug("router_output", {
+        ...logCtx,
+        stage: "router",
+        complexity: routerOutput.complexity,
+        domains: routerOutput.domains,
+        requiresClarification: routerOutput.requiresClarification,
+        clarificationCount: routerOutput.clarificationQuestions.length,
+      });
 
       if (routerOutput.requiresClarification && routerOutput.clarificationQuestions.length > 0) {
+        logInfo("chat_v2_clarification_needed", {
+          ...logCtx,
+          stage: "clarification",
+          questionCount: routerOutput.clarificationQuestions.length,
+        });
+
         const clarificationText = buildClarificationResponse(routerOutput.clarificationQuestions);
 
         const clarificationMeta: FinalAnswerMeta = {
@@ -170,44 +223,75 @@ export function registerChatV2Routes(app: Express): void {
       let suggestedFollowUps: string[] = [];
 
       if (routerOutput.complexity === "simple") {
-        console.log("[ChatV2] Taking simple path...");
+        logDebug("chat_v2_simple_path", {
+          ...logCtx,
+          stage: "simple_path_start",
+          domains: routerOutput.domains,
+        });
 
         const simpleResult = await generateSimpleAnswer({
           question: content.trim(),
           routerOutput,
           sessionHistory: chatHistory,
           userHints: metadata,
+          logContext: logCtx,
         });
 
         answerText = simpleResult.answerText;
         sourceDocumentNames = simpleResult.sourceDocumentNames;
 
+        logDebug("simple_answer_result", {
+          ...logCtx,
+          stage: "simpleAnswer",
+          sourceCount: sourceDocumentNames.length,
+          answerLength: answerText.length,
+        });
+
       } else {
-        console.log("[ChatV2] Taking complex path...");
+        logDebug("chat_v2_complex_path", {
+          ...logCtx,
+          stage: "complex_path_start",
+          domains: routerOutput.domains,
+        });
 
         const retrievalPlan = await planRetrieval({
           question: content.trim(),
           routerOutput,
           userHints: metadata,
+          logContext: logCtx,
         });
 
-        console.log(`[ChatV2] Retrieval plan: categories=${retrievalPlan.filters.categories.join(",")}, town=${retrievalPlan.filters.townPreference || "statewide"}`);
+        logDebug("retrieval_plan", {
+          ...logCtx,
+          stage: "retrievalPlanner",
+          categories: retrievalPlan.filters.categories,
+          townPreference: retrievalPlan.filters.townPreference,
+          allowStatewideFallback: retrievalPlan.filters.allowStatewideFallback,
+          infoNeedsCount: retrievalPlan.infoNeeds.length,
+        });
 
         const draftResult = await generateComplexDraftAnswer({
           question: content.trim(),
           retrievalPlan,
           sessionHistory: chatHistory,
+          logContext: logCtx,
         });
 
         sourceDocumentNames = draftResult.sourceDocumentNames;
 
-        console.log("[ChatV2] Running critic...");
+        logDebug("complex_answer_draft", {
+          ...logCtx,
+          stage: "complexAnswer",
+          sourceCount: sourceDocumentNames.length,
+          draftLength: draftResult.draftAnswerText.length,
+        });
 
         const critiqueResult = await critiqueAndImproveAnswer({
           question: content.trim(),
           draftAnswerText: draftResult.draftAnswerText,
           routerOutput,
           retrievalPlan,
+          logContext: logCtx,
         });
 
         answerText = critiqueResult.improvedAnswerText;
@@ -215,7 +299,13 @@ export function registerChatV2Routes(app: Express): void {
         limitationsNote = critiqueResult.limitationsNote;
         suggestedFollowUps = critiqueResult.suggestedFollowUps;
 
-        console.log(`[ChatV2] Critic scores: relevance=${criticScore.relevance}, completeness=${criticScore.completeness}, clarity=${criticScore.clarity}, risk=${criticScore.riskOfMisleading}`);
+        logDebug("critic_result", {
+          ...logCtx,
+          stage: "critic",
+          criticScore,
+          limitationsNote: limitationsNote?.slice(0, 100),
+          suggestedFollowUpCount: suggestedFollowUps.length,
+        });
       }
 
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
@@ -260,15 +350,31 @@ export function registerChatV2Routes(app: Express): void {
       };
 
       const duration = Date.now() - startTime;
-      console.log(`[ChatV2] Pipeline completed in ${duration}ms`);
+
+      logInfo("chat_v2_response_ready", {
+        ...logCtx,
+        stage: "exit",
+        complexity: answerMeta.complexity,
+        requiresClarification: answerMeta.requiresClarification,
+        sourceCount: sources.length,
+        suggestedFollowUpCount: suggestedFollowUps.length,
+        durationMs: duration,
+        answerLength: answerText.length,
+      });
 
       return res.json(response);
     } catch (error) {
-      console.error("[ChatV2] Pipeline error:", error);
+      const duration = Date.now() - startTime;
+
+      logError("chat_v2_request_error", {
+        ...logCtx,
+        stage: "error",
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
+        durationMs: duration,
+      });
 
       try {
-        const { sessionId } = req.params;
-
         const errorMessage = await storage.createChatMessage({
           sessionId,
           role: "assistant",
@@ -296,7 +402,11 @@ export function registerChatV2Routes(app: Express): void {
 
         return res.json(errorResponse);
       } catch (saveError) {
-        console.error("[ChatV2] Failed to save error message:", saveError);
+        logError("chat_v2_save_error", {
+          ...logCtx,
+          stage: "error_save",
+          error: saveError instanceof Error ? saveError.message : String(saveError),
+        });
         return res.status(500).json({
           message: error instanceof Error ? error.message : "Failed to process message",
         });

@@ -1,7 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import type { RouterOutput, RetrievalPlan, CriticScore } from "./types";
+import type { RouterOutput, RetrievalPlan, CriticScore, PipelineLogContext } from "./types";
+import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+const MODEL_NAME = "gemini-2.5-flash";
 
 const CRITIC_SYSTEM_PROMPT = `You are a careful municipal governance QA critic for New Hampshire. Your role is to evaluate and improve draft answers to ensure they are accurate, helpful, and appropriately cautious.
 
@@ -45,6 +48,7 @@ interface CritiqueOptions {
   draftAnswerText: string;
   routerOutput: RouterOutput;
   retrievalPlan?: RetrievalPlan;
+  logContext?: PipelineLogContext;
 }
 
 interface CritiqueResult {
@@ -57,7 +61,7 @@ interface CritiqueResult {
 export async function critiqueAndImproveAnswer(
   options: CritiqueOptions
 ): Promise<CritiqueResult> {
-  const { question, draftAnswerText, routerOutput, retrievalPlan } = options;
+  const { question, draftAnswerText, routerOutput, retrievalPlan, logContext } = options;
 
   const contextInfo = buildContextInfo(routerOutput, retrievalPlan);
 
@@ -81,9 +85,27 @@ Remember:
 
 Respond with valid JSON only.`;
 
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "critic",
+    model: MODEL_NAME,
+    systemPrompt: CRITIC_SYSTEM_PROMPT,
+    userPrompt,
+    temperature: 0.3,
+    extra: {
+      complexity: routerOutput.complexity,
+      domains: routerOutput.domains,
+      draftAnswerLength: draftAnswerText.length,
+      hasTownPreference: !!retrievalPlan?.filters.townPreference,
+    },
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: MODEL_NAME,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: CRITIC_SYSTEM_PROMPT,
@@ -92,6 +114,17 @@ Respond with valid JSON only.`;
     });
 
     const responseText = response.text || "";
+    const durationMs = Date.now() - startTime;
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "critic",
+      model: MODEL_NAME,
+      responseText,
+      durationMs,
+    });
+
     const cleanedText = responseText
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
@@ -116,11 +149,23 @@ Respond with valid JSON only.`;
           : [],
       };
     } catch (parseError) {
-      console.error("Failed to parse critic response:", cleanedText);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "critic_parse",
+        model: MODEL_NAME,
+        error: parseError instanceof Error ? parseError : new Error(String(parseError)),
+      });
       return getDefaultCritiqueResult(draftAnswerText);
     }
   } catch (error) {
-    console.error("Critic error:", error);
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "critic",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return getDefaultCritiqueResult(draftAnswerText);
   }
 }

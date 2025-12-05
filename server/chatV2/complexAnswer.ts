@@ -1,13 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import type { RetrievalPlan, ChatHistoryMessage } from "./types";
+import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext } from "./types";
+import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
+import { logDebug } from "../utils/logger";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+const MODEL_NAME = "gemini-2.5-flash";
 
 interface ComplexAnswerOptions {
   question: string;
   retrievalPlan: RetrievalPlan;
   sessionHistory: ChatHistoryMessage[];
+  logContext?: PipelineLogContext;
 }
 
 interface ComplexDraftResult {
@@ -18,7 +24,7 @@ interface ComplexDraftResult {
 export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
-  const { question, retrievalPlan, sessionHistory } = options;
+  const { question, retrievalPlan, sessionHistory, logContext } = options;
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -34,15 +40,56 @@ export async function generateComplexDraftAnswer(
 
   const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
+  logDebug("complex_answer_retrieval_prompts", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer_prompts",
+    promptCount: retrievalPrompts.length,
+    prompts: retrievalPrompts.map(p => ({ label: p.sourceLabel, queryLength: p.query.length })),
+  });
+
   const retrievedSnippets: { source: string; content: string }[] = [];
 
-  for (const prompt of retrievalPrompts) {
+  for (let i = 0; i < retrievalPrompts.length; i++) {
+    const prompt = retrievalPrompts[i];
+    const retrievalStage = `complexAnswer_retrieval_${i + 1}`;
+    const retrievalSystemPrompt = `You are a document retrieval assistant. Extract relevant information from municipal documents to answer the query. Be thorough and include specific details, quotes, and section references when available. Format as structured excerpts.`;
+
+    logLlmRequest({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: retrievalStage,
+      model: MODEL_NAME,
+      systemPrompt: retrievalSystemPrompt,
+      userPrompt: prompt.query,
+      extra: {
+        sourceLabel: prompt.sourceLabel,
+        retrievalIndex: i + 1,
+        totalRetrievals: retrievalPrompts.length,
+      },
+    });
+
+    logFileSearchRequest({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: `${retrievalStage}_fileSearch`,
+      storeId,
+      queryText: prompt.query,
+      filters: {
+        sourceLabel: prompt.sourceLabel,
+        categories: retrievalPlan.filters.categories,
+        town: retrievalPlan.filters.townPreference,
+      },
+    });
+
+    const startTime = Date.now();
+
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
         contents: [{ role: "user", parts: [{ text: prompt.query }] }],
         config: {
-          systemInstruction: `You are a document retrieval assistant. Extract relevant information from municipal documents to answer the query. Be thorough and include specific details, quotes, and section references when available. Format as structured excerpts.`,
+          systemInstruction: retrievalSystemPrompt,
           tools: [
             {
               fileSearch: {
@@ -54,6 +101,27 @@ export async function generateComplexDraftAnswer(
       });
 
       const snippetContent = response.text || "";
+      const durationMs = Date.now() - startTime;
+      const groundingInfo = extractGroundingInfoForLogging(response);
+
+      logLlmResponse({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: retrievalStage,
+        model: MODEL_NAME,
+        responseText: snippetContent,
+        durationMs,
+      });
+
+      logFileSearchResponse({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: `${retrievalStage}_fileSearch`,
+        results: groundingInfo,
+        responseText: snippetContent,
+        durationMs,
+      });
+
       if (snippetContent.length > 50) {
         retrievedSnippets.push({
           source: prompt.sourceLabel,
@@ -64,18 +132,33 @@ export async function generateComplexDraftAnswer(
       const docNames = extractSourceDocumentNames(response);
       allSourceDocumentNames.push(...docNames);
     } catch (error) {
-      console.error(`Error in retrieval for ${prompt.sourceLabel}:`, error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: retrievalStage,
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
     }
   }
+
+  logDebug("complex_answer_synthesis_start", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer_synthesis",
+    retrievedSnippetCount: retrievedSnippets.length,
+    totalSourceDocs: allSourceDocumentNames.length,
+  });
 
   const draftAnswerText = await synthesizeDraftAnswer(
     question,
     retrievedSnippets,
     sessionHistory,
-    retrievalPlan
+    retrievalPlan,
+    logContext
   );
 
-  const uniqueDocNames = [...new Set(allSourceDocumentNames)];
+  const uniqueDocNames = Array.from(new Set(allSourceDocumentNames));
 
   return {
     draftAnswerText,
@@ -170,7 +253,8 @@ async function synthesizeDraftAnswer(
   question: string,
   snippets: { source: string; content: string }[],
   history: ChatHistoryMessage[],
-  plan: RetrievalPlan
+  plan: RetrievalPlan,
+  logContext?: PipelineLogContext
 ): Promise<string> {
   if (snippets.length === 0) {
     return "I was unable to find relevant information in the available documents to answer this question. Please try rephrasing your question or consult with your municipal attorney or NHMA directly.";
@@ -208,19 +292,57 @@ Instructions:
 
 Provide a thorough, well-organized answer:`;
 
+  const synthesisSystemPrompt = `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices. Be thorough but organized.`;
+
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer_synthesis",
+    model: MODEL_NAME,
+    systemPrompt: synthesisSystemPrompt,
+    userPrompt: synthesisPrompt,
+    temperature: 0.3,
+    extra: {
+      snippetCount: snippets.length,
+      historyLength: history.length,
+      townPreference: plan.filters.townPreference,
+    },
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: MODEL_NAME,
       contents: [{ role: "user", parts: [{ text: synthesisPrompt }] }],
       config: {
-        systemInstruction: `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices. Be thorough but organized.`,
+        systemInstruction: synthesisSystemPrompt,
         temperature: 0.3,
       },
     });
 
-    return response.text || "Unable to synthesize an answer from the retrieved documents.";
+    const responseText = response.text || "Unable to synthesize an answer from the retrieved documents.";
+    const durationMs = Date.now() - startTime;
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "complexAnswer_synthesis",
+      model: MODEL_NAME,
+      responseText,
+      durationMs,
+    });
+
+    return responseText;
   } catch (error) {
-    console.error("Error synthesizing draft answer:", error);
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "complexAnswer_synthesis",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+
     return "I encountered an error while processing the retrieved documents. Please try again.";
   }
 }

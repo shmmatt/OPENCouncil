@@ -8,7 +8,7 @@ export async function mapFileSearchDocumentsToCitations(
     return [];
   }
 
-  const uniqueNames = [...new Set(documentNames)];
+  const uniqueNames = Array.from(new Set(documentNames));
   const citations: SourceCitation[] = [];
   const seenIds = new Set<string>();
 

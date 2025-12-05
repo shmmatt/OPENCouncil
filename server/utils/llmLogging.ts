@@ -10,7 +10,7 @@
  * - No API keys or auth tokens are logged
  */
 
-import { logDebug, truncate, type LogContext } from "./logger";
+import { logDebug, truncate, sanitizeUserContent, type LogContext } from "./logger";
 
 export interface LlmLogParams {
   requestId?: string;
@@ -52,7 +52,7 @@ export function logLlmRequest(params: LlmLogParams): void {
     context.systemPrompt = truncate(systemPrompt, 800);
   }
   if (userPrompt) {
-    context.userPrompt = truncate(userPrompt, 800);
+    context.userPrompt = sanitizeUserContent(userPrompt, 400);
   }
 
   logDebug("llm_request", context);

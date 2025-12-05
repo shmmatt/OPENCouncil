@@ -67,3 +67,11 @@ export interface ChatHistoryMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+/**
+ * Logging context passed through the pipeline for request correlation
+ */
+export interface PipelineLogContext {
+  requestId: string;
+  sessionId: string;
+}

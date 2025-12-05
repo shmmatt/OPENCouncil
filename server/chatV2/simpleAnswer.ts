@@ -1,14 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import type { RouterOutput, ChatHistoryMessage } from "./types";
+import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
+import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+const MODEL_NAME = "gemini-2.5-flash";
 
 interface SimpleAnswerOptions {
   question: string;
   routerOutput: RouterOutput;
   sessionHistory: ChatHistoryMessage[];
   userHints?: { town?: string; board?: string };
+  logContext?: PipelineLogContext;
 }
 
 interface SimpleAnswerResult {
@@ -19,7 +24,7 @@ interface SimpleAnswerResult {
 export async function generateSimpleAnswer(
   options: SimpleAnswerOptions
 ): Promise<SimpleAnswerResult> {
-  const { question, routerOutput, sessionHistory, userHints } = options;
+  const { question, routerOutput, sessionHistory, userHints, logContext } = options;
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -53,9 +58,37 @@ export async function generateSimpleAnswer(
 
   const systemInstruction = buildSimpleAnswerSystemPrompt(userHints);
 
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "simpleAnswer",
+    model: MODEL_NAME,
+    systemPrompt: systemInstruction,
+    userPrompt: enhancedQuestion,
+    extra: {
+      domains: routerOutput.domains,
+      historyLength: sessionHistory.length,
+      hasUserHints: !!userHints,
+    },
+  });
+
+  logFileSearchRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "simpleAnswer_fileSearch",
+    storeId,
+    queryText: enhancedQuestion,
+    filters: {
+      domains: routerOutput.domains,
+      town: userHints?.town,
+    },
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: MODEL_NAME,
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
@@ -71,12 +104,39 @@ export async function generateSimpleAnswer(
 
     const answerText =
       response.text || "I apologize, but I couldn't generate a response.";
+    const durationMs = Date.now() - startTime;
 
     const sourceDocumentNames = extractSourceDocumentNames(response);
+    const groundingInfo = extractGroundingInfoForLogging(response);
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer",
+      model: MODEL_NAME,
+      responseText: answerText,
+      durationMs,
+    });
+
+    logFileSearchResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer_fileSearch",
+      results: groundingInfo,
+      responseText: answerText,
+      durationMs,
+    });
 
     return { answerText, sourceDocumentNames };
   } catch (error) {
-    console.error("Error generating simple answer:", error);
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+
     return {
       answerText:
         "I apologize, but I'm having trouble accessing the document search system right now. Please try again in a moment.",

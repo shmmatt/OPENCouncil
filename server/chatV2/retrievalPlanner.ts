@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import type { RouterOutput, RetrievalPlan } from "./types";
+import type { RouterOutput, RetrievalPlan, PipelineLogContext } from "./types";
+import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -34,16 +35,19 @@ You MUST respond with valid JSON only:
   "infoNeeds": ["plain-language description of what info to look for"]
 }`;
 
+const MODEL_NAME = "gemini-2.5-flash";
+
 interface PlanRetrievalOptions {
   question: string;
   routerOutput: RouterOutput;
   userHints?: { town?: string; board?: string };
+  logContext?: PipelineLogContext;
 }
 
 export async function planRetrieval(
   options: PlanRetrievalOptions
 ): Promise<RetrievalPlan> {
-  const { question, routerOutput, userHints } = options;
+  const { question, routerOutput, userHints, logContext } = options;
 
   const userPrompt = `Create a retrieval plan for this complex question:
 
@@ -55,9 +59,26 @@ ${userHints?.board ? `Board hint: ${userHints.board}` : "No board specified"}
 
 Respond with valid JSON only.`;
 
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "retrievalPlanner",
+    model: MODEL_NAME,
+    systemPrompt: PLANNER_SYSTEM_PROMPT,
+    userPrompt,
+    temperature: 0.2,
+    extra: {
+      detectedDomains: routerOutput.domains,
+      townHint: userHints?.town,
+      boardHint: userHints?.board,
+    },
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: MODEL_NAME,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: PLANNER_SYSTEM_PROMPT,
@@ -66,6 +87,17 @@ Respond with valid JSON only.`;
     });
 
     const responseText = response.text || "";
+    const durationMs = Date.now() - startTime;
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "retrievalPlanner",
+      model: MODEL_NAME,
+      responseText,
+      durationMs,
+    });
+
     const cleanedText = responseText
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
@@ -94,11 +126,23 @@ Respond with valid JSON only.`;
           : ["General information about the topic"],
       };
     } catch (parseError) {
-      console.error("Failed to parse planner response:", cleanedText);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "retrievalPlanner_parse",
+        model: MODEL_NAME,
+        error: parseError instanceof Error ? parseError : new Error(String(parseError)),
+      });
       return getDefaultRetrievalPlan(routerOutput, userHints);
     }
   } catch (error) {
-    console.error("Retrieval planner error:", error);
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "retrievalPlanner",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return getDefaultRetrievalPlan(routerOutput, userHints);
   }
 }

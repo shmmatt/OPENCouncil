@@ -51,3 +51,64 @@ The application supports separate development modes for frontend (Vite) and back
 *   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.
 *   **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`.
 *   **Development**: `vite`, `tsx`, `esbuild`, `drizzle-kit`, `typescript`.
+
+## Observability & Pipeline Logging
+
+The Chat v2 pipeline includes comprehensive structured logging for debugging and observability. Logs are output as JSON to the console and can be filtered by log level.
+
+### Environment Variables
+
+- `LOG_LEVEL`: Controls minimum log level (`debug`, `info`, `warn`, `error`). Default: `info`
+- `CHAT_DEBUG_LOGGING`: Set to `1` or `true` to enable verbose debug logs (LLM prompts/responses, File Search queries, etc.). Default: disabled
+- `CHAT_LOG_USER_CONTENT`: Set to `1` or `true` to log actual user question text. Default: disabled (only logs question length for privacy)
+
+### Enabling Detailed Logging
+
+For development/debugging:
+```bash
+CHAT_DEBUG_LOGGING=1
+LOG_LEVEL=debug
+```
+
+For production (less verbose):
+```bash
+CHAT_DEBUG_LOGGING=0
+LOG_LEVEL=info  # or warn
+```
+
+### Log Correlation
+
+Each chat v2 request generates a unique `requestId` (UUID) that is passed through all pipeline stages. This enables end-to-end tracing of a single user question through:
+- Router → Simple/Complex path → Retrieval → Draft → Critic → Final answer
+
+Look for `requestId` and `sessionId` fields in log output to correlate logs.
+
+### What Gets Logged
+
+**Stage-level logging** (`info` level):
+- `chat_v2_request_received`: Entry point with user question
+- `chat_v2_response_ready`: Exit point with timing and metadata
+- `chat_v2_request_error`: Pipeline errors
+
+**Debug logging** (requires `CHAT_DEBUG_LOGGING=1`):
+- `llm_request`: LLM calls with truncated prompts (system + user)
+- `llm_response`: LLM responses with truncated output
+- `file_search_request`: File Search queries with filters
+- `file_search_response`: Retrieved document chunks (truncated snippets)
+- Stage outputs: `router_output`, `retrieval_plan`, `simple_answer_result`, `complex_answer_draft`, `critic_result`
+
+### Safety Constraints
+
+The logging system is designed to be privacy-safe:
+- API keys and secrets are never logged
+- User question content is redacted by default (only logs length). Enable `CHAT_LOG_USER_CONTENT=1` for debugging
+- LLM system prompts are truncated (~800 chars)
+- LLM responses are truncated (~1500 chars)
+- Document snippets are truncated (~200-500 chars)
+- Auth tokens and user passwords are never logged
+
+### Logging Utilities Location
+
+- `server/utils/logger.ts`: Core logging functions (`log`, `logInfo`, `logDebug`, `logWarn`, `logError`, `truncate`)
+- `server/utils/llmLogging.ts`: LLM-specific logging (`logLlmRequest`, `logLlmResponse`, `logLlmError`)
+- `server/utils/fileSearchLogging.ts`: File Search logging (`logFileSearchRequest`, `logFileSearchResponse`)

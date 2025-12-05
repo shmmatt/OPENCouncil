@@ -11,7 +11,7 @@
  * - No sensitive metadata (user tokens, etc.) is logged
  */
 
-import { logDebug, truncate, type LogContext } from "./logger";
+import { logDebug, truncate, sanitizeUserContent, type LogContext } from "./logger";
 
 /**
  * Log a File Search request before making the API call
@@ -31,7 +31,7 @@ export function logFileSearchRequest(params: {
     sessionId,
     stage,
     storeId: storeId ? truncate(storeId, 100) : undefined,
-    queryText: queryText ? truncate(queryText, 400) : undefined,
+    queryText: sanitizeUserContent(queryText, 200),
     filters,
   });
 }
