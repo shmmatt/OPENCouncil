@@ -791,6 +791,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * @deprecated Use /api/chat/v2/sessions/:sessionId/messages instead.
+   * This v1 endpoint will be removed in a future release.
+   * The v2 endpoint provides enhanced pipeline with structured logging,
+   * source citations, suggested follow-ups, and quality scoring.
+   */
   app.post("/api/chat/sessions/:id/messages", async (req, res) => {
     try {
       const { id } = req.params;

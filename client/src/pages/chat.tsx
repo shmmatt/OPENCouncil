@@ -10,6 +10,33 @@ import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu } from "lucide-reac
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import type { ChatSession, ChatMessage } from "@shared/schema";
 
+// V2 response types
+interface SourceCitation {
+  id: string;
+  title: string;
+  town?: string;
+  year?: string;
+  category?: string;
+  url?: string;
+}
+
+interface V2Metadata {
+  v2: true;
+  answerMeta: {
+    complexity: "simple" | "complex";
+    requiresClarification: boolean;
+    criticScore: {
+      relevance: number;
+      completeness: number;
+      clarity: number;
+      riskOfMisleading: number;
+    };
+    limitationsNote?: string;
+  };
+  sources: SourceCitation[];
+  suggestedFollowUps: string[];
+}
+
 function ChatSidebar({ 
   sessions, 
   activeSessionId, 
@@ -64,22 +91,34 @@ function ChatSidebar({
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ 
+  message, 
+  onFollowUpClick 
+}: { 
+  message: ChatMessage;
+  onFollowUpClick?: (question: string) => void;
+}) {
   const isUser = message.role === "user";
   
-  // Safely parse citations with error handling
-  let citations: string[] | null = null;
+  // Parse v2 metadata from citations field
+  let v2Data: V2Metadata | null = null;
+  let legacyCitations: string[] | null = null;
+  
   if (message.citations) {
     try {
-      citations = JSON.parse(message.citations);
-      if (!Array.isArray(citations)) {
-        citations = null;
+      const parsed = JSON.parse(message.citations);
+      if (parsed.v2 === true) {
+        v2Data = parsed as V2Metadata;
+      } else if (Array.isArray(parsed)) {
+        legacyCitations = parsed;
       }
     } catch (e) {
       console.error("Failed to parse citations:", e);
-      citations = null;
     }
   }
+
+  const sources = v2Data?.sources || [];
+  const suggestedFollowUps = v2Data?.suggestedFollowUps || [];
 
   return (
     <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -99,14 +138,50 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         >
           <p className="text-base whitespace-pre-wrap">{message.content}</p>
         </div>
-        {citations && citations.length > 0 && (
+        
+        {/* V2 Sources */}
+        {sources.length > 0 && (
+          <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 rounded-md p-2">
+            <p className="font-medium">Sources:</p>
+            {sources.map((source, idx) => (
+              <div key={source.id || idx} className="pl-2 flex items-start gap-1">
+                <span>•</span>
+                <span>
+                  {source.title}
+                  {source.town && <span className="text-muted-foreground/70"> ({source.town})</span>}
+                  {source.year && <span className="text-muted-foreground/70"> - {source.year}</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Legacy citations fallback */}
+        {legacyCitations && legacyCitations.length > 0 && (
           <div className="text-xs text-muted-foreground space-y-1">
             <p className="font-medium">Sources:</p>
-            {citations.map((citation: string, idx: number) => (
+            {legacyCitations.map((citation: string, idx: number) => (
               <p key={idx} className="pl-2">• {citation}</p>
             ))}
           </div>
         )}
+        
+        {/* Suggested follow-up questions */}
+        {suggestedFollowUps.length > 0 && onFollowUpClick && (
+          <div className="flex flex-wrap gap-2 mt-1">
+            {suggestedFollowUps.map((question, idx) => (
+              <button
+                key={idx}
+                onClick={() => onFollowUpClick(question)}
+                className="text-xs bg-primary/10 text-primary hover-elevate active-elevate-2 rounded-full px-3 py-1 transition-colors"
+                data-testid={`button-followup-${idx}`}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        )}
+        
         <p className="text-xs text-muted-foreground px-1">
           {new Date(message.createdAt).toLocaleTimeString()}
         </p>
@@ -154,10 +229,11 @@ export default function Chat() {
   });
 
   const createSessionMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/chat/sessions", { title: "New conversation" });
+    mutationFn: async (): Promise<ChatSession> => {
+      const res = await apiRequest("POST", "/api/chat/sessions", { title: "New conversation" });
+      return res.json();
     },
-    onSuccess: (newSession) => {
+    onSuccess: (newSession: ChatSession) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       setActiveSessionId(newSession.id);
     },
@@ -165,13 +241,18 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      return await apiRequest("POST", `/api/chat/sessions/${activeSessionId}/messages`, { content });
+      // Use v2 chat endpoint for enhanced pipeline with logging
+      return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
     },
   });
+
+  const handleFollowUpClick = (question: string) => {
+    setInputValue(question);
+  };
 
   useEffect(() => {
     if (sessions && sessions.length > 0 && !activeSessionId) {
@@ -259,7 +340,11 @@ export default function Chat() {
             ) : (
               <>
                 {messages?.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble 
+                    key={message.id} 
+                    message={message} 
+                    onFollowUpClick={handleFollowUpClick}
+                  />
                 ))}
                 {sendMessageMutation.isPending && <TypingIndicator />}
                 <div ref={messagesEndRef} />
