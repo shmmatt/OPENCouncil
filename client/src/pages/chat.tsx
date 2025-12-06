@@ -147,7 +147,19 @@ function MessageBubble({
               <div key={source.id || idx} className="pl-2 flex items-start gap-1">
                 <span>•</span>
                 <span>
-                  {source.title}
+                  {source.url ? (
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                      data-testid={`link-source-${source.id || idx}`}
+                    >
+                      {source.title}
+                    </a>
+                  ) : (
+                    source.title
+                  )}
                   {source.town && <span className="text-muted-foreground/70"> ({source.town})</span>}
                   {source.year && <span className="text-muted-foreground/70"> - {source.year}</span>}
                 </span>

@@ -4,6 +4,8 @@ import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext } from "./ty
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 import { logDebug } from "../utils/logger";
+import { chatConfig } from "./chatConfig";
+import { buildMergedRetrievalQuery } from "./pipelineUtils";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -175,6 +177,16 @@ function buildRetrievalPrompts(
   question: string,
   plan: RetrievalPlan
 ): RetrievalPrompt[] {
+  const maxPasses = chatConfig.MAX_RETRIEVAL_PASSES;
+  
+  if (maxPasses === 1) {
+    const mergedQuery = buildMergedRetrievalQuery(question, plan);
+    return [{
+      query: mergedQuery,
+      sourceLabel: "Comprehensive Document Search",
+    }];
+  }
+  
   const prompts: RetrievalPrompt[] = [];
 
   if (plan.filters.allowStatewideFallback) {
@@ -227,7 +239,7 @@ function buildRetrievalPrompts(
     });
   }
 
-  return prompts.slice(0, 3);
+  return prompts.slice(0, maxPasses);
 }
 
 function buildQueryWithContext(

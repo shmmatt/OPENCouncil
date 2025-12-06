@@ -8,6 +8,12 @@ import { generateComplexDraftAnswer } from "./complexAnswer";
 import { critiqueAndImproveAnswer } from "./critic";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
+import { shouldRunCritic } from "./chatConfig";
+import {
+  shouldBypassRouterForFollowup,
+  createBypassedRouterOutput,
+  buildTrimmedHistoryForAnswer,
+} from "./pipelineUtils";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -149,18 +155,23 @@ export function registerChatV2Routes(app: Express): void {
           content: m.content,
         }));
 
+      const bypassRouter = shouldBypassRouterForFollowup(chatHistory, content.trim());
+
       logDebug("chat_v2_pipeline_start", {
         ...logCtx,
         stage: "pipeline_start",
         historyLength: chatHistory.length,
+        bypassRouter,
       });
 
-      const routerOutput = await routeQuestion(
-        content.trim(),
-        chatHistory.slice(-6),
-        metadata,
-        logCtx
-      );
+      const routerOutput = bypassRouter
+        ? createBypassedRouterOutput(chatHistory)
+        : await routeQuestion(
+            content.trim(),
+            chatHistory.slice(-6),
+            metadata,
+            logCtx
+          );
 
       logDebug("router_output", {
         ...logCtx,
@@ -221,18 +232,22 @@ export function registerChatV2Routes(app: Express): void {
       let criticScore: CriticScore = { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 };
       let limitationsNote: string | undefined;
       let suggestedFollowUps: string[] = [];
+      let criticUsed = false;
 
       if (routerOutput.complexity === "simple") {
         logDebug("chat_v2_simple_path", {
           ...logCtx,
           stage: "simple_path_start",
           domains: routerOutput.domains,
+          bypassRouter,
         });
+
+        const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
 
         const simpleResult = await generateSimpleAnswer({
           question: content.trim(),
           routerOutput,
-          sessionHistory: chatHistory,
+          sessionHistory: trimmedHistory,
           userHints: metadata,
           logContext: logCtx,
         });
@@ -244,6 +259,7 @@ export function registerChatV2Routes(app: Express): void {
           ...logCtx,
           stage: "simpleAnswer",
           sourceCount: sourceDocumentNames.length,
+          sourceDocNames: sourceDocumentNames.slice(0, 5),
           answerLength: answerText.length,
         });
 
@@ -270,10 +286,12 @@ export function registerChatV2Routes(app: Express): void {
           infoNeedsCount: retrievalPlan.infoNeeds.length,
         });
 
+        const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
+
         const draftResult = await generateComplexDraftAnswer({
           question: content.trim(),
           retrievalPlan,
-          sessionHistory: chatHistory,
+          sessionHistory: trimmedHistory,
           logContext: logCtx,
         });
 
@@ -283,29 +301,46 @@ export function registerChatV2Routes(app: Express): void {
           ...logCtx,
           stage: "complexAnswer",
           sourceCount: sourceDocumentNames.length,
+          sourceDocNames: sourceDocumentNames.slice(0, 5),
           draftLength: draftResult.draftAnswerText.length,
         });
 
-        const critiqueResult = await critiqueAndImproveAnswer({
-          question: content.trim(),
-          draftAnswerText: draftResult.draftAnswerText,
-          routerOutput,
-          retrievalPlan,
-          logContext: logCtx,
-        });
+        const runCritic = shouldRunCritic(draftResult.draftAnswerText.length, content.trim());
 
-        answerText = critiqueResult.improvedAnswerText;
-        criticScore = critiqueResult.criticScore;
-        limitationsNote = critiqueResult.limitationsNote;
-        suggestedFollowUps = critiqueResult.suggestedFollowUps;
+        if (runCritic) {
+          const critiqueResult = await critiqueAndImproveAnswer({
+            question: content.trim(),
+            draftAnswerText: draftResult.draftAnswerText,
+            routerOutput,
+            retrievalPlan,
+            logContext: logCtx,
+          });
 
-        logDebug("critic_result", {
-          ...logCtx,
-          stage: "critic",
-          criticScore,
-          limitationsNote: limitationsNote?.slice(0, 100),
-          suggestedFollowUpCount: suggestedFollowUps.length,
-        });
+          answerText = critiqueResult.improvedAnswerText;
+          criticScore = critiqueResult.criticScore;
+          limitationsNote = critiqueResult.limitationsNote;
+          suggestedFollowUps = critiqueResult.suggestedFollowUps;
+          criticUsed = true;
+
+          logDebug("critic_result", {
+            ...logCtx,
+            stage: "critic",
+            criticUsed: true,
+            criticScore,
+            limitationsNote: limitationsNote?.slice(0, 100),
+            suggestedFollowUpCount: suggestedFollowUps.length,
+          });
+        } else {
+          answerText = draftResult.draftAnswerText;
+          
+          logDebug("critic_skipped", {
+            ...logCtx,
+            stage: "critic",
+            criticUsed: false,
+            reason: "gated_by_config",
+            draftLength: draftResult.draftAnswerText.length,
+          });
+        }
       }
 
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
@@ -357,7 +392,10 @@ export function registerChatV2Routes(app: Express): void {
         complexity: answerMeta.complexity,
         requiresClarification: answerMeta.requiresClarification,
         sourceCount: sources.length,
+        sourceDocNames: sources.slice(0, 3).map((s) => s.title),
         suggestedFollowUpCount: suggestedFollowUps.length,
+        bypassRouter,
+        criticUsed,
         durationMs: duration,
         answerLength: answerText.length,
       });
