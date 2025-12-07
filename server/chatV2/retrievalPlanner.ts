@@ -11,7 +11,7 @@ Given a complex municipal governance question and routing information, decide wh
 Document categories available:
 - budget: Town budgets, financial reports
 - zoning: Zoning ordinances, maps, regulations
-- meeting_minutes: Board/committee meeting minutes
+- meeting_minutes: Board/committee meeting minutes (IMPORTANT: Use this category when user asks about what happened at a meeting, meeting discussions, board decisions, votes, or actions taken at meetings)
 - town_report: Annual town reports
 - warrant_article: Town meeting warrant articles
 - ordinance: Local ordinances and bylaws
@@ -22,6 +22,14 @@ Document categories available:
 - cip: Capital Improvement Plans
 - elections: Election materials
 - misc_other: Other documents
+
+SPECIAL GUIDANCE FOR MEETING MINUTES:
+When a user's question mentions any of these, prioritize "meeting_minutes" category:
+- "minutes", "meeting", "last night's meeting", "meeting on [date]"
+- "what did the [board] decide", "what was discussed", "what happened at"
+- "vote on", "approved by", "actions taken", "motion to"
+- Questions about specific board discussions or decisions on dates
+For meeting-related questions, ONLY include "meeting_minutes" in categories to focus the search.
 
 You MUST respond with valid JSON only:
 {

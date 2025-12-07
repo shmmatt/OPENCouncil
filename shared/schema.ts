@@ -64,6 +64,9 @@ export const documentVersions = pgTable("document_versions", {
   fileSearchDocumentName: text("file_search_document_name"), // e.g., "fileSearchStores/.../documents/..."
   isCurrent: boolean("is_current").default(false).notNull(),
   supersedesVersionId: varchar("supersedes_version_id"), // previous version if any
+  // Minutes-specific fields
+  meetingDate: timestamp("meeting_date"), // parsed date for meeting minutes
+  isMinutes: boolean("is_minutes").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -118,12 +121,19 @@ export const ALLOWED_CATEGORIES = [
   "cip", "elections", "misc_other"
 ] as const;
 
+export const MEETING_TYPES = ["regular", "special", "work_session"] as const;
+
 export const documentMetadataSchema = z.object({
   category: z.enum(ALLOWED_CATEGORIES),
   town: z.string().default(""),
   board: z.string().optional().default(""),
   year: z.string().optional().default(""),
   notes: z.string().optional().default(""),
+  // Minutes-specific metadata
+  isMinutes: z.boolean().optional().default(false),
+  meetingDate: z.string().nullable().optional().default(null), // ISO date: "2024-03-05"
+  meetingType: z.string().nullable().optional().default(null), // "regular", "special", "work_session"
+  rawDateText: z.string().nullable().optional().default(null), // original text e.g. "March 5, 2024"
 });
 
 export type DocumentMetadata = z.infer<typeof documentMetadataSchema>;

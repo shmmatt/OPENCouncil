@@ -34,6 +34,26 @@ The v2 pipeline introduces a staged ingestion workflow:
 3.  **Approve:** Final metadata is validated and stored, and the job status is updated to `approved`.
 4.  **Index:** The document is uploaded to Gemini File Search, a `DocumentVersion` is created and set as current, and a legacy document record is also created for backward compatibility.
 
+### Meeting Minutes Detection
+
+The ingestion pipeline includes specialized handling for meeting minutes documents:
+
+**Heuristic Detection:**
+- Filename patterns: "minutes", "mtg", "meeting" with dates, board abbreviations (pb, bos, zba)
+- First-page text patterns: "Meeting Minutes", "Call to Order", "Roll Call", "Members Present"
+- Automatic extraction of town, board, and meeting date from document headers
+
+**Minutes-Specific Metadata:**
+- `isMinutes`: Boolean flag for minutes documents
+- `meetingDate`: ISO date string (YYYY-MM-DD) for the specific meeting
+- `meetingType`: "regular", "special", or "work_session"
+- `rawDateText`: Original date text from document for debugging
+
+**Chat Retrieval:**
+- Router and retrieval planner prioritize `meeting_minutes` category for questions about meetings, board decisions, votes, etc.
+- Questions like "What did the Planning Board decide on March 5?" automatically search meeting_minutes category
+- File Search metadata includes isMinutes and meetingDate for filtering
+
 ### Build & Deployment
 
 The application supports separate development modes for frontend (Vite) and backend (tsx with hot-reloading). For production, Vite builds the frontend to static assets, and esbuild bundles the backend into a single Node.js ESM module. It is designed for single-server deployment, serving both static files and the API, with external managed PostgreSQL (Neon) and requiring environment variables for configuration (`DATABASE_URL`, `GEMINI_API_KEY`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).

@@ -548,8 +548,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: `Job is already ${job.status}` });
       }
 
-      // Validate metadata
+      // Validate metadata - include minutes-specific fields
       const validatedMetadata = validateMetadata(finalMetadata);
+      
+      // Preserve minutes-specific fields that aren't handled by validateMetadata
+      if (finalMetadata.isMinutes !== undefined) {
+        (validatedMetadata as any).isMinutes = Boolean(finalMetadata.isMinutes);
+      }
+      if (finalMetadata.meetingDate) {
+        (validatedMetadata as any).meetingDate = finalMetadata.meetingDate;
+      }
+      if (finalMetadata.meetingType) {
+        (validatedMetadata as any).meetingType = finalMetadata.meetingType;
+      }
+      if (finalMetadata.rawDateText) {
+        (validatedMetadata as any).rawDateText = finalMetadata.rawDateText;
+      }
+      
+      // If isMinutes is true, force category to meeting_minutes
+      if ((validatedMetadata as any).isMinutes) {
+        validatedMetadata.category = "meeting_minutes";
+      }
 
       // Create or link to LogicalDocument
       let logicalDocId: string;
@@ -630,7 +649,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the previous current version (if any)
       const previousVersion = await storage.getCurrentVersionForDocument(job.documentId);
 
-      // Create DocumentVersion
+      // Parse meetingDate to Date object if present
+      let meetingDateObj: Date | null = null;
+      if (finalMetadata.meetingDate) {
+        const parsed = new Date(finalMetadata.meetingDate);
+        if (!isNaN(parsed.getTime())) {
+          meetingDateObj = parsed;
+        }
+      }
+
+      // Create DocumentVersion with minutes-specific fields
       const version = await storage.createDocumentVersion({
         documentId: job.documentId,
         fileBlobId: job.fileBlobId,
@@ -640,6 +668,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileSearchDocumentName: fileId,
         isCurrent: true,
         supersedesVersionId: previousVersion?.id || null,
+        meetingDate: meetingDateObj,
+        isMinutes: finalMetadata.isMinutes || false,
       });
 
       // Set this version as current (will unset previous)

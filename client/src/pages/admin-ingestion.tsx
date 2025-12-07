@@ -69,6 +69,10 @@ interface JobMetadataEdits {
   year: string;
   documentLinkMode: "new" | "existing";
   documentId: string;
+  // Minutes-specific fields
+  isMinutes: boolean;
+  meetingDate: string;
+  meetingType: string;
 }
 
 function getStatusBadge(status: string) {
@@ -161,6 +165,14 @@ function JobDetailsPopover({ job }: { job: IngestionJobWithBlob }) {
                     <div>Town: {suggested.town || "-"}</div>
                     <div>Board: {suggested.board || "-"}</div>
                     <div>Year: {suggested.year || "-"}</div>
+                    {suggested.isMinutes && (
+                      <>
+                        <div className="font-medium text-primary mt-2">Minutes Detected</div>
+                        <div>Meeting Date: {suggested.meetingDate || "-"}</div>
+                        <div>Meeting Type: {suggested.meetingType || "-"}</div>
+                        {suggested.rawDateText && <div>Raw Date: {suggested.rawDateText}</div>}
+                      </>
+                    )}
                     {suggested.notes && <div>Notes: {suggested.notes}</div>}
                   </div>
                 );
@@ -182,6 +194,9 @@ function getDefaultMetadataForJob(job: IngestionJobWithBlob): JobMetadataEdits {
     year: suggested.year || "",
     documentLinkMode: "new",
     documentId: "",
+    isMinutes: suggested.isMinutes || false,
+    meetingDate: suggested.meetingDate || "",
+    meetingType: suggested.meetingType || "",
   };
 }
 
@@ -243,7 +258,7 @@ export default function AdminIngestion() {
     return getDefaultMetadataForJob(job);
   }, [jobEdits]);
 
-  const updateJobEdit = useCallback((jobId: string, field: keyof JobMetadataEdits, value: string) => {
+  const updateJobEdit = useCallback((jobId: string, field: keyof JobMetadataEdits, value: string | boolean) => {
     setJobEdits(prev => {
       const existingJob = jobs?.find(j => j.id === jobId);
       const current = prev[jobId] || (existingJob ? getDefaultMetadataForJob(existingJob) : {
@@ -253,6 +268,9 @@ export default function AdminIngestion() {
         year: "",
         documentLinkMode: "new" as const,
         documentId: "",
+        isMinutes: false,
+        meetingDate: "",
+        meetingType: "",
       });
       return {
         ...prev,
@@ -312,11 +330,14 @@ export default function AdminIngestion() {
         },
         body: JSON.stringify({
           finalMetadata: {
-            category: metadata.category,
+            category: metadata.isMinutes ? "meeting_minutes" : metadata.category,
             town: metadata.town,
             board: metadata.board,
             year: metadata.year,
             notes: "",
+            isMinutes: metadata.isMinutes,
+            meetingDate: metadata.meetingDate || null,
+            meetingType: metadata.meetingType || null,
           },
           documentLinkMode: metadata.documentLinkMode,
           documentId: metadata.documentLinkMode === "existing" ? metadata.documentId : undefined,
@@ -374,11 +395,14 @@ export default function AdminIngestion() {
             },
             body: JSON.stringify({
               finalMetadata: {
-                category: metadata.category,
+                category: metadata.isMinutes ? "meeting_minutes" : metadata.category,
                 town: metadata.town,
                 board: metadata.board,
                 year: metadata.year,
                 notes: "",
+                isMinutes: metadata.isMinutes,
+                meetingDate: metadata.meetingDate || null,
+                meetingType: metadata.meetingType || null,
               },
               documentLinkMode: metadata.documentLinkMode,
               documentId: metadata.documentLinkMode === "existing" ? metadata.documentId : undefined,
@@ -908,25 +932,66 @@ export default function AdminIngestion() {
                                   {job.fileBlob.originalFilename}
                                 </TableCell>
                                 <TableCell>
-                                  {isNeedsReview ? (
-                                    <Select
-                                      value={metadata.category}
-                                      onValueChange={(v) => updateJobEdit(job.id, "category", v)}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs" data-testid={`select-category-${job.id}`}>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {CATEGORY_OPTIONS.map((option) => (
-                                          <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <span className="text-sm">{CATEGORY_OPTIONS.find(o => o.value === metadata.category)?.label || metadata.category}</span>
-                                  )}
+                                  <div className="space-y-1">
+                                    {isNeedsReview ? (
+                                      <Select
+                                        value={metadata.category}
+                                        onValueChange={(v) => {
+                                          updateJobEdit(job.id, "category", v);
+                                          if (v === "meeting_minutes") {
+                                            updateJobEdit(job.id, "isMinutes", true);
+                                          } else {
+                                            updateJobEdit(job.id, "isMinutes", false);
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs" data-testid={`select-category-${job.id}`}>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {CATEGORY_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                              {option.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <span className="text-sm">{CATEGORY_OPTIONS.find(o => o.value === metadata.category)?.label || metadata.category}</span>
+                                    )}
+                                    {(metadata.isMinutes || metadata.category === "meeting_minutes") && isNeedsReview && (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            value={metadata.meetingDate}
+                                            onChange={(e) => updateJobEdit(job.id, "meetingDate", e.target.value)}
+                                            placeholder="YYYY-MM-DD"
+                                            className="h-7 text-xs flex-1"
+                                            data-testid={`input-meetingdate-${job.id}`}
+                                          />
+                                        </div>
+                                        <Select
+                                          value={metadata.meetingType || "regular"}
+                                          onValueChange={(v) => updateJobEdit(job.id, "meetingType", v)}
+                                        >
+                                          <SelectTrigger className="h-7 text-xs" data-testid={`select-meetingtype-${job.id}`}>
+                                            <SelectValue placeholder="Meeting type" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="regular">Regular Meeting</SelectItem>
+                                            <SelectItem value="special">Special Meeting</SelectItem>
+                                            <SelectItem value="work_session">Work Session</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    )}
+                                    {(metadata.isMinutes || metadata.category === "meeting_minutes") && !isNeedsReview && (
+                                      <div className="text-xs text-muted-foreground">
+                                        {metadata.meetingDate && <span>Date: {metadata.meetingDate}</span>}
+                                        {metadata.meetingType && <span className="ml-2">({metadata.meetingType})</span>}
+                                      </div>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   {isNeedsReview ? (

@@ -16,6 +16,14 @@ Your job is to analyze each user question and determine:
    - ordinance, policy, planning_board_docs, zba_docs, licensing_permits
    - cip, elections, misc_other
 
+IMPORTANT FOR MEETING MINUTES:
+If the user asks about:
+- "minutes", "meeting minutes", "last night's meeting"
+- What a board "decided", "discussed", "voted on"
+- What happened at a specific meeting or date
+- Actions, motions, or decisions made by a board
+Then the primary domain should be "meeting_minutes".
+
 3. CLARIFICATION: Does the question need clarification before answering?
    - Only require clarification if the question is genuinely ambiguous about WHICH town or topic
    - Do NOT ask for clarification on common governance terms

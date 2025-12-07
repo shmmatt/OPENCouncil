@@ -10,6 +10,11 @@ export interface DocumentMetadata {
   board?: string;
   year?: string;
   notes?: string;
+  // Minutes-specific fields
+  isMinutes?: boolean;
+  meetingDate?: string | null;
+  meetingType?: string | null;
+  rawDateText?: string | null;
 }
 
 interface UploadResult {
@@ -61,8 +66,11 @@ export async function uploadDocumentToFileStore(
     // Build custom metadata for filtering (only include non-empty values)
     const customMetadata: Array<{ key: string; stringValue: string }> = [];
     
+    // If isMinutes is true, force category to meeting_minutes
+    const finalCategory = metadata.isMinutes ? "meeting_minutes" : metadata.category;
+    
     // Category is always required
-    customMetadata.push({ key: "category", stringValue: metadata.category });
+    customMetadata.push({ key: "category", stringValue: finalCategory });
     
     // Only add optional fields if they have values
     if (metadata.town) {
@@ -76,6 +84,17 @@ export async function uploadDocumentToFileStore(
     }
     if (metadata.notes) {
       customMetadata.push({ key: "notes", stringValue: metadata.notes });
+    }
+    
+    // Minutes-specific metadata
+    if (metadata.isMinutes !== undefined) {
+      customMetadata.push({ key: "isMinutes", stringValue: String(metadata.isMinutes) });
+    }
+    if (metadata.meetingDate) {
+      customMetadata.push({ key: "meetingDate", stringValue: metadata.meetingDate });
+    }
+    if (metadata.meetingType) {
+      customMetadata.push({ key: "meetingType", stringValue: metadata.meetingType });
     }
 
     // Determine MIME type from filename
@@ -119,7 +138,7 @@ export async function uploadDocumentToFileStore(
 
     console.log(`Document uploaded and indexed: ${displayName}`);
     console.log(`File ID: ${fileId}`);
-    console.log(`Metadata: category=${metadata.category}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}`);
+    console.log(`Metadata: category=${finalCategory}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}, isMinutes=${metadata.isMinutes || false}, meetingDate=${metadata.meetingDate || 'N/A'}`);
 
     return {
       fileId,
@@ -136,8 +155,17 @@ function buildDisplayName(filename: string, metadata: DocumentMetadata): string 
   
   if (metadata.town) parts.push(metadata.town);
   if (metadata.board) parts.push(metadata.board);
-  if (metadata.category) parts.push(metadata.category.replace(/_/g, ' '));
-  if (metadata.year) parts.push(metadata.year);
+  
+  // For minutes, prefer meetingDate over year
+  if (metadata.isMinutes && metadata.meetingDate) {
+    parts.push(`Meeting ${metadata.meetingDate}`);
+  } else if (metadata.category) {
+    parts.push(metadata.category.replace(/_/g, ' '));
+  }
+  
+  if (!metadata.isMinutes && metadata.year) {
+    parts.push(metadata.year);
+  }
   
   const prefix = parts.length > 0 ? `[${parts.join(' - ')}] ` : '';
   return `${prefix}${filename}`;
