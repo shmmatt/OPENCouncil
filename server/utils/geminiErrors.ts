@@ -54,5 +54,5 @@ export function handleGeminiError(
 }
 
 export function getQuotaExceededMessage(): string {
-  return "The assistant has temporarily reached its daily usage limit and cannot generate new answers right now. Your documents are safe; this is just a usage limit. Please try again in a few minutes or contact your administrator if the problem persists.";
+  return "The OpenCouncil assistant has temporarily reached its usage limit and cannot generate new answers right now. This is just a usage limit. Please try again in a few minutes or contact your administrator if the issue persists.";
 }

@@ -189,7 +189,7 @@ export async function askQuestionWithFileSearch(
     
     if (!storeId) {
       return {
-        answer: "No documents have been uploaded yet. Please ask an administrator to upload municipal documents before using the chat feature.",
+        answer: "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
         citations: [],
       };
     }
@@ -214,16 +214,19 @@ export async function askQuestionWithFileSearch(
     const systemInstruction = `You are an assistant helping small-town elected officials and public workers in New Hampshire.
 
 Your role:
-- Answer questions based ONLY on the provided municipal documents
+- Answer questions based on documents indexed in the OpenCouncil archive (municipal budgets, minutes, town reports, ordinances, etc.)
 - Provide concise, practical answers with clear citations
 - Reference specific document titles or sections when answering
-- If information is not in the documents, clearly state that and suggest consulting a municipal attorney or state association
+- When a clear, document-based answer is not possible, explain that no directly relevant material was found in the OpenCouncil archive, and provide carefully labeled general guidance based on New Hampshire practice or law
 
 Guidelines:
 - Be conservative and accurate - don't speculate
 - Use professional but accessible language
 - Prioritize actionable guidance
-- When citing, mention the document name clearly`;
+- When citing, mention the document name clearly
+- Never use phrases like "your documents" or imply the user personally provided documents
+
+All information is informational only and is not legal advice.`;
 
     // Call Gemini with File Search
     const response = await ai.models.generateContent({
@@ -241,7 +244,7 @@ Guidelines:
       },
     });
 
-    const answer = response.text || "I apologize, but I couldn't generate a response.";
+    const answer = response.text || "No directly relevant material was found in the OpenCouncil archive for this question.";
 
     // Extract citations from grounding metadata
     const citations: string[] = [];
@@ -263,7 +266,7 @@ Guidelines:
     
     // Return a graceful error message instead of throwing
     return {
-      answer: "I apologize, but I'm having trouble accessing the document search system right now. Please try again in a moment. If the problem persists, contact your administrator.",
+      answer: "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
       citations: [],
     };
   }

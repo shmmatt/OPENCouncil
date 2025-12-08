@@ -908,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         citations = result.citations;
       } catch (aiError) {
         console.error("AI response error:", aiError);
-        answer = "I apologize, but I encountered an error while processing your question. Please try again or contact support if the issue persists.";
+        answer = "An error occurred while processing this question. Please try again in a moment.";
         citations = [];
       }
 

@@ -6,7 +6,14 @@ import { logDebug } from "../utils/logger";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { isRSAQuestion } from "./router";
-import { generateStatewideDisclaimer, generateNoDocsFoundMessage } from "./scopeUtils";
+import { 
+  generateStatewideDisclaimer, 
+  generateNoDocsFoundMessage, 
+  selectScopeNote,
+  LOCAL_SCOPE_NOTE,
+  STATEWIDE_SCOPE_NOTE,
+  NO_DOC_SCOPE_NOTE
+} from "./scopeUtils";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -47,7 +54,7 @@ export async function generateSimpleAnswer(
   if (!storeId) {
     return {
       answerText:
-        "No documents have been uploaded yet. Please ask an administrator to upload municipal documents before using the chat feature.",
+        "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
     };
   }
@@ -177,7 +184,14 @@ export async function generateSimpleAnswer(
       };
     }
 
-    return { answerText: rawAnswerText, sourceDocumentNames };
+    const scopeNote = selectScopeNote({
+      hasDocResults,
+      isRSAQuestion: isRSA,
+      scopeHint: routerOutput.scopeHint,
+      townPreference: userHints?.town,
+    });
+    
+    return { answerText: rawAnswerText + scopeNote, sourceDocumentNames };
   } catch (error) {
     if (isQuotaError(error)) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -201,7 +215,7 @@ export async function generateSimpleAnswer(
 
     return {
       answerText:
-        "I apologize, but I'm having trouble accessing the document search system right now. Please try again in a moment.",
+        "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
       sourceDocumentNames: [],
     };
   }
@@ -238,19 +252,19 @@ function buildSimpleAnswerSystemPrompt(
 ${townContext}
 
 Your role:
-- Answer questions based ONLY on the provided municipal documents
+- Answer questions based on documents indexed in the OpenCouncil archive (municipal budgets, minutes, town reports, ordinances, etc.)
 - Provide concise, practical answers (2-4 sentences unless the question clearly needs more)
 - Reference specific document titles or sections when answering
-- If information is not in the documents, clearly state that and suggest consulting a municipal attorney or NHMA
+- When a clear, document-based answer is not possible, explain that no directly relevant material was found in the OpenCouncil archive, and provide carefully labeled general guidance based on New Hampshire practice or law
 
 Guidelines:
 - Be conservative and accurate - don't speculate
 - Use professional but accessible language
 - Prioritize actionable guidance
 - When citing, mention the document name clearly
-- Prefer saying "I don't have specific information about this" over making assumptions
+- Never use phrases like "your documents" or imply the user personally provided documents
 
-IMPORTANT: This is informational only, not legal advice. Users should consult town counsel or NHMA for formal legal opinions.`;
+IMPORTANT: All information is informational only and is not legal advice. Users should consult town counsel or NHMA for formal legal opinions.`;
 }
 
 async function generateRSAGeneralKnowledgeAnswer(
@@ -292,7 +306,7 @@ async function generateRSAGeneralKnowledgeAnswer(
     });
 
     if (!answerText) {
-      return "I apologize, but I was unable to generate a response about this New Hampshire statute. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
+      return "No directly relevant material was found for this New Hampshire statute question. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
     }
 
     return answerText;
@@ -305,7 +319,7 @@ async function generateRSAGeneralKnowledgeAnswer(
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
-    return "I apologize, but I was unable to generate a response about this New Hampshire statute at this time. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
+    return "An error occurred while processing this New Hampshire statute question. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
   }
 }
 

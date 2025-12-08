@@ -1,0 +1,147 @@
+## 🎨 Prompt 2 — Implement *tone & wording* changes (“OpenCouncil archive” instead of “your documents”)
+
+```text
+You are editing the same OpenCouncil municipal assistant codebase. Your goal is to clean up the language so it is professional, neutral, and product-branded — **never** blaming the user or implying they did something wrong with “your documents”.
+
+Replace “your documents” style wording with “OpenCouncil archive” style wording, and update all scope / disclaimer text accordingly.
+
+### 1) Find and replace problematic phrases
+
+Search the codebase (especially answer templates, system prompts, and error handlers) for phrases like:
+
+- "your documents"
+- "the provided documents"
+- "your town documents"
+- "we don't have your docs"
+- "we don't have your documents"
+- "I couldn't generate a response."
+- "based ONLY on the provided documents"
+- Any similar second-person document ownership phrasing
+
+You are **not** removing the constraints (the system must still be doc-grounded when appropriate), just changing how this is communicated.
+
+### 2) Introduce standardized “source scope” snippets
+
+Implement three reusable scope description strings somewhere central (e.g., a `scopes.ts` module or constants file), and then reuse them in answer synthesis and error handlers.
+
+#### A) Local / municipal doc-based scope
+
+```ts
+const LOCAL_SCOPE_NOTE = 
+  "Source scope: Based on documents available in the OpenCouncil archive for this municipality. " +
+  "These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. " +
+  "Details may be incomplete depending on what municipalities have published or digitized.";
+Use this whenever the answer is clearly based on one specific town’s municipal documents (budget, minutes, etc.).
+
+B) Statewide / RSA-based scope
+ts
+Copy code
+const STATEWIDE_SCOPE_NOTE =
+  "Source scope: Informed primarily by New Hampshire statutory and regulatory context. " +
+  "This summary is not based on a specific municipality’s OpenCouncil-indexed documents. " +
+  "For exact legal language or application, consult the official RSA text or municipal counsel. " +
+  "This information is informational only and is not legal advice.";
+Use this when the answer is a general explanation of New Hampshire law / RSA (for example, the RSA 53-A summary path implemented in Prompt 1).
+
+C) General fallback scope (no relevant docs found)
+ts
+Copy code
+const NO_DOC_SCOPE_NOTE =
+  "Source scope: No directly relevant material was found in the OpenCouncil archive for this question. " +
+  "Where possible, this response reflects general New Hampshire municipal practice. " +
+  "Local procedures may differ, and consulting municipal records or counsel may provide more specific guidance. " +
+  "This information is informational only and is not legal advice.";
+Use this when:
+
+There were no matching municipal documents, and
+
+The answer had to be constructed from general patterns/knowledge, or
+
+You are explicitly telling the user that OpenCouncil couldn’t find anything on that topic.
+
+3) Update prompts and templates to use this wording
+A) Complex answer synthesis
+Find the complex-answer synthesizer (look for system prompt: “You are an expert municipal governance assistant for New Hampshire…”, and sections like “### At a glance / ### Key numbers / ### Details from recent meetings”).
+
+At the end of the answer assembly pipeline (after generating the content), append either:
+
+LOCAL_SCOPE_NOTE if at least one municipal snippet was used and townPreference is set.
+
+STATEWIDE_SCOPE_NOTE if the answer is primarily statute/state-level.
+
+NO_DOC_SCOPE_NOTE if no snippets were available and you are answering from general knowledge.
+
+Make the choice based on the same scopeHint and snippet usage already available from Prompt 1.
+
+B) Simple answer path
+In the simple-answer function:
+
+If resultCount > 0 and a specific town is implied:
+
+Append LOCAL_SCOPE_NOTE.
+
+If it’s an RSA / statewide answer (no docs, but isRSAQuestion === true as implemented in Prompt 1):
+
+Append STATEWIDE_SCOPE_NOTE.
+
+If neither docs nor RSA-state context are present (pure “no results” from OpenCouncil):
+
+Use NO_DOC_SCOPE_NOTE and a short, professional explanation like:
+
+text
+Copy code
+No directly relevant material was found in the OpenCouncil archive for this question. 
+The following general guidance may still be helpful, but local procedures can differ.
+Replace any “I apologize, but I couldn’t generate a response.” type messages with this more professional pattern.
+
+C) System prompts and guidance text
+Update system prompts where you see wording like:
+
+“Answer questions based ONLY on the provided documents”
+
+“If information is not in the documents, clearly state that…”
+
+Change them to explicitly mention OpenCouncil archives, for example:
+
+text
+Copy code
+Answer questions based on documents indexed in the OpenCouncil archive (municipal budgets, minutes, town reports, ordinances, etc.). 
+When a clear, document-based answer is not possible, either:
+- Explain that no directly relevant material was found in the OpenCouncil archive, and/or
+- Provide carefully labeled general guidance based on New Hampshire practice or law, with an explicit scope note.
+All information is informational only and not legal advice.
+Ensure no system prompt uses “your documents” or implies that the user personally provided the docs.
+
+4) Keep tone polished and neutral
+Where you previously might have said:
+
+"We don't have your documents."
+
+"Your documents don't cover this."
+
+Change to formulations like:
+
+"No directly relevant material appears in the OpenCouncil archive for this question."
+
+"The available documents for this municipality do not address this question directly."
+
+These should appear in:
+
+Error states
+
+Edge-case answers
+
+Any fallback explanation when the archive lacks coverage
+
+5) Sanity check
+Once you update everything, ensure that:
+
+Answers now end with one of the three standardized scope notes.
+
+The RSA 53-A question path uses STATEWIDE_SCOPE_NOTE.
+
+Town-specific questions show LOCAL scope notes.
+
+Fallbacks never blame the user or mention “your documents.”
+
+Keep the implementation consistent with existing coding style (TypeScript types, logging patterns, etc.).

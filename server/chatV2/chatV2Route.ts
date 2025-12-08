@@ -16,6 +16,8 @@ import {
   createBypassedRouterOutput,
   buildTrimmedHistoryForAnswer,
 } from "./pipelineUtils";
+import { selectScopeNote } from "./scopeUtils";
+import { isRSAQuestion } from "./router";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -401,6 +403,15 @@ export function registerChatV2Routes(app: Express): void {
             followUpCount: suggestedFollowUps.length,
           });
         }
+
+        // Append scope note to complex answers
+        const scopeNote = selectScopeNote({
+          hasDocResults: sourceDocumentNames.length > 0,
+          isRSAQuestion: isRSAQuestion(content.trim()),
+          scopeHint: routerOutput.scopeHint,
+          townPreference: retrievalPlan.filters.townPreference,
+        });
+        answerText += scopeNote;
       }
 
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
@@ -518,7 +529,7 @@ export function registerChatV2Routes(app: Express): void {
         const errorMessage = await storage.createChatMessage({
           sessionId,
           role: "assistant",
-          content: "I apologize, but something went wrong while analyzing your question. Please try again or simplify your question. If the problem persists, contact your administrator.",
+          content: "An error occurred while processing this question. Please try again or simplify your question.",
           citations: null,
         });
 

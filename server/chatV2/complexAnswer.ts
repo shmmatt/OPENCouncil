@@ -34,7 +34,7 @@ export async function generateComplexDraftAnswer(
   if (!storeId) {
     return {
       draftAnswerText:
-        "No documents have been uploaded yet. Please ask an administrator to upload municipal documents.",
+        "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
     };
   }
@@ -282,7 +282,7 @@ async function synthesizeDraftAnswer(
   logContext?: PipelineLogContext
 ): Promise<string> {
   if (snippets.length === 0) {
-    return "I was unable to find relevant information in the available documents to answer this question. Please try rephrasing your question or consult with your municipal attorney or NHMA directly.";
+    return "No directly relevant material was found in the OpenCouncil archive for this question. The available documents for this municipality do not address this question directly. You may wish to consult municipal records or counsel for more specific guidance.";
   }
 
   const snippetText = snippets
@@ -406,7 +406,7 @@ HYPER-LOCAL FOCUS (IMPORTANT):
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
-    return "I encountered an error while processing the retrieved documents. Please try again.";
+    return "An error occurred while processing the retrieved documents. Please try again in a moment.";
   }
 }
 
