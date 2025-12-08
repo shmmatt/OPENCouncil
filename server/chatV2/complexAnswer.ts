@@ -336,7 +336,14 @@ For complex answers, use this structure exactly:
 3. "### Details from recent meetings" - compact narrative referencing specific meetings/documents
 
 Keep total length around 400-600 words unless the question explicitly demands more.
-When you use information from a document, mention it explicitly, e.g. "According to the Ossipee Board of Selectmen minutes from March 4, 2024..." or "As noted in the 2025 Ossipee budget...".`;
+When you use information from a document, mention it explicitly, e.g. "According to the Ossipee Board of Selectmen minutes from March 4, 2024..." or "As noted in the 2025 Ossipee budget...".
+
+HYPER-LOCAL FOCUS (IMPORTANT):
+- If a specific town is identified in the question or the retrieval filters (e.g. Ossipee, Conway), base your primary answer ONLY on documents for that town.
+- Do NOT generalize to statewide RSA procedures or "how it usually works in NH" unless the user explicitly asks for statewide context.
+- If the documents do not clearly explain the legal or procedural basis for how something was established or approved, say that explicitly instead of guessing.
+- You may mention that state law or RSAs might apply, but do not describe their content in detail unless the user asked for that.
+- Focus on specific meeting minutes, budget line items, and local decisions rather than theoretical RSA frameworks.`;
 
   logLlmRequest({
     requestId: logContext?.requestId,

@@ -6,6 +6,7 @@ import { generateSimpleAnswer } from "./simpleAnswer";
 import { planRetrieval } from "./retrievalPlanner";
 import { generateComplexDraftAnswer } from "./complexAnswer";
 import { critiqueAndImproveAnswer } from "./critic";
+import { generateFollowups } from "./generateFollowups";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
 import { shouldRunCritic } from "./chatConfig";
@@ -235,6 +236,8 @@ export function registerChatV2Routes(app: Express): void {
       let suggestedFollowUps: string[] = [];
       let criticUsed = false;
 
+      let townPreference: string | undefined;
+
       if (routerOutput.complexity === "simple") {
         logDebug("chat_v2_simple_path", {
           ...logCtx,
@@ -255,6 +258,7 @@ export function registerChatV2Routes(app: Express): void {
 
         answerText = simpleResult.answerText;
         sourceDocumentNames = simpleResult.sourceDocumentNames;
+        townPreference = metadata?.town;
 
         logDebug("simple_answer_result", {
           ...logCtx,
@@ -262,6 +266,20 @@ export function registerChatV2Routes(app: Express): void {
           sourceCount: sourceDocumentNames.length,
           sourceDocNames: sourceDocumentNames.slice(0, 5),
           answerLength: answerText.length,
+        });
+
+        suggestedFollowUps = await generateFollowups({
+          userQuestion: content.trim(),
+          answerText,
+          townPreference,
+          detectedDomains: routerOutput.domains,
+          logContext: logCtx,
+        });
+
+        logDebug("simple_path_followups_generated", {
+          ...logCtx,
+          stage: "generateFollowups",
+          followUpCount: suggestedFollowUps.length,
         });
 
       } else {
@@ -332,6 +350,22 @@ export function registerChatV2Routes(app: Express): void {
             limitationsNote: limitationsNote?.slice(0, 100),
             suggestedFollowUpCount: suggestedFollowUps.length,
           });
+
+          if (suggestedFollowUps.length === 0) {
+            suggestedFollowUps = await generateFollowups({
+              userQuestion: content.trim(),
+              answerText,
+              townPreference: retrievalPlan.filters.townPreference,
+              detectedDomains: routerOutput.domains,
+              logContext: logCtx,
+            });
+
+            logDebug("complex_path_followups_generated_after_critic", {
+              ...logCtx,
+              stage: "generateFollowups",
+              followUpCount: suggestedFollowUps.length,
+            });
+          }
         } else {
           answerText = draftResult.draftAnswerText;
           
@@ -341,6 +375,20 @@ export function registerChatV2Routes(app: Express): void {
             criticUsed: false,
             reason: "gated_by_config",
             draftLength: draftResult.draftAnswerText.length,
+          });
+
+          suggestedFollowUps = await generateFollowups({
+            userQuestion: content.trim(),
+            answerText,
+            townPreference: retrievalPlan.filters.townPreference,
+            detectedDomains: routerOutput.domains,
+            logContext: logCtx,
+          });
+
+          logDebug("complex_path_followups_generated", {
+            ...logCtx,
+            stage: "generateFollowups",
+            followUpCount: suggestedFollowUps.length,
           });
         }
       }
