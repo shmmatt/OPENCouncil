@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import type { DocumentMetadata } from "@shared/schema";
-import { ALLOWED_CATEGORIES } from "@shared/schema";
+import type { DocumentMetadata, MetadataHints } from "@shared/schema";
+import { ALLOWED_CATEGORIES, NH_TOWNS } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -17,6 +17,102 @@ export interface SuggestedMetadata {
   rawDateText?: string | null;
 }
 
+// Enhanced town extraction from document text using multiple patterns
+export function extractTownFromText(previewText: string): string | undefined {
+  const lines = previewText.split(/\r?\n/).slice(0, 40);
+  
+  // Pattern 1: "TOWN OF OSSIPEE" format (most common in minutes)
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    const m = upper.match(/TOWN\s+OF\s+([A-Z][A-Z\s]+)/);
+    if (m) {
+      let raw = m[1].trim();
+      // Clean up - remove "NH", "NEW HAMPSHIRE", punctuation
+      raw = raw
+        .replace(/\bNEW\s*HAMPSHIRE\b/g, "")
+        .replace(/\bNH\b/g, "")
+        .replace(/[,\.\:]+$/g, "")
+        .trim();
+      
+      // Title case
+      const town = raw.toLowerCase().replace(/\s+/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+      
+      if (town && town.length > 2) {
+        return town;
+      }
+    }
+  }
+  
+  // Pattern 2: Known NH towns with context patterns
+  const textLower = lines.join(" ").toLowerCase();
+  
+  for (const town of NH_TOWNS) {
+    if (town === "statewide") continue;
+    
+    const townLower = town.toLowerCase();
+    const patterns = [
+      `town of ${townLower}`,
+      `${townLower}, nh`,
+      `${townLower}, new hampshire`,
+      `${townLower} town hall`,
+      `${townLower} planning board`,
+      `${townLower} board of selectmen`,
+      `${townLower} select board`,
+      `${townLower} zoning board`,
+      `${townLower} conservation`,
+    ];
+    
+    for (const pattern of patterns) {
+      if (textLower.includes(pattern)) {
+        return town;
+      }
+    }
+  }
+  
+  // Pattern 3: Check for state-level documents
+  const statePatterns = [
+    /state\s+of\s+new\s+hampshire/i,
+    /new\s+hampshire\s+legislature/i,
+    /nh\s+rsa/i,
+    /new\s+hampshire\s+department/i,
+    /state\s+agency/i,
+  ];
+  
+  for (const pattern of statePatterns) {
+    if (pattern.test(textLower)) {
+      return "statewide";
+    }
+  }
+  
+  return undefined;
+}
+
+// Finalize town using fallback logic: LLM result > heuristic > default hint
+export function finalizeTown(
+  llmTown: string | undefined,
+  hints: { defaultTown?: string; possibleTown?: string }
+): string | undefined {
+  const cleaned = llmTown?.trim();
+  
+  // If LLM gave us a valid town, use it
+  if (cleaned && cleaned.length > 0) {
+    return cleaned;
+  }
+  
+  // Fall back to heuristic-detected town
+  if (hints.possibleTown) {
+    return hints.possibleTown;
+  }
+  
+  // Fall back to admin-provided default
+  if (hints.defaultTown) {
+    return hints.defaultTown;
+  }
+  
+  return undefined;
+}
+
 export interface MinutesHeuristics {
   likelyMinutes: boolean;
   possibleTown?: string;
@@ -31,12 +127,10 @@ export function detectMinutesHeuristics(
   previewText: string
 ): MinutesHeuristics {
   const lower = filename.toLowerCase();
-  const textLower = previewText.toLowerCase();
-  const firstPageText = previewText.slice(0, 3000); // Focus on first page
+  const firstPageText = previewText.slice(0, 3000);
   
   let likelyMinutes = false;
   let confidence: "high" | "medium" | "low" = "low";
-  let possibleTown: string | undefined;
   let possibleBoard: string | undefined;
   let possibleDateText: string | undefined;
 
@@ -84,21 +178,8 @@ export function detectMinutesHeuristics(
     }
   }
 
-  // Extract possible town from text
-  const townPatterns = [
-    /town\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+town\s+hall/i,
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+planning\s+board/i,
-    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+board\s+of\s+selectmen/i,
-  ];
-
-  for (const pattern of townPatterns) {
-    const match = firstPageText.match(pattern);
-    if (match && match[1]) {
-      possibleTown = match[1].trim();
-      break;
-    }
-  }
+  // Use enhanced town extraction instead of basic patterns
+  const possibleTown = extractTownFromText(previewText);
 
   // Extract possible board from text
   const boardPatterns: Array<{ pattern: RegExp; name: string }> = [
@@ -209,15 +290,44 @@ export function parseDateToISO(dateText: string): string | null {
 
 export async function suggestMetadataFromPreview(
   filename: string,
-  previewText: string
+  previewText: string,
+  metadataHints?: MetadataHints
 ): Promise<SuggestedMetadata> {
   const categoryList = ALLOWED_CATEGORIES.join(", ");
   
   // Run heuristic pre-pass for minutes detection
   const minutesHints = detectMinutesHeuristics(filename, previewText);
   
-  const prompt = `You classify municipal government documents from New Hampshire.
-Read the filename and text below and respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
+  // Build hints section for the LLM prompt
+  const hintsSection = [];
+  if (minutesHints.likelyMinutes) {
+    hintsSection.push(`HINT: This document appears to be meeting minutes based on filename/text patterns.`);
+  }
+  if (minutesHints.possibleTown) {
+    hintsSection.push(`HINT: Heuristic town detected from document text: "${minutesHints.possibleTown}" - USE THIS UNLESS TEXT CLEARLY CONTRADICTS IT.`);
+  }
+  if (metadataHints?.defaultTown) {
+    hintsSection.push(`HINT: Admin-provided default town: "${metadataHints.defaultTown}" - USE THIS IF NO OTHER TOWN IS CLEARLY INDICATED IN THE DOCUMENT.`);
+  }
+  if (minutesHints.possibleBoard) {
+    hintsSection.push(`HINT: Possible board detected: "${minutesHints.possibleBoard}"`);
+  }
+  if (metadataHints?.defaultBoard) {
+    hintsSection.push(`HINT: Admin-provided default board: "${metadataHints.defaultBoard}" - USE THIS IF NO OTHER BOARD IS CLEARLY INDICATED.`);
+  }
+  if (minutesHints.possibleDateText) {
+    hintsSection.push(`HINT: Possible meeting date detected: "${minutesHints.possibleDateText}"`);
+  }
+  
+  const prompt = `You are extracting canonical metadata for New Hampshire municipal documents.
+
+You are given:
+- filename
+- preview_text (first part of the document)
+- hints.possibleTown (town name heuristically detected from the text, if any)
+- hints.defaultTown (town chosen by the admin during upload, if any)
+
+Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
 
 {
   "category": "...",
@@ -234,12 +344,18 @@ Read the filename and text below and respond with ONLY valid JSON (no markdown, 
 category MUST be one of:
 ${categoryList}
 
-Rules:
-- If document is statewide (laws, handbooks, state guidance) use: "town": "statewide"
+**CRITICAL RULES FOR town:**
+- If the document text contains phrases like "TOWN OF OSSIPEE", "Town of Ossipee, NH", "Ossipee, New Hampshire", you MUST set town to exactly "Ossipee" (just the town name, no "Town of" prefix).
+- If hints.possibleTown is present (from heuristic detection), you MUST use that unless the document text clearly indicates a DIFFERENT town.
+- If hints.defaultTown is present (from admin), and the text does not clearly indicate a different town name, you MUST set town to hints.defaultTown.
+- Only use "statewide" if the document is clearly statewide (e.g., issued by the State of New Hampshire, NH RSA, state agency) and no specific town is indicated.
+- Do NOT leave town empty if hints.defaultTown exists and there is no conflicting town name in the text.
+- For NH towns, extract ONLY the town name (e.g., "Ossipee", "Conway", "Madison") - never include "Town of".
+
+Other rules:
 - Keep notes very short (under 100 characters)
-- If you cannot determine a field, use an empty string "" for strings or null for nullable fields
 - Year should be a 4-digit year if detectable, otherwise ""
-- Board should be the name of the board/department if mentioned (e.g., "Planning Board", "Zoning Board", "School Board")
+- Board should be the name of the board/department (e.g., "Planning Board", "Board of Selectmen", "Zoning Board of Adjustment")
 
 SPECIAL RULES FOR MEETING MINUTES:
 - If this document appears to be official meeting minutes, set isMinutes: true AND category: "meeting_minutes"
@@ -247,13 +363,8 @@ SPECIAL RULES FOR MEETING MINUTES:
 - For minutes, extract the EXACT meeting date as meetingDate in ISO format (YYYY-MM-DD)
 - Set rawDateText to the original date text you found (e.g., "March 5, 2024")
 - meetingType: "regular" for regular meetings, "special" for special meetings, "work_session" for work sessions
-- town: extract the exact town name (e.g., "Ossipee", "Conway") - do NOT include "Town of"
-- board: exact board name like "Planning Board", "Board of Selectmen", "Zoning Board of Adjustment"
 
-${minutesHints.likelyMinutes ? `HINT: This document appears to be meeting minutes based on filename/text patterns.` : ""}
-${minutesHints.possibleTown ? `HINT: Possible town detected: "${minutesHints.possibleTown}"` : ""}
-${minutesHints.possibleBoard ? `HINT: Possible board detected: "${minutesHints.possibleBoard}"` : ""}
-${minutesHints.possibleDateText ? `HINT: Possible meeting date detected: "${minutesHints.possibleDateText}"` : ""}
+${hintsSection.join("\n")}
 
 Filename: ${filename}
 
@@ -292,10 +403,21 @@ ${previewText.slice(0, 10000)}`;
         meetingDate = parseDateToISO(parsed.rawDateText);
       }
       
+      // Finalize town using fallback logic: LLM result > heuristic > admin default
+      const llmTown = typeof parsed.town === "string" ? parsed.town.trim() : "";
+      const finalTown = finalizeTown(llmTown, {
+        possibleTown: minutesHints.possibleTown,
+        defaultTown: metadataHints?.defaultTown,
+      }) || "";
+      
+      // Finalize board similarly
+      const llmBoard = typeof parsed.board === "string" ? parsed.board.trim() : "";
+      const finalBoard = llmBoard || minutesHints.possibleBoard || metadataHints?.defaultBoard || "";
+      
       return {
         category: finalCategory as typeof ALLOWED_CATEGORIES[number],
-        town: typeof parsed.town === "string" ? parsed.town : "",
-        board: typeof parsed.board === "string" ? parsed.board : "",
+        town: finalTown,
+        board: finalBoard,
         year: typeof parsed.year === "string" ? parsed.year : "",
         notes: typeof parsed.notes === "string" ? parsed.notes.slice(0, 200) : "",
         isMinutes,
@@ -305,11 +427,25 @@ ${previewText.slice(0, 10000)}`;
       };
     } catch (parseError) {
       console.error("Failed to parse LLM response:", cleanedText);
-      return inferMetadataFromFilename(filename);
+      // Even on parse failure, apply hints if available
+      const fallback = inferMetadataFromFilename(filename);
+      fallback.town = finalizeTown(fallback.town, {
+        possibleTown: minutesHints.possibleTown,
+        defaultTown: metadataHints?.defaultTown,
+      }) || "";
+      fallback.board = fallback.board || minutesHints.possibleBoard || metadataHints?.defaultBoard || "";
+      return fallback;
     }
   } catch (error) {
     console.error("Error calling Gemini for metadata suggestion:", error);
-    return inferMetadataFromFilename(filename);
+    // Even on error, apply hints if available
+    const fallback = inferMetadataFromFilename(filename);
+    fallback.town = finalizeTown(fallback.town, {
+      possibleTown: minutesHints.possibleTown,
+      defaultTown: metadataHints?.defaultTown,
+    }) || "";
+    fallback.board = fallback.board || minutesHints.possibleBoard || metadataHints?.defaultBoard || "";
+    return fallback;
   }
 }
 
