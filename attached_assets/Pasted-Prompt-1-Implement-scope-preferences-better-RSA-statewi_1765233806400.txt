@@ -1,0 +1,145 @@
+Prompt 1 — Implement scope preferences + better RSA / statewide handling
+You are editing the OpenCouncil municipal governance assistant codebase (Node/TypeScript, Express, chat_v2 pipeline). Your goal is to implement a robust "scope" system and fix bad behavior when users ask for statewide / RSA context (e.g., "What does RSA 53-A say…?").
+
+### High-level behavior to implement
+
+1. **Two main scopes**:
+   - **LOCAL** – answers based on a specific municipality’s documents (budget, minutes, reports, etc.).
+   - **STATEWIDE / GENERAL** – answers based on New Hampshire law/RSAs or general practice, not tied to a single town.
+   - Optionally **MIXED** – for future extension, but focus for now is LOCAL vs STATEWIDE.
+
+2. **Default rule**:
+   - If the user’s question clearly references a specific town/municipality (e.g., “Ossipee”, “Conway”), the **main answer must be LOCAL**, using OpenCouncil’s municipal document store for that town.
+   - Broader RSA / statewide context should be surfaced via:
+     - Follow-up suggestions, and/or
+     - A short “context” paragraph inside the answer when it’s clearly relevant.
+
+3. **Special rule for RSA / statewide-only questions**:
+   - If the user directly asks “What does RSA 53-A say…”, “What does New Hampshire law say…”, “Under NH law…”, etc., this should be treated as **STATEWIDE**, not LOCAL, and must NOT fail just because no municipal document contains the statute text.
+
+4. **Never respond with only “I couldn’t generate a response.”**
+   - If municipal documents don’t contain the requested thing, but the question is clearly RSA/state-level, answer using general knowledge mode (statute summary), with a clear scope disclaimer.
+
+---
+
+### Concrete implementation tasks
+
+#### 1) Add a `scopeHint` to the router output
+
+Find the code that implements the **router** stage for `chat_v2` (look for logs like `stage:"router"` and model `gemini-2.5-flash`).
+
+Modify the router so that, in addition to `complexity`, `domains`, etc., it also returns a **`scopeHint`** field. The router LLM already returns JSON; extend the JSON schema to include:
+
+- `scopeHint`: `"local" | "statewide" | "mixed" | null`
+
+Router rules (can be encoded in the router system prompt or post-processed):
+
+- If the question explicitly references **a specific town** (e.g., matches “Ossipee”, “Conway”, “Bartlett”, etc.), and does **not** explicitly ask “New Hampshire”, “NH law”, “RSA”, then:
+  - `scopeHint = "local"`
+- If the question explicitly references **“RSA”**, “New Hampshire law”, “NH law”, “state law”, “RSA 53-A”, etc., and does **not** name a specific town, then:
+  - `scopeHint = "statewide"`
+- If both a town and “RSA / NH law” appear in the question:
+  - `scopeHint = "mixed"` (we will treat this as LOCAL main answer plus RSA context in follow-ups).
+
+Propagate `scopeHint` into the internal router output object that downstream stages see (`router_output`).
+
+#### 2) Use `scopeHint` in the retrieval planner
+
+Find the **retrievalPlanner** stage (look for logs like `stage:"retrievalPlanner"` and `filters` with `townPreference`, `allowStatewideFallback`, `categories` etc.).
+
+Modify the behavior as follows:
+
+- If `scopeHint === "local"`:
+  - Keep current behavior (set `townPreference` to the detected town, `allowStatewideFallback: false`).
+- If `scopeHint === "mixed"`:
+  - Keep `townPreference` set (LOCAL priority).
+  - `allowStatewideFallback: true` so RSA-relevant content from a statewide corpus could be used if you add one later.
+- If `scopeHint === "statewide"`:
+  - Set `townPreference` to `null` / omit it.
+  - Set `allowStatewideFallback: true`.
+  - Focus categories on things like `policy`, `ordinance`, `warrant_article`, `misc_other`, etc. (no need to filter by a single town).
+
+This ensures we don’t accidentally lock RSA-level questions into a town’s docs.
+
+#### 3) Enhance the simple-answer path for RSA / statute questions
+
+Find the **simple path** handler (look for `chat_v2_simple_path` logs: stages `simpleAnswer` and `simpleAnswer_fileSearch`).
+
+You must implement the following logic:
+
+1. Perform the current `file_search` call as usual.
+2. After you get `resultCount` (number of retrieved docs), add logic:
+
+   ```ts
+   const isRSAQuestion =
+     /\bRSA\b/i.test(userQuestion) ||
+     /\bRevised Statutes\b/i.test(userQuestion) ||
+     /\bNew Hampshire law\b/i.test(userQuestion) ||
+     /\bNH law\b/i.test(userQuestion);
+
+   const hasDocs = resultCount > 0;
+
+
+If hasDocs is true:
+
+Keep using the existing document-based simple answer path.
+
+If hasDocs is false AND isRSAQuestion is true:
+
+Do NOT return “I couldn’t generate a response.”
+
+Instead:
+
+Call the LLM in a “general statute summary” mode (no file_search snippets required), with a system prompt like:
+
+“You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA). Provide a concise, plain-language summary based on general knowledge. When appropriate, mention that this is not based on OpenCouncil-indexed municipal documents, and recommend consulting the official RSA text or municipal counsel for precise legal language. This is informational only, not legal advice.”
+
+Use this to generate a 2–6 sentence answer summarizing the RSA or concept.
+
+Prepend or append a scope disclaimer string to the answer (see below in Prompt 2, but you can stub it as a reusable function now):
+
+e.g. "Source scope: Not based on OpenCouncil-indexed municipal documents; this is a general summary of New Hampshire law and is not legal advice."
+
+If hasDocs is false AND isRSAQuestion is false:
+
+Keep it document-centric, but use the improved tone (Prompt 2) — i.e., say that no relevant material was found in the OpenCouncil archive and suggest steps, rather than “I couldn’t generate a response.”
+
+4) Ensure complex path stays hyper-local but follow-ups cover statewide
+
+You already have a follow-up generator that, for town-specific questions, produces at least one RSA/statewide style follow-up (we see this in the logs with questions like “What does RSA 53-A say…”).
+
+Verify and strengthen that behavior:
+
+In the follow-up generator system prompt, encode:
+
+If the detected question targets a specific town (router domains include budget, meeting_minutes, etc. and a townPreference is present), ensure at least one follow-up explicitly asks about:
+
+“What does NH RSA [topic] say…”
+
+“What are the state requirements for [topic] in New Hampshire?”
+
+This gives the user a clear path to statewide context without mixing scopes in the main answer.
+
+5) Logging and guardrails
+
+Add fields scopeHint and isRSAQuestion into debug logs where helpful, so it is easy to diagnose scope behavior.
+
+Ensure there is no path where a user asking about RSA gets only “I apologize, but I couldn’t generate a response.”
+
+Acceptance criteria
+
+A question like “What is Ossipee’s ambulance and emergency response situation currently?”:
+
+Router: scopeHint = "local", townPreference = "Ossipee"
+
+Answer: hyper-local summary based on Ossipee documents.
+
+Follow-ups: at least one RSA-level question.
+
+A question like “What does RSA 53-A say about intermunicipal agreements?”:
+
+Router: scopeHint = "statewide"
+
+Simple path: if no docs found, LLM still returns a general statute summary (no “I couldn’t generate a response”), with a statewide scope disclaimer.
+
+Make these changes in all relevant files (router, retrieval planner, simple answer path, follow-up generator), keeping code style consistent with the existing codebase.
