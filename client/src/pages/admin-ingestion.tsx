@@ -755,12 +755,15 @@ export default function AdminIngestion() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-md border bg-muted/30">
               <div className="space-y-2">
                 <Label htmlFor="default-town">Default Town (Optional)</Label>
-                <Select value={defaultTown} onValueChange={setDefaultTown}>
+                <Select 
+                  value={defaultTown || "__none__"} 
+                  onValueChange={(val) => setDefaultTown(val === "__none__" ? "" : val)}
+                >
                   <SelectTrigger id="default-town" data-testid="select-default-town">
                     <SelectValue placeholder="Select a town..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (auto-detect)</SelectItem>
+                    <SelectItem value="__none__">None (auto-detect)</SelectItem>
                     {NH_TOWNS.map((town) => (
                       <SelectItem key={town} value={town}>{town}</SelectItem>
                     ))}
