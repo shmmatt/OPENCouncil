@@ -77,7 +77,9 @@ export const ingestionJobs = pgTable("ingestion_jobs", {
   status: text("status").notNull().default("staging"), // staging, needs_review, approved, rejected, indexed
   suggestedMetadata: jsonb("suggested_metadata"), // LLM output
   finalMetadata: jsonb("final_metadata"), // after admin edits
+  metadataHints: jsonb("metadata_hints"), // hints from upload (defaultTown, defaultBoard)
   duplicateWarning: text("duplicate_warning"), // notes about potential duplicates
+  statusNote: text("status_note"), // notes about why job has a certain status (e.g., "No town detected")
   documentId: varchar("document_id"), // FK to LogicalDocument (set when approved)
   documentVersionId: varchar("document_version_id"), // FK to DocumentVersion (set when indexed)
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -123,6 +125,14 @@ export const ALLOWED_CATEGORIES = [
 
 export const MEETING_TYPES = ["regular", "special", "work_session"] as const;
 
+// Known NH towns for validation and autocomplete
+export const NH_TOWNS = [
+  "Ossipee", "Conway", "Madison", "Freedom", "Tamworth", "Albany", "Sandwich",
+  "Jackson", "Bartlett", "Eaton", "Effingham", "Moultonborough", "Tuftonboro",
+  "Wolfeboro", "Wakefield", "Brookfield", "Chatham", "Hart's Location",
+  "statewide" // special value for statewide documents
+] as const;
+
 export const documentMetadataSchema = z.object({
   category: z.enum(ALLOWED_CATEGORIES),
   town: z.string().default(""),
@@ -137,6 +147,14 @@ export const documentMetadataSchema = z.object({
 });
 
 export type DocumentMetadata = z.infer<typeof documentMetadataSchema>;
+
+// Schema for metadata hints provided during upload
+export const metadataHintsSchema = z.object({
+  defaultTown: z.string().optional(),
+  defaultBoard: z.string().optional(),
+});
+
+export type MetadataHints = z.infer<typeof metadataHintsSchema>;
 
 // Insert schemas
 export const insertDocumentSchema = createInsertSchema(documents).omit({
