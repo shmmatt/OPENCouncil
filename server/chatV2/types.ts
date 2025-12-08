@@ -1,11 +1,14 @@
 export type ComplexityLevel = "simple" | "complex";
 
+export type ScopeHint = "local" | "statewide" | "mixed" | null;
+
 export interface RouterOutput {
   complexity: ComplexityLevel;
   domains: string[];
   requiresClarification: boolean;
   clarificationQuestions: string[];
   rerankedQuestion: string;
+  scopeHint: ScopeHint;
 }
 
 export interface RetrievalPlan {

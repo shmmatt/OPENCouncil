@@ -1,9 +1,53 @@
 import { GoogleGenAI } from "@google/genai";
-import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
+import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, ScopeHint } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+const NH_TOWNS = [
+  "Ossipee", "Conway", "Bartlett", "Madison", "Tamworth", "Freedom", "Effingham",
+  "Moultonborough", "Sandwich", "Wolfeboro", "Wakefield", "Milton", "Farmington",
+  "Rochester", "Dover", "Portsmouth", "Exeter", "Hampton", "Concord", "Manchester",
+  "Nashua", "Keene", "Laconia", "Berlin", "Littleton", "Plymouth", "Hanover",
+  "Lebanon", "Claremont", "Franklin", "Tilton", "Meredith", "Ashland", "Holderness",
+  "Campton", "Thornton", "Lincoln", "Woodstock", "Franconia", "Sugar Hill", "Lisbon",
+  "Bethlehem", "Whitefield", "Lancaster", "Gorham", "Jackson", "Albany", "Eaton",
+  "Chatham", "Brookfield"
+];
+
+const RSA_PATTERNS = [
+  /\bRSA\b/i,
+  /\bRevised Statutes\b/i,
+  /\bNew Hampshire law\b/i,
+  /\bNH law\b/i,
+  /\bstate law\b/i,
+  /\bstate statute\b/i,
+  /\bstate requirements?\b/i
+];
+
+function detectScopeHint(question: string, userHints?: { town?: string }): ScopeHint {
+  const lowerQuestion = question.toLowerCase();
+  
+  const hasTownReference = userHints?.town || 
+    NH_TOWNS.some(town => lowerQuestion.includes(town.toLowerCase()));
+  
+  const hasRSAReference = RSA_PATTERNS.some(pattern => pattern.test(question));
+  
+  if (hasTownReference && hasRSAReference) {
+    return "mixed";
+  } else if (hasRSAReference && !hasTownReference) {
+    return "statewide";
+  } else if (hasTownReference) {
+    return "local";
+  }
+  
+  return null;
+}
+
+export function isRSAQuestion(question: string): boolean {
+  return RSA_PATTERNS.some(pattern => pattern.test(question));
+}
 
 const ROUTER_SYSTEM_PROMPT = `You are a router for a municipal governance Q&A assistant that helps small-town elected officials and public workers in New Hampshire.
 
@@ -33,13 +77,20 @@ Then the primary domain should be "meeting_minutes".
    IMPORTANT: If the user names a specific town (e.g., "Ossipee", "Conway", "Bartlett"), you MUST preserve that town name in rerankedQuestion.
    The town name is critical for downstream retrieval - never strip it out or generalize it.
 
+5. SCOPE HINT: Determine the scope of the question:
+   - "local": Question specifically about a town/municipality (e.g., "What is Ossipee's budget?")
+   - "statewide": Question about NH law, RSAs, or state-level requirements without referencing a specific town
+   - "mixed": Question mentions both a specific town AND state law/RSAs
+   - null: Cannot determine scope
+
 You MUST respond with valid JSON only, no other text. Use this exact format:
 {
   "complexity": "simple" | "complex",
   "domains": ["array", "of", "relevant", "categories"],
   "requiresClarification": true | false,
   "clarificationQuestions": ["question1", "question2"] (empty array if no clarification needed),
-  "rerankedQuestion": "cleaned up question text"
+  "rerankedQuestion": "cleaned up question text",
+  "scopeHint": "local" | "statewide" | "mixed" | null
 }`;
 
 const MODEL_NAME = "gemini-2.5-flash";
@@ -109,6 +160,10 @@ Remember: Respond with valid JSON only, no other text.`;
 
     try {
       const parsed = JSON.parse(cleanedText);
+      const detectedScopeHint = detectScopeHint(question, userHints);
+      const llmScopeHint = parsed.scopeHint as ScopeHint;
+      const finalScopeHint = detectedScopeHint || llmScopeHint || null;
+      
       return {
         complexity: parsed.complexity === "complex" ? "complex" : "simple",
         domains: Array.isArray(parsed.domains) ? parsed.domains : ["misc_other"],
@@ -117,6 +172,7 @@ Remember: Respond with valid JSON only, no other text.`;
           ? parsed.clarificationQuestions
           : [],
         rerankedQuestion: parsed.rerankedQuestion || question,
+        scopeHint: finalScopeHint,
       };
     } catch (parseError) {
       logLlmError({
@@ -126,7 +182,7 @@ Remember: Respond with valid JSON only, no other text.`;
         model: MODEL_NAME,
         error: parseError instanceof Error ? parseError : new Error(String(parseError)),
       });
-      return getDefaultRouterOutput(question);
+      return getDefaultRouterOutput(question, userHints);
     }
   } catch (error) {
     if (isQuotaError(error)) {
@@ -149,16 +205,17 @@ Remember: Respond with valid JSON only, no other text.`;
       error: error instanceof Error ? error : new Error(String(error)),
     });
     
-    return getDefaultRouterOutput(question);
+    return getDefaultRouterOutput(question, userHints);
   }
 }
 
-function getDefaultRouterOutput(question: string): RouterOutput {
+function getDefaultRouterOutput(question: string, userHints?: { town?: string }): RouterOutput {
   return {
     complexity: "simple",
     domains: ["misc_other"],
     requiresClarification: false,
     clarificationQuestions: [],
     rerankedQuestion: question,
+    scopeHint: detectScopeHint(question, userHints),
   };
 }

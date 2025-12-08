@@ -82,11 +82,16 @@ export async function planRetrieval(
 ): Promise<RetrievalPlan> {
   const { question, routerOutput, userHints, logContext } = options;
 
+  const scopeContext = routerOutput.scopeHint 
+    ? `Scope hint: ${routerOutput.scopeHint}` 
+    : "Scope hint: not determined";
+
   const userPrompt = `Create a retrieval plan for this complex question:
 
 Question: "${routerOutput.rerankedQuestion || question}"
 
 Detected domains: ${routerOutput.domains.join(", ")}
+${scopeContext}
 ${userHints?.town ? `Town hint: ${userHints.town}` : "No town specified"}
 ${userHints?.board ? `Board hint: ${userHints.board}` : "No board specified"}
 
@@ -104,6 +109,7 @@ Respond with valid JSON only.`;
       detectedDomains: routerOutput.domains,
       townHint: userHints?.town,
       boardHint: userHints?.board,
+      scopeHint: routerOutput.scopeHint,
     },
   });
 
@@ -139,13 +145,30 @@ Respond with valid JSON only.`;
     try {
       const parsed = JSON.parse(cleanedText);
       const preferRecent = parsed.preferRecent === true || detectRecencyIntent(question);
+      
+      let townPreference = parsed.filters?.townPreference || userHints?.town || undefined;
+      let allowStatewideFallback = parsed.filters?.allowStatewideFallback !== false;
+      let categories = Array.isArray(parsed.filters?.categories)
+        ? parsed.filters.categories
+        : routerOutput.domains;
+      
+      if (routerOutput.scopeHint === "local") {
+        allowStatewideFallback = false;
+      } else if (routerOutput.scopeHint === "statewide") {
+        townPreference = undefined;
+        allowStatewideFallback = true;
+        if (!categories.some((c: string) => ["policy", "ordinance", "misc_other"].includes(c))) {
+          categories = [...categories, "policy", "ordinance", "misc_other"];
+        }
+      } else if (routerOutput.scopeHint === "mixed") {
+        allowStatewideFallback = true;
+      }
+      
       return {
         filters: {
-          townPreference: parsed.filters?.townPreference || userHints?.town || undefined,
-          allowStatewideFallback: parsed.filters?.allowStatewideFallback !== false,
-          categories: Array.isArray(parsed.filters?.categories)
-            ? parsed.filters.categories
-            : routerOutput.domains,
+          townPreference,
+          allowStatewideFallback,
+          categories,
           boards: Array.isArray(parsed.filters?.boards)
             ? parsed.filters.boards
             : userHints?.board

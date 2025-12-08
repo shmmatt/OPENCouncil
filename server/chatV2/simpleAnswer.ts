@@ -2,12 +2,27 @@ import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
 import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { logDebug } from "../utils/logger";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
+import { isRSAQuestion } from "./router";
+import { generateStatewideDisclaimer, generateNoDocsFoundMessage } from "./scopeUtils";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const MODEL_NAME = "gemini-2.5-flash";
+
+const RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA).
+
+Provide a concise, plain-language summary based on general knowledge. When appropriate, mention that this is not based on OpenCouncil-indexed municipal documents, and recommend consulting the official RSA text or municipal counsel for precise legal language.
+
+Guidelines:
+- Provide a 2-6 sentence answer summarizing the RSA or concept
+- Be accurate and conservative - don't speculate beyond what is well-established
+- Use professional but accessible language
+- If you're unsure about specifics, acknowledge that and recommend official sources
+
+IMPORTANT: This is informational only, not legal advice. Users should consult the official RSA text or municipal counsel for formal legal opinions.`;
 
 interface SimpleAnswerOptions {
   question: string;
@@ -103,19 +118,31 @@ export async function generateSimpleAnswer(
       },
     });
 
-    const answerText =
-      response.text || "I apologize, but I couldn't generate a response.";
+    const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
     const sourceDocumentNames = extractSourceDocumentNames(response);
     const groundingInfo = extractGroundingInfoForLogging(response);
+    const hasDocResults = sourceDocumentNames.length > 0;
+    const userQuestion = routerOutput.rerankedQuestion || question;
+    const isRSA = isRSAQuestion(userQuestion);
+
+    logDebug("simpleAnswer_scope_check", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer",
+      isRSAQuestion: isRSA,
+      scopeHint: routerOutput.scopeHint,
+      hasDocResults,
+      sourceCount: sourceDocumentNames.length,
+    });
 
     logLlmResponse({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer",
       model: MODEL_NAME,
-      responseText: answerText,
+      responseText: rawAnswerText,
       durationMs,
     });
 
@@ -124,11 +151,33 @@ export async function generateSimpleAnswer(
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer_fileSearch",
       results: groundingInfo,
-      responseText: answerText,
+      responseText: rawAnswerText,
       durationMs,
     });
 
-    return { answerText, sourceDocumentNames };
+    if (!hasDocResults && isRSA) {
+      const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
+      return { 
+        answerText: rsaAnswer + generateStatewideDisclaimer(), 
+        sourceDocumentNames: [] 
+      };
+    }
+
+    if (!rawAnswerText || rawAnswerText.toLowerCase().includes("i couldn't generate a response")) {
+      if (isRSA) {
+        const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
+        return { 
+          answerText: rsaAnswer + generateStatewideDisclaimer(), 
+          sourceDocumentNames: [] 
+        };
+      }
+      return {
+        answerText: generateNoDocsFoundMessage(false),
+        sourceDocumentNames: [],
+      };
+    }
+
+    return { answerText: rawAnswerText, sourceDocumentNames };
   } catch (error) {
     if (isQuotaError(error)) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -202,6 +251,62 @@ Guidelines:
 - Prefer saying "I don't have specific information about this" over making assumptions
 
 IMPORTANT: This is informational only, not legal advice. Users should consult town counsel or NHMA for formal legal opinions.`;
+}
+
+async function generateRSAGeneralKnowledgeAnswer(
+  question: string,
+  logContext?: PipelineLogContext
+): Promise<string> {
+  logLlmRequest({
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "simpleAnswer_rsaFallback",
+    model: MODEL_NAME,
+    systemPrompt: RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
+    userPrompt: question,
+    temperature: 0.3,
+  });
+
+  const startTime = Date.now();
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: [{ role: "user", parts: [{ text: question }] }],
+      config: {
+        systemInstruction: RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
+        temperature: 0.3,
+      },
+    });
+
+    const answerText = response.text || "";
+    const durationMs = Date.now() - startTime;
+
+    logLlmResponse({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer_rsaFallback",
+      model: MODEL_NAME,
+      responseText: answerText,
+      durationMs,
+    });
+
+    if (!answerText) {
+      return "I apologize, but I was unable to generate a response about this New Hampshire statute. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
+    }
+
+    return answerText;
+  } catch (error) {
+    logLlmError({
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer_rsaFallback",
+      model: MODEL_NAME,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+
+    return "I apologize, but I was unable to generate a response about this New Hampshire statute at this time. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";
+  }
 }
 
 function extractSourceDocumentNames(response: any): string[] {
