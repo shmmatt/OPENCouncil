@@ -79,6 +79,38 @@ The ingestion pipeline includes enhanced town detection with a three-tier fallba
 - Questions like "What did the Planning Board decide on March 5?" automatically search meeting_minutes category
 - File Search metadata includes isMinutes and meetingDate for filtering
 
+### Scope Preferences (Chat v2)
+
+The chat pipeline includes intelligent scope detection to distinguish between local (town-specific) and statewide (RSA/NH law) questions:
+
+**Scope Types (`ScopeHint`):**
+- `local`: Question specifically about a town/municipality (e.g., "What is Ossipee's budget?")
+- `statewide`: Question about NH law, RSAs, or state-level requirements without a specific town
+- `mixed`: Question mentions both a specific town AND state law/RSAs
+- `null`: Cannot determine scope
+
+**Detection Logic:**
+- Pattern-based detection in router.ts using `detectScopeHint()`:
+  - RSA patterns: `/\bRSA\b/i`, `/\bRevised Statutes\b/i`, `/\bNH law\b/i`, `/\bstate law\b/i`, etc.
+  - Town references: Checks for 50+ NH town names in the question
+- LLM also provides a scopeHint in its JSON response
+- `combineScopeHints()` merges both signals intelligently (conflicts → "mixed")
+
+**Retrieval Behavior:**
+- `local` scope: `allowStatewideFallback = false` (strict town filtering)
+- `statewide` scope: `townPreference = undefined`, `allowStatewideFallback = true`
+- `mixed` scope: `allowStatewideFallback = true` (search both)
+
+**RSA Fallback (simpleAnswer.ts):**
+- When no documents found AND question is RSA-related (`isRSAQuestion()`)
+- Generates general knowledge answer without file_search
+- Appends statewide disclaimer noting response is not from indexed documents
+
+**Utilities (scopeUtils.ts):**
+- `generateStatewideDisclaimer()`: Disclaimer for non-document-based answers
+- `generateNoDocsFoundMessage(isRSA)`: Appropriate "no results" message
+- `isStatewideScope(scopeHint)`: Check if scope is statewide or mixed
+
 ### Build & Deployment
 
 The application supports separate development modes for frontend (Vite) and backend (tsx with hot-reloading). For production, Vite builds the frontend to static assets, and esbuild bundles the backend into a single Node.js ESM module. It is designed for single-server deployment, serving both static files and the API, with external managed PostgreSQL (Neon) and requiring environment variables for configuration (`DATABASE_URL`, `GEMINI_API_KEY`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`).
