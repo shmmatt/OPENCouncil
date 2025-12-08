@@ -49,6 +49,31 @@ The ingestion pipeline includes specialized handling for meeting minutes documen
 - `meetingType`: "regular", "special", or "work_session"
 - `rawDateText`: Original date text from document for debugging
 
+### Enhanced Town Detection
+
+The ingestion pipeline includes enhanced town detection with a three-tier fallback system:
+
+**Heuristic Extraction (`extractTownFromText`):**
+- Pattern 1: "TOWN OF OSSIPEE" format (most common in minutes headers)
+- Pattern 2: Known NH town names with context patterns (e.g., "Conway, NH", "Ossipee Planning Board")
+- Pattern 3: State-level document detection (returns "statewide")
+
+**Admin Upload Hints:**
+- `metadataHints` field on ingestion jobs stores admin-provided defaults
+- Admin UI includes optional "Default Town" and "Default Board" fields during upload
+- These hints are used as fallbacks when AI cannot detect town from document text
+
+**Town Finalization Logic (`finalizeTown`):**
+1. LLM-extracted town (highest priority)
+2. Heuristic-detected town from document text
+3. Admin-provided default town hint
+4. Empty string (triggers "No town detected" status note)
+
+**LLM Prompt Enhancement:**
+- Opinionated prompt that instructs Gemini to use hints unless text clearly contradicts them
+- Explicit rules for handling NH towns (extract just town name, not "Town of" prefix)
+- Hints are passed directly to the LLM for more accurate suggestions
+
 **Chat Retrieval:**
 - Router and retrieval planner prioritize `meeting_minutes` category for questions about meetings, board decisions, votes, etc.
 - Questions like "What did the Planning Board decide on March 5?" automatically search meeting_minutes category

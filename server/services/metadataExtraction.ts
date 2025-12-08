@@ -89,15 +89,33 @@ export function extractTownFromText(previewText: string): string | undefined {
 }
 
 // Finalize town using fallback logic: LLM result > heuristic > default hint
+// Special handling: "statewide" from LLM should NOT override specific town hints
 export function finalizeTown(
   llmTown: string | undefined,
   hints: { defaultTown?: string; possibleTown?: string }
 ): string | undefined {
-  const cleaned = llmTown?.trim();
+  const cleaned = llmTown?.trim().toLowerCase();
   
-  // If LLM gave us a valid town, use it
+  // Special case: If LLM returns "statewide" but we have specific town hints,
+  // prefer the hints (statewide is often a fallback guess)
+  if (cleaned === "statewide") {
+    // Check if we have more specific hints
+    if (hints.possibleTown && hints.possibleTown !== "statewide") {
+      return hints.possibleTown;
+    }
+    if (hints.defaultTown && hints.defaultTown !== "statewide") {
+      return hints.defaultTown;
+    }
+    // No better hints, use statewide
+    return "statewide";
+  }
+  
+  // If LLM gave us a valid specific town, use it
   if (cleaned && cleaned.length > 0) {
-    return cleaned;
+    // Title case the town name
+    return llmTown!.trim().split(/\s+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
   }
   
   // Fall back to heuristic-detected town
@@ -111,6 +129,13 @@ export function finalizeTown(
   }
   
   return undefined;
+}
+
+// Validate town name against NH_TOWNS list
+export function isValidNHTown(town: string | undefined): boolean {
+  if (!town) return false;
+  const normalized = town.trim().toLowerCase();
+  return NH_TOWNS.some(t => t.toLowerCase() === normalized);
 }
 
 export interface MinutesHeuristics {

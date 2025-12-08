@@ -8,7 +8,7 @@ import { authenticateAdmin, generateToken } from "./middleware/auth";
 import { uploadDocumentToFileStore, askQuestionWithFileSearch } from "./gemini-client";
 import { extractPreviewText, suggestMetadataFromContent } from "./bulk-upload-helper";
 import { processFile, formatDuplicateWarning } from "./services/fileProcessing";
-import { suggestMetadataFromPreview, validateMetadata } from "./services/metadataExtraction";
+import { suggestMetadataFromPreview, validateMetadata, isValidNHTown } from "./services/metadataExtraction";
 import { insertDocumentSchema, insertChatMessageSchema, ALLOWED_CATEGORIES, documentMetadataSchema } from "@shared/schema";
 import type { DocumentMetadata, IngestionJobStatus } from "@shared/schema";
 import * as fs from "fs/promises";
@@ -390,11 +390,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const uploadedFiles = req.files as Express.Multer.File[];
       
-      // Parse metadata hints from form data if provided
+      // Parse and validate metadata hints from form data if provided
       let metadataHints: { defaultTown?: string; defaultBoard?: string } | undefined;
       try {
         if (req.body.metadataHints) {
-          metadataHints = JSON.parse(req.body.metadataHints);
+          const rawHints = JSON.parse(req.body.metadataHints);
+          metadataHints = {};
+          
+          // Validate defaultTown against NH_TOWNS list
+          if (rawHints.defaultTown && typeof rawHints.defaultTown === "string") {
+            const normalizedTown = rawHints.defaultTown.trim();
+            if (normalizedTown && isValidNHTown(normalizedTown)) {
+              metadataHints.defaultTown = normalizedTown;
+            } else if (normalizedTown) {
+              console.warn(`Invalid defaultTown hint: "${normalizedTown}" - not in NH_TOWNS list`);
+            }
+          }
+          
+          // Board can be any string (no validation needed)
+          if (rawHints.defaultBoard && typeof rawHints.defaultBoard === "string") {
+            metadataHints.defaultBoard = rawHints.defaultBoard.trim();
+          }
+          
+          // Clear empty hints object
+          if (!metadataHints.defaultTown && !metadataHints.defaultBoard) {
+            metadataHints = undefined;
+          }
         }
       } catch (e) {
         console.warn("Could not parse metadataHints:", e);

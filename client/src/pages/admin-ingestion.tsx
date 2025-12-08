@@ -45,6 +45,7 @@ import {
   Plus
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
+import { NH_TOWNS } from "@shared/schema";
 
 const CATEGORY_OPTIONS = [
   { label: "Budget", value: "budget" },
@@ -754,14 +755,17 @@ export default function AdminIngestion() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-md border bg-muted/30">
               <div className="space-y-2">
                 <Label htmlFor="default-town">Default Town (Optional)</Label>
-                <Input
-                  id="default-town"
-                  type="text"
-                  placeholder="e.g., Ossipee, Conway, Madison"
-                  value={defaultTown}
-                  onChange={(e) => setDefaultTown(e.target.value)}
-                  data-testid="input-default-town"
-                />
+                <Select value={defaultTown} onValueChange={setDefaultTown}>
+                  <SelectTrigger id="default-town" data-testid="select-default-town">
+                    <SelectValue placeholder="Select a town..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None (auto-detect)</SelectItem>
+                    {NH_TOWNS.map((town) => (
+                      <SelectItem key={town} value={town}>{town}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
                   Fallback town if AI cannot detect one
                 </p>
