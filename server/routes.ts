@@ -390,6 +390,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const uploadedFiles = req.files as Express.Multer.File[];
       
+      // Parse metadata hints from form data if provided
+      let metadataHints: { defaultTown?: string; defaultBoard?: string } | undefined;
+      try {
+        if (req.body.metadataHints) {
+          metadataHints = JSON.parse(req.body.metadataHints);
+        }
+      } catch (e) {
+        console.warn("Could not parse metadataHints:", e);
+      }
+      
       try {
         if (!uploadedFiles || uploadedFiles.length === 0) {
           return res.status(400).json({ message: "No files uploaded" });
@@ -436,18 +446,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
               previewText: fileResult.previewText.slice(0, 15000),
             });
 
-            // Get LLM metadata suggestions
+            // Get LLM metadata suggestions with hints
             const suggestedMetadata = await suggestMetadataFromPreview(
               file.originalname,
-              fileResult.previewText
+              fileResult.previewText,
+              metadataHints
             );
+            
+            // Determine status note if town is missing
+            let statusNote: string | null = null;
+            if (!suggestedMetadata.town || suggestedMetadata.town.trim() === "") {
+              statusNote = "No town detected - manual review required";
+            }
 
-            // Create IngestionJob
+            // Create IngestionJob with hints
             const ingestionJob = await storage.createIngestionJob({
               fileBlobId: fileBlob.id,
               status: "needs_review",
               suggestedMetadata: suggestedMetadata,
+              metadataHints: metadataHints || null,
               duplicateWarning,
+              statusNote,
             });
 
             results.push({

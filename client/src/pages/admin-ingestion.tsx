@@ -216,6 +216,10 @@ export default function AdminIngestion() {
   const [activeTab, setActiveTab] = useState("needs_review");
   const [files, setFiles] = useState<File[]>([]);
   
+  // Metadata hints for upload (defaultTown, defaultBoard)
+  const [defaultTown, setDefaultTown] = useState("");
+  const [defaultBoard, setDefaultBoard] = useState("");
+  
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [jobEdits, setJobEdits] = useState<Record<string, JobMetadataEdits>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -572,6 +576,14 @@ export default function AdminIngestion() {
       formData.append("files", file);
     });
     
+    // Add metadata hints if provided
+    const hints: { defaultTown?: string; defaultBoard?: string } = {};
+    if (defaultTown.trim()) hints.defaultTown = defaultTown.trim();
+    if (defaultBoard.trim()) hints.defaultBoard = defaultBoard.trim();
+    if (Object.keys(hints).length > 0) {
+      formData.append("metadataHints", JSON.stringify(hints));
+    }
+    
     analyzeMutation.mutate(formData);
   };
 
@@ -737,6 +749,37 @@ export default function AdminIngestion() {
               <p className="text-xs text-muted-foreground">
                 Supported formats: PDF, DOCX, TXT (max 100MB each)
               </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-md border bg-muted/30">
+              <div className="space-y-2">
+                <Label htmlFor="default-town">Default Town (Optional)</Label>
+                <Input
+                  id="default-town"
+                  type="text"
+                  placeholder="e.g., Ossipee, Conway, Madison"
+                  value={defaultTown}
+                  onChange={(e) => setDefaultTown(e.target.value)}
+                  data-testid="input-default-town"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Fallback town if AI cannot detect one
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="default-board">Default Board (Optional)</Label>
+                <Input
+                  id="default-board"
+                  type="text"
+                  placeholder="e.g., Planning Board, Select Board"
+                  value={defaultBoard}
+                  onChange={(e) => setDefaultBoard(e.target.value)}
+                  data-testid="input-default-board"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Fallback board if AI cannot detect one
+                </p>
+              </div>
             </div>
 
             {files.length > 0 && (
