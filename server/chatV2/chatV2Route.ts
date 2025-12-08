@@ -351,8 +351,9 @@ export function registerChatV2Routes(app: Express): void {
             suggestedFollowUpCount: suggestedFollowUps.length,
           });
 
-          if (suggestedFollowUps.length === 0) {
-            suggestedFollowUps = await generateFollowups({
+          const needsStatewideFollowup = retrievalPlan.filters.townPreference && suggestedFollowUps.length < 2;
+          if (suggestedFollowUps.length === 0 || needsStatewideFollowup) {
+            const generatedFollowups = await generateFollowups({
               userQuestion: content.trim(),
               answerText,
               townPreference: retrievalPlan.filters.townPreference,
@@ -360,10 +361,19 @@ export function registerChatV2Routes(app: Express): void {
               logContext: logCtx,
             });
 
-            logDebug("complex_path_followups_generated_after_critic", {
+            if (suggestedFollowUps.length === 0) {
+              suggestedFollowUps = generatedFollowups;
+            } else {
+              const existingSet = new Set(suggestedFollowUps.map(q => q.toLowerCase()));
+              const newFollowups = generatedFollowups.filter(q => !existingSet.has(q.toLowerCase()));
+              suggestedFollowUps = [...suggestedFollowUps, ...newFollowups].slice(0, 4);
+            }
+
+            logDebug("complex_path_followups_supplemented_after_critic", {
               ...logCtx,
               stage: "generateFollowups",
-              followUpCount: suggestedFollowUps.length,
+              reason: needsStatewideFollowup ? "needs_statewide" : "empty_followups",
+              finalFollowUpCount: suggestedFollowUps.length,
             });
           }
         } else {
