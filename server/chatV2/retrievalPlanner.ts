@@ -157,9 +157,6 @@ Respond with valid JSON only.`;
       } else if (routerOutput.scopeHint === "statewide") {
         townPreference = undefined;
         allowStatewideFallback = true;
-        if (!categories.some((c: string) => ["policy", "ordinance", "misc_other"].includes(c))) {
-          categories = [...categories, "policy", "ordinance", "misc_other"];
-        }
       } else if (routerOutput.scopeHint === "mixed") {
         allowStatewideFallback = true;
       }

@@ -49,6 +49,29 @@ export function isRSAQuestion(question: string): boolean {
   return RSA_PATTERNS.some(pattern => pattern.test(question));
 }
 
+function combineScopeHints(detected: ScopeHint, llm: ScopeHint): ScopeHint {
+  if (detected === "mixed" || llm === "mixed") {
+    return "mixed";
+  }
+  
+  if (detected === "local" && llm === "statewide") {
+    return "mixed";
+  }
+  if (detected === "statewide" && llm === "local") {
+    return "mixed";
+  }
+  
+  if (detected === "statewide" || llm === "statewide") {
+    return "statewide";
+  }
+  
+  if (detected === "local" || llm === "local") {
+    return "local";
+  }
+  
+  return llm || detected || null;
+}
+
 const ROUTER_SYSTEM_PROMPT = `You are a router for a municipal governance Q&A assistant that helps small-town elected officials and public workers in New Hampshire.
 
 Your job is to analyze each user question and determine:
@@ -162,7 +185,8 @@ Remember: Respond with valid JSON only, no other text.`;
       const parsed = JSON.parse(cleanedText);
       const detectedScopeHint = detectScopeHint(question, userHints);
       const llmScopeHint = parsed.scopeHint as ScopeHint;
-      const finalScopeHint = detectedScopeHint || llmScopeHint || null;
+      
+      const finalScopeHint = combineScopeHints(detectedScopeHint, llmScopeHint);
       
       return {
         complexity: parsed.complexity === "complex" ? "complex" : "simple",
