@@ -39,6 +39,22 @@ When the user's question includes words like "currently", "now", "this year", "r
 - Set categories to focus on ["meeting_minutes", "budget"] first; include "town_report", "policy", or "ordinance" only if clearly relevant
 - In infoNeeds, be explicit that you want "most recent" or "current-year" data, not historical information
 
+HYPER-LOCAL PREFERENCE (IMPORTANT):
+- If the user question names a specific town (e.g. "Ossipee", "Conway", "Bartlett"):
+  - Set filters.townPreference to that exact town name.
+  - Set filters.allowStatewideFallback to false UNLESS the user explicitly asks about "New Hampshire" or state law in general.
+- If the user explicitly asks about state-wide law or "New Hampshire" generally, you may set filters.townPreference to null and allowStatewideFallback to true.
+
+MEETING-MINUTES AND BUDGET GUIDANCE:
+- If the user is asking what happened at a meeting, about board decisions, or about how something was decided:
+  - Always include "meeting_minutes" in filters.categories.
+- If the user is asking about costs, spending, or budgets:
+  - Always include "budget" and/or "town_report" in filters.categories.
+
+RSA / STATUTE GUIDANCE:
+- Do NOT set rsaChapters in filters.rsaChapters unless the user explicitly asks about state law, statutes, or "RSA".
+- Default to local documents (meeting_minutes, budget, ordinance) over RSA references.
+
 You MUST respond with valid JSON only:
 {
   "filters": {

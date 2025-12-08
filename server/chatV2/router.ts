@@ -30,6 +30,8 @@ Then the primary domain should be "meeting_minutes".
    - Do NOT ask for clarification on common governance terms
 
 4. RERANKED QUESTION: Clean up the user's question for better retrieval (fix typos, expand abbreviations, etc.)
+   IMPORTANT: If the user names a specific town (e.g., "Ossipee", "Conway", "Bartlett"), you MUST preserve that town name in rerankedQuestion.
+   The town name is critical for downstream retrieval - never strip it out or generalize it.
 
 You MUST respond with valid JSON only, no other text. Use this exact format:
 {
