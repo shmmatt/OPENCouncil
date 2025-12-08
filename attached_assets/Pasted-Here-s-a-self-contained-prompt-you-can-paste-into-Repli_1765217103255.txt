@@ -1,0 +1,286 @@
+Here’s a self-contained prompt you can paste into Replit Agent to implement the town-detection tweaks we just talked through:
+
+---
+
+**Replit Agent Task: Improve Town Detection & Defaults for Minutes Metadata**
+
+We have a municipal governance Q&A app for New Hampshire in this repo, using:
+
+* Node/TypeScript + Express backend
+* Gemini 2.5 + Gemini File Search
+* A v2 document pipeline with:
+
+  * `IngestionJob` / `Document` / `DocumentVersion`
+  * A metadata extractor (LLM + heuristics) that fills fields like `category`, `town`, `board`, `year`, `isMinutes`, `meetingDate`, etc.
+* An admin UI for uploading documents and approving ingestion.
+
+The metadata pipeline is **mostly** working for meeting minutes (dates and meeting classification are good), but it is **completely failing to populate `town`** even when processing obvious minutes like “Town of Ossipee Board of Selectmen” minutes. I want you to make town detection **much more robust and opinionated**, using both upload-time context and document text.
+
+### Goals
+
+1. When uploading minutes (especially in bulk), **all Ossipee minutes get `town = "Ossipee"`**, Conway minutes get `town = "Conway"`, etc.
+2. The LLM must **strongly prefer known hints** instead of leaving `town` blank.
+3. The ingestion flow must **refuse to auto-approve** documents with an empty `town` unless an explicit `defaultTown` hint is provided.
+4. This should integrate cleanly into the existing v2 document pipeline and types.
+
+---
+
+## 1. Add “defaultTown” (and optional “defaultBoard”) to upload & ingestion pipeline
+
+### 1.1 Admin / upload API
+
+Locate the admin upload UI and API for document ingestion (single and bulk):
+
+* There should be an endpoint like `POST /api/admin/documents/upload` or similar.
+* There is a form where the admin chooses file(s) and some metadata.
+
+**Add:**
+
+* A `defaultTown` field (required for bulk minutes uploads; optional for generic uploads):
+
+  * A select/dropdown of NH towns plus `"Statewide"` if needed.
+* Optionally a `defaultBoard` field (e.g., `"Board of Selectmen"`, `"Planning Board"`, etc.).
+
+When the form submits, include these hints in the JSON body, something like:
+
+```json
+{
+  "files": [...],
+  "metadataHints": {
+    "defaultTown": "Ossipee",
+    "defaultBoard": "Board of Selectmen"
+  }
+}
+```
+
+Wire this into the upload API handler so that for each file we create an `IngestionJob` (or equivalent) with something like:
+
+```ts
+job.metadataHints = {
+  defaultTown: "Ossipee",
+  defaultBoard: "Board of Selectmen"
+};
+```
+
+Make sure this `metadataHints` object is accessible later in the metadata extraction phase.
+
+---
+
+## 2. Strengthen heuristic town detection
+
+We already have a v2 metadata extractor. I want a **stronger heuristic helper** that tries to extract the town name directly from the document’s preview text, especially for minutes.
+
+In the metadata extractor module (e.g. `src/server/ai/metadataExtractor.ts` or similar):
+
+1. Add a helper:
+
+```ts
+function extractTownFromText(previewText: string): string | undefined {
+  const lines = previewText.split(/\r?\n/).slice(0, 40); // focus on first page
+
+  // Pattern: "TOWN OF OSSIPEE"
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    const m = upper.match(/TOWN OF\s+([A-Z ]+)/);
+    if (m) {
+      const raw = m[1].trim();
+      // Clean up (remove "NH", "NEW HAMPSHIRE", extra punctuation, etc.)
+      let town = raw
+        .replace(/\bNEW HAMPSHIRE\b/g, "")
+        .replace(/\bNH\b/g, "")
+        .replace(/[,\.]+$/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+
+      // Title case:
+      town = town.replace(/\b\w/g, (c) => c.toUpperCase());
+
+      return town;
+    }
+  }
+
+  // Fallback: known town names appearing with "Town of X" or "X, NH"
+  const nhTowns = [
+    "Ossipee",
+    "Conway",
+    "Madison",
+    "Freedom",
+    "Tamworth",
+    "Albany",
+    "Sandwich",
+    "Jackson",
+    "Bartlett",
+    "Eaton"
+    // add more as needed
+  ];
+
+  for (const t of nhTowns) {
+    const needle1 = `town of ${t.toLowerCase()}`;
+    const needle2 = `${t.toLowerCase()}, nh`;
+    const needle3 = `${t.toLowerCase()}, new hampshire`;
+
+    if (
+      lines.some((l) => {
+        const ll = l.toLowerCase();
+        return ll.includes(needle1) || ll.includes(needle2) || ll.includes(needle3);
+      })
+    ) {
+      return t;
+    }
+  }
+
+  return undefined;
+}
+```
+
+2. Integrate this into whatever helper you already have that detects minutes (e.g. `detectMinutesHeuristics`). Add `possibleTown` to the returned hints:
+
+```ts
+const possibleTown = extractTownFromText(previewText);
+
+return {
+  ...existingHeuristicResult,
+  possibleTown
+};
+```
+
+These heuristic hints will be passed into the LLM, and also used directly as fallback if the LLM whiffs.
+
+---
+
+## 3. Make the LLM prompt much more opinionated about `town`
+
+In the function that calls Gemini to extract metadata (e.g. `suggestMetadataFromContent`), we already pass in `filename`, `previewText`, and some hints.
+
+1. Extend the input to include both:
+
+* `hints.possibleTown` (from heuristics)
+* `hints.defaultTown` (from upload context)
+
+2. Update the system + user prompt to:
+
+* Explain clearly that we’re working with **New Hampshire municipalities**.
+* Give explicit rules for determining `town`.
+
+**Add text like this to the prompt:**
+
+> You are extracting canonical metadata for New Hampshire municipal documents.
+>
+> You are given:
+>
+> * filename
+> * preview_text (first part of the document)
+> * hints.possibleTown (town name heuristically detected from the text, if any)
+> * hints.defaultTown (town chosen by the admin during upload, if any)
+>
+> **Rules for `town`:**
+>
+> * If the document text contains phrases like “TOWN OF OSSIPEE”, “Town of Ossipee, NH”, “Ossipee, New Hampshire”, you MUST set `town` to exactly `"Ossipee"`.
+> * If `hints.possibleTown` is present, you MUST use that unless the document text clearly contradicts it.
+> * If `hints.defaultTown` is present, and the text does not clearly indicate a different town name, you MUST set `town` to `hints.defaultTown`.
+> * Only use `"Statewide"` if the document is clearly statewide (e.g., issued by the State of New Hampshire) and no specific town is indicated.
+> * Do NOT leave `town` empty if `hints.defaultTown` exists and there is no conflicting town name in the text.
+>
+> Return JSON ONLY in this shape:
+>
+> ```json
+> {
+>   "category": "...",
+>   "town": "Ossipee" | "Conway" | "Statewide" | "",
+>   "board": "...",
+>   "year": "...",
+>   "isMinutes": true/false,
+>   "meetingDate": "YYYY-MM-DD" | null,
+>   "meetingType": "regular" | "special" | "work_session" | null,
+>   "rawDateText": "..."
+> }
+> ```
+
+3. On the TypeScript side, after parsing the LLM JSON:
+
+* Normalize `town`:
+
+  * Treat `""` as `undefined`.
+  * Trim whitespace.
+* Keep the LLM logic, but then apply **fallbacks** (see next section).
+
+---
+
+## 4. Apply final fallbacks and validation before saving metadata
+
+Where you take the LLM’s `DocumentMetadata` and finalize it for the job (e.g. inside the ingestion pipeline, after `suggestMetadataFromContent` returns):
+
+1. Apply this merge logic:
+
+```ts
+function finalizeTown(
+  llmTown: string | undefined,
+  hints: { defaultTown?: string; possibleTown?: string }
+): string | undefined {
+  const cleaned = llmTown?.trim();
+  if (cleaned) return cleaned;
+
+  if (hints.possibleTown) return hints.possibleTown;
+  if (hints.defaultTown) return hints.defaultTown;
+
+  return undefined;
+}
+```
+
+2. Use it when building `finalMetadata`:
+
+```ts
+const hints = job.metadataHints ?? {};
+const possibleTown = /* from heuristics, if you store it on the job */;
+
+const town = finalizeTown(llmMetadata.town, {
+  defaultTown: hints.defaultTown,
+  possibleTown
+});
+
+finalMetadata.town = town;
+```
+
+3. Add a **guard before auto-approving / indexing**:
+
+* If `finalMetadata.town` is still `undefined` or empty:
+
+  * If `hints.defaultTown` exists, set `town = hints.defaultTown`.
+  * Else, do **NOT** auto-approve:
+
+    * Mark the job as `needs_review`.
+    * Add a warning like: `"No town detected. Please set town manually before approving."`
+    * Ensure the admin UI shows this clearly and requires a town before “Approve & Index” is enabled.
+
+This guarantees that:
+
+* In the Ossipee minutes bulk case (with `defaultTown = "Ossipee"`), town will **always** be set to `"Ossipee"`.
+* For other towns, heuristics + LLM + defaultTown will converge.
+* For weird statewide documents, the admin can still correct town manually.
+
+---
+
+## 5. Keep everything integrated with the existing v2 pipeline
+
+* Do not remove or break any existing `meetingDate` / `isMinutes` logic.
+* Make sure `finalMetadata.town` is still sent:
+
+  * To the DB (`DocumentVersion` / metadata column).
+  * To Gemini File Search as metadata for retrieval.
+* Keep TypeScript types up-to-date, and add comments where logic is non-obvious, especially around `finalizeTown` and the new hints.
+
+---
+
+### Deliverables
+
+1. Updated upload UI + API to support `defaultTown` (and optional `defaultBoard`) for bulk/minutes uploads.
+2. New `extractTownFromText` heuristic integrated into the metadata extractor.
+3. Updated LLM prompt for metadata extraction with **strict rules** for town selection using `possibleTown` and `defaultTown`.
+4. A `finalizeTown` function and validation logic that:
+
+   * Forces town to be filled using hints if LLM fails.
+   * Prevents auto-approval for documents with missing town unless a default is supplied.
+5. All changes wired through to File Search metadata and existing v2 doc pipeline.
+
+After this, if I bulk-upload 22 Ossipee Board of Selectmen minutes with `defaultTown = "Ossipee"`, every single one should end up with `town = "Ossipee"` in the final metadata and in File Search.
