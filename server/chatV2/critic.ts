@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { RouterOutput, RetrievalPlan, CriticScore, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -159,6 +160,18 @@ Respond with valid JSON only.`;
       return getDefaultCritiqueResult(draftAnswerText);
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "critic",
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in critic");
+    }
+    
     logLlmError({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
@@ -166,6 +179,7 @@ Respond with valid JSON only.`;
       model: MODEL_NAME,
       error: error instanceof Error ? error : new Error(String(error)),
     });
+    
     return getDefaultCritiqueResult(draftAnswerText);
   }
 }

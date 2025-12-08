@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { RouterOutput, RetrievalPlan, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -31,6 +32,13 @@ When a user's question mentions any of these, prioritize "meeting_minutes" categ
 - Questions about specific board discussions or decisions on dates
 For meeting-related questions, ONLY include "meeting_minutes" in categories to focus the search.
 
+RECENCY PREFERENCE:
+When the user's question includes words like "currently", "now", "this year", "recent", "latest", or a specific year (e.g. "2025"), you must:
+- Set "preferRecent": true
+- Prefer recent meeting_minutes and current or specified year budgets for the town
+- Set categories to focus on ["meeting_minutes", "budget"] first; include "town_report", "policy", or "ordinance" only if clearly relevant
+- In infoNeeds, be explicit that you want "most recent" or "current-year" data, not historical information
+
 You MUST respond with valid JSON only:
 {
   "filters": {
@@ -40,7 +48,8 @@ You MUST respond with valid JSON only:
     "boards": ["Planning Board", "Select Board", etc.],
     "rsaChapters": ["RSA chapter numbers if relevant, e.g., '91-A', '673', '32']
   },
-  "infoNeeds": ["plain-language description of what info to look for"]
+  "infoNeeds": ["plain-language description of what info to look for"],
+  "preferRecent": true | false
 }`;
 
 const MODEL_NAME = "gemini-2.5-flash";
@@ -113,6 +122,7 @@ Respond with valid JSON only.`;
 
     try {
       const parsed = JSON.parse(cleanedText);
+      const preferRecent = parsed.preferRecent === true || detectRecencyIntent(question);
       return {
         filters: {
           townPreference: parsed.filters?.townPreference || userHints?.town || undefined,
@@ -132,6 +142,7 @@ Respond with valid JSON only.`;
         infoNeeds: Array.isArray(parsed.infoNeeds)
           ? parsed.infoNeeds
           : ["General information about the topic"],
+        preferRecent,
       };
     } catch (parseError) {
       logLlmError({
@@ -144,6 +155,18 @@ Respond with valid JSON only.`;
       return getDefaultRetrievalPlan(routerOutput, userHints);
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "retrievalPlanner",
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in retrievalPlanner");
+    }
+    
     logLlmError({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
@@ -151,6 +174,7 @@ Respond with valid JSON only.`;
       model: MODEL_NAME,
       error: error instanceof Error ? error : new Error(String(error)),
     });
+    
     return getDefaultRetrievalPlan(routerOutput, userHints);
   }
 }
@@ -168,5 +192,27 @@ function getDefaultRetrievalPlan(
       rsaChapters: [],
     },
     infoNeeds: ["General information about the topic"],
+    preferRecent: false,
   };
+}
+
+const RECENCY_KEYWORDS = [
+  "currently",
+  "now",
+  "this year",
+  "recent",
+  "recently",
+  "latest",
+  "today",
+  "right now",
+  "at the moment",
+  "present",
+  "presently",
+  "2024",
+  "2025",
+];
+
+function detectRecencyIntent(question: string): boolean {
+  const lowerQuestion = question.toLowerCase();
+  return RECENCY_KEYWORDS.some((keyword) => lowerQuestion.includes(keyword));
 }

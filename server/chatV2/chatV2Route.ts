@@ -9,6 +9,7 @@ import { critiqueAndImproveAnswer } from "./critic";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
 import { shouldRunCritic } from "./chatConfig";
+import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
 import {
   shouldBypassRouterForFollowup,
   createBypassedRouterOutput,
@@ -284,6 +285,7 @@ export function registerChatV2Routes(app: Express): void {
           townPreference: retrievalPlan.filters.townPreference,
           allowStatewideFallback: retrievalPlan.filters.allowStatewideFallback,
           infoNeedsCount: retrievalPlan.infoNeeds.length,
+          preferRecent: retrievalPlan.preferRecent,
         });
 
         const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
@@ -403,6 +405,48 @@ export function registerChatV2Routes(app: Express): void {
       return res.json(response);
     } catch (error) {
       const duration = Date.now() - startTime;
+
+      if (error instanceof GeminiQuotaExceededError) {
+        logError("chat_v2_quota_exceeded", {
+          ...logCtx,
+          stage: "quota_error",
+          error: error.message,
+          durationMs: duration,
+        });
+
+        try {
+          const quotaMessage = await storage.createChatMessage({
+            sessionId,
+            role: "assistant",
+            content: getQuotaExceededMessage(),
+            citations: null,
+          });
+
+          const quotaResponse: ChatV2Response = {
+            message: {
+              id: quotaMessage.id,
+              sessionId,
+              role: "assistant",
+              content: quotaMessage.content,
+              createdAt: quotaMessage.createdAt.toISOString(),
+            },
+            answerMeta: {
+              complexity: "simple",
+              requiresClarification: false,
+              criticScore: { relevance: 0, completeness: 0, clarity: 0, riskOfMisleading: 0.5 },
+              limitationsNote: "Quota limit reached.",
+            },
+            sources: [],
+            suggestedFollowUps: [],
+          };
+
+          return res.json(quotaResponse);
+        } catch (saveError) {
+          return res.status(503).json({
+            message: getQuotaExceededMessage(),
+          });
+        }
+      }
 
       logError("chat_v2_request_error", {
         ...logCtx,

@@ -128,6 +128,35 @@ Each chat v2 request generates a unique `requestId` (UUID) that is passed throug
 
 Look for `requestId` and `sessionId` fields in log output to correlate logs.
 
+## Chat V2 Pipeline Enhancements
+
+### Source Citations
+The pipeline enriches document sources with metadata:
+- `SourceCitation` type includes: `id`, `title`, `town`, `year`, `category`, `url`, `meetingDate`, `board`
+- Source mapping extracts metadata from `documentVersions` and `logicalDocuments` tables
+- Meeting dates are formatted as ISO date strings (YYYY-MM-DD)
+
+### Structured Complex Answers
+Complex questions receive structured answers with consistent formatting:
+- **At a glance**: 2-3 sentence executive summary (no bullet points)
+- **Key numbers**: Relevant budget figures, dates, quantities (bulleted list)
+- **Details from recent meetings**: Context from meeting discussions
+- Target length: 400-600 words for comprehensive but focused responses
+
+### Recency Bias Detection
+The retrieval planner detects questions about "current" or "recent" status:
+- Keywords detected: "current", "currently", "recent", "recently", "latest", "now", "today", "this year"
+- `preferRecent` flag is set on `RetrievalPlan` when recency intent is detected
+- Retrieval prompts are enhanced to prioritize documents from the last 6-12 months
+
+### Gemini Quota Error Handling
+Graceful handling of Gemini API rate limit errors (429/RESOURCE_EXHAUSTED):
+- `GeminiQuotaExceededError` class in `server/utils/geminiErrors.ts`
+- `isQuotaError()` utility detects nested error structures from Gemini
+- Quota errors are checked BEFORE fallback responses in all pipeline components
+- User receives friendly message: "We're temporarily experiencing high demand..."
+- Errors are logged with full context for debugging
+
 ### What Gets Logged
 
 **Stage-level logging** (`info` level):

@@ -170,11 +170,15 @@ export function buildMergedRetrievalQuery(
     ? `\nRelevant RSA chapters: ${plan.filters.rsaChapters.join(", ")}`
     : "";
 
+  const recencyContext = plan.preferRecent
+    ? `\nIMPORTANT: Prioritize the MOST RECENT documents, especially recent meeting minutes (from the last 6-12 months) and current-year budget documents. Focus on what is happening "currently" or "now", not historical information.`
+    : "";
+
   return `Question: ${question}
 
 Context: New Hampshire municipal governance documents
 Document categories: ${categoryStr}
-${townContext}${rsaContext}${infoNeedsStr}
+${townContext}${rsaContext}${recencyContext}${infoNeedsStr}
 
 Search for comprehensive information including:
 - Applicable state law and RSA requirements

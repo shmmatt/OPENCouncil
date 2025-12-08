@@ -22,6 +22,12 @@ export async function mapFileSearchDocumentsToCitations(
 
         const logicalDoc = await storage.getLogicalDocumentById(docVersion.documentId);
 
+        const meetingDateStr = docVersion.meetingDate 
+          ? (docVersion.meetingDate instanceof Date 
+              ? docVersion.meetingDate.toISOString().split('T')[0] 
+              : String(docVersion.meetingDate))
+          : undefined;
+          
         citations.push({
           id: docVersion.id,
           title: logicalDoc?.canonicalTitle || extractTitleFromName(docName),
@@ -29,6 +35,8 @@ export async function mapFileSearchDocumentsToCitations(
           year: docVersion.year || undefined,
           category: logicalDoc?.category || undefined,
           url: `/admin/documents/${docVersion.documentId}/view`,
+          meetingDate: meetingDateStr,
+          board: logicalDoc?.board || undefined,
         });
       } else {
         const title = extractTitleFromName(docName);
@@ -85,12 +93,38 @@ export function formatCitationsForDisplay(citations: SourceCitation[]): string {
       if (c.town && c.town !== "statewide") {
         citation += ` (${c.town})`;
       }
-      if (c.year) {
+      if (c.meetingDate) {
+        citation += ` - ${c.meetingDate}`;
+      } else if (c.year) {
         citation += ` - ${c.year}`;
+      }
+      if (c.board) {
+        citation += ` [${c.board}]`;
       }
       return citation;
     })
     .join("\n");
 
   return `\n\n**Sources:**\n${formatted}`;
+}
+
+export function formatSourcesForPrompt(citations: SourceCitation[]): string {
+  if (citations.length === 0) {
+    return "No sources explicitly labeled.";
+  }
+
+  return citations
+    .map((s, idx) => {
+      let line = `(${idx + 1}) [${s.title}]`;
+      if (s.meetingDate) {
+        line += ` - meeting date: ${s.meetingDate}`;
+      } else if (s.year) {
+        line += ` - year: ${s.year}`;
+      }
+      if (s.board) {
+        line += ` [${s.board}]`;
+      }
+      return line;
+    })
+    .join("\n");
 }

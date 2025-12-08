@@ -17,6 +17,7 @@ export interface RetrievalPlan {
     rsaChapters: string[];
   };
   infoNeeds: string[];
+  preferRecent?: boolean;
 }
 
 export interface CriticScore {
@@ -40,6 +41,8 @@ export interface SourceCitation {
   year?: string;
   category?: string;
   url?: string;
+  meetingDate?: string;
+  board?: string;
 }
 
 export interface ChatV2Request {

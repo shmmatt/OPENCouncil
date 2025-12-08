@@ -3,6 +3,7 @@ import { getOrCreateFileSearchStoreId } from "../gemini-store";
 import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
+import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -129,6 +130,18 @@ export async function generateSimpleAnswer(
 
     return { answerText, sourceDocumentNames };
   } catch (error) {
+    if (isQuotaError(error)) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer",
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in simpleAnswer");
+    }
+
     logLlmError({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,

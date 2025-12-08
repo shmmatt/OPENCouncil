@@ -6,6 +6,7 @@ import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLog
 import { logDebug } from "../utils/logger";
 import { chatConfig } from "./chatConfig";
 import { buildMergedRetrievalQuery } from "./pipelineUtils";
+import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -134,6 +135,18 @@ export async function generateComplexDraftAnswer(
       const docNames = extractSourceDocumentNames(response);
       allSourceDocumentNames.push(...docNames);
     } catch (error) {
+      if (isQuotaError(error)) {
+        const errMessage = error instanceof Error ? error.message : String(error);
+        logLlmError({
+          requestId: logContext?.requestId,
+          sessionId: logContext?.sessionId,
+          stage: retrievalStage,
+          model: MODEL_NAME,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+        throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in complexAnswer retrieval");
+      }
+      
       logLlmError({
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
@@ -284,6 +297,8 @@ async function synthesizeDraftAnswer(
           .join("\n")}\n`
       : "";
 
+  const townName = plan.filters.townPreference || "the town";
+
   const synthesisPrompt = `Based on the following document excerpts, provide a comprehensive answer to the question.
 ${historyContext}
 Question: ${question}
@@ -292,19 +307,36 @@ Document Excerpts:
 ${snippetText}
 
 Instructions:
-1. Synthesize information from multiple sources when applicable
-2. Clearly distinguish between:
-   - State law/RSA requirements (mandatory)
-   - Best practices and guidance (recommended)
-   - Local/town-specific requirements (varies by municipality)
-3. Use headings or bullet points for complex answers
-4. Cite specific documents or sections when possible
-5. If sources conflict or are unclear, note the ambiguity
-6. ${plan.filters.townPreference ? `Focus on ${plan.filters.townPreference} when specific local information is available` : "Provide statewide guidance when no specific town is mentioned"}
+Use this EXACT structure for your answer:
 
-Provide a thorough, well-organized answer:`;
+### At a glance
+- 2-4 bullet points summarizing the main answer in plain language
 
-  const synthesisSystemPrompt = `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices. Be thorough but organized.`;
+### Key numbers (${townName})
+- A short bullet list of important figures (dollar amounts, percentages, contract values, budget line items)
+- If no specific numbers are available, omit this section
+
+### Details from recent meetings
+- 1-3 short paragraphs that reference specific meetings or documents
+- When mentioning a meeting or document, use phrases like "According to the ${townName} BOS minutes from [date]..." or "In the 2025 ${townName} budget document..."
+
+Additional rules:
+- Keep the entire answer roughly 400-600 words unless the question clearly requires more detailed statutory analysis
+- Explicitly distinguish between what the documents say (facts) and what is unknown or not covered
+- If information is missing, advise consulting town counsel or NHMA
+- ${plan.filters.townPreference ? `Focus on ${plan.filters.townPreference} when specific local information is available` : "Provide statewide guidance when no specific town is mentioned"}
+
+Provide your answer:`;
+
+  const synthesisSystemPrompt = `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices.
+
+For complex answers, use this structure exactly:
+1. "### At a glance" - 2-4 bullet summary
+2. "### Key numbers (Town)" - bullet list of dollars/percentages (omit if no numbers available)
+3. "### Details from recent meetings" - compact narrative referencing specific meetings/documents
+
+Keep total length around 400-600 words unless the question explicitly demands more.
+When you use information from a document, mention it explicitly, e.g. "According to the Ossipee Board of Selectmen minutes from March 4, 2024..." or "As noted in the 2025 Ossipee budget...".`;
 
   logLlmRequest({
     requestId: logContext?.requestId,
@@ -347,6 +379,18 @@ Provide a thorough, well-organized answer:`;
 
     return responseText;
   } catch (error) {
+    if (isQuotaError(error)) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "complexAnswer_synthesis",
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in complexAnswer synthesis");
+    }
+
     logLlmError({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,

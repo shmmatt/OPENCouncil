@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { RouterOutput, ChatHistoryMessage, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
+import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -126,6 +127,18 @@ Remember: Respond with valid JSON only, no other text.`;
       return getDefaultRouterOutput(question);
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "router",
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+      throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in router");
+    }
+    
     logLlmError({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
@@ -133,6 +146,7 @@ Remember: Respond with valid JSON only, no other text.`;
       model: MODEL_NAME,
       error: error instanceof Error ? error : new Error(String(error)),
     });
+    
     return getDefaultRouterOutput(question);
   }
 }
