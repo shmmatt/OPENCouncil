@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
-import { eq, desc, asc, and, or } from "drizzle-orm";
+import { eq, desc, asc, and, or, gte, sql } from "drizzle-orm";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
@@ -25,7 +25,17 @@ import type {
   IngestionJobStatus,
   IngestionJobWithBlob,
   DocumentVersionWithBlob,
-  LogicalDocumentWithVersions
+  LogicalDocumentWithVersions,
+  User,
+  InsertUser,
+  UserIdentity,
+  InsertUserIdentity,
+  AnonymousUser,
+  InsertAnonymousUser,
+  LlmCostLog,
+  InsertLlmCostLog,
+  Event,
+  InsertEvent,
 } from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -90,6 +100,31 @@ export interface IStorage {
   getAllIngestionJobs(): Promise<IngestionJobWithBlob[]>;
   updateIngestionJob(id: string, data: Partial<InsertIngestionJob>): Promise<void>;
   deleteIngestionJob(id: string): Promise<void>;
+
+  // Identity Spine: User operations
+  createUser(user: InsertUser): Promise<User>;
+  getUserById(id: string): Promise<User | undefined>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<void>;
+  updateUserLastLogin(id: string): Promise<void>;
+
+  // Identity Spine: User Identity operations
+  createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity>;
+  getUserIdentityByProviderKey(provider: string, providerKey: string): Promise<UserIdentity | undefined>;
+  getUserIdentitiesByUserId(userId: string): Promise<UserIdentity[]>;
+
+  // Identity Spine: Anonymous User operations
+  createAnonymousUser(anonUser: InsertAnonymousUser): Promise<AnonymousUser>;
+  getAnonymousUserById(id: string): Promise<AnonymousUser | undefined>;
+  updateAnonymousUserLastSeen(id: string): Promise<void>;
+  linkAnonymousUserToUser(anonId: string, userId: string): Promise<void>;
+
+  // LLM Cost Log operations
+  createLlmCostLog(log: InsertLlmCostLog): Promise<LlmCostLog>;
+  getDailyCostByUser(userId: string): Promise<number>;
+  getDailyCostByAnon(anonId: string): Promise<number>;
+
+  // Event operations
+  createEvent(event: InsertEvent): Promise<Event>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -430,6 +465,128 @@ export class DatabaseStorage implements IStorage {
 
   async deleteIngestionJob(id: string): Promise<void> {
     await db.delete(schema.ingestionJobs).where(eq(schema.ingestionJobs.id, id));
+  }
+
+  // Identity Spine: User operations
+  async createUser(user: InsertUser): Promise<User> {
+    const [result] = await db.insert(schema.users).values(user).returning();
+    return result;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [result] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id));
+    return result;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<void> {
+    await db
+      .update(schema.users)
+      .set(data)
+      .where(eq(schema.users.id, id));
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(schema.users.id, id));
+  }
+
+  // Identity Spine: User Identity operations
+  async createUserIdentity(identity: InsertUserIdentity): Promise<UserIdentity> {
+    const [result] = await db.insert(schema.userIdentities).values(identity).returning();
+    return result;
+  }
+
+  async getUserIdentityByProviderKey(provider: string, providerKey: string): Promise<UserIdentity | undefined> {
+    const [result] = await db
+      .select()
+      .from(schema.userIdentities)
+      .where(and(
+        eq(schema.userIdentities.provider, provider),
+        eq(schema.userIdentities.providerKey, providerKey)
+      ));
+    return result;
+  }
+
+  async getUserIdentitiesByUserId(userId: string): Promise<UserIdentity[]> {
+    return await db
+      .select()
+      .from(schema.userIdentities)
+      .where(eq(schema.userIdentities.userId, userId));
+  }
+
+  // Identity Spine: Anonymous User operations
+  async createAnonymousUser(anonUser: InsertAnonymousUser): Promise<AnonymousUser> {
+    const [result] = await db.insert(schema.anonymousUsers).values(anonUser).returning();
+    return result;
+  }
+
+  async getAnonymousUserById(id: string): Promise<AnonymousUser | undefined> {
+    const [result] = await db
+      .select()
+      .from(schema.anonymousUsers)
+      .where(eq(schema.anonymousUsers.id, id));
+    return result;
+  }
+
+  async updateAnonymousUserLastSeen(id: string): Promise<void> {
+    await db
+      .update(schema.anonymousUsers)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(schema.anonymousUsers.id, id));
+  }
+
+  async linkAnonymousUserToUser(anonId: string, userId: string): Promise<void> {
+    await db
+      .update(schema.anonymousUsers)
+      .set({ userId })
+      .where(eq(schema.anonymousUsers.id, anonId));
+  }
+
+  // LLM Cost Log operations
+  async createLlmCostLog(log: InsertLlmCostLog): Promise<LlmCostLog> {
+    const [result] = await db.insert(schema.llmCostLogs).values(log).returning();
+    return result;
+  }
+
+  async getDailyCostByUser(userId: string): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const result = await db
+      .select({ total: sql<string>`COALESCE(SUM(${schema.llmCostLogs.costUsd}), 0)` })
+      .from(schema.llmCostLogs)
+      .where(and(
+        eq(schema.llmCostLogs.userId, userId),
+        gte(schema.llmCostLogs.createdAt, startOfDay)
+      ));
+    
+    return parseFloat(result[0]?.total || "0");
+  }
+
+  async getDailyCostByAnon(anonId: string): Promise<number> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const result = await db
+      .select({ total: sql<string>`COALESCE(SUM(${schema.llmCostLogs.costUsd}), 0)` })
+      .from(schema.llmCostLogs)
+      .where(and(
+        eq(schema.llmCostLogs.anonId, anonId),
+        gte(schema.llmCostLogs.createdAt, startOfDay)
+      ));
+    
+    return parseFloat(result[0]?.total || "0");
+  }
+
+  // Event operations
+  async createEvent(event: InsertEvent): Promise<Event> {
+    const [result] = await db.insert(schema.events).values(event).returning();
+    return result;
   }
 }
 

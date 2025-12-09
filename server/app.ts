@@ -6,9 +6,11 @@ import express, {
   Response,
   NextFunction,
 } from "express";
+import cookieParser from "cookie-parser";
 
 import { registerRoutes } from "./routes";
 import { ensureAdminExists } from "./init-admin";
+import { attachAnonymousIdentity, attachUserIdentity, authRouter } from "./auth";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -34,6 +36,12 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
+
+app.use(attachAnonymousIdentity);
+app.use(attachUserIdentity);
+
+app.use("/api/auth", authRouter);
 
 app.use((req, res, next) => {
   const start = Date.now();

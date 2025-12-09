@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, numeric, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -86,9 +86,46 @@ export const ingestionJobs = pgTable("ingestion_jobs", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ============================================================
+// IDENTITY SPINE TABLES
+// ============================================================
+
+// Users: Core user identity table
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  role: text("role").notNull().default("user"), // 'user' | 'admin' | 'municipal_admin'
+  defaultTown: text("default_town"),
+  isPaying: boolean("is_paying").default(false).notNull(),
+  isMunicipalStaff: boolean("is_municipal_staff").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+// User Identities: Maps external identifiers to users
+export const userIdentities = pgTable("user_identities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // 'email' | 'magic_link' | 'google' | 'municipal_sso'
+  providerKey: text("provider_key").notNull(), // email address or SSO subject
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("user_identities_provider_key_unique").on(table.provider, table.providerKey),
+]);
+
+// Anonymous Users: Tracks anonymous visitors
+export const anonymousUsers = pgTable("anonymous_users", {
+  id: varchar("id").primaryKey(), // UUID from cookie (not auto-generated)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  userId: varchar("user_id").references(() => users.id), // Linked when user signs up
+});
+
+// Chat Sessions: Updated with user/anon tracking
 export const chatSessions = pgTable("chat_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  anonId: varchar("anon_id").references(() => anonymousUsers.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -113,6 +150,43 @@ export const tempUploads = pgTable("temp_uploads", {
   suggestedBoard: text("suggested_board"),
   suggestedYear: text("suggested_year"),
   suggestedNotes: text("suggested_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================================
+// LLM COST LOGGING & EVENTS TABLES
+// ============================================================
+
+// LLM Cost Logs: Per-LLM-call cost tracking
+export const llmCostLogs = pgTable("llm_cost_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorType: text("actor_type").notNull(), // 'user' | 'anon'
+  userId: varchar("user_id").references(() => users.id),
+  anonId: varchar("anon_id").references(() => anonymousUsers.id),
+  sessionId: varchar("session_id").references(() => chatSessions.id),
+  requestId: text("request_id"), // Correlates to a single HTTP request
+  stage: text("stage").notNull(), // 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'other'
+  provider: text("provider").notNull(), // 'openai' | 'google' | etc.
+  model: text("model").notNull(), // 'gemini-2.5-flash' | 'gpt-5.1' | etc.
+  tokensIn: integer("tokens_in").notNull(),
+  tokensOut: integer("tokens_out").notNull(),
+  costUsd: numeric("cost_usd", { precision: 10, scale: 6 }).notNull(), // Up to 6 decimal places
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Events: Generic event tracking for analytics and audience targeting
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorType: text("actor_type").notNull(), // 'user' | 'anon'
+  userId: varchar("user_id").references(() => users.id),
+  anonId: varchar("anon_id").references(() => anonymousUsers.id),
+  eventType: text("event_type").notNull(), // 'chat_message', 'session_created', 'scope_change', etc.
+  sessionId: varchar("session_id").references(() => chatSessions.id),
+  town: text("town"),
+  board: text("board"),
+  topic: text("topic"),
+  metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -205,6 +279,31 @@ export const insertTempUploadSchema = createInsertSchema(tempUploads).omit({
   createdAt: true,
 });
 
+// Identity spine insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserIdentitySchema = createInsertSchema(userIdentities).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAnonymousUserSchema = createInsertSchema(anonymousUsers).omit({
+  createdAt: true,
+});
+
+export const insertLlmCostLogSchema = createInsertSchema(llmCostLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
@@ -232,6 +331,28 @@ export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 
 export type TempUpload = typeof tempUploads.$inferSelect;
 export type InsertTempUpload = z.infer<typeof insertTempUploadSchema>;
+
+// Identity spine types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type UserIdentity = typeof userIdentities.$inferSelect;
+export type InsertUserIdentity = z.infer<typeof insertUserIdentitySchema>;
+
+export type AnonymousUser = typeof anonymousUsers.$inferSelect;
+export type InsertAnonymousUser = z.infer<typeof insertAnonymousUserSchema>;
+
+export type LlmCostLog = typeof llmCostLogs.$inferSelect;
+export type InsertLlmCostLog = z.infer<typeof insertLlmCostLogSchema>;
+
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
+
+// Actor types for identity tracking
+export type ActorType = 'user' | 'anon';
+export type UserRole = 'user' | 'admin' | 'municipal_admin';
+export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'simpleAnswer' | 'critic' | 'other';
+export type LlmProvider = 'google' | 'openai' | 'other';
 
 // Status types for ingestion jobs
 export type IngestionJobStatus = "staging" | "needs_review" | "approved" | "rejected" | "indexed";
