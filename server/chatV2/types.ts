@@ -2,6 +2,20 @@ export type ComplexityLevel = "simple" | "complex";
 
 export type ScopeHint = "local" | "statewide" | "mixed" | null;
 
+/**
+ * Explicit document source tracking for scope note selection.
+ * This ensures the scope note accurately reflects which documents were used.
+ */
+export type DocSourceType = "none" | "local" | "statewide" | "mixed";
+
+/**
+ * Context about document sources used in the answer.
+ */
+export interface DocSourceContext {
+  docSourceType: DocSourceType;
+  townUsed: string | null;
+}
+
 export interface RouterOutput {
   complexity: ComplexityLevel;
   domains: string[];

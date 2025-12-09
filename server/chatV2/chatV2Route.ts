@@ -26,7 +26,9 @@ import type {
   FinalAnswerMeta,
   SourceCitation,
   PipelineLogContext,
+  DocSourceType,
 } from "./types";
+import { logWarn as logWarning } from "../utils/logger";
 
 export function registerChatV2Routes(app: Express): void {
   app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: Request, res: Response) => {
@@ -239,6 +241,8 @@ export function registerChatV2Routes(app: Express): void {
       let criticUsed = false;
 
       let townPreference: string | undefined;
+      let docSourceType: DocSourceType = "none";
+      let docSourceTown: string | null = null;
 
       if (routerOutput.complexity === "simple") {
         logDebug("chat_v2_simple_path", {
@@ -261,6 +265,8 @@ export function registerChatV2Routes(app: Express): void {
         answerText = simpleResult.answerText;
         sourceDocumentNames = simpleResult.sourceDocumentNames;
         townPreference = metadata?.town;
+        docSourceType = simpleResult.docSourceType;
+        docSourceTown = simpleResult.docSourceTown;
 
         logDebug("simple_answer_result", {
           ...logCtx,
@@ -318,6 +324,8 @@ export function registerChatV2Routes(app: Express): void {
         });
 
         sourceDocumentNames = draftResult.sourceDocumentNames;
+        docSourceType = draftResult.docSourceType;
+        docSourceTown = draftResult.docSourceTown;
 
         logDebug("complex_answer_draft", {
           ...logCtx,
@@ -404,14 +412,17 @@ export function registerChatV2Routes(app: Express): void {
           });
         }
 
-        // Append scope note to complex answers
+        // Append scope note to complex answers using explicit docSourceType tracking
         const scopeNote = selectScopeNote({
-          hasDocResults: sourceDocumentNames.length > 0,
-          isRSAQuestion: isRSAQuestion(content.trim()),
-          scopeHint: routerOutput.scopeHint,
-          townPreference: retrievalPlan.filters.townPreference,
+          docSourceType,
+          docSourceTown,
         });
         answerText += scopeNote;
+
+        // Development sanity check for scope/answer mismatches
+        if (process.env.NODE_ENV === "development") {
+          checkScopeAnswerMismatch(answerText, docSourceType, docSourceTown, logCtx);
+        }
       }
 
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
@@ -469,6 +480,8 @@ export function registerChatV2Routes(app: Express): void {
         criticUsed,
         durationMs: duration,
         answerLength: answerText.length,
+        docSourceType,
+        docSourceTown,
       });
 
       return res.json(response);
@@ -610,5 +623,44 @@ function parseCachedV2Response(citations: string | null): CachedV2Data {
     return defaultData;
   } catch (error) {
     return defaultData;
+  }
+}
+
+/**
+ * Development sanity check: warns if the answer content appears to reference
+ * local documents but docSourceType is set to "none".
+ * This helps catch mis-wiring early without blocking responses.
+ */
+function checkScopeAnswerMismatch(
+  answer: string,
+  docSourceType: DocSourceType,
+  docSourceTown: string | null,
+  logCtx: PipelineLogContext
+): void {
+  if (docSourceType === "none") {
+    // Check for patterns that suggest local document usage
+    const localPatterns = [
+      /According to the .* minutes/i,
+      /As noted in the .* budget/i,
+      /Planning Board/i,
+      /Board of Selectmen/i,
+      /BOS minutes/i,
+      /warrant article/i,
+      /town report/i,
+    ];
+
+    const hasLocalReferences = localPatterns.some(pattern => pattern.test(answer));
+
+    if (hasLocalReferences) {
+      logWarning("scope_answer_mismatch_detected", {
+        requestId: logCtx.requestId,
+        sessionId: logCtx.sessionId,
+        stage: "sanity_check",
+        docSourceType,
+        docSourceTown,
+        reason: "Answer contains local document references but docSourceType=none",
+        answerPreview: answer.slice(0, 200),
+      });
+    }
   }
 }

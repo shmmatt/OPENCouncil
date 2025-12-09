@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext } from "./types";
+import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 import { logDebug } from "../utils/logger";
@@ -22,6 +22,8 @@ interface ComplexAnswerOptions {
 interface ComplexDraftResult {
   draftAnswerText: string;
   sourceDocumentNames: string[];
+  docSourceType: import("./types").DocSourceType;
+  docSourceTown: string | null;
 }
 
 export async function generateComplexDraftAnswer(
@@ -36,6 +38,8 @@ export async function generateComplexDraftAnswer(
       draftAnswerText:
         "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
+      docSourceType: "none" as DocSourceType,
+      docSourceTown: null
     };
   }
 
@@ -175,9 +179,28 @@ export async function generateComplexDraftAnswer(
 
   const uniqueDocNames = Array.from(new Set(allSourceDocumentNames));
 
+  // Determine docSourceType based on actual retrieved documents
+  const townPref = retrievalPlan.filters.townPreference;
+  const docClassification = classifyDocumentSources(uniqueDocNames, townPref);
+  const docSourceType: DocSourceType = docClassification.type;
+  const docSourceTown: string | null = docClassification.town;
+
+  logDebug("complex_answer_doc_source_tracking", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer_docSource",
+    docSourceType,
+    docSourceTown,
+    snippetCount: retrievedSnippets.length,
+    sourceDocCount: uniqueDocNames.length,
+    townPreference: townPref,
+  });
+
   return {
     draftAnswerText,
     sourceDocumentNames: uniqueDocNames,
+    docSourceType,
+    docSourceTown
   };
 }
 
@@ -432,4 +455,67 @@ function extractSourceDocumentNames(response: any): string[] {
   }
 
   return documentNames;
+}
+
+/**
+ * Patterns indicating statewide/RSA documents vs local municipal documents.
+ */
+const STATEWIDE_PATTERNS = [
+  /\bRSA\b/i,
+  /\bNHMA\b/i,
+  /\bhandbook\b/i,
+  /\bstatewide\b/i,
+  /\bNew Hampshire (Municipal|Town|City)/i,
+  /\bgencourt\.state\.nh/i,
+  /\bstate law\b/i,
+];
+
+/**
+ * Classify document sources based on their names/URIs.
+ * Returns the doc source type and detected town.
+ */
+function classifyDocumentSources(
+  docNames: string[],
+  townHint?: string
+): { type: DocSourceType; town: string | null } {
+  if (docNames.length === 0) {
+    return { type: "none", town: null };
+  }
+
+  let hasLocal = false;
+  let hasStatewide = false;
+  let detectedTown: string | null = null;
+
+  for (const docName of docNames) {
+    const isStatewideDoc = STATEWIDE_PATTERNS.some(pattern => pattern.test(docName));
+    
+    if (isStatewideDoc) {
+      hasStatewide = true;
+    } else {
+      // If not matching statewide patterns, assume local
+      hasLocal = true;
+      // Try to detect town from document name if not already set
+      if (!detectedTown && townHint) {
+        if (docName.toLowerCase().includes(townHint.toLowerCase())) {
+          detectedTown = townHint;
+        }
+      }
+    }
+  }
+
+  // If we have a town hint and local docs, use it even if not detected in doc names
+  if (hasLocal && !detectedTown && townHint) {
+    detectedTown = townHint;
+  }
+
+  if (hasLocal && hasStatewide) {
+    return { type: "mixed", town: detectedTown };
+  } else if (hasLocal) {
+    return { type: "local", town: detectedTown };
+  } else if (hasStatewide) {
+    return { type: "statewide", town: null };
+  }
+
+  // Default - if we have docs but couldn't classify, assume local
+  return { type: "local", town: detectedTown };
 }
