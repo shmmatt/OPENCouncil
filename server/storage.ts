@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
-import { eq, desc, and, or } from "drizzle-orm";
+import { eq, desc, asc, and, or } from "drizzle-orm";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
@@ -160,7 +160,8 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(schema.chatMessages)
-      .where(eq(schema.chatMessages.sessionId, sessionId));
+      .where(eq(schema.chatMessages.sessionId, sessionId))
+      .orderBy(asc(schema.chatMessages.createdAt));
   }
 
   async createTempUpload(upload: InsertTempUpload): Promise<TempUpload> {
