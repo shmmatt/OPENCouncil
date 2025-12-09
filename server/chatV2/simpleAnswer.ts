@@ -204,10 +204,32 @@ export async function generateSimpleAnswer(
       docSourceType = "statewide";
     }
 
+    // Log the doc source classification for debugging
+    logDebug("simpleAnswer_docSource", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer_docSource",
+      docSourceType,
+      docSourceTown,
+      sourceDocCount: sourceDocumentNames.length,
+      userHintsTown: userHints?.town,
+      sourceDocNames: sourceDocumentNames.slice(0, 5),
+    });
+
     const scopeNote = selectScopeNote({ docSourceType, docSourceTown });
+    const finalAnswer = rawAnswerText + scopeNote;
+    
+    // Run sanity check in development to catch scope mismatches
+    checkSimpleAnswerScopeMismatch(
+      finalAnswer,
+      docSourceType,
+      docSourceTown,
+      sourceDocumentNames.length,
+      logContext
+    );
     
     return { 
-      answerText: rawAnswerText + scopeNote, 
+      answerText: finalAnswer, 
       sourceDocumentNames,
       docSourceType,
       docSourceTown
@@ -345,6 +367,10 @@ async function generateRSAGeneralKnowledgeAnswer(
   }
 }
 
+/**
+ * Extract source document names from a Gemini response's grounding metadata.
+ * Now also captures chunk.retrievedContext.title which is often present in file_search results.
+ */
 function extractSourceDocumentNames(response: any): string[] {
   const documentNames: string[] = [];
 
@@ -353,15 +379,32 @@ function extractSourceDocumentNames(response: any): string[] {
     const seenDocs = new Set<string>();
 
     chunks.forEach((chunk: any) => {
+      // Check retrievedContext.uri
       const uri = chunk.retrievedContext?.uri;
       if (uri && !seenDocs.has(uri)) {
         documentNames.push(uri);
         seenDocs.add(uri);
       }
-      const title = chunk.web?.title;
-      if (title && !seenDocs.has(title)) {
-        documentNames.push(title);
-        seenDocs.add(title);
+      
+      // Check retrievedContext.title (important - was missing before!)
+      const retrievedTitle = chunk.retrievedContext?.title;
+      if (retrievedTitle && !seenDocs.has(retrievedTitle)) {
+        documentNames.push(retrievedTitle);
+        seenDocs.add(retrievedTitle);
+      }
+      
+      // Check web.title (for web grounding fallback)
+      const webTitle = chunk.web?.title;
+      if (webTitle && !seenDocs.has(webTitle)) {
+        documentNames.push(webTitle);
+        seenDocs.add(webTitle);
+      }
+      
+      // Check web.uri as well
+      const webUri = chunk.web?.uri;
+      if (webUri && !seenDocs.has(webUri)) {
+        documentNames.push(webUri);
+        seenDocs.add(webUri);
       }
     });
   }
@@ -390,8 +433,88 @@ const STATEWIDE_PATTERNS = [
 ];
 
 /**
+ * List of known NH town names for automatic detection when no townHint is provided.
+ * This helps classify documents correctly for simple path questions that mention
+ * towns by name but don't have metadata.town set.
+ */
+const KNOWN_NH_TOWNS = [
+  "Acworth", "Albany", "Alexandria", "Allenstown", "Alstead", "Alton", "Amherst",
+  "Andover", "Antrim", "Ashland", "Atkinson", "Auburn", "Barnstead", "Barrington",
+  "Bartlett", "Bath", "Bedford", "Belmont", "Bennington", "Benton", "Berlin",
+  "Bethlehem", "Boscawen", "Bow", "Bradford", "Brentwood", "Bridgewater", "Bristol",
+  "Brookfield", "Brookline", "Campton", "Canaan", "Candia", "Canterbury", "Carroll",
+  "Center Harbor", "Charlestown", "Chatham", "Chester", "Chesterfield", "Chichester",
+  "Claremont", "Clarksville", "Colebrook", "Columbia", "Concord", "Conway", "Cornish",
+  "Croydon", "Dalton", "Danbury", "Danville", "Deerfield", "Deering", "Derry",
+  "Dorchester", "Dover", "Dublin", "Dummer", "Dunbarton", "Durham", "East Kingston",
+  "Easton", "Eaton", "Effingham", "Ellsworth", "Enfield", "Epping", "Epsom", "Errol",
+  "Exeter", "Farmington", "Fitzwilliam", "Francestown", "Franconia", "Franklin",
+  "Freedom", "Fremont", "Gilford", "Gilmanton", "Gilsum", "Goffstown", "Gorham",
+  "Goshen", "Grafton", "Grantham", "Greenfield", "Greenland", "Greenville", "Groton",
+  "Hampstead", "Hampton", "Hampton Falls", "Hancock", "Hanover", "Harrisville", "Hart's Location",
+  "Haverhill", "Hebron", "Henniker", "Hill", "Hillsborough", "Hinsdale", "Holderness",
+  "Hollis", "Hooksett", "Hopkinton", "Hudson", "Jackson", "Jaffrey", "Jefferson",
+  "Keene", "Kensington", "Kingston", "Laconia", "Lancaster", "Landaff", "Langdon",
+  "Lebanon", "Lee", "Lempster", "Lincoln", "Lisbon", "Litchfield", "Littleton",
+  "Londonderry", "Loudon", "Lyman", "Lyme", "Lyndeborough", "Madbury", "Madison",
+  "Manchester", "Marlborough", "Marlow", "Mason", "Meredith", "Merrimack", "Middleton",
+  "Milan", "Milford", "Milton", "Monroe", "Mont Vernon", "Moultonborough", "Nashua",
+  "Nelson", "New Boston", "New Castle", "New Durham", "New Hampton", "New Ipswich",
+  "New London", "Newbury", "Newfields", "Newington", "Newmarket", "Newport", "Newton",
+  "North Hampton", "Northfield", "Northumberland", "Northwood", "Nottingham", "Orange",
+  "Orford", "Ossipee", "Pelham", "Pembroke", "Peterborough", "Piermont", "Pittsburg",
+  "Pittsfield", "Plainfield", "Plaistow", "Plymouth", "Portsmouth", "Randolph", "Raymond",
+  "Richmond", "Rindge", "Rochester", "Rollinsford", "Roxbury", "Rumney", "Rye",
+  "Salem", "Salisbury", "Sanbornton", "Sandown", "Sandwich", "Seabrook", "Sharon",
+  "Shelburne", "Somersworth", "South Hampton", "Springfield", "Stark", "Stewartstown",
+  "Stoddard", "Strafford", "Stratford", "Stratham", "Sugar Hill", "Sullivan", "Sunapee",
+  "Surry", "Sutton", "Swanzey", "Tamworth", "Temple", "Thornton", "Tilton", "Troy",
+  "Tuftonboro", "Unity", "Wakefield", "Walpole", "Warner", "Warren", "Washington",
+  "Waterville Valley", "Weare", "Webster", "Wentworth", "Westmoreland", "Whitefield",
+  "Wilmot", "Wilton", "Winchester", "Windham", "Windsor", "Wolfeboro", "Woodstock"
+];
+
+/**
+ * Try to detect a town name from document names/URIs when no explicit townHint is provided.
+ * Scans document names for known NH town names.
+ */
+function detectTownFromDocuments(docNames: string[]): string | null {
+  const combinedText = docNames.join(" ").toLowerCase();
+  
+  // Check for known NH towns in document names
+  for (const town of KNOWN_NH_TOWNS) {
+    const townLower = town.toLowerCase();
+    // Use word boundary matching to avoid partial matches
+    const regex = new RegExp(`\\b${townLower}\\b`, 'i');
+    if (regex.test(combinedText)) {
+      return town; // Return the properly capitalized version
+    }
+  }
+  
+  // Also check for patterns like "Town of X" in the document names
+  const townOfPattern = /\btown\s+of\s+([A-Z][a-zA-Z\s]+?)(?:\s+(?:planning|board|select|budget|minutes|report)|,|\.|$)/i;
+  for (const docName of docNames) {
+    const match = docName.match(townOfPattern);
+    if (match && match[1]) {
+      const extractedTown = match[1].trim();
+      // Verify it's a known town
+      const knownMatch = KNOWN_NH_TOWNS.find(t => t.toLowerCase() === extractedTown.toLowerCase());
+      if (knownMatch) {
+        return knownMatch;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Classify document sources based on their names/URIs.
  * Returns the doc source type and detected town.
+ * 
+ * Enhanced to detect town from document names when no townHint is provided,
+ * fixing the bug where simple path answers using municipal docs would
+ * still show "no docs found" scope note.
  */
 function classifyDocumentSources(
   docNames: string[],
@@ -403,7 +526,12 @@ function classifyDocumentSources(
 
   let hasLocal = false;
   let hasStatewide = false;
-  let detectedTown: string | null = null;
+  let detectedTown: string | null = townHint || null;
+
+  // If no town hint provided, try to detect from document names
+  if (!detectedTown) {
+    detectedTown = detectTownFromDocuments(docNames);
+  }
 
   for (const docName of docNames) {
     const isStatewideDoc = STATEWIDE_PATTERNS.some(pattern => pattern.test(docName));
@@ -413,7 +541,7 @@ function classifyDocumentSources(
     } else {
       // If not matching statewide patterns, assume local
       hasLocal = true;
-      // Try to detect town from document name if not already set
+      // If we still don't have a detected town, try to find one from this doc
       if (!detectedTown && townHint) {
         if (docName.toLowerCase().includes(townHint.toLowerCase())) {
           detectedTown = townHint;
@@ -437,4 +565,63 @@ function classifyDocumentSources(
 
   // Default - if we have docs but couldn't classify, assume local
   return { type: "local", town: detectedTown };
+}
+
+/**
+ * Development sanity check: warns if the answer content appears to reference
+ * local documents but docSourceType is set to "none".
+ * This helps catch mis-wiring early without blocking responses.
+ */
+function checkSimpleAnswerScopeMismatch(
+  answer: string,
+  docSourceType: DocSourceType,
+  docSourceTown: string | null,
+  sourceDocCount: number,
+  logContext?: { requestId?: string; sessionId?: string }
+): void {
+  if (process.env.NODE_ENV !== "development") return;
+  
+  if (docSourceType === "none" && sourceDocCount > 0) {
+    // We have docs but docSourceType is none - this is definitely a bug
+    logDebug("scope_answer_mismatch_simple", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "sanity_check",
+      docSourceType,
+      docSourceTown,
+      sourceDocCount,
+      reason: "Has source docs but docSourceType=none",
+      answerPreview: answer.slice(0, 200),
+    });
+  }
+  
+  if (docSourceType === "none") {
+    // Check for patterns that suggest local document usage
+    const localPatterns = [
+      /According to the .* minutes/i,
+      /As noted in the .* budget/i,
+      /Planning Board/i,
+      /Board of Selectmen/i,
+      /BOS minutes/i,
+      /warrant article/i,
+      /town report/i,
+      /Case\s*#?\d+/i, // Case numbers like "Case #25-02-LM"
+      /OpenCouncil archive/i,
+    ];
+
+    const hasLocalReferences = localPatterns.some(pattern => pattern.test(answer));
+
+    if (hasLocalReferences) {
+      logDebug("scope_answer_mismatch_simple_patterns", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "sanity_check",
+        docSourceType,
+        docSourceTown,
+        sourceDocCount,
+        reason: "Answer contains local document references but docSourceType=none",
+        answerPreview: answer.slice(0, 200),
+      });
+    }
+  }
 }
