@@ -134,7 +134,9 @@ router.get("/usage", async (req: IdentityRequest, res: Response) => {
     }
   }
   
-  const usagePercent = Math.min(100, Math.round((dailyCost / limit) * 100));
+  const usagePercent = limit > 0 
+    ? Math.min(100, Math.round((dailyCost / limit) * 100))
+    : 100;
   
   res.json({
     tier,
