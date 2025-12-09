@@ -110,6 +110,39 @@ router.get("/me", async (req: IdentityRequest, res: Response) => {
   });
 });
 
+router.get("/usage", async (req: IdentityRequest, res: Response) => {
+  const { getDailyCost } = await import("../llm/callLLMWithLogging");
+  const { getUsageLimits } = await import("../middleware/usageLimits");
+  
+  const limits = getUsageLimits();
+  
+  let tier: "anonymous" | "free" | "paying";
+  let limit: number;
+  let dailyCost = 0;
+  
+  if (req.user) {
+    tier = req.user.isPaying ? "paying" : "free";
+    limit = req.user.isPaying ? limits.paying : limits.free;
+    if (req.actor) {
+      dailyCost = await getDailyCost(req.actor);
+    }
+  } else {
+    tier = "anonymous";
+    limit = limits.anonymous;
+    if (req.actor) {
+      dailyCost = await getDailyCost(req.actor);
+    }
+  }
+  
+  const usagePercent = Math.min(100, Math.round((dailyCost / limit) * 100));
+  
+  res.json({
+    tier,
+    usagePercent,
+    isAuthenticated: !!req.user,
+  });
+});
+
 router.post("/logout", async (req: IdentityRequest, res: Response) => {
   res.clearCookie("oc_session");
   res.json({ success: true });

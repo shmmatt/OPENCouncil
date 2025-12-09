@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { UserStatusBar } from "@/components/user-status-bar";
 import type { ChatSession, ChatMessage } from "@shared/schema";
 
 // V2 response types
@@ -311,21 +312,24 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 flex flex-col h-full">
-        <header className="border-b bg-card px-4 py-3 flex items-center gap-3">
-          <Sheet>
-            <SheetTrigger asChild className="md:hidden">
-              <Button variant="ghost" size="icon" data-testid="button-menu">
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-72">
-              {sidebarContent}
-            </SheetContent>
-          </Sheet>
-          <div>
-            <h1 className="text-lg font-semibold">OPENCouncil Assistant</h1>
-            <p className="text-xs text-muted-foreground">Ask questions about your municipal documents</p>
+        <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Sheet>
+              <SheetTrigger asChild className="md:hidden">
+                <Button variant="ghost" size="icon" data-testid="button-menu">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0 w-72">
+                {sidebarContent}
+              </SheetContent>
+            </Sheet>
+            <div>
+              <h1 className="text-lg font-semibold">OPENCouncil Assistant</h1>
+              <p className="text-xs text-muted-foreground">Ask questions about your municipal documents</p>
+            </div>
           </div>
+          <UserStatusBar />
         </header>
 
         <ScrollArea className="flex-1 p-4">
