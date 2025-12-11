@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import type { Express, Request, Response } from "express";
+import type { Express, Response } from "express";
+import type { IdentityRequest } from "../auth/types";
 import { storage } from "../storage";
 import { routeQuestion } from "./router";
 import { generateSimpleAnswer } from "./simpleAnswer";
@@ -31,12 +32,12 @@ import type {
 import { logWarn as logWarning } from "../utils/logger";
 
 export function registerChatV2Routes(app: Express): void {
-  app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: Request, res: Response) => {
+  app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: IdentityRequest, res: Response) => {
     const startTime = Date.now();
     const requestId = randomUUID();
     const { sessionId } = req.params;
 
-    const logCtx: PipelineLogContext = { requestId, sessionId };
+    const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
 
     try {
       const { content, metadata }: ChatV2Request = req.body;

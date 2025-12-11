@@ -88,10 +88,13 @@ export interface ChatHistoryMessage {
   content: string;
 }
 
+import type { ActorContext } from "../auth/types";
+
 /**
  * Logging context passed through the pipeline for request correlation
  */
 export interface PipelineLogContext {
   requestId: string;
   sessionId: string;
+  actor?: ActorContext;
 }

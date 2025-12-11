@@ -6,6 +6,7 @@ import { logDebug } from "../utils/logger";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { isRSAQuestion } from "./router";
+import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { 
   generateStatewideDisclaimer, 
   generateNoDocsFoundMessage, 
@@ -156,6 +157,21 @@ export async function generateSimpleAnswer(
       responseText: rawAnswerText,
       durationMs,
     });
+
+    // Log usage for cost tracking
+    if (logContext?.actor) {
+      const tokens = extractTokenCounts(response);
+      await logLLMCall(
+        {
+          actor: logContext.actor,
+          sessionId: logContext.sessionId,
+          requestId: logContext.requestId,
+          stage: "simpleAnswer",
+          model: MODEL_NAME,
+        },
+        { text: rawAnswerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+      );
+    }
 
     logFileSearchResponse({
       requestId: logContext?.requestId,
@@ -348,6 +364,22 @@ async function generateRSAGeneralKnowledgeAnswer(
       responseText: answerText,
       durationMs,
     });
+
+    // Log usage for cost tracking
+    if (logContext?.actor) {
+      const tokens = extractTokenCounts(response);
+      await logLLMCall(
+        {
+          actor: logContext.actor,
+          sessionId: logContext.sessionId,
+          requestId: logContext.requestId,
+          stage: "simpleAnswer",
+          model: MODEL_NAME,
+          metadata: { fallback: "rsa" },
+        },
+        { text: answerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+      );
+    }
 
     if (!answerText) {
       return "No directly relevant material was found for this New Hampshire statute question. Please consult the official RSA text at gencourt.state.nh.us/rsa/html/indexes/ or contact NHMA for guidance.";

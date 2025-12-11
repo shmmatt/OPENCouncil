@@ -7,6 +7,7 @@ import { logDebug } from "../utils/logger";
 import { chatConfig } from "./chatConfig";
 import { buildMergedRetrievalQuery } from "./pipelineUtils";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
+import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -119,6 +120,22 @@ export async function generateComplexDraftAnswer(
         responseText: snippetContent,
         durationMs,
       });
+
+      // Log usage for cost tracking
+      if (logContext?.actor) {
+        const tokens = extractTokenCounts(response);
+        await logLLMCall(
+          {
+            actor: logContext.actor,
+            sessionId: logContext.sessionId,
+            requestId: logContext.requestId,
+            stage: "other",
+            model: MODEL_NAME,
+            metadata: { subStage: retrievalStage },
+          },
+          { text: snippetContent, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+        );
+      }
 
       logFileSearchResponse({
         requestId: logContext?.requestId,
@@ -406,6 +423,21 @@ HYPER-LOCAL FOCUS (IMPORTANT):
       responseText,
       durationMs,
     });
+
+    // Log usage for cost tracking
+    if (logContext?.actor) {
+      const tokens = extractTokenCounts(response);
+      await logLLMCall(
+        {
+          actor: logContext.actor,
+          sessionId: logContext.sessionId,
+          requestId: logContext.requestId,
+          stage: "synthesis",
+          model: MODEL_NAME,
+        },
+        { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+      );
+    }
 
     return responseText;
   } catch (error) {

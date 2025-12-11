@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, ScopeHint } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
+import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -175,6 +176,21 @@ Remember: Respond with valid JSON only, no other text.`;
       responseText,
       durationMs,
     });
+
+    // Log usage for cost tracking
+    if (logContext?.actor) {
+      const tokens = extractTokenCounts(response);
+      await logLLMCall(
+        {
+          actor: logContext.actor,
+          sessionId: logContext.sessionId,
+          requestId: logContext.requestId,
+          stage: "router",
+          model: MODEL_NAME,
+        },
+        { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+      );
+    }
 
     const cleanedText = responseText
       .replace(/```json\n?/g, "")
