@@ -260,6 +260,7 @@ export default function Chat() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
     },
   });
 
