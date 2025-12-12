@@ -1,0 +1,31 @@
+What are the NH RSA requirements for a quorum at public meetings?
+
+2:35:33 PM
+
+Under New Hampshire law and Ossipee's municipal procedures, a quorum is the minimum number of members who must be present to legally conduct official business, vote, or make decisions.
+
+Key Requirements (RSA 91-A):
+
+Definition: RSA 91-A:2 defines a meeting as the convening of a quorum of the public body. For most boards, a quorum is a simple majority of the total membership (e.g., 3 members of a 5-member board, or 2 members of a 3-member board).
+Physical Presence: Under normal circumstances, a quorum of the board must be physically present at the location specified in the meeting notice. Remote participation by individual members is permitted only if a quorum is already physically present at the meeting site (RSA 91-A:2, III).
+No Quorum = No Business: If a quorum is not present, the board cannot vote, appropriate funds, or make binding decisions. They may only continue discussions as "informational" or adjourn, though minutes are often still kept to record the lack of a quorum (as seen in the Feb 10, 2025 EDC minutes).
+Ossipee Specifics:
+
+Planning Board: The Ossipee Planning Board Rules of Procedure (amended July 2024) specifically state that for their 7-member board, a quorum of four (4) members must be present to conduct any business.
+Stricter Rules Allowed: RSA 91-A sets the minimum standard. Local bodies in Ossipee may adopt rules requiring a higher number for a quorum (e.g., supermajority), but they cannot set it lower than a simple majority.
+Source scope: Based on documents from the Town of Ossipee in the OpenCouncil archive. These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. Details may be incomplete depending on what the municipality has published or digitized. This information is informational only and is not legal advice.
+
+Source scope: Based on documents from the Town of Ossipee in the OpenCouncil archive. These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. Details may be incomplete depending on what the municipality has published or digitized. This information is informational only and is not legal advice.
+
+Sources:
+
+•
+84cf6096622ad93e575f08fef33b4f6f
+•
+27ae842817cc46de06785a4b9b76d9bb
+•
+16f7f92a0e1e9e100034e4fa0afef8cc
+•
+07fc64d94cda428a2db1073b7b5dd35c
+•
+f289b2e9223b1e674e1e4652d534b4fb
