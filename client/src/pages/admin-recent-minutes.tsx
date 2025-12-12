@@ -110,12 +110,15 @@ export default function AdminRecentMinutes() {
           <CardContent>
             <div className="flex flex-wrap gap-4 mb-4">
               <div className="w-48">
-                <Select value={townFilter} onValueChange={setTownFilter}>
+                <Select 
+                  value={townFilter || "__all__"} 
+                  onValueChange={(v) => setTownFilter(v === "__all__" ? "" : v)}
+                >
                   <SelectTrigger data-testid="select-town-filter">
                     <SelectValue placeholder="All towns" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All towns</SelectItem>
+                    <SelectItem value="__all__">All towns</SelectItem>
                     {towns.map((town) => (
                       <SelectItem key={town} value={town}>
                         {town}
