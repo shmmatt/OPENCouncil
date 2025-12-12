@@ -62,6 +62,30 @@ export interface SourceCitation {
   board?: string;
 }
 
+/**
+ * Raw citation extracted from Gemini grounding metadata.
+ * geminiDocId is the canonical key (extracted from URI).
+ */
+export interface ExtractedCitation {
+  rawTitle?: string;      // retrievedContext.title (for debug only, not for identity)
+  rawUri?: string;        // retrievedContext.uri (full path)
+  geminiDocId?: string;   // parsed from /documents/<docId> - this is the canonical key
+}
+
+/**
+ * Resolved source ready for UI display.
+ */
+export interface ResolvedSource {
+  docVersionId: string | null;
+  label: string;
+  href: string | null;
+  debug?: {
+    geminiDocId?: string;
+    rawUri?: string;
+    rawTitle?: string;
+  };
+}
+
 export interface ChatV2Request {
   content: string;
   metadata?: {

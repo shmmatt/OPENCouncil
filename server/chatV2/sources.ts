@@ -1,107 +1,68 @@
 import { storage } from "../storage";
 import type { SourceCitation } from "./types";
 
+/**
+ * Resolve geminiDocIds to SourceCitations using canonical exact-match resolution.
+ * This is the primary path - uses gemini_internal_id exact match.
+ */
 export async function mapFileSearchDocumentsToCitations(
-  documentNames: string[]
+  geminiDocIds: string[]
 ): Promise<SourceCitation[]> {
-  if (!documentNames || documentNames.length === 0) {
+  if (!geminiDocIds || geminiDocIds.length === 0) {
     return [];
   }
 
-  const uniqueNames = Array.from(new Set(documentNames));
+  const uniqueDocIds = Array.from(new Set(geminiDocIds));
   const citations: SourceCitation[] = [];
   const seenIds = new Set<string>();
+  let resolvedCount = 0;
+  const unresolvedSample: string[] = [];
 
-  console.log(`[mapFileSearchDocumentsToCitations] Processing ${uniqueNames.length} unique document names:`, uniqueNames);
-
-  for (const docName of uniqueNames) {
+  for (const docId of uniqueDocIds) {
     try {
-      console.log(`[mapFileSearchDocumentsToCitations] Looking up docName: "${docName}"`);
-      // Strategy 1: Try to find by fileSearchDocumentName (full path or ID)
-      let docVersion = await storage.getDocumentVersionByFileSearchName(docName);
-      console.log(`[mapFileSearchDocumentsToCitations] getDocumentVersionByFileSearchName result:`, docVersion ? `Found ${docVersion.id}` : 'null');
-      let logicalDoc = docVersion 
-        ? await storage.getLogicalDocumentById(docVersion.documentId)
-        : null;
-      console.log(`[mapFileSearchDocumentsToCitations] logicalDoc result:`, logicalDoc ? logicalDoc.canonicalTitle : 'null');
+      // Primary path: exact match on gemini_internal_id
+      const resolved = await storage.getDocumentVersionByGeminiInternalId(docId);
+      
+      if (resolved) {
+        if (seenIds.has(resolved.documentVersionId)) continue;
+        seenIds.add(resolved.documentVersionId);
+        resolvedCount++;
 
-      // Strategy 2: If not found by fileSearchName, try to find by title
-      // Gemini may return the displayName we set as retrievedContext.title
-      if (!docVersion && !logicalDoc) {
-        logicalDoc = await storage.getLogicalDocumentByTitle(docName);
-        if (logicalDoc) {
-          console.log(`[mapFileSearchDocumentsToCitations] Found by title: "${docName}" -> ${logicalDoc.id}`);
-          // Get the current version for this logical document
-          const currentVersion = await storage.getCurrentVersionForDocument(logicalDoc.id);
-          if (currentVersion) {
-            docVersion = currentVersion;
-          }
-        }
-      }
+        // Get additional metadata from logical document
+        const logicalDoc = await storage.getLogicalDocumentById(resolved.logicalDocumentId);
+        const docVersion = await storage.getDocumentVersionById(resolved.documentVersionId);
 
-      if (docVersion && logicalDoc) {
-        if (seenIds.has(docVersion.id)) continue;
-        seenIds.add(docVersion.id);
-
-        const meetingDateStr = docVersion.meetingDate 
+        const meetingDateStr = docVersion?.meetingDate 
           ? (docVersion.meetingDate instanceof Date 
               ? docVersion.meetingDate.toISOString().split('T')[0] 
               : String(docVersion.meetingDate))
           : undefined;
           
         citations.push({
-          id: docVersion.id,
-          title: logicalDoc.canonicalTitle || extractTitleFromName(docName),
-          town: logicalDoc.town || undefined,
-          year: docVersion.year || undefined,
-          category: logicalDoc.category || undefined,
-          url: `/api/files/${docVersion.id}`,
+          id: resolved.documentVersionId,
+          title: resolved.label,
+          town: logicalDoc?.town || undefined,
+          year: docVersion?.year || undefined,
+          category: logicalDoc?.category || undefined,
+          url: `/api/files/${resolved.documentVersionId}`,
           meetingDate: meetingDateStr,
-          board: logicalDoc.board || undefined,
-        });
-      } else if (docVersion) {
-        // Have version but no logical doc
-        if (seenIds.has(docVersion.id)) continue;
-        seenIds.add(docVersion.id);
-
-        const meetingDateStr = docVersion.meetingDate 
-          ? (docVersion.meetingDate instanceof Date 
-              ? docVersion.meetingDate.toISOString().split('T')[0] 
-              : String(docVersion.meetingDate))
-          : undefined;
-          
-        citations.push({
-          id: docVersion.id,
-          title: extractTitleFromName(docName),
-          town: undefined,
-          year: docVersion.year || undefined,
-          category: undefined,
-          url: `/api/files/${docVersion.id}`,
-          meetingDate: meetingDateStr,
-          board: undefined,
-        });
-      } else if (logicalDoc) {
-        // Have logical doc but no version
-        if (seenIds.has(logicalDoc.id)) continue;
-        seenIds.add(logicalDoc.id);
-          
-        citations.push({
-          id: logicalDoc.id,
-          title: logicalDoc.canonicalTitle || extractTitleFromName(docName),
-          town: logicalDoc.town || undefined,
-          year: undefined,
-          category: logicalDoc.category || undefined,
-          url: undefined,
-          board: logicalDoc.board || undefined,
+          board: logicalDoc?.board || undefined,
         });
       } else {
-        // No match found - use extracted title
-        const title = extractTitleFromName(docName);
-        if (!seenIds.has(title)) {
-          seenIds.add(title);
+        // Unresolved - log for debugging, use safe fallback label
+        if (unresolvedSample.length < 3) {
+          unresolvedSample.push(docId);
+        }
+        
+        // Use "Source document" as fallback instead of showing hex
+        const isHexString = /^[0-9a-f]{16,64}$/i.test(docId);
+        const fallbackLabel = isHexString ? "Source document" : docId;
+        
+        if (!seenIds.has(docId)) {
+          seenIds.add(docId);
           citations.push({
-            id: docName,
-            title: title,
+            id: docId,
+            title: fallbackLabel,
             town: undefined,
             year: undefined,
             category: undefined,
@@ -110,33 +71,25 @@ export async function mapFileSearchDocumentsToCitations(
         }
       }
     } catch (error) {
-      console.error(`Error mapping document ${docName}:`, error);
-      const title = extractTitleFromName(docName);
-      if (!seenIds.has(title)) {
-        seenIds.add(title);
+      console.error(`[mapFileSearchDocumentsToCitations] Error resolving ${docId}:`, error);
+      if (!seenIds.has(docId)) {
+        seenIds.add(docId);
         citations.push({
-          id: docName,
-          title: title,
+          id: docId,
+          title: "Source document",
         });
       }
     }
   }
 
+  // Debug log
+  console.log("[sources_resolution_debug]", {
+    extractedCount: uniqueDocIds.length,
+    resolvedCount,
+    unresolvedSample,
+  });
+
   return citations;
-}
-
-function extractTitleFromName(docName: string): string {
-  if (docName.includes("/documents/")) {
-    const parts = docName.split("/");
-    return parts[parts.length - 1] || docName;
-  }
-
-  const bracketMatch = docName.match(/\[([^\]]+)\]\s*(.+)/);
-  if (bracketMatch) {
-    return bracketMatch[2] || docName;
-  }
-
-  return docName;
 }
 
 export function formatCitationsForDisplay(citations: SourceCitation[]): string {

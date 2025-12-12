@@ -1,0 +1,213 @@
+Here’s a **comprehensive “clean-up + fix” Replit Agent prompt** that puts you back on rails, removes scabbing, and solves the Sources bubble issue using the *correct* canonical key: **`retrievedContext.uri → docId → document_versions.gemini_internal_id`**.
+
+Copy/paste this whole thing into Replit Agent.
+
+---
+
+## Replit Agent Prompt — Fix “Sources bubble shows hashes” (Canonical URI → docId mapping, cleanup included)
+
+You are working on OPENCouncil (Node/Express + Drizzle + Neon). The chat “Sources” bubble currently shows cryptic hex strings (e.g., `07fc64d94cda428a2db1073b7b5dd35c`) instead of readable document titles. The link URLs are formatted correctly, but the displayed text label is wrong.
+
+### The Correct Architecture (Non-negotiable)
+
+We already store the canonical Gemini document resource identity:
+
+**DB sample**
+
+* `document_versions.file_search_document_name`:
+  `fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/78bda87302028ec613a5930c6db-10troyt89iwf`
+* `document_versions.gemini_internal_id`:
+  `78bda87302028ec613a5930c6db-10troyt89iwf`
+
+Gemini grounding metadata provides a `retrievedContext` object for each grounded chunk. **We must build source mapping from `retrievedContext.uri` (or any field containing `/documents/<docId>`) and ignore `retrievedContext.title` for identity mapping**, because `title` is not a stable doc identifier.
+
+### Goal
+
+Make Sources bubble display a human-readable label for each cited document and link correctly to the internal viewer. The mapping must be deterministic and avoid heuristic “prefix matching” as a primary strategy.
+
+---
+
+# Task A — Implement Canonical Citation Extraction (server)
+
+### Files likely involved:
+
+* `server/chatV2/simpleAnswer.ts` (grounding parsing)
+* Possibly `server/chatV2/sources.ts` if extraction currently happens there
+
+### Requirements
+
+1. Replace any function that returns `string[]` “doc names” extracted from Gemini grounding (often using `retrievedContext.title`) with a structured extraction that prefers **URI**.
+
+Create a type:
+
+```ts
+export type ExtractedCitation = {
+  rawTitle?: string;
+  rawUri?: string;
+  geminiDocId?: string;   // parsed from /documents/<docId>
+};
+```
+
+2. Implement `extractCitationsFromGrounding(groundingMetadata): ExtractedCitation[]` that:
+
+* Iterates grounding chunks
+* Reads retrievedContext fields (at least `uri` and `title`, but also check any other fields that may exist like `name`, `sourceUri`, `documentUri`)
+* Finds the first field containing `/documents/` and extracts `geminiDocId` as substring after `/documents/`
+* Sets `rawUri` to that field’s value when available
+* Sets `rawTitle` to retrievedContext.title (for debug only)
+
+3. Identity rule:
+
+* If `geminiDocId` is present, it is the canonical key.
+* Never use `rawTitle` as the primary key when `geminiDocId` exists.
+
+4. Add one debug log (dev-safe) per request:
+   Log only the first 3 extracted citations:
+
+```ts
+logger.debug("citation_extraction_debug", {
+  requestId,
+  citations: extracted.slice(0,3)
+});
+```
+
+---
+
+# Task B — Deterministic Resolver (storage + sources)
+
+### Files:
+
+* `server/storage.ts` (IStorage + implementation)
+* `server/chatV2/sources.ts` (source resolution glue)
+
+### Requirements
+
+1. Add to `IStorage`:
+
+```ts
+getDocumentVersionByGeminiInternalId(docId: string): Promise<{
+  documentVersionId: string;
+  logicalDocumentId: string;
+  label: string;
+  fileSearchDocumentName: string | null;
+} | null>;
+```
+
+2. Implement it in `server/storage.ts` using Drizzle:
+
+* Exact match on `document_versions.gemini_internal_id = docId`
+* Join `logical_documents` and `file_blobs` if needed to produce label fields.
+
+Label precedence (human-readable):
+
+1. `document_versions.gemini_display_name` (if it exists in schema and populated)
+2. `logical_documents.canonical_title` (if exists)
+3. `file_blobs.original_filename` (if exists)
+4. Fallback: `docId`
+
+**Important:** do NOT use prefix LIKE matching as the common path. You may keep a *last-resort fallback* if you want, but it must be clearly gated: only used when exact match fails and only in development logs. Prefer to remove it entirely if URI extraction works.
+
+3. In `server/chatV2/sources.ts`, refactor so that:
+
+* It accepts `ExtractedCitation[]` (not string IDs)
+* For each citation with `geminiDocId`, call `storage.getDocumentVersionByGeminiInternalId(geminiDocId)`
+* Build a `ResolvedSource` object:
+
+```ts
+{
+  docVersionId: string | null;
+  label: string;
+  href: string | null;
+  debug?: { geminiDocId?: string; rawUri?: string; rawTitle?: string };
+}
+```
+
+4. Generate `href` consistently:
+
+* Prefer linking via your internal doc viewer using `docVersionId` (best)
+* If you do not have a viewer route, link via existing “open file search doc” route (whatever the app currently uses)
+* Ensure `href` is never built from `rawTitle`.
+
+5. Add a single log at the end of resolution:
+
+```ts
+logger.info("sources_resolution_debug", {
+  requestId,
+  extractedCount: extracted.length,
+  resolvedCount: resolved.filter(s => s.docVersionId).length,
+  unresolvedSample: resolved.filter(s => !s.docVersionId).slice(0,3)
+});
+```
+
+---
+
+# Task C — Ensure Chat API Returns Explicit `label` and UI Never Displays Hashes
+
+### Files:
+
+* `server/chatV2/chatV2Route.ts` (or wherever the response JSON is assembled)
+* `client/src/pages/chat.tsx` (sources rendering)
+
+### Requirements
+
+1. In the chat response payload, ensure each source includes:
+
+* `label` (display text)
+* `href` (click target)
+* `docVersionId` (optional but preferred)
+
+2. In `client/src/pages/chat.tsx` (or wherever Sources bubble renders):
+
+* Render link text from `source.label` ONLY
+* Never display `source.title`, `source.id`, or any Gemini-provided field
+* If `label` appears to be a hex string (regex: `/^[0-9a-f]{16,64}$/i/`), display a safe fallback like `Source document` and log a console warning in dev.
+
+---
+
+# Task D — Cleanup / Undo Scabbing (keep only what helps)
+
+### Requirements
+
+1. If there are admin endpoints created only for debugging Gemini document listing/backfills:
+
+* Either remove them OR gate them behind `NODE_ENV !== 'production'` and add a comment `// DEV ONLY: remove after citation fix`.
+* Do not require these endpoints for runtime citation resolution.
+
+2. If there is prefix-matching logic in main resolver path:
+
+* Remove it, or move it behind a strict fallback when `geminiDocId` is absent.
+* We should not depend on `retrievedContext.title` hex matching.
+
+3. Do not add new tables.
+4. Do not introduce any new “canonical documents” table.
+
+---
+
+# Definition of Done (must verify)
+
+1. Ask a question that produces citations.
+2. Sources bubble shows readable labels (town/board/title/filename), not hex strings.
+3. Clicking a source opens a meaningful viewer/doc page.
+4. Server logs show `citation_extraction_debug` with `geminiDocId` extracted from `rawUri`.
+5. `sources_resolution_debug` shows most sources resolved via `gemini_internal_id` exact match.
+
+---
+
+# Acceptance Test Instructions
+
+After implementing, run:
+
+* Ask: “What are cemetery regulations in Ossipee?” (or any question that triggers sources)
+* Confirm sources list displays human labels (not hashes)
+* Confirm at least one source link opens.
+
+---
+
+## Notes / Context
+
+* `retrievedContext.title` may be a Gemini internal hash; do not treat it as a document identity.
+* The canonical identity is the `/documents/<docId>` portion of the resource URI, which matches `document_versions.gemini_internal_id`.
+
+Proceed to implement Tasks A–D with minimal changes and clear code comments.
+
+---

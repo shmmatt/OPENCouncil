@@ -464,56 +464,79 @@ async function generateRSAGeneralKnowledgeAnswer(
   }
 }
 
+import type { ExtractedCitation } from "./types";
+
 /**
- * Extract source document names from a Gemini response's grounding metadata.
- * Now also captures chunk.retrievedContext.title which is often present in file_search results.
+ * Extract citations from Gemini grounding metadata.
+ * Uses URI as the canonical source for document identity (extracts geminiDocId from /documents/<docId>).
+ * Title is captured for debug only - never used as primary key.
  */
-function extractSourceDocumentNames(response: any): string[] {
-  const documentNames: string[] = [];
+export function extractCitationsFromGrounding(response: any): ExtractedCitation[] {
+  const citations: ExtractedCitation[] = [];
+  const seenDocIds = new Set<string>();
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
     const chunks = response.candidates[0].groundingMetadata.groundingChunks;
-    const seenDocs = new Set<string>();
 
     chunks.forEach((chunk: any) => {
-      // Check retrievedContext.uri
-      const uri = chunk.retrievedContext?.uri;
-      if (uri && !seenDocs.has(uri)) {
-        documentNames.push(uri);
-        seenDocs.add(uri);
-      }
+      const ctx = chunk.retrievedContext;
+      if (!ctx) return;
+
+      // Extract geminiDocId from URI - this is the canonical key
+      let geminiDocId: string | undefined;
+      let rawUri: string | undefined;
       
-      // Check retrievedContext.title (important - was missing before!)
-      const retrievedTitle = chunk.retrievedContext?.title;
-      if (retrievedTitle && !seenDocs.has(retrievedTitle)) {
-        documentNames.push(retrievedTitle);
-        seenDocs.add(retrievedTitle);
+      // Check all possible URI fields
+      const uriFields = [ctx.uri, ctx.sourceUri, ctx.documentUri, ctx.name];
+      for (const field of uriFields) {
+        if (field && typeof field === 'string' && field.includes('/documents/')) {
+          rawUri = field;
+          // Extract docId from /documents/<docId>
+          const match = field.match(/\/documents\/([^\/]+)/);
+          if (match) {
+            geminiDocId = match[1];
+            break;
+          }
+        }
       }
-      
-      // Check web.title (for web grounding fallback)
-      const webTitle = chunk.web?.title;
-      if (webTitle && !seenDocs.has(webTitle)) {
-        documentNames.push(webTitle);
-        seenDocs.add(webTitle);
-      }
-      
-      // Check web.uri as well
-      const webUri = chunk.web?.uri;
-      if (webUri && !seenDocs.has(webUri)) {
-        documentNames.push(webUri);
-        seenDocs.add(webUri);
-      }
+
+      // Deduplicate by geminiDocId
+      if (geminiDocId && seenDocIds.has(geminiDocId)) return;
+      if (geminiDocId) seenDocIds.add(geminiDocId);
+
+      citations.push({
+        rawTitle: ctx.title,  // For debug only
+        rawUri,
+        geminiDocId,
+      });
     });
   }
 
-  if (response.candidates?.[0]?.groundingMetadata?.retrievalMetadata?.googleSearchDynamicRetrievalScore !== undefined) {
-    const sources = response.candidates?.[0]?.groundingMetadata?.webSearchQueries;
-    if (sources) {
-      console.log("Web search was used:", sources);
-    }
+  // Debug log (first 3 only)
+  if (citations.length > 0) {
+    console.log("[citation_extraction_debug]", {
+      count: citations.length,
+      sample: citations.slice(0, 3).map(c => ({
+        geminiDocId: c.geminiDocId,
+        hasUri: !!c.rawUri,
+        rawTitle: c.rawTitle?.slice(0, 20)
+      }))
+    });
   }
 
-  return documentNames;
+  return citations;
+}
+
+/**
+ * Legacy function for backward compatibility - converts ExtractedCitation[] to string[]
+ * @deprecated Use extractCitationsFromGrounding directly
+ */
+function extractSourceDocumentNames(response: any): string[] {
+  const citations = extractCitationsFromGrounding(response);
+  // Return geminiDocId as the primary identifier (for sources.ts to look up)
+  return citations
+    .filter(c => c.geminiDocId)
+    .map(c => c.geminiDocId!);
 }
 
 /**

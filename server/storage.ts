@@ -94,6 +94,14 @@ export interface IStorage {
   setCurrentVersion(documentId: string, versionId: string): Promise<void>;
   getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined>;
   getLogicalDocumentByTitle(title: string): Promise<LogicalDocument | undefined>;
+  
+  // Canonical citation resolution - exact match on gemini_internal_id
+  getDocumentVersionByGeminiInternalId(docId: string): Promise<{
+    documentVersionId: string;
+    logicalDocumentId: string;
+    label: string;
+    fileSearchDocumentName: string | null;
+  } | null>;
 
   // v2 Pipeline: IngestionJob operations
   createIngestionJob(job: InsertIngestionJob): Promise<IngestionJob>;
@@ -528,6 +536,56 @@ export class DatabaseStorage implements IStorage {
     if (reverseLikeMatch) return reverseLikeMatch;
 
     return undefined;
+  }
+
+  /**
+   * Canonical citation resolver - exact match on gemini_internal_id.
+   * Returns document info with human-readable label for Sources UI.
+   */
+  async getDocumentVersionByGeminiInternalId(docId: string): Promise<{
+    documentVersionId: string;
+    logicalDocumentId: string;
+    label: string;
+    fileSearchDocumentName: string | null;
+  } | null> {
+    // Exact match on gemini_internal_id
+    const [version] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(eq(schema.documentVersions.geminiInternalId, docId));
+    
+    if (!version) {
+      console.log(`[getDocumentVersionByGeminiInternalId] No exact match for: "${docId}"`);
+      return null;
+    }
+
+    // Get logical document for label
+    const [logicalDoc] = await db
+      .select()
+      .from(schema.logicalDocuments)
+      .where(eq(schema.logicalDocuments.id, version.documentId));
+
+    // Get file blob for fallback filename
+    const [fileBlob] = await db
+      .select()
+      .from(schema.fileBlobs)
+      .where(eq(schema.fileBlobs.id, version.fileBlobId));
+
+    // Label precedence: geminiDisplayName > canonicalTitle > originalFilename > docId
+    const label = 
+      version.geminiDisplayName ||
+      logicalDoc?.canonicalTitle ||
+      fileBlob?.originalFilename ||
+      docId;
+
+    console.log(`[getDocumentVersionByGeminiInternalId] Found: "${docId}" -> label: "${label}"`);
+
+    return {
+      documentVersionId: version.id,
+      logicalDocumentId: version.documentId,
+      label,
+      fileSearchDocumentName: version.fileSearchDocumentName,
+    };
   }
 
   // v2 Pipeline: IngestionJob operations
