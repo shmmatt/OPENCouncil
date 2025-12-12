@@ -36,6 +36,8 @@ import type {
   InsertLlmCostLog,
   Event,
   InsertEvent,
+  MinutesUpdateItem,
+  ActorIdentifier,
 } from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -125,6 +127,17 @@ export interface IStorage {
 
   // Event operations
   createEvent(event: InsertEvent): Promise<Event>;
+
+  // Town preference operations
+  getAvailableTowns(): Promise<string[]>;
+  setActorDefaultTown(actor: ActorIdentifier, town: string): Promise<void>;
+  getActorDefaultTown(actor: ActorIdentifier): Promise<string | null>;
+  setSessionTownPreference(sessionId: string, town: string): Promise<void>;
+  getSessionTownPreference(sessionId: string): Promise<string | null>;
+
+  // Recent minutes updates
+  getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]>;
+  getRecentMinutesUpdatesAdmin(params: { town?: string; board?: string; limit?: number }): Promise<MinutesUpdateItem[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -587,6 +600,148 @@ export class DatabaseStorage implements IStorage {
   async createEvent(event: InsertEvent): Promise<Event> {
     const [result] = await db.insert(schema.events).values(event).returning();
     return result;
+  }
+
+  // Town preference operations
+  async getAvailableTowns(): Promise<string[]> {
+    // Currently only Ossipee is active
+    return ["Ossipee"];
+  }
+
+  async setActorDefaultTown(actor: ActorIdentifier, town: string): Promise<void> {
+    if (actor.type === 'user' && actor.userId) {
+      await db
+        .update(schema.users)
+        .set({ defaultTown: town })
+        .where(eq(schema.users.id, actor.userId));
+    } else if (actor.type === 'anon' && actor.anonId) {
+      await db
+        .update(schema.anonymousUsers)
+        .set({ defaultTown: town })
+        .where(eq(schema.anonymousUsers.id, actor.anonId));
+    }
+  }
+
+  async getActorDefaultTown(actor: ActorIdentifier): Promise<string | null> {
+    if (actor.type === 'user' && actor.userId) {
+      const [user] = await db
+        .select({ defaultTown: schema.users.defaultTown })
+        .from(schema.users)
+        .where(eq(schema.users.id, actor.userId));
+      return user?.defaultTown || null;
+    } else if (actor.type === 'anon' && actor.anonId) {
+      const [anonUser] = await db
+        .select({ defaultTown: schema.anonymousUsers.defaultTown })
+        .from(schema.anonymousUsers)
+        .where(eq(schema.anonymousUsers.id, actor.anonId));
+      return anonUser?.defaultTown || null;
+    }
+    return null;
+  }
+
+  async setSessionTownPreference(sessionId: string, town: string): Promise<void> {
+    await db
+      .update(schema.chatSessions)
+      .set({ townPreference: town, updatedAt: new Date() })
+      .where(eq(schema.chatSessions.id, sessionId));
+  }
+
+  async getSessionTownPreference(sessionId: string): Promise<string | null> {
+    const [session] = await db
+      .select({ townPreference: schema.chatSessions.townPreference })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.id, sessionId));
+    return session?.townPreference || null;
+  }
+
+  // Recent minutes updates - canonical query using logicalDocuments + documentVersions
+  async getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]> {
+    const { town, limit = 5 } = params;
+    
+    const results = await db
+      .select({
+        logicalDocumentId: schema.logicalDocuments.id,
+        documentVersionId: schema.documentVersions.id,
+        town: schema.logicalDocuments.town,
+        board: schema.logicalDocuments.board,
+        category: schema.logicalDocuments.category,
+        meetingDate: schema.documentVersions.meetingDate,
+        ingestedAt: schema.documentVersions.createdAt,
+        fileSearchDocumentName: schema.documentVersions.fileSearchDocumentName,
+      })
+      .from(schema.logicalDocuments)
+      .innerJoin(
+        schema.documentVersions,
+        eq(schema.logicalDocuments.id, schema.documentVersions.documentId)
+      )
+      .where(
+        and(
+          eq(schema.logicalDocuments.category, 'meeting_minutes'),
+          eq(schema.documentVersions.isCurrent, true),
+          eq(schema.logicalDocuments.town, town)
+        )
+      )
+      .orderBy(desc(schema.documentVersions.createdAt))
+      .limit(limit);
+
+    return results.map(r => ({
+      logicalDocumentId: r.logicalDocumentId,
+      documentVersionId: r.documentVersionId,
+      town: r.town,
+      board: r.board,
+      category: r.category,
+      meetingDate: r.meetingDate?.toISOString() || null,
+      ingestedAt: r.ingestedAt.toISOString(),
+      fileSearchDocumentName: r.fileSearchDocumentName,
+    }));
+  }
+
+  async getRecentMinutesUpdatesAdmin(params: { town?: string; board?: string; limit?: number }): Promise<MinutesUpdateItem[]> {
+    const { town, board, limit = 50 } = params;
+    
+    // Build where conditions dynamically
+    const conditions = [
+      eq(schema.logicalDocuments.category, 'meeting_minutes'),
+      eq(schema.documentVersions.isCurrent, true),
+    ];
+    
+    if (town) {
+      conditions.push(eq(schema.logicalDocuments.town, town));
+    }
+    if (board) {
+      conditions.push(eq(schema.logicalDocuments.board, board));
+    }
+
+    const results = await db
+      .select({
+        logicalDocumentId: schema.logicalDocuments.id,
+        documentVersionId: schema.documentVersions.id,
+        town: schema.logicalDocuments.town,
+        board: schema.logicalDocuments.board,
+        category: schema.logicalDocuments.category,
+        meetingDate: schema.documentVersions.meetingDate,
+        ingestedAt: schema.documentVersions.createdAt,
+        fileSearchDocumentName: schema.documentVersions.fileSearchDocumentName,
+      })
+      .from(schema.logicalDocuments)
+      .innerJoin(
+        schema.documentVersions,
+        eq(schema.logicalDocuments.id, schema.documentVersions.documentId)
+      )
+      .where(and(...conditions))
+      .orderBy(desc(schema.documentVersions.createdAt))
+      .limit(limit);
+
+    return results.map(r => ({
+      logicalDocumentId: r.logicalDocumentId,
+      documentVersionId: r.documentVersionId,
+      town: r.town,
+      board: r.board,
+      category: r.category,
+      meetingDate: r.meetingDate?.toISOString() || null,
+      ingestedAt: r.ingestedAt.toISOString(),
+      fileSearchDocumentName: r.fileSearchDocumentName,
+    }));
   }
 }
 

@@ -16,6 +16,7 @@ import {
   shouldBypassRouterForFollowup,
   createBypassedRouterOutput,
   buildTrimmedHistoryForAnswer,
+  resolveTownPreference,
 } from "./pipelineUtils";
 import { selectScopeNote } from "./scopeUtils";
 import { isRSAQuestion } from "./router";
@@ -164,11 +165,25 @@ export function registerChatV2Routes(app: Express): void {
 
       const bypassRouter = shouldBypassRouterForFollowup(chatHistory, content.trim());
 
+      // Resolve town preference: explicit > session > actor > fallback (Ossipee)
+      const resolvedTown = await resolveTownPreference({
+        explicitTown: metadata?.town,
+        sessionId,
+        actor: req.actor,
+      });
+
+      // Create enhanced metadata with resolved town
+      const enhancedMetadata = {
+        ...metadata,
+        town: resolvedTown,
+      };
+
       logDebug("chat_v2_pipeline_start", {
         ...logCtx,
         stage: "pipeline_start",
         historyLength: chatHistory.length,
         bypassRouter,
+        resolvedTown,
       });
 
       const routerOutput = bypassRouter
@@ -176,7 +191,7 @@ export function registerChatV2Routes(app: Express): void {
         : await routeQuestion(
             content.trim(),
             chatHistory.slice(-6),
-            metadata,
+            enhancedMetadata,
             logCtx
           );
 
@@ -259,13 +274,13 @@ export function registerChatV2Routes(app: Express): void {
           question: content.trim(),
           routerOutput,
           sessionHistory: trimmedHistory,
-          userHints: metadata,
+          userHints: enhancedMetadata,
           logContext: logCtx,
         });
 
         answerText = simpleResult.answerText;
         sourceDocumentNames = simpleResult.sourceDocumentNames;
-        townPreference = metadata?.town;
+        townPreference = resolvedTown;
         docSourceType = simpleResult.docSourceType;
         docSourceTown = simpleResult.docSourceTown;
 
@@ -301,7 +316,7 @@ export function registerChatV2Routes(app: Express): void {
         const retrievalPlan = await planRetrieval({
           question: content.trim(),
           routerOutput,
-          userHints: metadata,
+          userHints: enhancedMetadata,
           logContext: logCtx,
         });
 

@@ -118,6 +118,7 @@ export const anonymousUsers = pgTable("anonymous_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
   userId: varchar("user_id").references(() => users.id), // Linked when user signs up
+  defaultTown: text("default_town"), // Town preference for anonymous users
 });
 
 // Chat Sessions: Updated with user/anon tracking
@@ -126,6 +127,7 @@ export const chatSessions = pgTable("chat_sessions", {
   title: text("title").notNull(),
   userId: varchar("user_id").references(() => users.id),
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
+  townPreference: text("town_preference"), // Session-level town preference override
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -408,4 +410,22 @@ export interface ChatV2Response {
   answerMeta: ChatV2AnswerMeta;
   sources: SourceCitation[];
   suggestedFollowUps: string[];
+}
+
+// Town/Minutes Updates Types
+export interface MinutesUpdateItem {
+  logicalDocumentId: string;
+  documentVersionId: string;
+  town: string;
+  board: string | null;
+  category: string;
+  meetingDate: string | null; // ISO date string
+  ingestedAt: string; // ISO date string from dv.createdAt
+  fileSearchDocumentName: string | null;
+}
+
+export interface ActorIdentifier {
+  type: 'user' | 'anon';
+  userId?: string;
+  anonId?: string;
 }

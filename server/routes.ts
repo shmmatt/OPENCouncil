@@ -5,12 +5,14 @@ import multer from "multer";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { authenticateAdmin, generateToken } from "./middleware/auth";
+import { requireRole } from "./auth/middleware";
+import type { IdentityRequest } from "./auth/types";
 import { uploadDocumentToFileStore, askQuestionWithFileSearch } from "./gemini-client";
 import { extractPreviewText, suggestMetadataFromContent } from "./bulk-upload-helper";
 import { processFile, formatDuplicateWarning } from "./services/fileProcessing";
 import { suggestMetadataFromPreview, validateMetadata, isValidNHTown } from "./services/metadataExtraction";
 import { insertDocumentSchema, insertChatMessageSchema, ALLOWED_CATEGORIES, documentMetadataSchema } from "@shared/schema";
-import type { DocumentMetadata, IngestionJobStatus } from "@shared/schema";
+import type { DocumentMetadata, IngestionJobStatus, ActorIdentifier } from "@shared/schema";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { z } from "zod";
@@ -932,6 +934,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // ============================================================
+  // TOWN PREFERENCES & RECENT MINUTES UPDATES ROUTES
+  // ============================================================
+
+  // Get available towns
+  app.get("/api/meta/towns", async (req, res) => {
+    try {
+      const towns = await storage.getAvailableTowns();
+      res.json({ towns });
+    } catch (error) {
+      console.error("Error fetching available towns:", error);
+      res.status(500).json({ message: "Failed to fetch available towns" });
+    }
+  });
+
+  // Set town preference for current actor (authed or anonymous)
+  app.post("/api/preferences/town", async (req: IdentityRequest, res) => {
+    try {
+      const { town } = req.body;
+
+      if (!town || typeof town !== "string") {
+        return res.status(400).json({ message: "Town is required" });
+      }
+
+      // Validate town is in available list
+      const availableTowns = await storage.getAvailableTowns();
+      if (!availableTowns.includes(town)) {
+        return res.status(400).json({ message: "Invalid town selection" });
+      }
+
+      // Build actor identifier from request
+      const actor: ActorIdentifier = req.user 
+        ? { type: 'user', userId: req.user.id }
+        : req.anonId 
+          ? { type: 'anon', anonId: req.anonId }
+          : { type: 'anon' }; // Fallback for edge case
+
+      // Persist to actor record
+      if (actor.userId || actor.anonId) {
+        await storage.setActorDefaultTown(actor, town);
+      }
+
+      // If there's an active session ID in the request, also set session preference
+      const sessionId = req.body.sessionId;
+      if (sessionId) {
+        await storage.setSessionTownPreference(sessionId, town);
+      }
+
+      res.json({ success: true, town });
+    } catch (error) {
+      console.error("Error setting town preference:", error);
+      res.status(500).json({ message: "Failed to set town preference" });
+    }
+  });
+
+  // Get current town preference for actor
+  app.get("/api/preferences/town", async (req: IdentityRequest, res) => {
+    try {
+      const actor: ActorIdentifier = req.user 
+        ? { type: 'user', userId: req.user.id }
+        : req.anonId 
+          ? { type: 'anon', anonId: req.anonId }
+          : { type: 'anon' };
+
+      let town: string | null = null;
+
+      // Check session preference first if sessionId provided
+      const sessionId = req.query.sessionId as string | undefined;
+      if (sessionId) {
+        town = await storage.getSessionTownPreference(sessionId);
+      }
+
+      // Fall back to actor default
+      if (!town && (actor.userId || actor.anonId)) {
+        town = await storage.getActorDefaultTown(actor);
+      }
+
+      // Fall back to Ossipee
+      town = town || "Ossipee";
+
+      res.json({ town });
+    } catch (error) {
+      console.error("Error fetching town preference:", error);
+      res.status(500).json({ message: "Failed to fetch town preference" });
+    }
+  });
+
+  // Get recent minutes updates (public)
+  app.get("/api/updates/minutes", async (req: IdentityRequest, res) => {
+    try {
+      let town = req.query.town as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 5;
+
+      // If no town specified, resolve from actor preference
+      if (!town) {
+        const actor: ActorIdentifier = req.user 
+          ? { type: 'user', userId: req.user.id }
+          : req.anonId 
+            ? { type: 'anon', anonId: req.anonId }
+            : { type: 'anon' };
+
+        if (actor.userId || actor.anonId) {
+          town = await storage.getActorDefaultTown(actor) || undefined;
+        }
+      }
+
+      // Fallback to Ossipee
+      town = town || "Ossipee";
+
+      const items = await storage.getRecentMinutesUpdates({ town, limit });
+      res.json({ items });
+    } catch (error) {
+      console.error("Error fetching recent minutes updates:", error);
+      res.status(500).json({ message: "Failed to fetch recent minutes updates" });
+    }
+  });
+
+  // Get recent minutes updates (admin only, with optional filters)
+  app.get(
+    "/api/admin/updates/minutes",
+    requireRole("admin", "municipal_admin"),
+    async (req: IdentityRequest, res) => {
+      try {
+        const town = req.query.town as string | undefined;
+        const board = req.query.board as string | undefined;
+        const limit = parseInt(req.query.limit as string) || 50;
+
+        const items = await storage.getRecentMinutesUpdatesAdmin({ town, board, limit });
+        res.json({ items });
+      } catch (error) {
+        console.error("Error fetching admin minutes updates:", error);
+        res.status(500).json({ message: "Failed to fetch admin minutes updates" });
+      }
+    }
+  );
 
   // Register v2 Chat Pipeline Routes
   registerChatV2Routes(app);

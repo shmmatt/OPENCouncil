@@ -4,7 +4,10 @@
  */
 
 import type { ChatHistoryMessage, RouterOutput, RetrievalPlan } from "./types";
+import type { ActorContext } from "../auth/types";
+import type { ActorIdentifier } from "@shared/schema";
 import { chatConfig } from "./chatConfig";
+import { storage } from "../storage";
 
 /**
  * Determines if the router should be bypassed for a trivial follow-up question.
@@ -187,4 +190,52 @@ Search for comprehensive information including:
 - Relevant examples or precedents if available
 
 Provide detailed, relevant excerpts with specific section references.`;
+}
+
+/**
+ * Resolve the effective town preference for a chat request.
+ * Priority order:
+ * 1. Explicit town from request metadata
+ * 2. Session townPreference 
+ * 3. Actor defaultTown (user or anonymous)
+ * 4. Fallback to "Ossipee"
+ */
+export async function resolveTownPreference(options: {
+  explicitTown?: string;
+  sessionId?: string;
+  actor?: ActorContext;
+}): Promise<string> {
+  const { explicitTown, sessionId, actor } = options;
+
+  // 1. Explicit town from request metadata takes precedence
+  if (explicitTown) {
+    return explicitTown;
+  }
+
+  // 2. Check session town preference
+  if (sessionId) {
+    const sessionTown = await storage.getSessionTownPreference(sessionId);
+    if (sessionTown) {
+      return sessionTown;
+    }
+  }
+
+  // 3. Check actor default town
+  if (actor) {
+    const actorIdentifier: ActorIdentifier = actor.actorType === 'user' && actor.userId
+      ? { type: 'user', userId: actor.userId }
+      : actor.anonId
+        ? { type: 'anon', anonId: actor.anonId }
+        : { type: 'anon' };
+
+    if (actorIdentifier.userId || actorIdentifier.anonId) {
+      const actorTown = await storage.getActorDefaultTown(actorIdentifier);
+      if (actorTown) {
+        return actorTown;
+      }
+    }
+  }
+
+  // 4. Fallback to Ossipee
+  return "Ossipee";
 }

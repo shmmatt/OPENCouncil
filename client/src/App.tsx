@@ -9,6 +9,7 @@ import AdminDocuments from "@/pages/admin-documents";
 import AdminBulkUpload from "@/pages/admin-bulk-upload";
 import AdminIngestion from "@/pages/admin-ingestion";
 import AdminDocumentsV2 from "@/pages/admin-documents-v2";
+import AdminRecentMinutes from "@/pages/admin-recent-minutes";
 import Chat from "@/pages/chat";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/admin/bulk-upload" component={AdminBulkUpload} />
       <Route path="/admin/ingestion" component={AdminIngestion} />
       <Route path="/admin/documents-v2" component={AdminDocumentsV2} />
+      <Route path="/admin/recent-minutes" component={AdminRecentMinutes} />
       <Route component={NotFound} />
     </Switch>
   );

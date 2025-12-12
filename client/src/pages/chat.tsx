@@ -6,10 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
-import type { ChatSession, ChatMessage } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
 
 // V2 response types
 interface SourceCitation {
@@ -38,17 +40,176 @@ interface V2Metadata {
   suggestedFollowUps: string[];
 }
 
+function RecentMinutesUpdates({ 
+  selectedTown,
+  onAskAboutMeeting 
+}: { 
+  selectedTown: string;
+  onAskAboutMeeting: (prompt: string) => void;
+}) {
+  const { data: minutesData, isLoading } = useQuery<{ items: MinutesUpdateItem[] }>({
+    queryKey: ["/api/updates/minutes", selectedTown],
+    queryFn: async () => {
+      const res = await fetch(`/api/updates/minutes?town=${encodeURIComponent(selectedTown)}&limit=5`);
+      if (!res.ok) throw new Error("Failed to fetch minutes updates");
+      return res.json();
+    },
+  });
+
+  const items = minutesData?.items || [];
+
+  if (isLoading) {
+    return (
+      <div className="p-3 space-y-2">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="p-3 text-center text-muted-foreground text-sm">
+        No recent minutes have been added yet.
+      </div>
+    );
+  }
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    try {
+      return new Date(dateStr).toLocaleDateString("en-US", { 
+        month: "short", 
+        day: "numeric", 
+        year: "numeric" 
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const handleAskClick = (item: MinutesUpdateItem) => {
+    const meetingDateStr = item.meetingDate 
+      ? formatDate(item.meetingDate) 
+      : "recent meeting";
+    const boardStr = item.board || "board";
+    const prompt = `Summarize key decisions, votes, and any budget impacts from the ${item.town} ${boardStr} minutes for ${meetingDateStr}. Cite the minutes.`;
+    onAskAboutMeeting(prompt);
+  };
+
+  return (
+    <div className="space-y-1">
+      {items.map((item) => (
+        <div 
+          key={item.documentVersionId}
+          className="p-2 rounded-md bg-sidebar-accent/30 space-y-1"
+          data-testid={`minutes-item-${item.documentVersionId}`}
+        >
+          <div className="flex items-start gap-2">
+            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {item.town}{item.board ? ` — ${item.board}` : ""}
+              </p>
+              {item.meetingDate && (
+                <p className="text-xs text-muted-foreground">
+                  Meeting: {formatDate(item.meetingDate)}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Added: {formatDate(item.ingestedAt)}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-1 ml-6">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => handleAskClick(item)}
+              data-testid={`button-ask-about-${item.documentVersionId}`}
+            >
+              <Sparkles className="w-3 h-3 mr-1" />
+              Ask
+            </Button>
+            {item.fileSearchDocumentName && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2"
+                asChild
+                data-testid={`button-view-${item.documentVersionId}`}
+              >
+                <a 
+                  href={`/admin/documents?doc=${item.logicalDocumentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  View
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChatSidebar({ 
   sessions, 
   activeSessionId, 
   onSessionSelect, 
-  onNewChat 
+  onNewChat,
+  onInsertPrompt
 }: { 
   sessions?: ChatSession[]; 
   activeSessionId: string | null;
   onSessionSelect: (id: string) => void;
   onNewChat: () => void;
+  onInsertPrompt: (prompt: string) => void;
 }) {
+  // Fetch available towns
+  const { data: townsData } = useQuery<{ towns: string[] }>({
+    queryKey: ["/api/meta/towns"],
+  });
+
+  // Fetch current town preference
+  const { data: prefData } = useQuery<{ town: string }>({
+    queryKey: ["/api/preferences/town"],
+  });
+
+  const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
+
+  // Update selected town when preference loads
+  useEffect(() => {
+    if (prefData?.town) {
+      setSelectedTown(prefData.town);
+    }
+  }, [prefData?.town]);
+
+  const setTownMutation = useMutation({
+    mutationFn: async (town: string) => {
+      await apiRequest("POST", "/api/preferences/town", { 
+        town,
+        sessionId: activeSessionId 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
+    },
+  });
+
+  const handleTownChange = (town: string) => {
+    setSelectedTown(town);
+    setTownMutation.mutate(town);
+  };
+
+  const towns = townsData?.towns || ["Ossipee"];
+
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       <div className="p-4 border-b border-sidebar-border">
@@ -62,8 +223,50 @@ function ChatSidebar({
           New Chat
         </Button>
       </div>
+
+      {/* Town selector */}
+      <div className="p-3 border-b border-sidebar-border">
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+          Town
+        </label>
+        <Select value={selectedTown} onValueChange={handleTownChange}>
+          <SelectTrigger 
+            className="w-full" 
+            data-testid="select-town"
+          >
+            <SelectValue placeholder="Select a town" />
+          </SelectTrigger>
+          <SelectContent>
+            {towns.map((town) => (
+              <SelectItem key={town} value={town} data-testid={`town-option-${town}`}>
+                {town}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Recent minutes updates */}
+      <div className="p-3 border-b border-sidebar-border">
+        <h3 className="text-xs font-medium text-muted-foreground mb-2">
+          Recent Minutes Updates
+        </h3>
+        <RecentMinutesUpdates 
+          selectedTown={selectedTown}
+          onAskAboutMeeting={onInsertPrompt}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Sessions list */}
+      <div className="p-3 pb-1">
+        <h3 className="text-xs font-medium text-muted-foreground mb-2">
+          Conversations
+        </h3>
+      </div>
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="px-2 pb-2 space-y-1">
           {sessions?.map((session) => (
             <button
               key={session.id}
@@ -297,12 +500,17 @@ export default function Chat() {
     }
   };
 
+  const handleInsertPrompt = (prompt: string) => {
+    setInputValue(prompt);
+  };
+
   const sidebarContent = (
     <ChatSidebar
       sessions={sessions}
       activeSessionId={activeSessionId}
       onSessionSelect={setActiveSessionId}
       onNewChat={handleNewChat}
+      onInsertPrompt={handleInsertPrompt}
     />
   );
 
