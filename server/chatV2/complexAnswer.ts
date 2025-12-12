@@ -11,7 +11,7 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-3-pro";
+const MODEL_NAME = "gemini-3-pro-preview";
 
 interface ComplexAnswerOptions {
   question: string;
