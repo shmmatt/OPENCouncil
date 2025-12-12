@@ -168,6 +168,28 @@ The pipeline enriches document sources with metadata:
 - Source mapping extracts metadata from `documentVersions` and `logicalDocuments` tables
 - Meeting dates are formatted as ISO date strings (YYYY-MM-DD)
 
+### Meeting Minutes Interpretation (v1.1 Prompt Update)
+The simpleAnswer system prompt includes enhanced guidance for interpreting municipal meeting minutes:
+
+**Narrative Record Handling:**
+- Minutes are treated as narrative records that capture discussion and motions, not just declarative statements
+- LLM can synthesize consistent statements from discussion to summarize proposals, actions, or issues
+- Attribution language encouraged: "The minutes indicate...", "Board discussion reflects...", "Discussion focused on..."
+
+**Graded Certainty:**
+- Not limited to binary specific/vague responses
+- Graded confidence language allowed: "appears to involve", "discussion suggests", "was described as..."
+- Particularly relevant for zoning/planning, variances, and building/site changes
+
+**Clarity Structure:**
+- Answers may distinguish between "what is described" and "what is not specified"
+- Example: "The minutes describe modifications to the roofline" vs "The minutes do not explicitly label the project as..."
+
+**Guardrails:**
+- No speculation beyond what documents support
+- No inferred motives or legal conclusions unless explicitly recorded
+- Informal discussion not recharacterized as finalized decisions without recorded motion/vote
+
 ### Structured Complex Answers
 Complex questions receive structured answers with consistent formatting:
 - **At a glance**: 2-3 sentence executive summary (no bullet points)
