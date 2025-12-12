@@ -409,7 +409,6 @@ export class DatabaseStorage implements IStorage {
     console.log(`[getDocumentVersionByFileSearchName] Looking up: "${fileSearchDocumentName}"`);
     
     // Strategy 0 (HIGHEST PRIORITY): Try exact match on geminiInternalId
-    // This is what Gemini returns in grounding metadata as the document identifier
     const [internalIdMatch] = await db
       .select()
       .from(schema.documentVersions)
@@ -417,6 +416,33 @@ export class DatabaseStorage implements IStorage {
     if (internalIdMatch) {
       console.log(`[getDocumentVersionByFileSearchName] Found exact match on geminiInternalId: ${internalIdMatch.id}`);
       return internalIdMatch;
+    }
+    
+    // Strategy 0.5: HEX PREFIX MATCH - Gemini returns 32-char hex like "07fc64d94cda428a2db1073b7b5dd35c"
+    // but our stored gemini_internal_id is like "07fc64d94cda428a2db1073b7b5-qvpfp260873n"
+    // They share the first ~20-27 characters, so match by prefix
+    const isHexId = /^[0-9a-f]{20,64}$/i.test(fileSearchDocumentName);
+    if (isHexId) {
+      // Try matching by prefix (first 20 chars should be unique enough)
+      const hexPrefix = fileSearchDocumentName.slice(0, 20);
+      const [hexPrefixMatch] = await db
+        .select()
+        .from(schema.documentVersions)
+        .where(sql`${schema.documentVersions.geminiInternalId} LIKE ${hexPrefix + '%'}`);
+      if (hexPrefixMatch) {
+        console.log(`[getDocumentVersionByFileSearchName] Found HEX PREFIX match on geminiInternalId: ${hexPrefixMatch.id} (prefix: ${hexPrefix})`);
+        return hexPrefixMatch;
+      }
+      
+      // Also try matching gemini_internal_id prefix against the search term
+      const [reverseHexMatch] = await db
+        .select()
+        .from(schema.documentVersions)
+        .where(sql`${fileSearchDocumentName} LIKE SUBSTRING(${schema.documentVersions.geminiInternalId}, 1, 20) || '%'`);
+      if (reverseHexMatch) {
+        console.log(`[getDocumentVersionByFileSearchName] Found REVERSE HEX PREFIX match: ${reverseHexMatch.id}`);
+        return reverseHexMatch;
+      }
     }
     
     // Strategy 1: Try exact match on fileSearchDocumentName
@@ -429,7 +455,7 @@ export class DatabaseStorage implements IStorage {
       return exactMatch;
     }
 
-    // Strategy 2: Try exact match on geminiDisplayName (Gemini often returns displayName as title)
+    // Strategy 2: Try exact match on geminiDisplayName
     const [displayNameMatch] = await db
       .select()
       .from(schema.documentVersions)
@@ -439,7 +465,7 @@ export class DatabaseStorage implements IStorage {
       return displayNameMatch;
     }
 
-    // Strategy 3: Try LIKE query - check if the passed ID is contained within fileSearchDocumentName
+    // Strategy 3: Try LIKE query - check if passed ID is contained within fileSearchDocumentName
     const [likeMatch] = await db
       .select()
       .from(schema.documentVersions)
@@ -459,17 +485,7 @@ export class DatabaseStorage implements IStorage {
       return displayNameLikeMatch;
     }
 
-    // Strategy 5: Try reverse LIKE - geminiDisplayName contains the search term
-    const [reverseLikeMatch] = await db
-      .select()
-      .from(schema.documentVersions)
-      .where(sql`${fileSearchDocumentName} LIKE '%' || ${schema.documentVersions.geminiDisplayName} || '%'`);
-    if (reverseLikeMatch) {
-      console.log(`[getDocumentVersionByFileSearchName] Found reverse LIKE match on geminiDisplayName: ${reverseLikeMatch.id}`);
-      return reverseLikeMatch;
-    }
-
-    // Strategy 6: Try to extract hash from the passed ID and match partial
+    // Strategy 5: Extract hash from path and match
     const hashPart = fileSearchDocumentName.includes('/') 
       ? fileSearchDocumentName.split('/').pop() 
       : fileSearchDocumentName;
