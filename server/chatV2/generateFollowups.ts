@@ -6,7 +6,7 @@ import type { PipelineLogContext } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-2.5-pro";
 
 const FOLLOWUP_SYSTEM_PROMPT = `You are a follow-up question generator for a municipal governance Q&A assistant in New Hampshire.
 

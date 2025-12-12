@@ -6,7 +6,7 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-3-pro";
 
 const CRITIC_SYSTEM_PROMPT = `You are a careful municipal governance QA critic for New Hampshire. Your role is to evaluate and improve draft answers to ensure they are accurate, helpful, and appropriately cautious.
 
