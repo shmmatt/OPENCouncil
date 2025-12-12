@@ -93,6 +93,7 @@ export interface IStorage {
   getCurrentVersionForDocument(documentId: string): Promise<DocumentVersionWithBlob | undefined>;
   setCurrentVersion(documentId: string, versionId: string): Promise<void>;
   getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined>;
+  getLogicalDocumentByTitle(title: string): Promise<LogicalDocument | undefined>;
 
   // v2 Pipeline: IngestionJob operations
   createIngestionJob(job: InsertIngestionJob): Promise<IngestionJob>;
@@ -405,11 +406,101 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined> {
-    const [result] = await db
+    console.log(`[getDocumentVersionByFileSearchName] Looking up: "${fileSearchDocumentName}"`);
+    
+    // Strategy 1: Try exact match on fileSearchDocumentName
+    const [exactMatch] = await db
       .select()
       .from(schema.documentVersions)
       .where(eq(schema.documentVersions.fileSearchDocumentName, fileSearchDocumentName));
-    return result;
+    if (exactMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found exact match on fileSearchDocumentName: ${exactMatch.id}`);
+      return exactMatch;
+    }
+
+    // Strategy 2: Try exact match on geminiDisplayName (Gemini often returns displayName as title)
+    const [displayNameMatch] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(eq(schema.documentVersions.geminiDisplayName, fileSearchDocumentName));
+    if (displayNameMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found exact match on geminiDisplayName: ${displayNameMatch.id}`);
+      return displayNameMatch;
+    }
+
+    // Strategy 3: Try LIKE query - check if the passed ID is contained within fileSearchDocumentName
+    const [likeMatch] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(sql`${schema.documentVersions.fileSearchDocumentName} LIKE ${'%' + fileSearchDocumentName + '%'}`);
+    if (likeMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found LIKE match on fileSearchDocumentName: ${likeMatch.id}`);
+      return likeMatch;
+    }
+
+    // Strategy 4: Try LIKE match on geminiDisplayName (partial match)
+    const [displayNameLikeMatch] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(sql`${schema.documentVersions.geminiDisplayName} LIKE ${'%' + fileSearchDocumentName + '%'}`);
+    if (displayNameLikeMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found LIKE match on geminiDisplayName: ${displayNameLikeMatch.id}`);
+      return displayNameLikeMatch;
+    }
+
+    // Strategy 5: Try reverse LIKE - geminiDisplayName contains the search term
+    const [reverseLikeMatch] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(sql`${fileSearchDocumentName} LIKE '%' || ${schema.documentVersions.geminiDisplayName} || '%'`);
+    if (reverseLikeMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found reverse LIKE match on geminiDisplayName: ${reverseLikeMatch.id}`);
+      return reverseLikeMatch;
+    }
+
+    // Strategy 6: Try to extract hash from the passed ID and match partial
+    const hashPart = fileSearchDocumentName.includes('/') 
+      ? fileSearchDocumentName.split('/').pop() 
+      : fileSearchDocumentName;
+    
+    if (hashPart && hashPart !== fileSearchDocumentName) {
+      const [hashMatch] = await db
+        .select()
+        .from(schema.documentVersions)
+        .where(sql`${schema.documentVersions.fileSearchDocumentName} LIKE ${'%' + hashPart + '%'}`);
+      if (hashMatch) {
+        console.log(`[getDocumentVersionByFileSearchName] Found hash match: ${hashMatch.id}`);
+        return hashMatch;
+      }
+    }
+
+    console.log(`[getDocumentVersionByFileSearchName] No match found for: "${fileSearchDocumentName}"`);
+    return undefined;
+  }
+
+  async getLogicalDocumentByTitle(title: string): Promise<LogicalDocument | undefined> {
+    // Try exact match first
+    const [exactMatch] = await db
+      .select()
+      .from(schema.logicalDocuments)
+      .where(eq(schema.logicalDocuments.canonicalTitle, title));
+    if (exactMatch) return exactMatch;
+
+    // Try LIKE match for partial title matching (displayName may have prefix like [Ossipee - Board])
+    const [likeMatch] = await db
+      .select()
+      .from(schema.logicalDocuments)
+      .where(sql`${schema.logicalDocuments.canonicalTitle} LIKE ${'%' + title + '%'}`);
+    if (likeMatch) return likeMatch;
+
+    // Try reverse LIKE - title contains the canonicalTitle
+    const [reverseLikeMatch] = await db
+      .select()
+      .from(schema.logicalDocuments)
+      .where(sql`${title} LIKE '%' || ${schema.logicalDocuments.canonicalTitle} || '%'`);
+    if (reverseLikeMatch) return reverseLikeMatch;
+
+    return undefined;
   }
 
   // v2 Pipeline: IngestionJob operations

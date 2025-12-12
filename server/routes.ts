@@ -682,7 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Upload to Gemini File Search
-      const { fileId, storeId } = await uploadDocumentToFileStore(
+      const { fileId, storeId, displayName } = await uploadDocumentToFileStore(
         job.fileBlob.storagePath,
         job.fileBlob.originalFilename,
         finalMetadata
@@ -708,6 +708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: finalMetadata.notes || null,
         fileSearchStoreName: storeId,
         fileSearchDocumentName: fileId,
+        geminiDisplayName: displayName,
         isCurrent: true,
         supersedesVersionId: previousVersion?.id || null,
         meetingDate: meetingDateObj,

@@ -62,6 +62,7 @@ export const documentVersions = pgTable("document_versions", {
   notes: text("notes"),
   fileSearchStoreName: text("file_search_store_name"), // e.g., "fileSearchStores/opencouncil-..."
   fileSearchDocumentName: text("file_search_document_name"), // e.g., "fileSearchStores/.../documents/..."
+  geminiDisplayName: text("gemini_display_name"), // Display name sent to Gemini (for citation matching)
   isCurrent: boolean("is_current").default(false).notNull(),
   supersedesVersionId: varchar("supersedes_version_id"), // previous version if any
   // Minutes-specific fields

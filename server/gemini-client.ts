@@ -20,6 +20,7 @@ export interface DocumentMetadata {
 interface UploadResult {
   fileId: string;
   storeId: string;
+  displayName: string;
 }
 
 function getMimeType(filename: string): string {
@@ -143,6 +144,7 @@ export async function uploadDocumentToFileStore(
     return {
       fileId,
       storeId: storeId,
+      displayName,
     };
   } catch (error) {
     console.error("Error uploading to File Search:", error);
