@@ -1071,6 +1071,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // File download endpoint (public - allows viewing source documents)
+  // Note: These are public municipal governance documents, intentionally accessible
+  app.get("/api/files/:documentVersionId", async (req, res) => {
+    try {
+      const { documentVersionId } = req.params;
+
+      // Get the document version
+      const docVersion = await storage.getDocumentVersionById(documentVersionId);
+      if (!docVersion) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      // Get the file blob
+      const fileBlob = await storage.getFileBlobById(docVersion.fileBlobId);
+      if (!fileBlob) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      // Get absolute path for sendFile
+      const absolutePath = path.resolve(fileBlob.storagePath);
+
+      // Check if file exists on disk
+      try {
+        await fs.access(absolutePath);
+      } catch {
+        return res.status(404).json({ message: "File no longer available" });
+      }
+
+      // Use res.sendFile for efficient streaming of large files
+      res.sendFile(absolutePath, {
+        headers: {
+          "Content-Type": fileBlob.mimeType,
+          "Content-Disposition": `inline; filename="${encodeURIComponent(fileBlob.originalFilename)}"`,
+        },
+      }, (err) => {
+        if (err) {
+          console.error("Error sending file:", err);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Failed to serve file" });
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error serving file:", error);
+      res.status(500).json({ message: "Failed to serve file" });
+    }
+  });
+
   // Register v2 Chat Pipeline Routes
   registerChatV2Routes(app);
 

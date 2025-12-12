@@ -34,7 +34,7 @@ export async function mapFileSearchDocumentsToCitations(
           town: logicalDoc?.town || undefined,
           year: docVersion.year || undefined,
           category: logicalDoc?.category || undefined,
-          url: `/admin/documents/${docVersion.documentId}/view`,
+          url: `/api/files/${docVersion.id}`,
           meetingDate: meetingDateStr,
           board: logicalDoc?.board || undefined,
         });

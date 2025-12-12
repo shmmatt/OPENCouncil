@@ -133,24 +133,22 @@ function RecentMinutesUpdates({
               <Sparkles className="w-3 h-3 mr-1" />
               Ask
             </Button>
-            {item.fileSearchDocumentName && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs px-2"
-                asChild
-                data-testid={`button-view-${item.documentVersionId}`}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2"
+              asChild
+              data-testid={`button-view-${item.documentVersionId}`}
+            >
+              <a 
+                href={`/api/files/${item.documentVersionId}`}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <a 
-                  href={`/admin/documents?doc=${item.logicalDocumentId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  View
-                </a>
-              </Button>
-            )}
+                <ExternalLink className="w-3 h-3 mr-1" />
+                View
+              </a>
+            </Button>
           </div>
         </div>
       ))}
