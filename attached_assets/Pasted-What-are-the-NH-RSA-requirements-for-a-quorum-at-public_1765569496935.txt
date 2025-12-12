@@ -1,0 +1,54 @@
+What are the NH RSA requirements for a quorum at public meetings?
+
+2:56:32 PM
+
+Based on New Hampshire State Law (RSA 91-A, the "Right-to-Know" Law) and specific rules adopted by Ossipee boards, here are the requirements for public meetings.
+
+1. Quorum Requirements
+A quorum is the minimum number of members who must be present to conduct business.
+
+General Rule: RSA 91-A defines a quorum as a simple majority of the board's membership (e.g., 3 members of a 5-member board).
+Physical Presence: A quorum must be physically present at the meeting location. Remote participation by a member is only allowed if a quorum is already physically present at the site (unless there is a declared state of emergency).
+Ossipee Planning Board: The Rules of Procedure (Amended July 2024) specifically require 4 members to be present to constitute a quorum for their 7-member board.
+2. Public Input & Decorum Rules (Ossipee Specific)
+While the public has a right to attend and record meetings, the right to speak is limited to designated times (Public Comment) or Public Hearings. Ossipee boards have adopted strict rules regarding this:
+
+Selectmen’s Public Input Policy (Adopted June 2022):
+Time Limit: Speakers are limited to 3 minutes each.
+Total Time: The total public comment period is capped at 15 minutes.
+Identification: Speakers must identify themselves by name and address and speak from the podium.
+Scope: The Chair is not required to allow public comment during general board discussion, only during the specific "Public Comment" agenda item or hearings.
+Planning Board Conduct Rules:
+Prohibited Items: Banners, flyers, and signs are not permitted in the meeting room.
+Directing Comments: All comments must be directed to the Board, not to other audience members.
+Disruption: The Chair has the authority to remove individuals who are boisterous or refuse to follow directives.
+3. Meeting Notice & Minutes
+Notice:
+Regular Meetings: Must be posted at least 24 hours in advance (excluding Sundays and holidays) in two public places (e.g., Town Hall, Town website).
+Land Use Hearings (Planning/Zoning): Often require 10 days notice including certified mail to abutters (RSA 676:4).
+Minutes:
+Availability: Minutes must be available for public inspection within 5 business days of the meeting (RSA 91-A:2).
+Content: Must include names of members, persons appearing before the board, a brief description of the subject matter, and all decisions/votes.
+Recordings: The Ossipee Planning Board Rules state that audio recordings are deleted 30 days after approval of the written minutes (which become the official record).
+4. Voting Rules
+Open Voting: All votes must be public.
+No Secret Ballots: Secret ballots are strictly prohibited by NH law.
+Roll Call: A roll call vote is often required, particularly when entering a non-public session or when members are participating remotely.
+Sources:
+
+Ossipee Planning Board Rules of Procedure (Amended July 2, 2024)
+Ossipee Board of Selectmen Public Input Policy (Adopted June 20, 2022)
+Ossipee Zoning Board of Adjustment Rules of Procedure (Revised 2019)
+NH RSA 91-A (Right-to-Know Law)
+Source scope: Based on documents from the Town of Ossipee in the OpenCouncil archive. These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. Details may be incomplete depending on what the municipality has published or digitized. This information is informational only and is not legal advice.
+
+Sources:
+
+•
+07fc64d94cda428a2db1073b7b5dd35c
+•
+976ddcd001bae681dae3c81d588158fb
+•
+45ac9ad600aeadd9c5db6a5da19cec96
+•
+4c9a5a6bd7162f2a85ec3860a374bb06
