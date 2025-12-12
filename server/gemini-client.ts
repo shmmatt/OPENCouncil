@@ -193,7 +193,7 @@ export interface GeminiDocument {
 
 /**
  * List all documents in the Gemini File Search store.
- * Returns documents with their internal IDs and display names.
+ * Uses REST API directly to avoid SDK issues.
  */
 export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
   const storeId = await getOrCreateFileSearchStoreId();
@@ -203,19 +203,17 @@ export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
     return [];
   }
 
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("[listDocumentsInStore] No GEMINI_API_KEY set");
+    return [];
+  }
+
   console.log(`[listDocumentsInStore] Listing documents in store: ${storeId}`);
   
   const allDocuments: GeminiDocument[] = [];
   
   try {
-    // Use the documents.list API with pagination
-    const documentsApi = (ai as any).fileSearchStores?.documents;
-    
-    if (!documentsApi || !documentsApi.list) {
-      console.error("[listDocumentsInStore] Documents API not available in SDK");
-      return [];
-    }
-
     let pageToken: string | undefined;
     let pageCount = 0;
     
@@ -223,35 +221,24 @@ export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
       pageCount++;
       console.log(`[listDocumentsInStore] Fetching page ${pageCount}...`);
       
-      const config: any = { pageSize: 20 };
+      // Use REST API directly
+      let url = `https://generativelanguage.googleapis.com/v1beta/${storeId}/documents?key=${apiKey}&pageSize=20`;
       if (pageToken) {
-        config.pageToken = pageToken;
+        url += `&pageToken=${encodeURIComponent(pageToken)}`;
       }
       
-      const response = await documentsApi.list({
-        fileSearchStoreName: storeId,
-        config,
-      });
+      const response = await fetch(url);
       
-      // Handle paginated response
-      const pager = response as any;
-      
-      // Try to iterate directly (modern SDK style)
-      if (Symbol.iterator in pager || Symbol.asyncIterator in pager) {
-        for await (const doc of pager) {
-          allDocuments.push({
-            name: doc.name,
-            displayName: doc.displayName || doc.display_name,
-            createTime: doc.createTime || doc.create_time,
-            updateTime: doc.updateTime || doc.update_time,
-            customMetadata: doc.customMetadata || doc.custom_metadata,
-          });
-        }
-        break; // Iterator handles pagination internally
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[listDocumentsInStore] API error ${response.status}: ${errorText}`);
+        break;
       }
       
-      // Fallback: handle as array response
-      const docs = pager.documents || pager.data || [];
+      const data = await response.json();
+      console.log(`[listDocumentsInStore] Page ${pageCount} response:`, JSON.stringify(data).slice(0, 500));
+      
+      const docs = data.documents || [];
       for (const doc of docs) {
         allDocuments.push({
           name: doc.name,
@@ -262,7 +249,7 @@ export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
         });
       }
       
-      pageToken = pager.nextPageToken || pager.next_page_token;
+      pageToken = data.nextPageToken;
     } while (pageToken && pageCount < 50); // Safety limit
     
     console.log(`[listDocumentsInStore] Found ${allDocuments.length} documents total`);

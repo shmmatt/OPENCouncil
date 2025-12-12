@@ -1146,21 +1146,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "No Gemini documents found to map", matched: 0, total: 0 });
       }
 
-      // Build mapping: displayName -> internal ID (last part of name)
-      const displayNameToInternalId = new Map<string, string>();
+      // Build multiple mappings for different matching strategies
+      const fullNameToInternalId = new Map<string, string>();  // Full Gemini path -> internal ID
+      const displayNameToInternalId = new Map<string, string>(); // displayName -> internal ID
+      const docIdToDisplayName = new Map<string, string>();      // internal ID -> displayName
+      
       for (const doc of geminiDocs) {
         const internalId = doc.name.split('/').pop() || doc.name;
+        
+        // Map by full name (fileSearchDocumentName in our DB)
+        fullNameToInternalId.set(doc.name, internalId);
+        
+        // Map by displayName
         if (doc.displayName) {
           displayNameToInternalId.set(doc.displayName, internalId);
+          docIdToDisplayName.set(internalId, doc.displayName);
         }
       }
 
-      // Get all document versions with geminiDisplayName set
       const { drizzle } = await import("drizzle-orm/neon-serverless");
       const { Pool, neonConfig } = await import("@neondatabase/serverless");
       const ws = await import("ws");
       const schema = await import("@shared/schema");
-      const { isNotNull } = await import("drizzle-orm");
+      const { eq } = await import("drizzle-orm");
 
       neonConfig.webSocketConstructor = ws.default;
       const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -1170,17 +1178,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let matched = 0;
       let updated = 0;
-      const matchedDetails: Array<{ id: string; displayName: string; internalId: string }> = [];
+      const matchedDetails: Array<{ id: string; matchedBy: string; internalId: string }> = [];
 
       for (const version of versions) {
-        if (version.geminiDisplayName && displayNameToInternalId.has(version.geminiDisplayName)) {
+        let internalId: string | undefined;
+        let matchedBy: string = "";
+
+        // Strategy 1: Match by fileSearchDocumentName (full Gemini path)
+        if (version.fileSearchDocumentName && fullNameToInternalId.has(version.fileSearchDocumentName)) {
+          internalId = fullNameToInternalId.get(version.fileSearchDocumentName);
+          matchedBy = "fileSearchDocumentName";
+        }
+        
+        // Strategy 2: Match by geminiDisplayName
+        if (!internalId && version.geminiDisplayName && displayNameToInternalId.has(version.geminiDisplayName)) {
+          internalId = displayNameToInternalId.get(version.geminiDisplayName);
+          matchedBy = "geminiDisplayName";
+        }
+        
+        // Strategy 3: Extract ID from fileSearchDocumentName and match directly
+        if (!internalId && version.fileSearchDocumentName) {
+          const extractedId = version.fileSearchDocumentName.split('/').pop();
+          if (extractedId && docIdToDisplayName.has(extractedId)) {
+            internalId = extractedId;
+            matchedBy = "extractedFromPath";
+          }
+        }
+
+        if (internalId) {
           matched++;
-          const internalId = displayNameToInternalId.get(version.geminiDisplayName)!;
-          matchedDetails.push({ id: version.id, displayName: version.geminiDisplayName, internalId });
+          matchedDetails.push({ id: version.id, matchedBy, internalId });
 
           // Update if not already set
           if (version.geminiInternalId !== internalId) {
-            const { eq } = await import("drizzle-orm");
             await db.update(schema.documentVersions)
               .set({ geminiInternalId: internalId })
               .where(eq(schema.documentVersions.id, version.id));
