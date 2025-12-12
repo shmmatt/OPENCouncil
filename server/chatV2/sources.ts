@@ -12,13 +12,18 @@ export async function mapFileSearchDocumentsToCitations(
   const citations: SourceCitation[] = [];
   const seenIds = new Set<string>();
 
+  console.log(`[mapFileSearchDocumentsToCitations] Processing ${uniqueNames.length} unique document names:`, uniqueNames);
+
   for (const docName of uniqueNames) {
     try {
+      console.log(`[mapFileSearchDocumentsToCitations] Looking up docName: "${docName}"`);
       // Strategy 1: Try to find by fileSearchDocumentName (full path or ID)
       let docVersion = await storage.getDocumentVersionByFileSearchName(docName);
+      console.log(`[mapFileSearchDocumentsToCitations] getDocumentVersionByFileSearchName result:`, docVersion ? `Found ${docVersion.id}` : 'null');
       let logicalDoc = docVersion 
         ? await storage.getLogicalDocumentById(docVersion.documentId)
         : null;
+      console.log(`[mapFileSearchDocumentsToCitations] logicalDoc result:`, logicalDoc ? logicalDoc.canonicalTitle : 'null');
 
       // Strategy 2: If not found by fileSearchName, try to find by title
       // Gemini may return the displayName we set as retrievedContext.title
