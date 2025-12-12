@@ -1,0 +1,246 @@
+Below is a **clean, corrected COO → CTO directive**, rewritten to explicitly reflect your **existing normalized document/versioning system** and to avoid creating a new documents table.
+
+This replaces the earlier directive wholesale.
+
+---
+
+# **CTO Directive — Town Selector + “Recent Minutes Updates” (Using Existing Document System)**
+
+**From:** COO
+**To:** CTO
+**Subject:** Implement town selector and recent minutes updates using existing logicalDocuments / documentVersions system
+
+---
+
+## **Objective**
+
+Implement a **Town Preference selector** (single town for now: **Ossipee**) and a **“Recent Minutes Updates”** feature that appears:
+
+1. In the **user-facing chat interface** as a **sidebar module**
+2. In the **admin dashboard** as a lightweight operational view
+
+This work must **reuse and compose the existing normalized document system** (`logicalDocuments`, `documentVersions`, `ingestionJobs`, `fileBlobs`) and **must not introduce a new canonical documents table**.
+
+This feature establishes:
+
+* visible content freshness,
+* clean default scoping for chat,
+* a foundation for future multi-town expansion.
+
+---
+
+## **Key Constraint (Important)**
+
+You already have a normalized document/versioning model:
+
+* `logicalDocuments` → document identity (town, category, board)
+* `documentVersions` → version-specific data (meetingDate, isCurrent, createdAt, fileSearchDocumentName)
+* `ingestionJobs` → pipeline status (optional for admin)
+* `fileBlobs` → file storage
+
+**Do not create a new `documents` table.**
+All “Recent minutes updates” functionality must be implemented by querying and composing these existing tables.
+
+---
+
+## **1) Town Preference (Minimal, Future-Proof)**
+
+### **Behavior**
+
+* Users must have a persistent “current town”:
+
+  * Logged-in users → stored on `users.defaultTown`
+  * Anonymous users → stored on `anonymous_users.defaultTown`
+* Session-level override (if supported):
+
+  * `chat_sessions.townPreference`
+
+### **UI**
+
+* Add a **Town dropdown** to the chat sidebar.
+* For now, the dropdown has **one option only: “Ossipee”**.
+* Default selected value: **Ossipee**.
+* The dropdown should still be implemented as a real control (future multi-town).
+
+### **Endpoints**
+
+* `GET /api/meta/towns`
+
+  * Returns available towns (currently `["Ossipee"]`).
+* `POST /api/preferences/town`
+
+  * Body: `{ town: "Ossipee" }`
+  * Persists to user or anon record.
+  * Optionally updates active session preference.
+
+### **Pipeline Defaulting**
+
+In chat routing / retrieval:
+
+* If the question does not explicitly specify a town and scope is local/mixed:
+
+  * Use `session.townPreference` if set
+  * Else use actor defaultTown
+
+---
+
+## **2) “Recent Minutes Updates” — Feed Definition**
+
+### **What counts as a “Recent Minutes Update”**
+
+* A **logical document** where:
+
+  * `logicalDocuments.category = 'meeting_minutes'`
+  * AND there exists a **current version**:
+
+    * `documentVersions.isCurrent = true`
+
+### **Sort Order (v1)**
+
+* Order by `documentVersions.createdAt DESC`
+
+  * This represents “recently ingested into OpenCouncil”
+  * Display `meetingDate` if present, but do not sort by it initially
+
+---
+
+## **3) Required Query (Conceptual)**
+
+Implement a query equivalent to:
+
+```sql
+SELECT
+  ld.id                  AS logicalDocumentId,
+  dv.id                  AS documentVersionId,
+  ld.town,
+  ld.board,
+  ld.category,
+  dv.meetingDate,
+  dv.createdAt           AS ingestedAt,
+  dv.fileSearchDocumentName
+FROM logicalDocuments ld
+JOIN documentVersions dv
+  ON dv.logicalDocumentId = ld.id
+WHERE
+  ld.category = 'meeting_minutes'
+  AND dv.isCurrent = true
+  AND ld.town = $town
+ORDER BY dv.createdAt DESC
+LIMIT $limit;
+```
+
+This is the **canonical source** for the updates feed.
+
+---
+
+## **4) API Endpoints**
+
+### **Public (Chat UI)**
+
+* `GET /api/updates/minutes?town=Ossipee&limit=5`
+
+Returns a list of current meeting minutes for the selected town, using the query above.
+
+### **Admin**
+
+* `GET /api/admin/updates/minutes?town=&board=&limit=50`
+
+  * Same data shape
+  * Supports optional filters
+  * Requires `admin` or `municipal_admin` role
+
+---
+
+## **5) Chat UI — Sidebar Placement**
+
+### **Sidebar Components**
+
+1. **Town selector**
+
+   * Label: “Town”
+   * Dropdown (single option for now)
+
+2. **Recent minutes updates**
+
+   * Title: **Recent minutes updates**
+   * Display 3–5 items max
+   * Each item shows:
+
+     * **Town — Board** (board optional)
+     * **Meeting date** (if available)
+     * **Added to OpenCouncil** date (from `documentVersions.createdAt`)
+
+### **Actions per item**
+
+* **Ask about this meeting**
+
+  * Inserts a prefilled chat prompt, e.g.:
+
+    > “Summarize key decisions, votes, and any budget impacts from the Ossipee [Board] minutes for [meetingDate]. Cite the minutes.”
+  * Pass townPreference into the chat request.
+  * Optionally include `documentVersionId` to bias retrieval toward that document.
+
+* **View minutes**
+
+  * Open via `fileSearchDocumentName` or internal doc viewer route.
+
+### **Empty state**
+
+* If no results:
+
+  * Show a single, subtle line:
+
+    > “No recent minutes have been added yet.”
+
+---
+
+## **6) Admin Dashboard — Recent Minutes Ingested**
+
+Add an admin view/table showing:
+
+* Ingested at
+* Town
+* Board
+* Meeting date
+* Category (always meeting_minutes here)
+* Source (if available)
+* Link to view document
+
+This is for **ops visibility and QA**, not full ingestion control.
+
+---
+
+## **7) Definition of Done**
+
+1. Sidebar shows **Town selector** and **Recent minutes updates**.
+2. Town preference persists for anon and logged-in users.
+3. Clicking “Ask about this meeting” inserts a message and produces a local-scoped answer.
+4. Admin dashboard shows recent minutes using existing document/version tables.
+5. No new canonical documents table is created.
+6. No breaking changes to existing chat/session APIs.
+7. All endpoints follow existing logging conventions (requestId, sessionId, actor).
+
+---
+
+## **Implementation Guidance**
+
+* Treat the existing normalized document system as the **single source of truth**.
+* This feature is **visibility-only**; ingestion automation remains separate.
+* If necessary, add small helper views/services, but not new canonical storage.
+
+---
+
+**Next deliverable:**
+PR implementing:
+
+* town selector persistence,
+* updates feed query + endpoints,
+* sidebar UI module,
+* admin “recent minutes” view.
+
+---
+
+If you want, I can now:
+
+* sanity-check the exact table/column names against your schema,
+* or write the **frontend UX copy** so the tone stays consistent with OpenCouncil’s civic voice.

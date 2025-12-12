@@ -1,0 +1,218 @@
+Got it. Here’s the **CTO execution directive** rewritten as **Replit-Agent-ready work orders**, aligned to your **existing normalized doc/version system** (no new `documents` table), and split into clean, shippable slices.
+
+---
+
+# CTO Execution Directive — Town Selector + Recent Minutes Updates (v1)
+
+## North Star
+
+Ship a **Town preference control** (single town: **Ossipee**) plus a **“Recent minutes updates”** feed that appears in:
+
+* **Chat UI sidebar** (user-facing)
+* **Admin dashboard** (ops visibility)
+
+All data must come from existing:
+
+* `logicalDocuments` (identity: town/category/board)
+* `documentVersions` (version: meetingDate/isCurrent/createdAt/fileSearchDocumentName)
+* optionally `ingestionJobs` (admin/QA)
+* `fileBlobs` (storage)
+
+**Hard constraint:** *No new canonical `documents` table.*
+
+---
+
+## Replit Agent Work Orders
+
+### AGENT 1 — Data + API (Public + Admin)
+
+**Goal:** Provide the canonical “recent minutes updates” query behind endpoints.
+
+**Implement:**
+
+1. `GET /api/meta/towns`
+
+* Returns `["Ossipee"]` (shape consistent with your API conventions)
+
+2. `GET /api/updates/minutes?town=Ossipee&limit=5`
+
+* Uses canonical query:
+
+  * `logicalDocuments.category = 'meeting_minutes'`
+  * join current `documentVersions.isCurrent = true`
+  * filter by `ld.town = town`
+  * order by `dv.createdAt DESC`
+  * limit
+
+3. `GET /api/admin/updates/minutes?town=&board=&limit=50`
+
+* Same base query + optional filters
+* Authz: `admin` or `municipal_admin`
+
+**Return shape (recommended v1):**
+
+```json
+{
+  "items": [
+    {
+      "logicalDocumentId": "...",
+      "documentVersionId": "...",
+      "town": "Ossipee",
+      "board": "ZBA",
+      "category": "meeting_minutes",
+      "meetingDate": "2025-04-08",
+      "ingestedAt": "2025-12-11T18:22:01.123Z",
+      "fileSearchDocumentName": "..."
+    }
+  ]
+}
+```
+
+**Notes:**
+
+* Sort by `dv.createdAt` (ingestedAt), *display* `meetingDate` if present.
+* Keep logging conventions: `requestId`, `sessionId`, `actor`.
+
+**DoD:**
+
+* Both endpoints return correct items for Ossipee with stable ordering.
+* Admin endpoint rejects non-admin roles.
+* No schema changes required.
+
+**Prompt to Replit Agent (copy/paste):**
+
+> Implement three endpoints: GET /api/meta/towns, GET /api/updates/minutes, GET /api/admin/updates/minutes. Use existing tables logicalDocuments + documentVersions; filter ld.category='meeting_minutes' and dv.isCurrent=true; filter by town; order by dv.createdAt desc; limit. Admin endpoint supports optional town/board filters and requires admin or municipal_admin role. Return item fields: logicalDocumentId, documentVersionId, town, board, category, meetingDate, ingestedAt (dv.createdAt), fileSearchDocumentName. Follow existing logging conventions and error patterns. Do not create any new canonical documents table.
+
+---
+
+### AGENT 2 — Town Preference Persistence
+
+**Goal:** Persist a single “current town” for logged-in + anonymous users, and optionally session override.
+
+**Implement:**
+
+1. Storage targets:
+
+* Logged in: `users.defaultTown`
+* Anonymous: `anonymous_users.defaultTown`
+* Optional session override: `chat_sessions.townPreference` (only if your session model already supports safe writes)
+
+2. `POST /api/preferences/town`
+
+* Body: `{ "town": "Ossipee" }`
+* Persist to the correct actor record
+* If an active session exists, also set `chat_sessions.townPreference` (optional but preferred)
+
+3. Chat defaulting behavior (routing/retrieval layer):
+
+* If user prompt does not specify a town:
+
+  * Use `chat_sessions.townPreference` if set
+  * Else actor `defaultTown`
+  * Else fallback `"Ossipee"`
+
+**DoD:**
+
+* Town selection survives refresh for anon + logged-in.
+* Chat requests include resolved town scope consistently.
+
+**Prompt to Replit Agent (copy/paste):**
+
+> Add POST /api/preferences/town {town}. Persist to users.defaultTown for authed users, anonymous_users.defaultTown for anon actors. If an active chat session is present and safe to update, set chat_sessions.townPreference too. Update chat routing/retrieval scoping so that when town is not explicitly mentioned, it resolves in this order: session.townPreference → actor.defaultTown → "Ossipee". Maintain existing requestId/sessionId/actor logging and do not introduce new tables unless a missing column is absolutely required (prefer migrations that add only the needed column).
+
+---
+
+### AGENT 3 — Chat Sidebar UI Module
+
+**Goal:** Add a sidebar block with Town selector + Recent minutes updates.
+
+**UI Components:**
+
+1. **Town dropdown**
+
+* Label: “Town”
+* Options: fetched from `/api/meta/towns` (currently only Ossipee)
+* Default selected: resolved current town
+* On change: `POST /api/preferences/town`
+
+2. **Recent minutes updates**
+
+* Title: “Recent minutes updates”
+* Fetch: `/api/updates/minutes?town=<selected>&limit=5`
+* Render 3–5 rows:
+
+  * **Town — Board** (board optional)
+  * Meeting date (if present)
+  * “Added to OpenCouncil” (ingestedAt)
+
+**Row actions:**
+
+* **Ask about this meeting**
+
+  * Inserts a prefilled message into composer:
+
+    * “Summarize key decisions, votes, and any budget impacts from the Ossipee [Board] minutes for [meetingDate]. Cite the minutes.”
+  * Include `townPreference` in the outgoing chat request
+  * If your chat API supports it, pass `documentVersionId` as a retrieval bias hint
+
+* **View minutes**
+
+  * Open your existing doc viewer route using `fileSearchDocumentName` (or whatever internal route maps to it)
+
+**Empty state:**
+
+* “No recent minutes have been added yet.”
+
+**DoD:**
+
+* Sidebar renders without breaking chat layout.
+* Town change updates feed + persists.
+* “Ask about this meeting” inserts text and yields town-scoped response.
+
+**Prompt to Replit Agent (copy/paste):**
+
+> In the chat UI sidebar, add a Town dropdown (label "Town") populated via GET /api/meta/towns (currently ["Ossipee"]). On selection, POST /api/preferences/town and update local state. Below it, add a "Recent minutes updates" module that calls GET /api/updates/minutes?town=<selected>&limit=5 and renders 3–5 items with Town—Board, meetingDate (if present), and ingestedAt labeled "Added to OpenCouncil". Each item has two actions: (1) "Ask about this meeting" which inserts a prefilled prompt into the chat composer and ensures townPreference is included in the chat request; if supported, include documentVersionId as a retrieval hint. (2) "View minutes" which routes to the existing document viewer using fileSearchDocumentName. Show empty state text if no items.
+
+---
+
+### AGENT 4 — Admin Dashboard: “Recent Minutes Ingested”
+
+**Goal:** Lightweight ops table for QA visibility.
+
+**Implement:**
+
+* Admin page/widget/table that calls:
+
+  * `GET /api/admin/updates/minutes?limit=50` (plus filters if you add UI controls)
+* Columns:
+
+  * Ingested at
+  * Town
+  * Board
+  * Meeting date
+  * Category
+  * Link to view document
+
+**DoD:**
+
+* Only visible to admin/municipal_admin.
+* Matches the API’s ordering (most recently ingested first).
+
+**Prompt to Replit Agent (copy/paste):**
+
+> Add an admin dashboard view/table "Recent Minutes Ingested" that calls GET /api/admin/updates/minutes?limit=50 (support optional filters town/board if easy). Display columns: ingestedAt, town, board, meetingDate, category, and a link to view the document using fileSearchDocumentName/internal viewer route. Enforce admin/municipal_admin access and keep this as visibility-only (no ingestion controls).
+
+---
+
+## Integration Checklist (CTO QA)
+
+* [ ] No new `documents` table exists in migrations.
+* [ ] Query uses `logicalDocuments.category='meeting_minutes'` + `documentVersions.isCurrent=true`.
+* [ ] Feed sorts by `documentVersions.createdAt DESC`.
+* [ ] Town preference persists for anon + authed.
+* [ ] Sidebar works + doesn’t break chat.
+* [ ] “Ask about this meeting” produces town-scoped answers and cites minutes.
+
+---
+
+If you want, paste your **existing route folder structure + ORM layer (Prisma/Drizzle/etc.)**, and I’ll translate the above into **exact file paths + code-level agent prompts** (imports, query builder shape, and UI component boundaries) without changing the requirements.

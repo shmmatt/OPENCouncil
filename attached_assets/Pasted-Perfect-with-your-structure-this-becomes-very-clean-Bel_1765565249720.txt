@@ -1,0 +1,193 @@
+Perfect — with your structure, this becomes very clean. Below is a **file-path-level implementation plan** + **Replit Agent prompts** that fit your “thin routes → storage layer” pattern and Drizzle/Neon setup.
+
+---
+
+# Implementation Map (Exact Files)
+
+## 0) Shared schema (only if columns missing)
+
+**File:** `shared/schema.ts`
+
+Add (only if not already present):
+
+* `users.defaultTown` (text/varchar, nullable)
+* `anonymous_users.defaultTown` (text/varchar, nullable)
+* `chat_sessions.townPreference` (text/varchar, nullable) — optional but recommended
+
+If you’re using Drizzle migrations, add corresponding migration.
+
+**Replit Agent Prompt**
+
+> Check shared/schema.ts for users, anonymous_users, chat_sessions tables. If defaultTown/townPreference columns do not exist, add them (text/varchar). Generate a Drizzle migration for these columns only. Do not add new tables. Keep names exactly: users.defaultTown, anonymous_users.defaultTown, chat_sessions.townPreference.
+
+---
+
+## 1) Storage layer additions
+
+**Files:**
+
+* `server/storage.ts` (IStorage interface + implementation)
+* (wherever the Drizzle client is instantiated, usually inside `storage.ts`)
+
+### Add these methods to `IStorage`
+
+* `getAvailableTowns(): Promise<string[]>`
+* `setActorDefaultTown(params): Promise<void>`
+* `getActorDefaultTown(params): Promise<string | null>`
+* `setSessionTownPreference(params): Promise<void>`
+* `getRecentMinutesUpdates(params): Promise<MinutesUpdateItem[]>`
+* `getRecentMinutesUpdatesAdmin(params): Promise<MinutesUpdateItem[]>`
+
+**MinutesUpdateItem shape**
+
+```ts
+type MinutesUpdateItem = {
+  logicalDocumentId: string;
+  documentVersionId: string;
+  town: string;
+  board: string | null;
+  category: string;
+  meetingDate: string | null;      // or Date | null depending on schema
+  ingestedAt: string;              // dv.createdAt
+  fileSearchDocumentName: string | null;
+};
+```
+
+### Canonical Drizzle query
+
+Implement the equivalent of your SQL using Drizzle joins between `logicalDocuments` and `documentVersions`.
+
+**Replit Agent Prompt**
+
+> In server/storage.ts, extend IStorage with:
+>
+> * getAvailableTowns(): returns ["Ossipee"] for now
+> * setActorDefaultTown({ actor, town }): writes to users.defaultTown if authed else anonymous_users.defaultTown
+> * getActorDefaultTown({ actor }): reads same
+> * setSessionTownPreference({ sessionId, town }): updates chat_sessions.townPreference (no-op if sessionId missing)
+> * getRecentMinutesUpdates({ town, limit }): returns current minutes using logicalDocuments + documentVersions (ld.category='meeting_minutes', dv.isCurrent=true, ld.town=town) ordered by dv.createdAt desc, limit
+> * getRecentMinutesUpdatesAdmin({ town?, board?, limit }): same query with optional filters
+>   Return fields: logicalDocumentId, documentVersionId, town, board, category, meetingDate, ingestedAt=dv.createdAt, fileSearchDocumentName.
+>   Keep routes thin; all DB logic goes here. No new tables.
+
+---
+
+## 2) Routes (thin)
+
+**File:** `server/routes.ts`
+
+Add routes:
+
+### `GET /api/meta/towns`
+
+* calls `storage.getAvailableTowns()`
+
+### `POST /api/preferences/town`
+
+* body `{ town }`
+* validate town ∈ available towns
+* uses auth context to identify actor (authed or anonymous)
+* calls:
+
+  * `storage.setActorDefaultTown({ actor, town })`
+  * and if request has sessionId (or you can derive it), `storage.setSessionTownPreference({ sessionId, town })`
+
+### `GET /api/updates/minutes`
+
+* query: `town`, `limit`
+* resolves town:
+
+  * use query.town if present else actor defaultTown else `"Ossipee"`
+* calls `storage.getRecentMinutesUpdates({ town, limit })`
+
+### `GET /api/admin/updates/minutes`
+
+* query: `town?`, `board?`, `limit?`
+* require role `admin` or `municipal_admin`
+* calls `storage.getRecentMinutesUpdatesAdmin({ town, board, limit })`
+
+**Replit Agent Prompt**
+
+> In server/routes.ts, add:
+>
+> * GET /api/meta/towns -> storage.getAvailableTowns()
+> * POST /api/preferences/town {town} -> validate against getAvailableTowns; persist via storage.setActorDefaultTown; if sessionId available, also storage.setSessionTownPreference
+> * GET /api/updates/minutes?town=&limit= -> resolve town (query.town || actor.defaultTown || "Ossipee"); default limit 5; call storage.getRecentMinutesUpdates
+> * GET /api/admin/updates/minutes?town=&board=&limit= -> require admin/municipal_admin; default limit 50; call storage.getRecentMinutesUpdatesAdmin
+>   Follow existing error + logging conventions (requestId/sessionId/actor). Keep route handlers thin.
+
+---
+
+## 3) Chat pipeline defaulting (town scoping)
+
+**Files (likely):**
+
+* `server/chatV2/router.ts` or `server/chatV2/chatV2Route.ts`
+* possibly `server/chatV2/retrieval/*` where filters are built
+
+### Add a “resolveTownPreference” step
+
+Order:
+
+1. `chat_sessions.townPreference` (if session exists)
+2. actor defaultTown
+3. `"Ossipee"`
+
+Then ensure this resolved town is available to retrieval and/or prompt context. The minimum viable change is to add `town` into the retrieval filter logic (where you already use `logicalDocuments.town` or equivalent in existing search).
+
+**Replit Agent Prompt**
+
+> In chatV2 pipeline (router.ts or chatV2Route.ts), add a single function resolveTownPreference({ sessionId, actor, explicitTown? }) with priority:
+> explicitTown -> session.townPreference -> actor.defaultTown -> "Ossipee".
+> Use storage.getActorDefaultTown and (if needed) storage lookup for session.townPreference.
+> Ensure resolved town is passed into retrieval filters for local/minutes questions (prefer filtering logicalDocuments.town where applicable) and included in logs.
+
+*(If you already pass session/actor into retrieval, this is usually a 10–20 line patch.)*
+
+---
+
+## 4) UI wiring
+
+You didn’t paste the frontend tree, so I’ll stay at “where it connects”:
+
+### Chat sidebar module
+
+* calls `/api/meta/towns`
+* calls `/api/updates/minutes?town=...`
+* on change calls `POST /api/preferences/town`
+
+### “Ask about this meeting”
+
+* inserts prompt text
+* include `townPreference` in the chat request payload (or rely on server-side resolve)
+* optionally include `documentVersionId` as a retrieval hint if your chatV2 request supports it (even if just logged for now)
+
+**Replit Agent Prompt**
+
+> In the chat sidebar component, add Town dropdown populated from GET /api/meta/towns. Default selection should reflect current preference (use server-resolved town or stored value). On change, POST /api/preferences/town then refresh the minutes feed. Add a "Recent minutes updates" list from GET /api/updates/minutes?town=<selected>&limit=5 with actions: Ask (prefill message) + View (open internal viewer using fileSearchDocumentName). Add empty state.
+
+---
+
+# A concrete “done” checklist (CTO QA)
+
+* [ ] Schema columns exist (or confirmed already present)
+* [ ] Storage methods added, compiled, used by routes
+* [ ] Public endpoints return correct shape
+* [ ] Admin endpoint is role-guarded
+* [ ] ChatV2 resolves town preference and logs it
+* [ ] No new canonical documents table created
+* [ ] Sidebar shows updates and town selector persists
+
+---
+
+## If you paste just ONE thing, make it this
+
+Paste the Drizzle table definitions for:
+
+* `logicalDocuments`
+* `documentVersions`
+* `users`
+* `anonymous_users`
+* `chat_sessions`
+
+…and I’ll write the **exact Drizzle query code** (joins/where/order/limit + types) so your agent can drop it in with almost no guesswork.
