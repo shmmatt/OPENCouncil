@@ -1120,6 +1120,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin endpoint to list Gemini File Search documents and build ID mapping
+  app.get("/api/admin/gemini/documents", authenticateAdmin, async (req, res) => {
+    try {
+      const { listDocumentsInStore } = await import("./gemini-client");
+      const documents = await listDocumentsInStore();
+      res.json({ 
+        count: documents.length, 
+        documents: documents.slice(0, 100), // Limit response for viewing
+        total: documents.length
+      });
+    } catch (error) {
+      console.error("Error listing Gemini documents:", error);
+      res.status(500).json({ message: "Failed to list Gemini documents" });
+    }
+  });
+
+  // Admin endpoint to backfill geminiInternalId from Gemini File Search documents
+  app.post("/api/admin/gemini/backfill-ids", authenticateAdmin, async (req, res) => {
+    try {
+      const { listDocumentsInStore } = await import("./gemini-client");
+      const geminiDocs = await listDocumentsInStore();
+      
+      if (geminiDocs.length === 0) {
+        return res.json({ message: "No Gemini documents found to map", matched: 0, total: 0 });
+      }
+
+      // Build mapping: displayName -> internal ID (last part of name)
+      const displayNameToInternalId = new Map<string, string>();
+      for (const doc of geminiDocs) {
+        const internalId = doc.name.split('/').pop() || doc.name;
+        if (doc.displayName) {
+          displayNameToInternalId.set(doc.displayName, internalId);
+        }
+      }
+
+      // Get all document versions with geminiDisplayName set
+      const { drizzle } = await import("drizzle-orm/neon-serverless");
+      const { Pool, neonConfig } = await import("@neondatabase/serverless");
+      const ws = await import("ws");
+      const schema = await import("@shared/schema");
+      const { isNotNull } = await import("drizzle-orm");
+
+      neonConfig.webSocketConstructor = ws.default;
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      const db = drizzle({ client: pool, schema });
+
+      const versions = await db.select().from(schema.documentVersions);
+      
+      let matched = 0;
+      let updated = 0;
+      const matchedDetails: Array<{ id: string; displayName: string; internalId: string }> = [];
+
+      for (const version of versions) {
+        if (version.geminiDisplayName && displayNameToInternalId.has(version.geminiDisplayName)) {
+          matched++;
+          const internalId = displayNameToInternalId.get(version.geminiDisplayName)!;
+          matchedDetails.push({ id: version.id, displayName: version.geminiDisplayName, internalId });
+
+          // Update if not already set
+          if (version.geminiInternalId !== internalId) {
+            const { eq } = await import("drizzle-orm");
+            await db.update(schema.documentVersions)
+              .set({ geminiInternalId: internalId })
+              .where(eq(schema.documentVersions.id, version.id));
+            updated++;
+          }
+        }
+      }
+
+      await pool.end();
+
+      res.json({ 
+        message: "Backfill complete",
+        geminiDocsCount: geminiDocs.length,
+        versionsCount: versions.length,
+        matched,
+        updated,
+        sampleMatches: matchedDetails.slice(0, 10)
+      });
+    } catch (error) {
+      console.error("Error backfilling Gemini IDs:", error);
+      res.status(500).json({ message: "Failed to backfill Gemini IDs", error: String(error) });
+    }
+  });
+
   // Register v2 Chat Pipeline Routes
   registerChatV2Routes(app);
 

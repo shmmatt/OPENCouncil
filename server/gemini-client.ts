@@ -183,6 +183,129 @@ interface AskQuestionResult {
   citations: string[];
 }
 
+export interface GeminiDocument {
+  name: string; // e.g., "fileSearchStores/{store_id}/documents/{doc_id}"
+  displayName: string;
+  createTime?: string;
+  updateTime?: string;
+  customMetadata?: Array<{ key: string; stringValue?: string; numericValue?: number }>;
+}
+
+/**
+ * List all documents in the Gemini File Search store.
+ * Returns documents with their internal IDs and display names.
+ */
+export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
+  const storeId = await getOrCreateFileSearchStoreId();
+  
+  if (!storeId) {
+    console.log("[listDocumentsInStore] No store ID found");
+    return [];
+  }
+
+  console.log(`[listDocumentsInStore] Listing documents in store: ${storeId}`);
+  
+  const allDocuments: GeminiDocument[] = [];
+  
+  try {
+    // Use the documents.list API with pagination
+    const documentsApi = (ai as any).fileSearchStores?.documents;
+    
+    if (!documentsApi || !documentsApi.list) {
+      console.error("[listDocumentsInStore] Documents API not available in SDK");
+      return [];
+    }
+
+    let pageToken: string | undefined;
+    let pageCount = 0;
+    
+    do {
+      pageCount++;
+      console.log(`[listDocumentsInStore] Fetching page ${pageCount}...`);
+      
+      const config: any = { pageSize: 20 };
+      if (pageToken) {
+        config.pageToken = pageToken;
+      }
+      
+      const response = await documentsApi.list({
+        fileSearchStoreName: storeId,
+        config,
+      });
+      
+      // Handle paginated response
+      const pager = response as any;
+      
+      // Try to iterate directly (modern SDK style)
+      if (Symbol.iterator in pager || Symbol.asyncIterator in pager) {
+        for await (const doc of pager) {
+          allDocuments.push({
+            name: doc.name,
+            displayName: doc.displayName || doc.display_name,
+            createTime: doc.createTime || doc.create_time,
+            updateTime: doc.updateTime || doc.update_time,
+            customMetadata: doc.customMetadata || doc.custom_metadata,
+          });
+        }
+        break; // Iterator handles pagination internally
+      }
+      
+      // Fallback: handle as array response
+      const docs = pager.documents || pager.data || [];
+      for (const doc of docs) {
+        allDocuments.push({
+          name: doc.name,
+          displayName: doc.displayName || doc.display_name,
+          createTime: doc.createTime || doc.create_time,
+          updateTime: doc.updateTime || doc.update_time,
+          customMetadata: doc.customMetadata || doc.custom_metadata,
+        });
+      }
+      
+      pageToken = pager.nextPageToken || pager.next_page_token;
+    } while (pageToken && pageCount < 50); // Safety limit
+    
+    console.log(`[listDocumentsInStore] Found ${allDocuments.length} documents total`);
+    
+    // Log first few for debugging
+    if (allDocuments.length > 0) {
+      console.log("[listDocumentsInStore] Sample documents:");
+      allDocuments.slice(0, 3).forEach((doc, i) => {
+        console.log(`  [${i}] name: ${doc.name}`);
+        console.log(`      displayName: ${doc.displayName}`);
+      });
+    }
+    
+    return allDocuments;
+  } catch (error) {
+    console.error("[listDocumentsInStore] Error:", error);
+    return [];
+  }
+}
+
+/**
+ * Build a mapping from Gemini document names (internal IDs) to display names.
+ * This helps resolve citations when Gemini returns internal IDs in grounding metadata.
+ */
+export async function buildDocumentIdMapping(): Promise<Map<string, GeminiDocument>> {
+  const documents = await listDocumentsInStore();
+  const mapping = new Map<string, GeminiDocument>();
+  
+  for (const doc of documents) {
+    // Map by full name
+    mapping.set(doc.name, doc);
+    
+    // Also map by just the document ID part (after last /)
+    const docIdPart = doc.name.split('/').pop();
+    if (docIdPart) {
+      mapping.set(docIdPart, doc);
+    }
+  }
+  
+  console.log(`[buildDocumentIdMapping] Built mapping with ${mapping.size} entries`);
+  return mapping;
+}
+
 export async function askQuestionWithFileSearch(
   options: AskQuestionOptions
 ): Promise<AskQuestionResult> {

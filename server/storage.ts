@@ -408,6 +408,17 @@ export class DatabaseStorage implements IStorage {
   async getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined> {
     console.log(`[getDocumentVersionByFileSearchName] Looking up: "${fileSearchDocumentName}"`);
     
+    // Strategy 0 (HIGHEST PRIORITY): Try exact match on geminiInternalId
+    // This is what Gemini returns in grounding metadata as the document identifier
+    const [internalIdMatch] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(eq(schema.documentVersions.geminiInternalId, fileSearchDocumentName));
+    if (internalIdMatch) {
+      console.log(`[getDocumentVersionByFileSearchName] Found exact match on geminiInternalId: ${internalIdMatch.id}`);
+      return internalIdMatch;
+    }
+    
     // Strategy 1: Try exact match on fileSearchDocumentName
     const [exactMatch] = await db
       .select()
