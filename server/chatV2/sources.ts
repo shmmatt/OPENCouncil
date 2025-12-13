@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import type { SourceCitation } from "./types";
-import type { GroundingChunk } from "./simpleAnswer";
+import type { GroundingChunk, FileSearchDocRef } from "./simpleAnswer";
 
 /**
  * Known NH town names for content-based document matching.
@@ -152,13 +152,13 @@ function parseSnippetMetadata(snippet: string): {
 }
 
 /**
- * Resolve grounding chunks to SourceCitations using content-based matching.
+ * Resolve File Search document names to SourceCitations.
  * 
- * Since Gemini returns content hashes (not our document IDs) in grounding metadata,
- * we extract text snippets and match them against our database using:
- * - Town name
- * - Board name  
- * - Meeting date
+ * NEW APPROACH: Uses fileSearchDocumentName (from retrievedContext.uri) for direct DB lookup.
+ * This replaces the old content-based matching approach which was unreliable.
+ * 
+ * The fileSearchDocumentName matches document_versions.fileSearchDocumentName in our DB,
+ * providing a stable, canonical way to identify source documents.
  */
 export async function mapFileSearchDocumentsToCitations(
   chunks: GroundingChunk[]
@@ -174,97 +174,73 @@ export async function mapFileSearchDocumentsToCitations(
 
   for (const chunk of chunks) {
     try {
-      let resolved: { documentVersionId: string; label: string; logicalDocumentId: string } | null = null;
-      let town: string | null = null;
-      let board: string | null = null;
-      let meetingDate: string | null = null;
+      // The contentHash field now contains the fileSearchDocumentName (from URI) 
+      // or falls back to hex hash if URI is unavailable
+      const docIdentifier = chunk.contentHash;
       
-      // If snippet is empty (complex path), try ID-based matching first
-      if (!chunk.snippet || chunk.snippet.trim() === "") {
-        // Fall back to legacy ID-based matching for complex path
-        const idResolved = await storage.getDocumentVersionByGeminiInternalId(chunk.contentHash);
-        if (idResolved) {
-          resolved = {
-            documentVersionId: idResolved.documentVersionId,
-            logicalDocumentId: idResolved.logicalDocumentId,
-            label: idResolved.label,
-          };
-        }
-        console.log("[sources_id_fallback]", {
-          contentHash: chunk.contentHash.slice(0, 20) + "...",
-          resolved: !!resolved,
-        });
-      } else {
-        // Parse metadata from the snippet content
-        const parsed = parseSnippetMetadata(chunk.snippet);
-        town = parsed.town;
-        board = parsed.board;
-        meetingDate = parsed.meetingDate;
-        
-        console.log("[sources_content_match]", {
-          contentHash: chunk.contentHash.slice(0, 16) + "...",
-          snippetPreview: chunk.snippet.slice(0, 60) + "...",
-          parsedTown: town,
-          parsedBoard: board,
-          parsedDate: meetingDate,
-        });
-
-        // Try to find matching document in database
-        if (town && board && meetingDate) {
-          // Best case: have all three fields for precise matching
-          resolved = await storage.getDocumentVersionByContentMatch(town, board, meetingDate);
-        } else if (town && meetingDate) {
-          // Fallback: town + date
-          resolved = await storage.getDocumentVersionByContentMatch(town, null, meetingDate);
-        } else if (town && board) {
-          // Fallback: town + board (will get most recent)
-          resolved = await storage.getDocumentVersionByContentMatch(town, board, null);
-        }
-      }
-
-      if (resolved) {
-        if (seenIds.has(resolved.documentVersionId)) continue;
-        seenIds.add(resolved.documentVersionId);
+      // Primary resolution: Try fileSearchDocumentName lookup
+      const version = await storage.getDocumentVersionByFileSearchName(docIdentifier);
+      
+      if (version) {
+        if (seenIds.has(version.id)) continue;
+        seenIds.add(version.id);
         resolvedCount++;
 
-        // Get additional metadata
-        const logicalDoc = await storage.getLogicalDocumentById(resolved.logicalDocumentId);
-        const docVersion = await storage.getDocumentVersionById(resolved.documentVersionId);
+        // Get logical document for metadata
+        const logicalDoc = await storage.getLogicalDocumentById(version.documentId);
+        const fileBlob = await storage.getFileBlobById(version.fileBlobId);
 
-        const meetingDateStr = docVersion?.meetingDate 
-          ? (docVersion.meetingDate instanceof Date 
-              ? docVersion.meetingDate.toISOString().split('T')[0] 
-              : String(docVersion.meetingDate))
+        // Build human-readable label
+        const label = 
+          version.geminiDisplayName ||
+          logicalDoc?.canonicalTitle ||
+          fileBlob?.originalFilename ||
+          "Source document";
+
+        const meetingDateStr = version.meetingDate 
+          ? (version.meetingDate instanceof Date 
+              ? version.meetingDate.toISOString().split('T')[0] 
+              : String(version.meetingDate))
           : undefined;
           
         citations.push({
-          id: resolved.documentVersionId,
-          title: resolved.label,
+          id: version.id,
+          title: label,
           town: logicalDoc?.town || undefined,
-          year: docVersion?.year || undefined,
+          year: version.year || undefined,
           category: logicalDoc?.category || undefined,
-          url: `/api/files/${resolved.documentVersionId}`,
+          url: `/api/files/${version.id}`,
           meetingDate: meetingDateStr,
           board: logicalDoc?.board || undefined,
         });
       } else {
-        // Unresolved - create a readable fallback from parsed metadata
+        // Fallback: Parse metadata from snippet if available
         if (unresolvedSample.length < 3) {
-          unresolvedSample.push(chunk.contentHash.slice(0, 16));
+          unresolvedSample.push(docIdentifier.slice(0, 30));
         }
         
-        // Build a readable label from parsed metadata
         let fallbackLabel = "Source document";
-        if (town && board) {
-          fallbackLabel = `${town} ${board}`;
-          if (meetingDate) {
-            fallbackLabel += ` (${meetingDate})`;
+        let town: string | null = null;
+        let board: string | null = null;
+        let meetingDate: string | null = null;
+        
+        if (chunk.snippet) {
+          const parsed = parseSnippetMetadata(chunk.snippet);
+          town = parsed.town;
+          board = parsed.board;
+          meetingDate = parsed.meetingDate;
+          
+          if (town && board) {
+            fallbackLabel = `${town} ${board}`;
+            if (meetingDate) {
+              fallbackLabel += ` (${meetingDate})`;
+            }
+          } else if (town) {
+            fallbackLabel = `${town} document`;
           }
-        } else if (town) {
-          fallbackLabel = `${town} document`;
         }
         
-        const fallbackId = chunk.contentHash;
+        const fallbackId = docIdentifier;
         if (!seenIds.has(fallbackId)) {
           seenIds.add(fallbackId);
           citations.push({
@@ -289,13 +265,18 @@ export async function mapFileSearchDocumentsToCitations(
     }
   }
 
-  // Debug log
-  console.log("[sources_resolution_debug]", {
-    chunkCount: chunks.length,
-    resolvedCount,
-    unresolvedSample,
-    citationLabels: citations.slice(0, 5).map(c => c.title),
+  // Verification logs
+  console.log("[sources_resolved]", {
+    count: resolvedCount,
+    sample: citations.slice(0, 2).map(s => s.title),
   });
+
+  if (unresolvedSample.length > 0) {
+    console.log("[sources_unresolved]", {
+      count: unresolvedSample.length,
+      sample: unresolvedSample,
+    });
+  }
 
   return citations;
 }

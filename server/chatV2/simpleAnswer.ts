@@ -472,51 +472,66 @@ async function generateRSAGeneralKnowledgeAnswer(
 import type { ExtractedCitation } from "./types";
 
 /**
- * Extracted grounding chunk with content for document matching.
+ * File Search document reference for citation resolution.
+ * Uses the URI/documentName for direct DB lookup instead of content matching.
  */
-export interface GroundingChunk {
-  contentHash: string;  // The hex hash from title field
-  snippet: string;      // First ~200 chars of content for matching
+export interface FileSearchDocRef {
+  fileSearchDocumentName: string;  // The URI from retrievedContext (e.g., fileSearchStores/.../documents/...)
+  snippet: string;                  // First ~200 chars of content for scope classification
 }
 
 /**
- * Extract grounding chunks with content snippets for document identification.
- * 
- * The grounding metadata `title` is a content hash, NOT our stored document ID.
- * We extract both the hash and content snippet to enable content-based matching.
+ * Legacy GroundingChunk interface - kept for backwards compatibility.
+ * @deprecated Use FileSearchDocRef instead
  */
-export function extractGroundingChunks(response: any): GroundingChunk[] {
-  const chunks: GroundingChunk[] = [];
-  const seenHashes = new Set<string>();
+export interface GroundingChunk {
+  contentHash: string;
+  snippet: string;
+}
+
+/**
+ * Extract File Search document names from Gemini response.
+ * 
+ * IMPORTANT: We use retrievedContext.uri (the fileSearchDocumentName) for source identity,
+ * NOT retrievedContext.title (which is a content hash and unstable).
+ * 
+ * The uri field contains the canonical document path that matches our DB's
+ * document_versions.fileSearchDocumentName column.
+ */
+export function extractFileSearchDocRefs(response: any): FileSearchDocRef[] {
+  const docRefs: FileSearchDocRef[] = [];
+  const seenDocNames = new Set<string>();
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
     const rawChunks = response.candidates[0].groundingMetadata.groundingChunks;
 
     rawChunks.forEach((chunk: any) => {
       const ctx = chunk.retrievedContext;
-      if (!ctx?.title || !ctx?.text) return;
+      if (!ctx) return;
 
-      const contentHash = ctx.title;
+      // Priority: Use URI (fileSearchDocumentName) if available, fall back to title (content hash)
+      const docName = ctx.uri || ctx.title;
+      if (!docName) return;
       
-      // Deduplicate by hash
-      if (seenHashes.has(contentHash)) return;
-      seenHashes.add(contentHash);
+      // Deduplicate by document name
+      if (seenDocNames.has(docName)) return;
+      seenDocNames.add(docName);
       
-      // Extract first 200 chars of content for matching
-      const snippet = ctx.text.slice(0, 200);
-      chunks.push({ contentHash, snippet });
+      // Extract snippet for scope classification
+      const snippet = ctx.text?.slice(0, 200) || "";
+      docRefs.push({ fileSearchDocumentName: docName, snippet });
     });
   }
 
-  // Debug log
-  if (chunks.length > 0) {
-    console.log("[grounding_chunks_extracted]", {
-      count: chunks.length,
-      snippetPreviews: chunks.slice(0, 3).map(c => c.snippet.slice(0, 50) + "..."),
+  // Debug log for verification
+  if (docRefs.length > 0) {
+    console.log("[sources_file_search_docnames]", {
+      count: docRefs.length,
+      sample: docRefs.slice(0, 3).map(d => d.fileSearchDocumentName.slice(0, 60)),
     });
   }
 
-  return chunks;
+  return docRefs;
 }
 
 /**
@@ -524,16 +539,29 @@ export function extractGroundingChunks(response: any): GroundingChunk[] {
  * Returns content snippets from grounding metadata for document identification.
  */
 function extractSourceDocumentTitles(response: any): string[] {
-  const chunks = extractGroundingChunks(response);
-  return chunks.map(c => c.snippet);
+  const docRefs = extractFileSearchDocRefs(response);
+  return docRefs.map(d => d.snippet);
 }
 
 /**
- * Extract grounding chunks for citation resolution in sources.ts.
- * Returns chunks with both content hash and snippet for content-based matching.
+ * Extract File Search document refs for citation resolution in sources.ts.
+ * Uses URI-based identity (not content hashes) for reliable DB matching.
+ */
+export function extractFileSearchDocRefsForCitations(response: any): FileSearchDocRef[] {
+  return extractFileSearchDocRefs(response);
+}
+
+/**
+ * @deprecated Use extractFileSearchDocRefsForCitations instead
+ * Legacy function kept for backwards compatibility with complex path.
  */
 export function extractGroundingChunksForCitations(response: any): GroundingChunk[] {
-  return extractGroundingChunks(response);
+  // Convert FileSearchDocRef to GroundingChunk format for backwards compatibility
+  const docRefs = extractFileSearchDocRefs(response);
+  return docRefs.map(d => ({
+    contentHash: d.fileSearchDocumentName,
+    snippet: d.snippet,
+  }));
 }
 
 /**
