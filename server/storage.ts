@@ -548,14 +548,28 @@ export class DatabaseStorage implements IStorage {
     label: string;
     fileSearchDocumentName: string | null;
   } | null> {
-    // Exact match on gemini_internal_id
-    const [version] = await db
+    // Strategy 1: Exact match on gemini_internal_id
+    let [version] = await db
       .select()
       .from(schema.documentVersions)
       .where(eq(schema.documentVersions.geminiInternalId, docId));
     
+    // Strategy 2: Prefix matching fallback for hex IDs
+    // Gemini returns 32-char hex, but our stored ID may have a different suffix
+    if (!version && /^[0-9a-f]{20,64}$/i.test(docId)) {
+      const prefix = docId.slice(0, 20);
+      console.log(`[getDocumentVersionByGeminiInternalId] Trying prefix match: "${prefix}..."`);
+      [version] = await db
+        .select()
+        .from(schema.documentVersions)
+        .where(sql`${schema.documentVersions.geminiInternalId} LIKE ${prefix + '%'}`);
+      if (version) {
+        console.log(`[getDocumentVersionByGeminiInternalId] Prefix match found: "${docId}" -> ${version.id}`);
+      }
+    }
+    
     if (!version) {
-      console.log(`[getDocumentVersionByGeminiInternalId] No exact match for: "${docId}"`);
+      console.log(`[getDocumentVersionByGeminiInternalId] No match for: "${docId}"`);
       return null;
     }
 

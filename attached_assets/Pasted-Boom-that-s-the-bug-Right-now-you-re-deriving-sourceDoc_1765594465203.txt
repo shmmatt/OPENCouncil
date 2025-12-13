@@ -1,0 +1,106 @@
+Boom — that’s the bug.
+
+Right now you’re deriving `sourceDocumentNames` from **`extractSourceDocumentNames(response)`**, and based on your log, that function is effectively reading **grounding metadata** (or something that doesn’t include URIs) and returning **either nothing or the wrong thing**. Meanwhile, you *do* have the file search IDs available… but you’re not using them.
+
+### What we learned from your logs
+
+* The response contains `groundingMetadata.groundingChunks[].retrievedContext.title` (hex)
+* The file search layer logs a separate `file_search_response.results[].documentName` (hex)
+* But your `sourceDocumentNames` ends up empty in `simpleAnswer_docSource`
+
+Given your snippet, `hasDocResults` can only be false if `extractSourceDocumentNames(response)` is returning an empty array at runtime — which aligns with your “no sources” behavior.
+
+So: **you must stop using `extractSourceDocumentNames(response)` as currently implemented and instead read the document IDs from the file-search response object you already have.**
+
+---
+
+## The right fix (minimal and clean)
+
+### 1) Change `extractSourceDocumentNames` to use `fileSearchResponse.results[].documentName`
+
+Wherever you have access to the file search response (likely you call Gemini File Search separately or the SDK returns both answer + results), you should do:
+
+```ts
+const sourceDocumentNames =
+  fileSearchResponse?.results?.map(r => r.documentName).filter(Boolean) ?? [];
+```
+
+If you *only* have the combined `response`, then use a function that pulls the “results” from the same object that your `file_search_response` log uses.
+
+### 2) Keep grounding logging, but do NOT use grounding for identity
+
+Grounding is useful to attribute segments, but in your current response shape it does not provide doc URIs, so it can’t be your doc identity source.
+
+### 3) Add a sanity log right after extraction
+
+Add:
+
+```ts
+logger.debug("source_doc_names_extracted", {
+  requestId,
+  count: sourceDocumentNames.length,
+  sample: sourceDocumentNames.slice(0, 5),
+});
+```
+
+This will instantly tell you whether the pipeline is now carrying sources.
+
+---
+
+## Why this will fix both “no sources” and “hash sources”
+
+* **No sources**: because `sourceDocumentNames` was empty.
+* **Hash sources**: because the only identifiers you had were hex; once you can map those `documentName` values in `sources.ts` to your DB records, the UI can display human labels.
+
+But there’s one more important step:
+
+---
+
+## Next required fix in `sources.ts`
+
+Once `sourceDocumentNames` is populated with those hex IDs, your resolver must map them to `document_versions` and return a label.
+
+So in `server/chatV2/sources.ts`, resolution should be:
+
+1. `storage.getDocumentVersionByGeminiDocName(documentName)` (exact match)
+2. return `{ label: canonical_title/original_filename, href: viewerUrl }`
+
+### Do you have those hex IDs stored in the DB?
+
+Right now, your earlier DB sample shows `gemini_internal_id = 78bda...-suffix`, which does **not** look like the 32-hex `documentName` values you’re receiving in this request.
+
+That means you’ll likely need to **store this `documentName`** at ingestion time (or during upload/indexing).
+
+If you already added a `gemini_internal_id` column, confirm what you’re storing in it:
+
+* If it’s storing the *resource docId* (`78bda...-suffix`), that won’t match `documentName` (`22a6b73b...`).
+* So either:
+
+  * store `documentName` in a new column (e.g., `gemini_result_document_name`) **OR**
+  * repurpose `gemini_internal_id` to store the `documentName` that Gemini returns in results (my preference is a separate column to avoid breaking what you already have).
+
+---
+
+# What I need from you now (to avoid more guessing)
+
+Paste (or have the agent paste) the implementation of:
+
+### `extractSourceDocumentNames(response)`
+
+and show where `file_search_response` log is produced (what object it’s reading).
+
+Because right now we need to point extraction at the same data your log is printing:
+
+```json
+results: [{ "documentName": "22a6b..." }]
+```
+
+Once we see that, I can tell you exactly how to rewrite `extractSourceDocumentNames` (or replace it entirely) in 2–3 lines.
+
+---
+
+## Ultra-direct instruction for Replit Agent (copy/paste)
+
+> In `server/chatV2/simpleAnswer.ts`, stop using grounding metadata to compute `sourceDocumentNames`. Populate `sourceDocumentNames` from the file search results `results[].documentName` (the same values logged in `file_search_response`). Add a debug log showing extracted doc names. Then in `server/chatV2/sources.ts`, resolve those doc names to document_versions and return human-readable `label` + viewer `href`. Ensure `simpleAnswer_docSource` logs a non-zero `sourceDocCount` for the same request.
+
+If you paste the `extractSourceDocumentNames` function, I’ll be very specific about the exact replacement.
