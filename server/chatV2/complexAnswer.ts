@@ -465,28 +465,43 @@ HYPER-LOCAL FOCUS (IMPORTANT):
   }
 }
 
+/**
+ * Extract source document IDs from Gemini File Search grounding metadata.
+ * 
+ * CRITICAL: The grounding metadata `title` field contains the hex hash that matches
+ * our stored `gemini_internal_id`. This is the ONLY usable document identifier.
+ * DO NOT extract IDs from URIs - grounding metadata doesn't have /documents/<id> URIs.
+ */
 function extractSourceDocumentNames(response: any): string[] {
-  const documentNames: string[] = [];
+  const docIds: string[] = [];
+  const seenIds = new Set<string>();
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
     const chunks = response.candidates[0].groundingMetadata.groundingChunks;
-    const seenDocs = new Set<string>();
 
     chunks.forEach((chunk: any) => {
-      const uri = chunk.retrievedContext?.uri;
-      if (uri && !seenDocs.has(uri)) {
-        documentNames.push(uri);
-        seenDocs.add(uri);
-      }
-      const title = chunk.web?.title;
-      if (title && !seenDocs.has(title)) {
-        documentNames.push(title);
-        seenDocs.add(title);
-      }
+      const ctx = chunk.retrievedContext;
+      if (!ctx?.title) return;
+
+      // The title IS the document identifier (hex hash matching gemini_internal_id)
+      const docId = ctx.title;
+      
+      // Deduplicate
+      if (seenIds.has(docId)) return;
+      seenIds.add(docId);
+      docIds.push(docId);
     });
   }
 
-  return documentNames;
+  // Debug log
+  if (docIds.length > 0) {
+    console.log("[complex_source_doc_ids]", {
+      count: docIds.length,
+      sample: docIds.slice(0, 3).map(id => id.slice(0, 20) + "..."),
+    });
+  }
+
+  return docIds;
 }
 
 /**

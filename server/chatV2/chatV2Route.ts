@@ -443,6 +443,16 @@ export function registerChatV2Routes(app: Express): void {
 
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
 
+      // Final debug log for citation resolution verification
+      logDebug("final_citations_payload", {
+        ...logCtx,
+        stage: "citation_resolution",
+        inputDocIdCount: sourceDocumentNames.length,
+        resolvedSourceCount: sources.length,
+        sourceLabels: sources.slice(0, 5).map(s => s.title),
+        sourceIds: sources.slice(0, 5).map(s => s.id),
+      });
+
       const answerMeta: FinalAnswerMeta = {
         complexity: routerOutput.complexity,
         requiresClarification: false,

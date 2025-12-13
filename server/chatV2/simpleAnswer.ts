@@ -474,92 +474,59 @@ async function generateRSAGeneralKnowledgeAnswer(
 import type { ExtractedCitation } from "./types";
 
 /**
- * Extract citations from Gemini grounding metadata.
- * Uses URI as the canonical source for document identity (extracts geminiDocId from /documents/<docId>).
- * Title is captured for debug only - never used as primary key.
+ * Extract source document IDs from Gemini File Search grounding metadata.
+ * 
+ * CRITICAL: The grounding metadata `title` field contains the hex hash that matches
+ * our stored `gemini_internal_id`. This is the ONLY usable document identifier.
+ * DO NOT attempt to extract IDs from URIs - grounding metadata doesn't have /documents/<id> URIs.
  */
-export function extractCitationsFromGrounding(response: any): ExtractedCitation[] {
-  const citations: ExtractedCitation[] = [];
-  const seenDocIds = new Set<string>();
-
-  // Debug: log full grounding metadata structure
-  if (response.candidates?.[0]?.groundingMetadata) {
-    console.log("[extractCitationsFromGrounding] Full metadata:", 
-      JSON.stringify(response.candidates[0].groundingMetadata, null, 2).slice(0, 3000));
-  }
+export function extractSourceDocIdsFromGrounding(response: any): string[] {
+  const docIds: string[] = [];
+  const seenIds = new Set<string>();
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
     const chunks = response.candidates[0].groundingMetadata.groundingChunks;
 
     chunks.forEach((chunk: any) => {
       const ctx = chunk.retrievedContext;
-      if (!ctx) return;
+      if (!ctx?.title) return;
 
-      // Extract geminiDocId from URI - this is the canonical key
-      let geminiDocId: string | undefined;
-      let rawUri: string | undefined;
+      // The title IS the document identifier (hex hash matching gemini_internal_id)
+      const docId = ctx.title;
       
-      // Check all possible URI fields
-      const uriFields = [ctx.uri, ctx.sourceUri, ctx.documentUri, ctx.name];
-      for (const field of uriFields) {
-        if (field && typeof field === 'string' && field.includes('/documents/')) {
-          rawUri = field;
-          // Extract docId from /documents/<docId>
-          const match = field.match(/\/documents\/([^\/]+)/);
-          if (match) {
-            geminiDocId = match[1];
-            break;
-          }
-        }
-      }
-
-      // Deduplicate by geminiDocId
-      if (geminiDocId && seenDocIds.has(geminiDocId)) return;
-      if (geminiDocId) seenDocIds.add(geminiDocId);
-
-      citations.push({
-        rawTitle: ctx.title,  // For debug only
-        rawUri,
-        geminiDocId,
-      });
+      // Deduplicate
+      if (seenIds.has(docId)) return;
+      seenIds.add(docId);
+      docIds.push(docId);
     });
   }
 
-  // Debug log (first 3 only)
-  if (citations.length > 0) {
-    console.log("[citation_extraction_debug]", {
-      count: citations.length,
-      sample: citations.slice(0, 3).map(c => ({
-        geminiDocId: c.geminiDocId,
-        hasUri: !!c.rawUri,
-        rawTitle: c.rawTitle?.slice(0, 20)
-      }))
+  // Debug log
+  if (docIds.length > 0) {
+    console.log("[source_doc_ids_from_grounding]", {
+      count: docIds.length,
+      sample: docIds.slice(0, 3).map(id => id.slice(0, 20) + "..."),
     });
   }
 
-  return citations;
+  return docIds;
 }
 
 /**
  * Extract readable document titles for classification (scope detection, town detection).
- * Returns the rawTitle from grounding metadata, which contains human-readable names.
+ * Returns the title from grounding metadata - these are hex hashes, NOT human-readable.
+ * Used only for counting/existence checks, not for display.
  */
 function extractSourceDocumentTitles(response: any): string[] {
-  const citations = extractCitationsFromGrounding(response);
-  return citations
-    .filter(c => c.rawTitle)
-    .map(c => c.rawTitle!);
+  return extractSourceDocIdsFromGrounding(response);
 }
 
 /**
  * Extract Gemini document IDs for citation resolution in sources.ts.
- * Returns the geminiDocId extracted from URIs in grounding metadata.
+ * Returns the title (hex hash) from grounding metadata which matches gemini_internal_id in DB.
  */
 export function extractGeminiDocIds(response: any): string[] {
-  const citations = extractCitationsFromGrounding(response);
-  return citations
-    .filter(c => c.geminiDocId)
-    .map(c => c.geminiDocId!);
+  return extractSourceDocIdsFromGrounding(response);
 }
 
 /**
