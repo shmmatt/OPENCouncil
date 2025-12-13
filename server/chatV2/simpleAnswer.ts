@@ -40,9 +40,9 @@ interface SimpleAnswerOptions {
   logContext?: PipelineLogContext;
 }
 
-interface SimpleAnswerResult {
+export interface SimpleAnswerResult {
   answerText: string;
-  sourceDocumentNames: string[];
+  groundingChunks: GroundingChunk[];
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
 }
@@ -58,7 +58,7 @@ export async function generateSimpleAnswer(
     return {
       answerText:
         "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
-      sourceDocumentNames: [],
+      groundingChunks: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null
     };
@@ -133,12 +133,12 @@ export async function generateSimpleAnswer(
     const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
+    // Extract grounding chunks with content snippets for citation resolution
+    const groundingChunks = extractGroundingChunksForCitations(response);
     // Extract readable titles for classification (scope/town detection)
     const sourceDocumentTitles = extractSourceDocumentTitles(response);
-    // Extract Gemini doc IDs for citation resolution in sources.ts
-    const geminiDocIds = extractGeminiDocIds(response);
     const groundingInfo = extractGroundingInfoForLogging(response);
-    const hasDocResults = sourceDocumentTitles.length > 0 || geminiDocIds.length > 0;
+    const hasDocResults = groundingChunks.length > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
 
@@ -149,8 +149,7 @@ export async function generateSimpleAnswer(
       isRSAQuestion: isRSA,
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
-      sourceCount: sourceDocumentTitles.length,
-      geminiDocIdCount: geminiDocIds.length,
+      groundingChunkCount: groundingChunks.length,
     });
 
     logLlmResponse({
@@ -190,7 +189,7 @@ export async function generateSimpleAnswer(
       const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
       return { 
         answerText: rsaAnswer + generateStatewideDisclaimer(), 
-        sourceDocumentNames: [],
+        groundingChunks: [],
         docSourceType: "statewide" as DocSourceType,
         docSourceTown: null
       };
@@ -201,14 +200,14 @@ export async function generateSimpleAnswer(
         const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
         return { 
           answerText: rsaAnswer + generateStatewideDisclaimer(), 
-          sourceDocumentNames: [],
+          groundingChunks: [],
           docSourceType: "statewide" as DocSourceType,
           docSourceTown: null
         };
       }
       return {
         answerText: generateNoDocsFoundMessage(false),
-        sourceDocumentNames: [],
+        groundingChunks: [],
         docSourceType: "none" as DocSourceType,
         docSourceTown: null
       };
@@ -232,10 +231,9 @@ export async function generateSimpleAnswer(
       stage: "simpleAnswer_docSource",
       docSourceType,
       docSourceTown,
-      sourceDocTitleCount: sourceDocumentTitles.length,
-      geminiDocIdCount: geminiDocIds.length,
+      groundingChunkCount: groundingChunks.length,
       userHintsTown: userHints?.town,
-      sourceDocTitles: sourceDocumentTitles.slice(0, 5),
+      snippetPreviews: groundingChunks.slice(0, 3).map(c => c.snippet.slice(0, 50)),
     });
 
     const scopeNote = selectScopeNote({ docSourceType, docSourceTown });
@@ -246,14 +244,14 @@ export async function generateSimpleAnswer(
       finalAnswer,
       docSourceType,
       docSourceTown,
-      sourceDocumentTitles.length,
+      groundingChunks.length,
       logContext
     );
     
-    // Return geminiDocIds for citation resolution in sources.ts
+    // Return grounding chunks for content-based citation resolution in sources.ts
     return { 
       answerText: finalAnswer, 
-      sourceDocumentNames: geminiDocIds,
+      groundingChunks,
       docSourceType,
       docSourceTown
     };
@@ -281,7 +279,7 @@ export async function generateSimpleAnswer(
     return {
       answerText:
         "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
-      sourceDocumentNames: [],
+      groundingChunks: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null
     };
@@ -474,59 +472,68 @@ async function generateRSAGeneralKnowledgeAnswer(
 import type { ExtractedCitation } from "./types";
 
 /**
- * Extract source document IDs from Gemini File Search grounding metadata.
- * 
- * CRITICAL: The grounding metadata `title` field contains the hex hash that matches
- * our stored `gemini_internal_id`. This is the ONLY usable document identifier.
- * DO NOT attempt to extract IDs from URIs - grounding metadata doesn't have /documents/<id> URIs.
+ * Extracted grounding chunk with content for document matching.
  */
-export function extractSourceDocIdsFromGrounding(response: any): string[] {
-  const docIds: string[] = [];
-  const seenIds = new Set<string>();
+export interface GroundingChunk {
+  contentHash: string;  // The hex hash from title field
+  snippet: string;      // First ~200 chars of content for matching
+}
+
+/**
+ * Extract grounding chunks with content snippets for document identification.
+ * 
+ * The grounding metadata `title` is a content hash, NOT our stored document ID.
+ * We extract both the hash and content snippet to enable content-based matching.
+ */
+export function extractGroundingChunks(response: any): GroundingChunk[] {
+  const chunks: GroundingChunk[] = [];
+  const seenHashes = new Set<string>();
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-    const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+    const rawChunks = response.candidates[0].groundingMetadata.groundingChunks;
 
-    chunks.forEach((chunk: any) => {
+    rawChunks.forEach((chunk: any) => {
       const ctx = chunk.retrievedContext;
-      if (!ctx?.title) return;
+      if (!ctx?.title || !ctx?.text) return;
 
-      // The title IS the document identifier (hex hash matching gemini_internal_id)
-      const docId = ctx.title;
+      const contentHash = ctx.title;
       
-      // Deduplicate
-      if (seenIds.has(docId)) return;
-      seenIds.add(docId);
-      docIds.push(docId);
+      // Deduplicate by hash
+      if (seenHashes.has(contentHash)) return;
+      seenHashes.add(contentHash);
+      
+      // Extract first 200 chars of content for matching
+      const snippet = ctx.text.slice(0, 200);
+      chunks.push({ contentHash, snippet });
     });
   }
 
   // Debug log
-  if (docIds.length > 0) {
-    console.log("[source_doc_ids_from_grounding]", {
-      count: docIds.length,
-      sample: docIds.slice(0, 3).map(id => id.slice(0, 20) + "..."),
+  if (chunks.length > 0) {
+    console.log("[grounding_chunks_extracted]", {
+      count: chunks.length,
+      snippetPreviews: chunks.slice(0, 3).map(c => c.snippet.slice(0, 50) + "..."),
     });
   }
 
-  return docIds;
+  return chunks;
 }
 
 /**
  * Extract readable document titles for classification (scope detection, town detection).
- * Returns the title from grounding metadata - these are hex hashes, NOT human-readable.
- * Used only for counting/existence checks, not for display.
+ * Returns content snippets from grounding metadata for document identification.
  */
 function extractSourceDocumentTitles(response: any): string[] {
-  return extractSourceDocIdsFromGrounding(response);
+  const chunks = extractGroundingChunks(response);
+  return chunks.map(c => c.snippet);
 }
 
 /**
- * Extract Gemini document IDs for citation resolution in sources.ts.
- * Returns the title (hex hash) from grounding metadata which matches gemini_internal_id in DB.
+ * Extract grounding chunks for citation resolution in sources.ts.
+ * Returns chunks with both content hash and snippet for content-based matching.
  */
-export function extractGeminiDocIds(response: any): string[] {
-  return extractSourceDocIdsFromGrounding(response);
+export function extractGroundingChunksForCitations(response: any): GroundingChunk[] {
+  return extractGroundingChunks(response);
 }
 
 /**

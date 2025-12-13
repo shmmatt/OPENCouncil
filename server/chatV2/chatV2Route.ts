@@ -3,7 +3,7 @@ import type { Express, Response } from "express";
 import type { IdentityRequest } from "../auth/types";
 import { storage } from "../storage";
 import { routeQuestion } from "./router";
-import { generateSimpleAnswer } from "./simpleAnswer";
+import { generateSimpleAnswer, type GroundingChunk } from "./simpleAnswer";
 import { planRetrieval } from "./retrievalPlanner";
 import { generateComplexDraftAnswer } from "./complexAnswer";
 import { critiqueAndImproveAnswer } from "./critic";
@@ -250,7 +250,7 @@ export function registerChatV2Routes(app: Express): void {
       }
 
       let answerText: string;
-      let sourceDocumentNames: string[] = [];
+      let groundingChunks: GroundingChunk[] = [];
       let criticScore: CriticScore = { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 };
       let limitationsNote: string | undefined;
       let suggestedFollowUps: string[] = [];
@@ -279,7 +279,7 @@ export function registerChatV2Routes(app: Express): void {
         });
 
         answerText = simpleResult.answerText;
-        sourceDocumentNames = simpleResult.sourceDocumentNames;
+        groundingChunks = simpleResult.groundingChunks;
         townPreference = resolvedTown;
         docSourceType = simpleResult.docSourceType;
         docSourceTown = simpleResult.docSourceTown;
@@ -287,8 +287,8 @@ export function registerChatV2Routes(app: Express): void {
         logDebug("simple_answer_result", {
           ...logCtx,
           stage: "simpleAnswer",
-          sourceCount: sourceDocumentNames.length,
-          sourceDocNames: sourceDocumentNames.slice(0, 5),
+          sourceCount: groundingChunks.length,
+          snippetPreviews: groundingChunks.slice(0, 3).map(c => c.snippet.slice(0, 50)),
           answerLength: answerText.length,
         });
 
@@ -339,15 +339,17 @@ export function registerChatV2Routes(app: Express): void {
           logContext: logCtx,
         });
 
-        sourceDocumentNames = draftResult.sourceDocumentNames;
+        // Complex path returns sourceDocumentNames (gemini IDs), convert to GroundingChunk format
+        // with empty snippets - content matching won't work but we'll fall back to ID matching
+        groundingChunks = draftResult.sourceDocumentNames.map(id => ({ contentHash: id, snippet: "" }));
         docSourceType = draftResult.docSourceType;
         docSourceTown = draftResult.docSourceTown;
 
         logDebug("complex_answer_draft", {
           ...logCtx,
           stage: "complexAnswer",
-          sourceCount: sourceDocumentNames.length,
-          sourceDocNames: sourceDocumentNames.slice(0, 5),
+          sourceCount: groundingChunks.length,
+          sourceDocNames: draftResult.sourceDocumentNames.slice(0, 5),
           draftLength: draftResult.draftAnswerText.length,
         });
 
@@ -441,13 +443,13 @@ export function registerChatV2Routes(app: Express): void {
         }
       }
 
-      const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
+      const sources = await mapFileSearchDocumentsToCitations(groundingChunks);
 
       // Final debug log for citation resolution verification
       logDebug("final_citations_payload", {
         ...logCtx,
         stage: "citation_resolution",
-        inputDocIdCount: sourceDocumentNames.length,
+        inputChunkCount: groundingChunks.length,
         resolvedSourceCount: sources.length,
         sourceLabels: sources.slice(0, 5).map(s => s.title),
         sourceIds: sources.slice(0, 5).map(s => s.id),

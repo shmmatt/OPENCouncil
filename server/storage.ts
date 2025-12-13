@@ -103,6 +103,17 @@ export interface IStorage {
     fileSearchDocumentName: string | null;
   } | null>;
 
+  // Content-based citation resolution - match by town, board, and meeting date
+  getDocumentVersionByContentMatch(
+    town: string,
+    board: string | null,
+    meetingDate: string | null
+  ): Promise<{
+    documentVersionId: string;
+    logicalDocumentId: string;
+    label: string;
+  } | null>;
+
   // v2 Pipeline: IngestionJob operations
   createIngestionJob(job: InsertIngestionJob): Promise<IngestionJob>;
   getIngestionJobById(id: string): Promise<IngestionJob | undefined>;
@@ -599,6 +610,90 @@ export class DatabaseStorage implements IStorage {
       logicalDocumentId: version.documentId,
       label,
       fileSearchDocumentName: version.fileSearchDocumentName,
+    };
+  }
+
+  /**
+   * Content-based citation resolver - match by town, board, and optionally meeting date.
+   * Used when grounding metadata returns content hashes instead of document IDs.
+   */
+  async getDocumentVersionByContentMatch(
+    town: string,
+    board: string | null,
+    meetingDate: string | null
+  ): Promise<{
+    documentVersionId: string;
+    logicalDocumentId: string;
+    label: string;
+  } | null> {
+    // Build conditions for the query
+    const conditions: any[] = [];
+    
+    // Case-insensitive town match
+    conditions.push(sql`LOWER(${schema.logicalDocuments.town}) = LOWER(${town})`);
+    
+    if (board) {
+      // Case-insensitive board match, allowing for variants
+      conditions.push(sql`LOWER(${schema.logicalDocuments.board}) = LOWER(${board})`);
+    }
+
+    // Join document_versions with logical_documents
+    let query = db
+      .select({
+        versionId: schema.documentVersions.id,
+        documentId: schema.documentVersions.documentId,
+        meetingDate: schema.documentVersions.meetingDate,
+        displayName: schema.documentVersions.geminiDisplayName,
+        canonicalTitle: schema.logicalDocuments.canonicalTitle,
+      })
+      .from(schema.documentVersions)
+      .innerJoin(
+        schema.logicalDocuments,
+        eq(schema.documentVersions.documentId, schema.logicalDocuments.id)
+      )
+      .where(and(...conditions));
+    
+    // Add meeting date filter if provided
+    if (meetingDate) {
+      query = query.where(
+        and(
+          ...conditions,
+          eq(schema.documentVersions.meetingDate, meetingDate)
+        )
+      );
+    }
+    
+    // Order by meeting date descending to get most recent if no exact date match
+    const results = await query.orderBy(desc(schema.documentVersions.meetingDate)).limit(5);
+    
+    if (results.length === 0) {
+      console.log(`[getDocumentVersionByContentMatch] No match for: town=${town}, board=${board}, date=${meetingDate}`);
+      return null;
+    }
+
+    // If we have a specific date, try to find exact match first
+    if (meetingDate) {
+      const exactMatch = results.find(r => r.meetingDate === meetingDate);
+      if (exactMatch) {
+        const label = exactMatch.displayName || exactMatch.canonicalTitle || `${town} ${board || 'document'}`;
+        console.log(`[getDocumentVersionByContentMatch] Exact date match: ${label}`);
+        return {
+          documentVersionId: exactMatch.versionId,
+          logicalDocumentId: exactMatch.documentId,
+          label,
+        };
+      }
+    }
+
+    // Return the most recent match
+    const match = results[0];
+    const label = match.displayName || match.canonicalTitle || `${town} ${board || 'document'}`;
+    console.log(`[getDocumentVersionByContentMatch] Found: town=${town}, board=${board} -> ${label}`);
+    
+    return {
+      documentVersionId: match.versionId,
+      logicalDocumentId: match.documentId,
+      label,
     };
   }
 
