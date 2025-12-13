@@ -133,9 +133,12 @@ export async function generateSimpleAnswer(
     const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
-    const sourceDocumentNames = extractSourceDocumentNames(response);
+    // Extract readable titles for classification (scope/town detection)
+    const sourceDocumentTitles = extractSourceDocumentTitles(response);
+    // Extract Gemini doc IDs for citation resolution in sources.ts
+    const geminiDocIds = extractGeminiDocIds(response);
     const groundingInfo = extractGroundingInfoForLogging(response);
-    const hasDocResults = sourceDocumentNames.length > 0;
+    const hasDocResults = sourceDocumentTitles.length > 0 || geminiDocIds.length > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
 
@@ -146,7 +149,8 @@ export async function generateSimpleAnswer(
       isRSAQuestion: isRSA,
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
-      sourceCount: sourceDocumentNames.length,
+      sourceCount: sourceDocumentTitles.length,
+      geminiDocIdCount: geminiDocIds.length,
     });
 
     logLlmResponse({
@@ -211,7 +215,8 @@ export async function generateSimpleAnswer(
     }
 
     // Determine docSourceType based on actual retrieved documents
-    const docClassification = classifyDocumentSources(sourceDocumentNames, userHints?.town);
+    // Use readable titles for classification (not gemini IDs)
+    const docClassification = classifyDocumentSources(sourceDocumentTitles, userHints?.town);
     let docSourceType: DocSourceType = docClassification.type;
     let docSourceTown: string | null = docClassification.town;
 
@@ -227,9 +232,10 @@ export async function generateSimpleAnswer(
       stage: "simpleAnswer_docSource",
       docSourceType,
       docSourceTown,
-      sourceDocCount: sourceDocumentNames.length,
+      sourceDocTitleCount: sourceDocumentTitles.length,
+      geminiDocIdCount: geminiDocIds.length,
       userHintsTown: userHints?.town,
-      sourceDocNames: sourceDocumentNames.slice(0, 5),
+      sourceDocTitles: sourceDocumentTitles.slice(0, 5),
     });
 
     const scopeNote = selectScopeNote({ docSourceType, docSourceTown });
@@ -240,13 +246,14 @@ export async function generateSimpleAnswer(
       finalAnswer,
       docSourceType,
       docSourceTown,
-      sourceDocumentNames.length,
+      sourceDocumentTitles.length,
       logContext
     );
     
+    // Return geminiDocIds for citation resolution in sources.ts
     return { 
       answerText: finalAnswer, 
-      sourceDocumentNames,
+      sourceDocumentNames: geminiDocIds,
       docSourceType,
       docSourceTown
     };
@@ -475,6 +482,12 @@ export function extractCitationsFromGrounding(response: any): ExtractedCitation[
   const citations: ExtractedCitation[] = [];
   const seenDocIds = new Set<string>();
 
+  // Debug: log full grounding metadata structure
+  if (response.candidates?.[0]?.groundingMetadata) {
+    console.log("[extractCitationsFromGrounding] Full metadata:", 
+      JSON.stringify(response.candidates[0].groundingMetadata, null, 2).slice(0, 3000));
+  }
+
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
     const chunks = response.candidates[0].groundingMetadata.groundingChunks;
 
@@ -528,12 +541,22 @@ export function extractCitationsFromGrounding(response: any): ExtractedCitation[
 }
 
 /**
- * Legacy function for backward compatibility - converts ExtractedCitation[] to string[]
- * @deprecated Use extractCitationsFromGrounding directly
+ * Extract readable document titles for classification (scope detection, town detection).
+ * Returns the rawTitle from grounding metadata, which contains human-readable names.
  */
-function extractSourceDocumentNames(response: any): string[] {
+function extractSourceDocumentTitles(response: any): string[] {
   const citations = extractCitationsFromGrounding(response);
-  // Return geminiDocId as the primary identifier (for sources.ts to look up)
+  return citations
+    .filter(c => c.rawTitle)
+    .map(c => c.rawTitle!);
+}
+
+/**
+ * Extract Gemini document IDs for citation resolution in sources.ts.
+ * Returns the geminiDocId extracted from URIs in grounding metadata.
+ */
+export function extractGeminiDocIds(response: any): string[] {
+  const citations = extractCitationsFromGrounding(response);
   return citations
     .filter(c => c.geminiDocId)
     .map(c => c.geminiDocId!);
