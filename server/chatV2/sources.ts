@@ -46,15 +46,20 @@ const KNOWN_NH_TOWNS = [
  * Board name patterns for content matching.
  */
 const BOARD_PATTERNS: { pattern: RegExp; normalizedName: string }[] = [
-  { pattern: /planning\s*board/i, normalizedName: "Planning Board" },
+  { pattern: /planning\s*(?:board|bd\.?)/i, normalizedName: "Planning Board" },
+  { pattern: /\bPB\b/i, normalizedName: "Planning Board" },
   { pattern: /board\s*of\s*select(?:men|persons|women)?/i, normalizedName: "Board of Selectmen" },
+  { pattern: /select(?:men|persons|women)?(?:'s)?\s*(?:board|meeting)/i, normalizedName: "Board of Selectmen" },
   { pattern: /\bBOS\b/i, normalizedName: "Board of Selectmen" },
   { pattern: /zoning\s*board(?:\s*of\s*adjustment)?/i, normalizedName: "Zoning Board of Adjustment" },
   { pattern: /\bZBA\b/i, normalizedName: "Zoning Board of Adjustment" },
   { pattern: /budget\s*committee/i, normalizedName: "Budget Committee" },
   { pattern: /conservation\s*commission/i, normalizedName: "Conservation Commission" },
-  { pattern: /school\s*board/i, normalizedName: "School Board" },
-  { pattern: /library\s*trustees?/i, normalizedName: "Library Trustees" },
+  { pattern: /\bCC\b/i, normalizedName: "Conservation Commission" },
+  { pattern: /school\s*(?:board|bd\.?)/i, normalizedName: "School Board" },
+  { pattern: /library\s*(?:trustees?|board)/i, normalizedName: "Library Trustees" },
+  { pattern: /heritage\s*commission/i, normalizedName: "Heritage Commission" },
+  { pattern: /recreation\s*(?:commission|committee|dept\.?)/i, normalizedName: "Recreation Commission" },
 ];
 
 /**
@@ -69,20 +74,29 @@ function parseSnippetMetadata(snippet: string): {
   let board: string | null = null;
   let meetingDate: string | null = null;
 
-  const upperSnippet = snippet.toUpperCase();
+  // Normalize snippet for matching - handle all-caps headers
+  const normalizedSnippet = snippet.replace(/\s+/g, ' ').trim();
   
-  // Find town name (check uppercase version for all-caps headers)
+  // Find town name - check both original and uppercase for all-caps headers
   for (const townName of KNOWN_NH_TOWNS) {
-    const regex = new RegExp(`\\b${townName}\\b`, 'i');
-    if (regex.test(snippet)) {
-      town = townName;
-      break;
+    // Match "Townname", "TOWNNAME", "Town of Townname", "City of Townname"
+    const patterns = [
+      new RegExp(`\\b${townName}\\b`, 'i'),
+      new RegExp(`\\bTown\\s+of\\s+${townName}\\b`, 'i'),
+      new RegExp(`\\bCity\\s+of\\s+${townName}\\b`, 'i'),
+    ];
+    for (const regex of patterns) {
+      if (regex.test(normalizedSnippet)) {
+        town = townName;
+        break;
+      }
     }
+    if (town) break;
   }
   
-  // Find board name
+  // Find board name - use normalized snippet for better matching
   for (const { pattern, normalizedName } of BOARD_PATTERNS) {
-    if (pattern.test(snippet)) {
+    if (pattern.test(normalizedSnippet)) {
       board = normalizedName;
       break;
     }
@@ -99,7 +113,7 @@ function parseSnippetMetadata(snippet: string): {
   ];
   
   for (const pattern of datePatterns) {
-    const match = snippet.match(pattern);
+    const match = normalizedSnippet.match(pattern);
     if (match) {
       try {
         let dateStr: string;
