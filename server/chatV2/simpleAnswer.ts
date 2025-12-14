@@ -496,58 +496,6 @@ async function generateRSAGeneralKnowledgeAnswer(
 }
 
 /**
- * Extract source document names from a Gemini response's grounding metadata.
- * Now also captures chunk.retrievedContext.title which is often present in file_search results.
- */
-function extractSourceDocumentNames(response: any): string[] {
-  const documentNames: string[] = [];
-
-  if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-    const chunks = response.candidates[0].groundingMetadata.groundingChunks;
-    const seenDocs = new Set<string>();
-
-    chunks.forEach((chunk: any) => {
-      // Check retrievedContext.uri
-      const uri = chunk.retrievedContext?.uri;
-      if (uri && !seenDocs.has(uri)) {
-        documentNames.push(uri);
-        seenDocs.add(uri);
-      }
-      
-      // Check retrievedContext.title (important - was missing before!)
-      const retrievedTitle = chunk.retrievedContext?.title;
-      if (retrievedTitle && !seenDocs.has(retrievedTitle)) {
-        documentNames.push(retrievedTitle);
-        seenDocs.add(retrievedTitle);
-      }
-      
-      // Check web.title (for web grounding fallback)
-      const webTitle = chunk.web?.title;
-      if (webTitle && !seenDocs.has(webTitle)) {
-        documentNames.push(webTitle);
-        seenDocs.add(webTitle);
-      }
-      
-      // Check web.uri as well
-      const webUri = chunk.web?.uri;
-      if (webUri && !seenDocs.has(webUri)) {
-        documentNames.push(webUri);
-        seenDocs.add(webUri);
-      }
-    });
-  }
-
-  if (response.candidates?.[0]?.groundingMetadata?.retrievalMetadata?.googleSearchDynamicRetrievalScore !== undefined) {
-    const sources = response.candidates?.[0]?.groundingMetadata?.webSearchQueries;
-    if (sources) {
-      console.log("Web search was used:", sources);
-    }
-  }
-
-  return documentNames;
-}
-
-/**
  * Patterns indicating statewide/RSA documents vs local municipal documents.
  */
 const STATEWIDE_PATTERNS = [

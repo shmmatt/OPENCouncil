@@ -77,11 +77,21 @@ export function logFileSearchResponse(params: {
 }
 
 /**
- * Extract retrieval document count DIRECTLY from File Search response.
+ * Extract retrieval document count from File Search response.
  * This is the AUTHORITATIVE source for determining if documents were found.
  * 
- * IMPORTANT: This function is the ONLY signal used for scope/no-doc notice logic.
- * Grounding metadata is ONLY used for logging, NOT for determining notices.
+ * ARCHITECTURAL NOTE:
+ * In the Gemini API, File Search is a tool that runs as part of the model call.
+ * Results are returned in the response's groundingMetadata structure - there is
+ * NO separate File Search API call that returns results independently.
+ * 
+ * This function serves as the SINGLE SOURCE OF TRUTH for:
+ * 1. Determining if documents were found (for scope/no-doc notice logic)
+ * 2. Providing document names for classification
+ * 
+ * CRITICAL: All scope/no-doc notice logic MUST use the output of this function.
+ * The extractGroundingInfoForLogging function is for LOGGING ONLY and must NOT
+ * be used to drive user-visible behavior.
  */
 export function extractRetrievalDocCount(response: any): { count: number; documentNames: string[] } {
   const documentNames: string[] = [];

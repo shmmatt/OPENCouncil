@@ -498,30 +498,6 @@ HYPER-LOCAL FOCUS (IMPORTANT):
   }
 }
 
-function extractSourceDocumentNames(response: any): string[] {
-  const documentNames: string[] = [];
-
-  if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-    const chunks = response.candidates[0].groundingMetadata.groundingChunks;
-    const seenDocs = new Set<string>();
-
-    chunks.forEach((chunk: any) => {
-      const uri = chunk.retrievedContext?.uri;
-      if (uri && !seenDocs.has(uri)) {
-        documentNames.push(uri);
-        seenDocs.add(uri);
-      }
-      const title = chunk.web?.title;
-      if (title && !seenDocs.has(title)) {
-        documentNames.push(title);
-        seenDocs.add(title);
-      }
-    });
-  }
-
-  return documentNames;
-}
-
 /**
  * Patterns indicating statewide/RSA documents vs local municipal documents.
  */
