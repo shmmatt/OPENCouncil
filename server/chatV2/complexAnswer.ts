@@ -54,7 +54,6 @@ export async function generateComplexDraftAnswer(
   }
 
   const allSourceDocumentNames: string[] = [];
-  const allRetrievalDocNames: string[] = [];
 
   const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
@@ -156,12 +155,6 @@ export async function generateComplexDraftAnswer(
         durationMs,
       });
 
-      // Collect retrieval doc names from file search results (groundingInfo)
-      const retrievalDocNames = groundingInfo
-        .map(r => r.documentName)
-        .filter((name): name is string => !!name);
-      allRetrievalDocNames.push(...retrievalDocNames);
-
       if (snippetContent.length > 50) {
         retrievedSnippets.push({
           source: prompt.sourceLabel,
@@ -211,9 +204,6 @@ export async function generateComplexDraftAnswer(
   );
 
   const uniqueDocNames = Array.from(new Set(allSourceDocumentNames));
-  
-  // Use file search retrieval results as authoritative source for document count
-  const retrievalDocCount = new Set(allRetrievalDocNames).size;
 
   // Determine docSourceType based on actual retrieved documents
   const townPref = retrievalPlan.filters.townPreference;
@@ -228,17 +218,15 @@ export async function generateComplexDraftAnswer(
     docSourceType,
     docSourceTown,
     snippetCount: retrievedSnippets.length,
-    retrievalDocCount,
-    sourceDocNamesCount: uniqueDocNames.length,
+    sourceDocCount: uniqueDocNames.length,
     townPreference: townPref,
   });
 
-  // Build notice based on file search retrieval count (not grounding metadata)
-  // Rule: If file search returned docs, never show "No docs found"
+  // Build notice based on doc source type
   const scopeNotice = selectScopeNotice({ 
     docSourceType, 
     docSourceTown, 
-    sourceCount: retrievalDocCount,
+    sourceCount: uniqueDocNames.length,
   });
 
   return {

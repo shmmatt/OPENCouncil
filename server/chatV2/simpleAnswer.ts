@@ -135,18 +135,9 @@ export async function generateSimpleAnswer(
     const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
-    const groundingInfo = extractGroundingInfoForLogging(response);
-    
-    // Use file search results (groundingInfo) as the authoritative source for document count
-    // This is more reliable than extractSourceDocumentNames which can miss documents
-    const retrievalDocNames = groundingInfo
-      .map(r => r.documentName)
-      .filter((name): name is string => !!name);
-    const retrievalDocCount = new Set(retrievalDocNames).size;
-    const hasDocResults = retrievalDocCount > 0;
-    
-    // Keep sourceDocumentNames for citation mapping (uses same extraction but different format)
     const sourceDocumentNames = extractSourceDocumentNames(response);
+    const groundingInfo = extractGroundingInfoForLogging(response);
+    const hasDocResults = sourceDocumentNames.length > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
 
@@ -157,8 +148,7 @@ export async function generateSimpleAnswer(
       isRSAQuestion: isRSA,
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
-      retrievalDocCount,
-      sourceDocNamesCount: sourceDocumentNames.length,
+      sourceCount: sourceDocumentNames.length,
     });
 
     logLlmResponse({
@@ -242,18 +232,16 @@ export async function generateSimpleAnswer(
       stage: "simpleAnswer_docSource",
       docSourceType,
       docSourceTown,
-      retrievalDocCount,
-      sourceDocNamesCount: sourceDocumentNames.length,
+      sourceDocCount: sourceDocumentNames.length,
       userHintsTown: userHints?.town,
       sourceDocNames: sourceDocumentNames.slice(0, 5),
     });
 
-    // Build notice based on file search retrieval count (not grounding metadata)
-    // Rule: If file search returned docs, never show "No docs found"
+    // Build notice based on doc source type
     const scopeNotice = selectScopeNotice({ 
       docSourceType, 
       docSourceTown, 
-      sourceCount: retrievalDocCount,
+      sourceCount: sourceDocumentNames.length,
       isRSAQuestion: isRSA,
     });
     
@@ -262,7 +250,7 @@ export async function generateSimpleAnswer(
       rawAnswerText,
       docSourceType,
       docSourceTown,
-      retrievalDocCount,
+      sourceDocumentNames.length,
       logContext
     );
     
