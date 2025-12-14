@@ -34,23 +34,25 @@ function NoticeBadge({ notice }: { notice: ChatNotice }) {
   const icon = getSeverityIcon(notice.severity);
   const variant = getSeverityVariant(notice.severity);
 
-  const badge = (
-    <Badge 
-      variant={variant} 
-      className="cursor-help flex items-center gap-1 text-xs"
-      data-testid={`notice-badge-${notice.code}`}
-    >
-      {icon}
-      <span>{notice.label}</span>
-    </Badge>
-  );
-
   return (
     <>
       <div className="hidden md:block">
         <Tooltip>
           <TooltipTrigger asChild>
-            {badge}
+            <button 
+              type="button"
+              className="appearance-none bg-transparent border-none p-0 m-0"
+              data-testid={`notice-trigger-desktop-${notice.code}`}
+            >
+              <Badge 
+                variant={variant} 
+                className="cursor-help flex items-center gap-1 text-xs"
+                data-testid={`notice-badge-${notice.code}`}
+              >
+                {icon}
+                <span>{notice.label}</span>
+              </Badge>
+            </button>
           </TooltipTrigger>
           <TooltipContent 
             className="max-w-xs text-sm"
@@ -63,7 +65,19 @@ function NoticeBadge({ notice }: { notice: ChatNotice }) {
       <div className="md:hidden">
         <Popover>
           <PopoverTrigger asChild>
-            {badge}
+            <button 
+              type="button"
+              className="appearance-none bg-transparent border-none p-0 m-0"
+              data-testid={`notice-trigger-mobile-${notice.code}`}
+            >
+              <Badge 
+                variant={variant} 
+                className="cursor-pointer flex items-center gap-1 text-xs"
+              >
+                {icon}
+                <span>{notice.label}</span>
+              </Badge>
+            </button>
           </PopoverTrigger>
           <PopoverContent 
             className="max-w-xs text-sm"
