@@ -70,6 +70,8 @@ export interface ChatV2Request {
   };
 }
 
+import type { ChatNotice } from "@shared/chatNotices";
+
 export interface ChatV2Response {
   message: {
     id: string;
@@ -81,6 +83,7 @@ export interface ChatV2Response {
   answerMeta: FinalAnswerMeta;
   sources: SourceCitation[];
   suggestedFollowUps: string[];
+  notices?: ChatNotice[];
 }
 
 export interface ChatHistoryMessage {
