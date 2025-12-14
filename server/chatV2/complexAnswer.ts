@@ -8,6 +8,13 @@ import { chatConfig } from "./chatConfig";
 import { buildMergedRetrievalQuery } from "./pipelineUtils";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { 
+  selectScopeNotice, 
+  archiveNotConfiguredNotice, 
+  noDocsScopeNotice,
+  processingErrorNotice,
+} from "./scopeUtils";
+import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -25,6 +32,7 @@ interface ComplexDraftResult {
   sourceDocumentNames: string[];
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
+  notices: ChatNotice[];
 }
 
 export async function generateComplexDraftAnswer(
@@ -40,7 +48,8 @@ export async function generateComplexDraftAnswer(
         "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
-      docSourceTown: null
+      docSourceTown: null,
+      notices: [archiveNotConfiguredNotice()],
     };
   }
 
@@ -213,11 +222,19 @@ export async function generateComplexDraftAnswer(
     townPreference: townPref,
   });
 
+  // Build notice based on doc source type
+  const scopeNotice = selectScopeNotice({ 
+    docSourceType, 
+    docSourceTown, 
+    sourceCount: uniqueDocNames.length,
+  });
+
   return {
     draftAnswerText,
     sourceDocumentNames: uniqueDocNames,
     docSourceType,
-    docSourceTown
+    docSourceTown,
+    notices: [scopeNotice],
   };
 }
 

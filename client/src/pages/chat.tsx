@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
+import type { ChatNotice } from "@shared/chatNotices";
+import { MessageNotices } from "@/components/MessageNotices";
 
 // V2 response types
 interface SourceCitation {
@@ -39,6 +41,7 @@ interface V2Metadata {
   };
   sources: SourceCitation[];
   suggestedFollowUps: string[];
+  notices?: ChatNotice[];
 }
 
 function RecentMinutesUpdates({ 
@@ -324,6 +327,7 @@ function MessageBubble({
 
   const sources = v2Data?.sources || [];
   const suggestedFollowUps = v2Data?.suggestedFollowUps || [];
+  const notices = v2Data?.notices || [];
 
   return (
     <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -387,6 +391,11 @@ function MessageBubble({
               <p key={idx} className="pl-2">• {citation}</p>
             ))}
           </div>
+        )}
+        
+        {/* V2 Notices (scope, disclaimers, system messages) */}
+        {!isUser && notices.length > 0 && (
+          <MessageNotices notices={notices} />
         )}
         
         {/* Suggested follow-up questions */}

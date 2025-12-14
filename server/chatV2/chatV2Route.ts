@@ -18,7 +18,6 @@ import {
   buildTrimmedHistoryForAnswer,
   resolveTownPreference,
 } from "./pipelineUtils";
-import { selectScopeNote } from "./scopeUtils";
 import { isRSAQuestion } from "./router";
 import type {
   ChatV2Request,
@@ -30,6 +29,7 @@ import type {
   PipelineLogContext,
   DocSourceType,
 } from "./types";
+import type { ChatNotice } from "@shared/chatNotices";
 import { logWarn as logWarning } from "../utils/logger";
 
 export function registerChatV2Routes(app: Express): void {
@@ -255,6 +255,7 @@ export function registerChatV2Routes(app: Express): void {
       let limitationsNote: string | undefined;
       let suggestedFollowUps: string[] = [];
       let criticUsed = false;
+      let notices: ChatNotice[] = [];
 
       let townPreference: string | undefined;
       let docSourceType: DocSourceType = "none";
@@ -283,6 +284,7 @@ export function registerChatV2Routes(app: Express): void {
         townPreference = resolvedTown;
         docSourceType = simpleResult.docSourceType;
         docSourceTown = simpleResult.docSourceTown;
+        notices = simpleResult.notices;
 
         logDebug("simple_answer_result", {
           ...logCtx,
@@ -342,6 +344,7 @@ export function registerChatV2Routes(app: Express): void {
         sourceDocumentNames = draftResult.sourceDocumentNames;
         docSourceType = draftResult.docSourceType;
         docSourceTown = draftResult.docSourceTown;
+        notices = draftResult.notices;
 
         logDebug("complex_answer_draft", {
           ...logCtx,
@@ -367,6 +370,13 @@ export function registerChatV2Routes(app: Express): void {
           limitationsNote = critiqueResult.limitationsNote;
           suggestedFollowUps = critiqueResult.suggestedFollowUps;
           criticUsed = true;
+          // Merge critic notices with draft notices (avoiding duplicates by code)
+          const existingCodes = new Set(notices.map(n => n.code));
+          for (const notice of critiqueResult.notices) {
+            if (!existingCodes.has(notice.code)) {
+              notices.push(notice);
+            }
+          }
 
           logDebug("critic_result", {
             ...logCtx,
@@ -428,13 +438,6 @@ export function registerChatV2Routes(app: Express): void {
           });
         }
 
-        // Append scope note to complex answers using explicit docSourceType tracking
-        const scopeNote = selectScopeNote({
-          docSourceType,
-          docSourceTown,
-        });
-        answerText += scopeNote;
-
         // Development sanity check for scope/answer mismatches
         if (process.env.NODE_ENV === "development") {
           checkScopeAnswerMismatch(answerText, docSourceType, docSourceTown, logCtx);
@@ -455,6 +458,7 @@ export function registerChatV2Routes(app: Express): void {
         answerMeta,
         sources,
         suggestedFollowUps,
+        notices,
       };
 
       const assistantMessage = await storage.createChatMessage({

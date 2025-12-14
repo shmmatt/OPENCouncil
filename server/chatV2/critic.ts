@@ -3,6 +3,8 @@ import type { RouterOutput, RetrievalPlan, CriticScore, PipelineLogContext } fro
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { infoOnlyNotice } from "./scopeUtils";
+import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -58,6 +60,7 @@ interface CritiqueResult {
   criticScore: CriticScore;
   limitationsNote?: string;
   suggestedFollowUps: string[];
+  notices: ChatNotice[];
 }
 
 export async function critiqueAndImproveAnswer(
@@ -164,6 +167,7 @@ Respond with valid JSON only.`;
         suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps)
           ? parsed.suggestedFollowUps.slice(0, 3)
           : [],
+        notices: [infoOnlyNotice()],
       };
     } catch (parseError) {
       logLlmError({
@@ -235,10 +239,8 @@ function parseScore(value: any, defaultValue: number): number {
 }
 
 function getDefaultCritiqueResult(draftAnswerText: string): CritiqueResult {
-  const disclaimer = "\n\n*Note: This is informational only, not legal advice. For specific legal questions, please consult your municipal attorney or NHMA.*";
-
   return {
-    improvedAnswerText: draftAnswerText + (draftAnswerText.includes("not legal advice") ? "" : disclaimer),
+    improvedAnswerText: draftAnswerText,
     criticScore: {
       relevance: 0.7,
       completeness: 0.7,
@@ -247,5 +249,6 @@ function getDefaultCritiqueResult(draftAnswerText: string): CritiqueResult {
     },
     limitationsNote: "Unable to perform full quality review. Please verify information with official sources.",
     suggestedFollowUps: [],
+    notices: [infoOnlyNotice()],
   };
 }

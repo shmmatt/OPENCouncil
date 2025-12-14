@@ -8,13 +8,13 @@ import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { isRSAQuestion } from "./router";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { 
-  generateStatewideDisclaimer, 
-  generateNoDocsFoundMessage, 
-  selectScopeNote,
-  LOCAL_SCOPE_NOTE,
-  STATEWIDE_SCOPE_NOTE,
-  NO_DOC_SCOPE_NOTE
+  selectScopeNotice,
+  archiveNotConfiguredNotice,
+  statewideScopeNotice,
+  noDocsScopeNotice,
+  processingErrorNotice,
 } from "./scopeUtils";
+import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -45,6 +45,7 @@ interface SimpleAnswerResult {
   sourceDocumentNames: string[];
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
+  notices: ChatNotice[];
 }
 
 export async function generateSimpleAnswer(
@@ -60,7 +61,8 @@ export async function generateSimpleAnswer(
         "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
-      docSourceTown: null
+      docSourceTown: null,
+      notices: [archiveNotConfiguredNotice()],
     };
   }
 
@@ -185,10 +187,11 @@ export async function generateSimpleAnswer(
     if (!hasDocResults && isRSA) {
       const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
       return { 
-        answerText: rsaAnswer + generateStatewideDisclaimer(), 
+        answerText: rsaAnswer, 
         sourceDocumentNames: [],
         docSourceType: "statewide" as DocSourceType,
-        docSourceTown: null
+        docSourceTown: null,
+        notices: [statewideScopeNotice()],
       };
     }
 
@@ -196,17 +199,19 @@ export async function generateSimpleAnswer(
       if (isRSA) {
         const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
         return { 
-          answerText: rsaAnswer + generateStatewideDisclaimer(), 
+          answerText: rsaAnswer, 
           sourceDocumentNames: [],
           docSourceType: "statewide" as DocSourceType,
-          docSourceTown: null
+          docSourceTown: null,
+          notices: [statewideScopeNotice()],
         };
       }
       return {
-        answerText: generateNoDocsFoundMessage(false),
+        answerText: "No directly relevant material was found in the OpenCouncil archive for this question. The following general guidance may still be helpful, but local procedures can differ.",
         sourceDocumentNames: [],
         docSourceType: "none" as DocSourceType,
-        docSourceTown: null
+        docSourceTown: null,
+        notices: [noDocsScopeNotice()],
       };
     }
 
@@ -232,12 +237,17 @@ export async function generateSimpleAnswer(
       sourceDocNames: sourceDocumentNames.slice(0, 5),
     });
 
-    const scopeNote = selectScopeNote({ docSourceType, docSourceTown });
-    const finalAnswer = rawAnswerText + scopeNote;
+    // Build notice based on doc source type
+    const scopeNotice = selectScopeNotice({ 
+      docSourceType, 
+      docSourceTown, 
+      sourceCount: sourceDocumentNames.length,
+      isRSAQuestion: isRSA,
+    });
     
     // Run sanity check in development to catch scope mismatches
     checkSimpleAnswerScopeMismatch(
-      finalAnswer,
+      rawAnswerText,
       docSourceType,
       docSourceTown,
       sourceDocumentNames.length,
@@ -245,10 +255,11 @@ export async function generateSimpleAnswer(
     );
     
     return { 
-      answerText: finalAnswer, 
+      answerText: rawAnswerText, 
       sourceDocumentNames,
       docSourceType,
-      docSourceTown
+      docSourceTown,
+      notices: [scopeNotice],
     };
   } catch (error) {
     if (isQuotaError(error)) {
@@ -276,7 +287,8 @@ export async function generateSimpleAnswer(
         "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
       sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
-      docSourceTown: null
+      docSourceTown: null,
+      notices: [processingErrorNotice()],
     };
   }
 }
