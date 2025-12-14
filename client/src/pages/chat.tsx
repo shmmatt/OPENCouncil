@@ -355,44 +355,6 @@ function MessageBubble({
           )}
         </div>
         
-        {/* V2 Sources */}
-        {sources.length > 0 && (
-          <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 rounded-md p-2">
-            <p className="font-medium">Sources:</p>
-            {sources.map((source, idx) => (
-              <div key={source.id || idx} className="pl-2 flex items-start gap-1">
-                <span>•</span>
-                <span>
-                  {source.url ? (
-                    <a
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                      data-testid={`link-source-${source.id || idx}`}
-                    >
-                      {source.title}
-                    </a>
-                  ) : (
-                    source.title
-                  )}
-                  {source.town && <span className="text-muted-foreground/70"> ({source.town})</span>}
-                  {source.year && <span className="text-muted-foreground/70"> - {source.year}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {/* Legacy citations fallback */}
-        {legacyCitations && legacyCitations.length > 0 && (
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p className="font-medium">Sources:</p>
-            {legacyCitations.map((citation: string, idx: number) => (
-              <p key={idx} className="pl-2">• {citation}</p>
-            ))}
-          </div>
-        )}
         
         {/* V2 Notices (scope, disclaimers, system messages) */}
         {!isUser && notices.length > 0 && (
