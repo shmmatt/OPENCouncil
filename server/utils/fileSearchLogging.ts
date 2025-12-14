@@ -77,8 +77,66 @@ export function logFileSearchResponse(params: {
 }
 
 /**
- * Extract grounding metadata from a Gemini response for logging
- * Returns structured information about retrieved document chunks
+ * Extract retrieval document count DIRECTLY from File Search response.
+ * This is the AUTHORITATIVE source for determining if documents were found.
+ * 
+ * IMPORTANT: This function is the ONLY signal used for scope/no-doc notice logic.
+ * Grounding metadata is ONLY used for logging, NOT for determining notices.
+ */
+export function extractRetrievalDocCount(response: any): { count: number; documentNames: string[] } {
+  const documentNames: string[] = [];
+  const seenDocs = new Set<string>();
+  
+  try {
+    if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+      const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+      
+      for (const chunk of chunks) {
+        // Check retrievedContext.uri
+        const uri = chunk.retrievedContext?.uri;
+        if (uri && !seenDocs.has(uri)) {
+          documentNames.push(uri);
+          seenDocs.add(uri);
+        }
+        
+        // Check retrievedContext.title
+        const title = chunk.retrievedContext?.title;
+        if (title && !seenDocs.has(title)) {
+          documentNames.push(title);
+          seenDocs.add(title);
+        }
+        
+        // Check web.title (for web grounding fallback)
+        const webTitle = chunk.web?.title;
+        if (webTitle && !seenDocs.has(webTitle)) {
+          documentNames.push(webTitle);
+          seenDocs.add(webTitle);
+        }
+        
+        // Check web.uri
+        const webUri = chunk.web?.uri;
+        if (webUri && !seenDocs.has(webUri)) {
+          documentNames.push(webUri);
+          seenDocs.add(webUri);
+        }
+      }
+    }
+  } catch (e) {
+    // Silently fail - return empty if extraction fails
+  }
+  
+  return {
+    count: documentNames.length,
+    documentNames,
+  };
+}
+
+/**
+ * Extract grounding metadata from a Gemini response for logging ONLY.
+ * 
+ * WARNING: This data is for LOGGING PURPOSES ONLY.
+ * It MUST NOT be used to determine scope notices or "No docs found" logic.
+ * Use extractRetrievalDocCount() for that purpose.
  */
 export function extractGroundingInfoForLogging(response: any): FileSearchResult[] {
   const results: FileSearchResult[] = [];

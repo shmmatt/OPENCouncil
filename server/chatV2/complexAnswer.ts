@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
 import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
-import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
+import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { logDebug } from "../utils/logger";
 import { chatConfig } from "./chatConfig";
 import { buildMergedRetrievalQuery } from "./pipelineUtils";
@@ -53,7 +53,9 @@ export async function generateComplexDraftAnswer(
     };
   }
 
-  const allSourceDocumentNames: string[] = [];
+  // CRITICAL: Accumulate retrieval doc names from File Search responses
+  // This is the ONLY signal used for scope/no-doc notice logic
+  const allRetrievalDocNames: string[] = [];
 
   const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
@@ -162,8 +164,10 @@ export async function generateComplexDraftAnswer(
         });
       }
 
-      const docNames = extractSourceDocumentNames(response);
-      allSourceDocumentNames.push(...docNames);
+      // CRITICAL: Extract retrieval doc count from File Search response
+      // This is the ONLY signal used for notice logic
+      const retrievalResult = extractRetrievalDocCount(response);
+      allRetrievalDocNames.push(...retrievalResult.documentNames);
     } catch (error) {
       if (isQuotaError(error)) {
         const errMessage = error instanceof Error ? error.message : String(error);
@@ -187,12 +191,25 @@ export async function generateComplexDraftAnswer(
     }
   }
 
+  // Compute unique retrieval doc count from accumulated File Search results
+  const uniqueRetrievalDocNames = Array.from(new Set(allRetrievalDocNames));
+  const retrievalDocCount = uniqueRetrievalDocNames.length;
+
+  // Verification logging: prove that retrievalDocCount is derived from file_search_response
+  logDebug("scope_notice_inputs", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer",
+    retrievalDocCount,
+    note: "retrievalDocCount is derived ONLY from file_search_response",
+  });
+
   logDebug("complex_answer_synthesis_start", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "complexAnswer_synthesis",
     retrievedSnippetCount: retrievedSnippets.length,
-    totalSourceDocs: allSourceDocumentNames.length,
+    retrievalDocCount,
   });
 
   const draftAnswerText = await synthesizeDraftAnswer(
@@ -203,11 +220,9 @@ export async function generateComplexDraftAnswer(
     logContext
   );
 
-  const uniqueDocNames = Array.from(new Set(allSourceDocumentNames));
-
-  // Determine docSourceType based on actual retrieved documents
+  // Determine docSourceType based on actual retrieved documents (from File Search)
   const townPref = retrievalPlan.filters.townPreference;
-  const docClassification = classifyDocumentSources(uniqueDocNames, townPref);
+  const docClassification = classifyDocumentSources(uniqueRetrievalDocNames, townPref);
   const docSourceType: DocSourceType = docClassification.type;
   const docSourceTown: string | null = docClassification.town;
 
@@ -218,20 +233,21 @@ export async function generateComplexDraftAnswer(
     docSourceType,
     docSourceTown,
     snippetCount: retrievedSnippets.length,
-    sourceDocCount: uniqueDocNames.length,
+    retrievalDocCount,
     townPreference: townPref,
   });
 
   // Build notice based on doc source type
+  // CRITICAL: Use retrievalDocCount for sourceCount - this is derived ONLY from file_search_response
   const scopeNotice = selectScopeNotice({ 
     docSourceType, 
     docSourceTown, 
-    sourceCount: uniqueDocNames.length,
+    sourceCount: retrievalDocCount,
   });
 
   return {
     draftAnswerText,
-    sourceDocumentNames: uniqueDocNames,
+    sourceDocumentNames: uniqueRetrievalDocNames,
     docSourceType,
     docSourceTown,
     notices: [scopeNotice],

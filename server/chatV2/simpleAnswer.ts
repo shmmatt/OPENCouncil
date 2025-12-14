@@ -3,7 +3,7 @@ import { getOrCreateFileSearchStoreId } from "../gemini-store";
 import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, DocSourceType } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logDebug } from "../utils/logger";
-import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging } from "../utils/fileSearchLogging";
+import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { isRSAQuestion } from "./router";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
@@ -135,11 +135,28 @@ export async function generateSimpleAnswer(
     const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
-    const sourceDocumentNames = extractSourceDocumentNames(response);
+    // CRITICAL: Extract retrieval doc count from File Search response
+    // This is the ONLY signal used for scope/no-doc notice logic
+    const retrievalResult = extractRetrievalDocCount(response);
+    const retrievalDocCount = retrievalResult.count;
+    const retrievalDocNames = retrievalResult.documentNames;
+    
+    // Grounding info is for LOGGING ONLY - not for notice logic
     const groundingInfo = extractGroundingInfoForLogging(response);
-    const hasDocResults = sourceDocumentNames.length > 0;
+    
+    // Use retrievalDocCount for determining if docs were found
+    const hasDocResults = retrievalDocCount > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
+
+    // Verification logging: prove that retrievalDocCount is derived from file_search_response
+    logDebug("scope_notice_inputs", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "simpleAnswer",
+      retrievalDocCount,
+      note: "retrievalDocCount is derived ONLY from file_search_response",
+    });
 
     logDebug("simpleAnswer_scope_check", {
       requestId: logContext?.requestId,
@@ -148,7 +165,7 @@ export async function generateSimpleAnswer(
       isRSAQuestion: isRSA,
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
-      sourceCount: sourceDocumentNames.length,
+      retrievalDocCount,
     });
 
     logLlmResponse({
@@ -215,8 +232,8 @@ export async function generateSimpleAnswer(
       };
     }
 
-    // Determine docSourceType based on actual retrieved documents
-    const docClassification = classifyDocumentSources(sourceDocumentNames, userHints?.town);
+    // Determine docSourceType based on actual retrieved documents (from File Search)
+    const docClassification = classifyDocumentSources(retrievalDocNames, userHints?.town);
     let docSourceType: DocSourceType = docClassification.type;
     let docSourceTown: string | null = docClassification.town;
 
@@ -232,31 +249,33 @@ export async function generateSimpleAnswer(
       stage: "simpleAnswer_docSource",
       docSourceType,
       docSourceTown,
-      sourceDocCount: sourceDocumentNames.length,
+      retrievalDocCount,
       userHintsTown: userHints?.town,
-      sourceDocNames: sourceDocumentNames.slice(0, 5),
+      retrievalDocNames: retrievalDocNames.slice(0, 5),
     });
 
     // Build notice based on doc source type
+    // CRITICAL: Use retrievalDocCount for sourceCount - this is derived ONLY from file_search_response
     const scopeNotice = selectScopeNotice({ 
       docSourceType, 
       docSourceTown, 
-      sourceCount: sourceDocumentNames.length,
+      sourceCount: retrievalDocCount,
       isRSAQuestion: isRSA,
     });
     
     // Run sanity check in development to catch scope mismatches
+    // Use retrievalDocCount - derived from file_search_response
     checkSimpleAnswerScopeMismatch(
       rawAnswerText,
       docSourceType,
       docSourceTown,
-      sourceDocumentNames.length,
+      retrievalDocCount,
       logContext
     );
     
     return { 
       answerText: rawAnswerText, 
-      sourceDocumentNames,
+      sourceDocumentNames: retrievalDocNames,
       docSourceType,
       docSourceTown,
       notices: [scopeNotice],
