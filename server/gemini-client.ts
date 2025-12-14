@@ -20,7 +20,6 @@ export interface DocumentMetadata {
 interface UploadResult {
   fileId: string;
   storeId: string;
-  displayName: string;
 }
 
 function getMimeType(filename: string): string {
@@ -144,7 +143,6 @@ export async function uploadDocumentToFileStore(
     return {
       fileId,
       storeId: storeId,
-      displayName,
     };
   } catch (error) {
     console.error("Error uploading to File Search:", error);
@@ -181,116 +179,6 @@ interface AskQuestionOptions {
 interface AskQuestionResult {
   answer: string;
   citations: string[];
-}
-
-export interface GeminiDocument {
-  name: string; // e.g., "fileSearchStores/{store_id}/documents/{doc_id}"
-  displayName: string;
-  createTime?: string;
-  updateTime?: string;
-  customMetadata?: Array<{ key: string; stringValue?: string; numericValue?: number }>;
-}
-
-/**
- * List all documents in the Gemini File Search store.
- * Uses REST API directly to avoid SDK issues.
- */
-export async function listDocumentsInStore(): Promise<GeminiDocument[]> {
-  const storeId = await getOrCreateFileSearchStoreId();
-  
-  if (!storeId) {
-    console.log("[listDocumentsInStore] No store ID found");
-    return [];
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error("[listDocumentsInStore] No GEMINI_API_KEY set");
-    return [];
-  }
-
-  console.log(`[listDocumentsInStore] Listing documents in store: ${storeId}`);
-  
-  const allDocuments: GeminiDocument[] = [];
-  
-  try {
-    let pageToken: string | undefined;
-    let pageCount = 0;
-    
-    do {
-      pageCount++;
-      console.log(`[listDocumentsInStore] Fetching page ${pageCount}...`);
-      
-      // Use REST API directly
-      let url = `https://generativelanguage.googleapis.com/v1beta/${storeId}/documents?key=${apiKey}&pageSize=20`;
-      if (pageToken) {
-        url += `&pageToken=${encodeURIComponent(pageToken)}`;
-      }
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[listDocumentsInStore] API error ${response.status}: ${errorText}`);
-        break;
-      }
-      
-      const data = await response.json();
-      console.log(`[listDocumentsInStore] Page ${pageCount} response:`, JSON.stringify(data).slice(0, 500));
-      
-      const docs = data.documents || [];
-      for (const doc of docs) {
-        allDocuments.push({
-          name: doc.name,
-          displayName: doc.displayName || doc.display_name,
-          createTime: doc.createTime || doc.create_time,
-          updateTime: doc.updateTime || doc.update_time,
-          customMetadata: doc.customMetadata || doc.custom_metadata,
-        });
-      }
-      
-      pageToken = data.nextPageToken;
-    } while (pageToken && pageCount < 50); // Safety limit
-    
-    console.log(`[listDocumentsInStore] Found ${allDocuments.length} documents total`);
-    
-    // Log first few for debugging
-    if (allDocuments.length > 0) {
-      console.log("[listDocumentsInStore] Sample documents:");
-      allDocuments.slice(0, 3).forEach((doc, i) => {
-        console.log(`  [${i}] name: ${doc.name}`);
-        console.log(`      displayName: ${doc.displayName}`);
-      });
-    }
-    
-    return allDocuments;
-  } catch (error) {
-    console.error("[listDocumentsInStore] Error:", error);
-    return [];
-  }
-}
-
-/**
- * Build a mapping from Gemini document names (internal IDs) to display names.
- * This helps resolve citations when Gemini returns internal IDs in grounding metadata.
- */
-export async function buildDocumentIdMapping(): Promise<Map<string, GeminiDocument>> {
-  const documents = await listDocumentsInStore();
-  const mapping = new Map<string, GeminiDocument>();
-  
-  for (const doc of documents) {
-    // Map by full name
-    mapping.set(doc.name, doc);
-    
-    // Also map by just the document ID part (after last /)
-    const docIdPart = doc.name.split('/').pop();
-    if (docIdPart) {
-      mapping.set(docIdPart, doc);
-    }
-  }
-  
-  console.log(`[buildDocumentIdMapping] Built mapping with ${mapping.size} entries`);
-  return mapping;
 }
 
 export async function askQuestionWithFileSearch(

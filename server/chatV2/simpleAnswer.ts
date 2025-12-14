@@ -40,9 +40,9 @@ interface SimpleAnswerOptions {
   logContext?: PipelineLogContext;
 }
 
-export interface SimpleAnswerResult {
+interface SimpleAnswerResult {
   answerText: string;
-  groundingChunks: GroundingChunk[];
+  sourceDocumentNames: string[];
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
 }
@@ -58,7 +58,7 @@ export async function generateSimpleAnswer(
     return {
       answerText:
         "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
-      groundingChunks: [],
+      sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null
     };
@@ -133,12 +133,9 @@ export async function generateSimpleAnswer(
     const rawAnswerText = response.text || "";
     const durationMs = Date.now() - startTime;
 
-    // Extract grounding chunks with content snippets for citation resolution
-    const groundingChunks = extractGroundingChunksForCitations(response);
-    // Extract readable titles for classification (scope/town detection)
-    const sourceDocumentTitles = extractSourceDocumentTitles(response);
+    const sourceDocumentNames = extractSourceDocumentNames(response);
     const groundingInfo = extractGroundingInfoForLogging(response);
-    const hasDocResults = groundingChunks.length > 0;
+    const hasDocResults = sourceDocumentNames.length > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
 
@@ -149,7 +146,7 @@ export async function generateSimpleAnswer(
       isRSAQuestion: isRSA,
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
-      groundingChunkCount: groundingChunks.length,
+      sourceCount: sourceDocumentNames.length,
     });
 
     logLlmResponse({
@@ -189,7 +186,7 @@ export async function generateSimpleAnswer(
       const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
       return { 
         answerText: rsaAnswer + generateStatewideDisclaimer(), 
-        groundingChunks: [],
+        sourceDocumentNames: [],
         docSourceType: "statewide" as DocSourceType,
         docSourceTown: null
       };
@@ -200,22 +197,21 @@ export async function generateSimpleAnswer(
         const rsaAnswer = await generateRSAGeneralKnowledgeAnswer(userQuestion, logContext);
         return { 
           answerText: rsaAnswer + generateStatewideDisclaimer(), 
-          groundingChunks: [],
+          sourceDocumentNames: [],
           docSourceType: "statewide" as DocSourceType,
           docSourceTown: null
         };
       }
       return {
         answerText: generateNoDocsFoundMessage(false),
-        groundingChunks: [],
+        sourceDocumentNames: [],
         docSourceType: "none" as DocSourceType,
         docSourceTown: null
       };
     }
 
     // Determine docSourceType based on actual retrieved documents
-    // Use readable titles for classification (not gemini IDs)
-    const docClassification = classifyDocumentSources(sourceDocumentTitles, userHints?.town);
+    const docClassification = classifyDocumentSources(sourceDocumentNames, userHints?.town);
     let docSourceType: DocSourceType = docClassification.type;
     let docSourceTown: string | null = docClassification.town;
 
@@ -231,9 +227,9 @@ export async function generateSimpleAnswer(
       stage: "simpleAnswer_docSource",
       docSourceType,
       docSourceTown,
-      groundingChunkCount: groundingChunks.length,
+      sourceDocCount: sourceDocumentNames.length,
       userHintsTown: userHints?.town,
-      snippetPreviews: groundingChunks.slice(0, 3).map(c => c.snippet.slice(0, 50)),
+      sourceDocNames: sourceDocumentNames.slice(0, 5),
     });
 
     const scopeNote = selectScopeNote({ docSourceType, docSourceTown });
@@ -244,14 +240,13 @@ export async function generateSimpleAnswer(
       finalAnswer,
       docSourceType,
       docSourceTown,
-      groundingChunks.length,
+      sourceDocumentNames.length,
       logContext
     );
     
-    // Return grounding chunks for content-based citation resolution in sources.ts
     return { 
       answerText: finalAnswer, 
-      groundingChunks,
+      sourceDocumentNames,
       docSourceType,
       docSourceTown
     };
@@ -279,7 +274,7 @@ export async function generateSimpleAnswer(
     return {
       answerText:
         "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
-      groundingChunks: [],
+      sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null
     };
@@ -469,99 +464,56 @@ async function generateRSAGeneralKnowledgeAnswer(
   }
 }
 
-import type { ExtractedCitation } from "./types";
-
 /**
- * File Search document reference for citation resolution.
- * Uses the URI/documentName for direct DB lookup instead of content matching.
+ * Extract source document names from a Gemini response's grounding metadata.
+ * Now also captures chunk.retrievedContext.title which is often present in file_search results.
  */
-export interface FileSearchDocRef {
-  fileSearchDocumentName: string;  // The URI from retrievedContext (e.g., fileSearchStores/.../documents/...)
-  snippet: string;                  // First ~200 chars of content for scope classification
-}
-
-/**
- * Legacy GroundingChunk interface - kept for backwards compatibility.
- * @deprecated Use FileSearchDocRef instead
- */
-export interface GroundingChunk {
-  contentHash: string;
-  snippet: string;
-}
-
-/**
- * Extract File Search document names from Gemini response.
- * 
- * IMPORTANT: We use retrievedContext.uri (the fileSearchDocumentName) for source identity,
- * NOT retrievedContext.title (which is a content hash and unstable).
- * 
- * The uri field contains the canonical document path that matches our DB's
- * document_versions.fileSearchDocumentName column.
- */
-export function extractFileSearchDocRefs(response: any): FileSearchDocRef[] {
-  const docRefs: FileSearchDocRef[] = [];
-  const seenDocNames = new Set<string>();
+function extractSourceDocumentNames(response: any): string[] {
+  const documentNames: string[] = [];
 
   if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-    const rawChunks = response.candidates[0].groundingMetadata.groundingChunks;
+    const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+    const seenDocs = new Set<string>();
 
-    rawChunks.forEach((chunk: any) => {
-      const ctx = chunk.retrievedContext;
-      if (!ctx) return;
-
-      // Priority: Use URI (fileSearchDocumentName) if available, fall back to title (content hash)
-      const docName = ctx.uri || ctx.title;
-      if (!docName) return;
+    chunks.forEach((chunk: any) => {
+      // Check retrievedContext.uri
+      const uri = chunk.retrievedContext?.uri;
+      if (uri && !seenDocs.has(uri)) {
+        documentNames.push(uri);
+        seenDocs.add(uri);
+      }
       
-      // Deduplicate by document name
-      if (seenDocNames.has(docName)) return;
-      seenDocNames.add(docName);
+      // Check retrievedContext.title (important - was missing before!)
+      const retrievedTitle = chunk.retrievedContext?.title;
+      if (retrievedTitle && !seenDocs.has(retrievedTitle)) {
+        documentNames.push(retrievedTitle);
+        seenDocs.add(retrievedTitle);
+      }
       
-      // Extract snippet for scope classification
-      const snippet = ctx.text?.slice(0, 200) || "";
-      docRefs.push({ fileSearchDocumentName: docName, snippet });
+      // Check web.title (for web grounding fallback)
+      const webTitle = chunk.web?.title;
+      if (webTitle && !seenDocs.has(webTitle)) {
+        documentNames.push(webTitle);
+        seenDocs.add(webTitle);
+      }
+      
+      // Check web.uri as well
+      const webUri = chunk.web?.uri;
+      if (webUri && !seenDocs.has(webUri)) {
+        documentNames.push(webUri);
+        seenDocs.add(webUri);
+      }
     });
   }
 
-  // Debug log for verification
-  if (docRefs.length > 0) {
-    console.log("[sources_file_search_docnames]", {
-      count: docRefs.length,
-      sample: docRefs.slice(0, 3).map(d => d.fileSearchDocumentName.slice(0, 60)),
-    });
+  if (response.candidates?.[0]?.groundingMetadata?.retrievalMetadata?.googleSearchDynamicRetrievalScore !== undefined) {
+    const sources = response.candidates?.[0]?.groundingMetadata?.webSearchQueries;
+    if (sources) {
+      console.log("Web search was used:", sources);
+    }
   }
 
-  return docRefs;
-}
-
-/**
- * Extract readable document titles for classification (scope detection, town detection).
- * Returns content snippets from grounding metadata for document identification.
- */
-function extractSourceDocumentTitles(response: any): string[] {
-  const docRefs = extractFileSearchDocRefs(response);
-  return docRefs.map(d => d.snippet);
-}
-
-/**
- * Extract File Search document refs for citation resolution in sources.ts.
- * Uses URI-based identity (not content hashes) for reliable DB matching.
- */
-export function extractFileSearchDocRefsForCitations(response: any): FileSearchDocRef[] {
-  return extractFileSearchDocRefs(response);
-}
-
-/**
- * @deprecated Use extractFileSearchDocRefsForCitations instead
- * Legacy function kept for backwards compatibility with complex path.
- */
-export function extractGroundingChunksForCitations(response: any): GroundingChunk[] {
-  // Convert FileSearchDocRef to GroundingChunk format for backwards compatibility
-  const docRefs = extractFileSearchDocRefs(response);
-  return docRefs.map(d => ({
-    contentHash: d.fileSearchDocumentName,
-    snippet: d.snippet,
-  }));
+  return documentNames;
 }
 
 /**

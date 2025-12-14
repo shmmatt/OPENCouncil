@@ -84,12 +84,6 @@ export function extractGroundingInfoForLogging(response: any): FileSearchResult[
   const results: FileSearchResult[] = [];
   
   try {
-    // Debug log to understand the full grounding structure
-    if (response.candidates?.[0]?.groundingMetadata) {
-      console.log("[extractGroundingInfoForLogging] Full groundingMetadata:", 
-        JSON.stringify(response.candidates[0].groundingMetadata, null, 2));
-    }
-    
     if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
       const chunks = response.candidates[0].groundingMetadata.groundingChunks;
       

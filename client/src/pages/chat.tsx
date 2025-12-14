@@ -11,7 +11,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import ReactMarkdown from "react-markdown";
 import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
 
 // V2 response types
@@ -134,22 +133,24 @@ function RecentMinutesUpdates({
               <Sparkles className="w-3 h-3 mr-1" />
               Ask
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs px-2"
-              asChild
-              data-testid={`button-view-${item.documentVersionId}`}
-            >
-              <a 
-                href={`/api/files/${item.documentVersionId}`}
-                target="_blank"
-                rel="noopener noreferrer"
+            {item.fileSearchDocumentName && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2"
+                asChild
+                data-testid={`button-view-${item.documentVersionId}`}
               >
-                <ExternalLink className="w-3 h-3 mr-1" />
-                View
-              </a>
-            </Button>
+                <a 
+                  href={`/admin/documents?doc=${item.logicalDocumentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  View
+                </a>
+              </Button>
+            )}
           </div>
         </div>
       ))}
@@ -339,9 +340,7 @@ function MessageBubble({
           }`}
           data-testid={`message-${message.id}`}
         >
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
+          <p className="text-base whitespace-pre-wrap">{message.content}</p>
         </div>
         
         {/* V2 Sources */}

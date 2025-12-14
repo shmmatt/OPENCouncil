@@ -682,7 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Upload to Gemini File Search
-      const { fileId, storeId, displayName } = await uploadDocumentToFileStore(
+      const { fileId, storeId } = await uploadDocumentToFileStore(
         job.fileBlob.storagePath,
         job.fileBlob.originalFilename,
         finalMetadata
@@ -708,7 +708,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: finalMetadata.notes || null,
         fileSearchStoreName: storeId,
         fileSearchDocumentName: fileId,
-        geminiDisplayName: displayName,
         isCurrent: true,
         supersedesVersionId: previousVersion?.id || null,
         meetingDate: meetingDateObj,
@@ -1071,169 +1070,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
-
-  // File download endpoint (public - allows viewing source documents)
-  // Note: These are public municipal governance documents, intentionally accessible
-  app.get("/api/files/:documentVersionId", async (req, res) => {
-    try {
-      const { documentVersionId } = req.params;
-
-      // Get the document version
-      const docVersion = await storage.getDocumentVersionById(documentVersionId);
-      if (!docVersion) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-
-      // Get the file blob
-      const fileBlob = await storage.getFileBlobById(docVersion.fileBlobId);
-      if (!fileBlob) {
-        return res.status(404).json({ message: "File not found" });
-      }
-
-      // Get absolute path for sendFile
-      const absolutePath = path.resolve(fileBlob.storagePath);
-
-      // Check if file exists on disk
-      try {
-        await fs.access(absolutePath);
-      } catch {
-        return res.status(404).json({ message: "File no longer available" });
-      }
-
-      // Use res.sendFile for efficient streaming of large files
-      res.sendFile(absolutePath, {
-        headers: {
-          "Content-Type": fileBlob.mimeType,
-          "Content-Disposition": `inline; filename="${encodeURIComponent(fileBlob.originalFilename)}"`,
-        },
-      }, (err) => {
-        if (err) {
-          console.error("Error sending file:", err);
-          if (!res.headersSent) {
-            res.status(500).json({ message: "Failed to serve file" });
-          }
-        }
-      });
-    } catch (error) {
-      console.error("Error serving file:", error);
-      res.status(500).json({ message: "Failed to serve file" });
-    }
-  });
-
-  // Admin endpoint to list Gemini File Search documents and build ID mapping
-  app.get("/api/admin/gemini/documents", authenticateAdmin, async (req, res) => {
-    try {
-      const { listDocumentsInStore } = await import("./gemini-client");
-      const documents = await listDocumentsInStore();
-      res.json({ 
-        count: documents.length, 
-        documents: documents.slice(0, 100), // Limit response for viewing
-        total: documents.length
-      });
-    } catch (error) {
-      console.error("Error listing Gemini documents:", error);
-      res.status(500).json({ message: "Failed to list Gemini documents" });
-    }
-  });
-
-  // Admin endpoint to backfill geminiInternalId from Gemini File Search documents
-  app.post("/api/admin/gemini/backfill-ids", authenticateAdmin, async (req, res) => {
-    try {
-      const { listDocumentsInStore } = await import("./gemini-client");
-      const geminiDocs = await listDocumentsInStore();
-      
-      if (geminiDocs.length === 0) {
-        return res.json({ message: "No Gemini documents found to map", matched: 0, total: 0 });
-      }
-
-      // Build multiple mappings for different matching strategies
-      const fullNameToInternalId = new Map<string, string>();  // Full Gemini path -> internal ID
-      const displayNameToInternalId = new Map<string, string>(); // displayName -> internal ID
-      const docIdToDisplayName = new Map<string, string>();      // internal ID -> displayName
-      
-      for (const doc of geminiDocs) {
-        const internalId = doc.name.split('/').pop() || doc.name;
-        
-        // Map by full name (fileSearchDocumentName in our DB)
-        fullNameToInternalId.set(doc.name, internalId);
-        
-        // Map by displayName
-        if (doc.displayName) {
-          displayNameToInternalId.set(doc.displayName, internalId);
-          docIdToDisplayName.set(internalId, doc.displayName);
-        }
-      }
-
-      const { drizzle } = await import("drizzle-orm/neon-serverless");
-      const { Pool, neonConfig } = await import("@neondatabase/serverless");
-      const ws = await import("ws");
-      const schema = await import("@shared/schema");
-      const { eq } = await import("drizzle-orm");
-
-      neonConfig.webSocketConstructor = ws.default;
-      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-      const db = drizzle({ client: pool, schema });
-
-      const versions = await db.select().from(schema.documentVersions);
-      
-      let matched = 0;
-      let updated = 0;
-      const matchedDetails: Array<{ id: string; matchedBy: string; internalId: string }> = [];
-
-      for (const version of versions) {
-        let internalId: string | undefined;
-        let matchedBy: string = "";
-
-        // Strategy 1: Match by fileSearchDocumentName (full Gemini path)
-        if (version.fileSearchDocumentName && fullNameToInternalId.has(version.fileSearchDocumentName)) {
-          internalId = fullNameToInternalId.get(version.fileSearchDocumentName);
-          matchedBy = "fileSearchDocumentName";
-        }
-        
-        // Strategy 2: Match by geminiDisplayName
-        if (!internalId && version.geminiDisplayName && displayNameToInternalId.has(version.geminiDisplayName)) {
-          internalId = displayNameToInternalId.get(version.geminiDisplayName);
-          matchedBy = "geminiDisplayName";
-        }
-        
-        // Strategy 3: Extract ID from fileSearchDocumentName and match directly
-        if (!internalId && version.fileSearchDocumentName) {
-          const extractedId = version.fileSearchDocumentName.split('/').pop();
-          if (extractedId && docIdToDisplayName.has(extractedId)) {
-            internalId = extractedId;
-            matchedBy = "extractedFromPath";
-          }
-        }
-
-        if (internalId) {
-          matched++;
-          matchedDetails.push({ id: version.id, matchedBy, internalId });
-
-          // Update if not already set
-          if (version.geminiInternalId !== internalId) {
-            await db.update(schema.documentVersions)
-              .set({ geminiInternalId: internalId })
-              .where(eq(schema.documentVersions.id, version.id));
-            updated++;
-          }
-        }
-      }
-
-      await pool.end();
-
-      res.json({ 
-        message: "Backfill complete",
-        geminiDocsCount: geminiDocs.length,
-        versionsCount: versions.length,
-        matched,
-        updated,
-        sampleMatches: matchedDetails.slice(0, 10)
-      });
-    } catch (error) {
-      console.error("Error backfilling Gemini IDs:", error);
-      res.status(500).json({ message: "Failed to backfill Gemini IDs", error: String(error) });
-    }
-  });
 
   // Register v2 Chat Pipeline Routes
   registerChatV2Routes(app);
