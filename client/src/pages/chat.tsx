@@ -412,6 +412,7 @@ function TypingIndicator() {
 export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: sessions } = useQuery<ChatSession[]>({
@@ -440,9 +441,13 @@ export default function Chat() {
       return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
     },
     onSuccess: () => {
+      setPendingMessage(null);
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+    },
+    onError: () => {
+      setPendingMessage(null);
     },
   });
 
@@ -468,7 +473,9 @@ export default function Chat() {
     e.preventDefault();
     if (!inputValue.trim() || !activeSessionId) return;
 
-    sendMessageMutation.mutate(inputValue);
+    const messageContent = inputValue.trim();
+    setPendingMessage(messageContent);
+    sendMessageMutation.mutate(messageContent);
     setInputValue("");
   };
 
@@ -550,6 +557,21 @@ export default function Chat() {
                     onFollowUpClick={handleFollowUpClick}
                   />
                 ))}
+                {pendingMessage && (
+                  <div className="flex gap-4 justify-end">
+                    <div className="flex flex-col gap-2 max-w-3xl items-end">
+                      <div className="rounded-lg px-4 py-3 bg-primary text-primary-foreground">
+                        <p className="text-base whitespace-pre-wrap">{pendingMessage}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground px-1">
+                        {new Date().toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
                 {sendMessageMutation.isPending && <TypingIndicator />}
                 <div ref={messagesEndRef} />
               </>
