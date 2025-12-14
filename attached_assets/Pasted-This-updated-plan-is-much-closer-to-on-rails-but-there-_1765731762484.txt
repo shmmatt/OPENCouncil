@@ -1,0 +1,83 @@
+This updated plan is much closer to “on-rails”, but there’s one key thing to sanity-check:
+
+✅ Good
+
+The signal hierarchy is correct.
+
+The deterministic rule (“if retrieval > 0, never show NO_DOCS”) is exactly right.
+
+
+⚠️ Potential wrong assumption
+
+> “Gemini returns file search results somewhere else in the LLM response (toolInvocations / function call outputs), separate from grounding metadata.”
+
+
+
+In your implementation, you already have retrieval results outside the Gemini response, because you’re logging:
+
+file_search_request (you trigger it)
+
+file_search_response with resultCount and results[].documentName
+
+
+…and in the same log you posted, we see:
+
+"file_search_response": { "resultCount": 5, "results":[{"documentName":"22a6..."}, ...] }
+
+So you do not need to reverse-engineer where Gemini “hides” tool results in its response object. That’s SDK/response-shape chasing and is exactly how agents burn time and add scab code.
+
+
+---
+
+What to tell the agent (tight correction)
+
+“Do not hunt for file search results inside the Gemini response. We already have the file search results from our own file search call. Use those.”
+
+Concretely:
+
+1. In simpleAnswer.ts (and complexAnswer.ts) compute:
+
+
+
+retrievalDocCount = unique(fileSearchResults.map(r => r.documentName)).length
+
+hasDocResults = retrievalDocCount > 0
+
+
+2. Pass retrievalDocCount into selectScopeNotice(...).
+
+
+3. Delete/ignore sourceDocumentNames.length for notice selection. Keep grounding extraction only for logs/debug.
+
+
+
+
+---
+
+Why this matters
+
+Less code, fewer regressions.
+
+You avoid coupling to Gemini response internals that can change.
+
+Your own retrieval pipeline is the authoritative truth and is already structured and logged.
+
+
+
+---
+
+One more thing: “used docs” vs “retrieved docs”
+
+You might later want badges like “Docs retrieved” vs “Docs cited,” but for now your requirement is:
+
+don’t show NO_DOCS if retrieval returned docs.
+
+
+So use retrieval count for scope/no-doc badges, period.
+
+
+---
+
+Bottom line
+
+Yes, updated plan is correct in principle — but redirect it to use the existing file_search_response you already log, not some new extractFileSearchResults() from Gemini’s raw response. That’s the clean, minimal fix.

@@ -1,0 +1,60 @@
+Parts of it make sense (it correctly spotted a mismatch between the signal used for the badge and the signal that makes the UI look like it used docs), but the fix it proposes is not the one you want.
+
+What makes sense in the agent’s plan
+
+✅ It’s plausible that grounding metadata is empty/incomplete even when the model produces an answer that looks document-based.
+
+✅ It correctly suspects the badge logic is using a different “sourceCount” than whatever is being shown inline / in the UI.
+
+
+What does not make sense (and will create more “jank”)
+
+❌ Parsing the answer text to infer which documents were used is not reliable.
+
+The model can mention titles without using them (or hallucinate titles).
+
+The model can use docs without naming them.
+
+You’ll create a new brittle matching subsystem that will be hard to reason about and will regress.
+
+
+❌ “Suppress the ‘no docs’ badge if the answer contains document-like references” is a band-aid that hides real cases where retrieval returned zero and the model just name-dropped.
+
+
+The right mental model
+
+There are three different signals:
+
+1. Retrieval truth (File Search returned docs): file_search_response.resultCount / results[].documentName
+
+
+2. Grounding truth (Gemini attribution): groundingMetadata / retrievedContext
+
+
+3. Prose references (model text): whatever it says inline
+
+
+
+For “No docs found” and scope badges, you should trust (1), not (2) or (3).
+
+So: does the plan make sense?
+
+Diagnosis: yes-ish.
+
+Proposed fix: no — it’s the wrong direction.
+
+
+What you should tell the agent instead
+
+Implement this rule:
+
+If File Search resultCount > 0 (or unique documentName > 0), never show “No docs found.”
+
+Only show “No docs found” when File Search returns 0.
+
+Grounding metadata can be logged, but must not drive scope/no-doc notices.
+
+
+That gives you a clean, deterministic badge system without heuristic parsing.
+
+If you paste the current selectScopeNotice() signature and where it’s called, I can give you a tight instruction to wire it to file_search_response with minimal diff.
