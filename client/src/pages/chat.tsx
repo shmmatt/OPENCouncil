@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import ReactMarkdown from "react-markdown";
 import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
 
 // V2 response types
@@ -340,7 +341,13 @@ function MessageBubble({
           }`}
           data-testid={`message-${message.id}`}
         >
-          <p className="text-base whitespace-pre-wrap">{message.content}</p>
+          {isUser ? (
+            <p className="text-base whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:my-3 prose-headings:font-semibold">
+              <ReactMarkdown>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
         
         {/* V2 Sources */}
