@@ -12,6 +12,7 @@ import { UserStatusBar } from "@/components/user-status-bar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
 import type { ChatNotice } from "@shared/chatNotices";
 import { MessageNotices } from "@/components/MessageNotices";
@@ -348,8 +349,8 @@ function MessageBubble({
           {isUser ? (
             <p className="text-base whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:my-3 prose-headings:font-semibold">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
+            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:my-3 prose-headings:font-semibold prose-table:w-full prose-table:border-collapse prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
             </div>
           )}
         </div>
