@@ -832,7 +832,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/chat/sessions", async (req, res) => {
     try {
-      const sessions = await storage.getChatSessions();
+      const actor = req.actor;
+      const sessions = await storage.getChatSessions(actor ? {
+        type: actor.actorType === 'user' ? 'user' : 'anon',
+        userId: actor.userId,
+        anonId: actor.anonId,
+      } : undefined);
       res.json(sessions);
     } catch (error) {
       console.error("Error fetching sessions:", error);
@@ -843,8 +848,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/chat/sessions", async (req, res) => {
     try {
       const { title } = req.body;
+      const actor = req.actor;
+      
+      if (!actor || (!actor.userId && !actor.anonId)) {
+        return res.status(401).json({ message: "Authentication required to create chat sessions" });
+      }
+      
       const session = await storage.createChatSession({
         title: title || "New conversation",
+        userId: actor.actorType === 'user' ? actor.userId : undefined,
+        anonId: actor.anonId,
       });
       res.json(session);
     } catch (error) {
