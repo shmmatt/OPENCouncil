@@ -96,15 +96,17 @@ router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
 });
 
 router.get("/verify", async (req: IdentityRequest, res: Response) => {
+  const baseUrl = process.env.APP_BASE_URL || "";
+  
   try {
     const token = req.query.token as string;
     if (!token) {
-      return res.status(400).json({ error: "No token provided" });
+      return res.redirect(`${baseUrl}/?error=no_token`);
     }
     
     const payload = verifyMagicLinkToken(token);
     if (!payload) {
-      return res.status(400).json({ error: "Invalid or expired token" });
+      return res.redirect(`${baseUrl}/?error=invalid_or_expired_token`);
     }
     
     const { email } = payload;
@@ -131,7 +133,7 @@ router.get("/verify", async (req: IdentityRequest, res: Response) => {
     }
     
     if (!user) {
-      return res.status(500).json({ error: "Failed to create or retrieve user" });
+      return res.redirect(`${baseUrl}/?error=user_creation_failed`);
     }
     
     const sessionToken = generateUserSessionToken(user.id, email);
@@ -143,17 +145,11 @@ router.get("/verify", async (req: IdentityRequest, res: Response) => {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
     
-    res.json({ 
-      success: true,
-      user: {
-        id: user.id,
-        role: user.role,
-        isPaying: user.isPaying,
-      },
-    });
+    res.redirect(`${baseUrl}/`);
   } catch (error) {
     console.error("Error verifying magic link:", error);
-    res.status(500).json({ error: "Failed to verify magic link" });
+    const errorBaseUrl = process.env.APP_BASE_URL || "";
+    res.redirect(`${errorBaseUrl}/?error=auth_failed`);
   }
 });
 
