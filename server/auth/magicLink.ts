@@ -1,14 +1,54 @@
 import { Router, Response } from "express";
 import { z } from "zod";
+import sgMail from "@sendgrid/mail";
 import { storage } from "../storage";
 import { generateMagicLinkToken, verifyMagicLinkToken, generateUserSessionToken } from "./tokens";
 import type { IdentityRequest } from "./types";
 
 const router = Router();
 
+// Initialize SendGrid
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
 const sendMagicLinkSchema = z.object({
   email: z.string().email(),
 });
+
+async function sendMagicLinkEmail(to: string, magicLink: string): Promise<boolean> {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.error("[MagicLink] SENDGRID_API_KEY not configured");
+    return false;
+  }
+
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "noreply@example.com";
+  
+  const msg = {
+    to,
+    from: fromEmail,
+    subject: "Your Sign-In Link",
+    text: `Click this link to sign in: ${magicLink}\n\nThis link expires in 15 minutes.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #333;">Sign In to Your Account</h2>
+        <p style="color: #666; font-size: 16px;">Click the button below to sign in:</p>
+        <a href="${magicLink}" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">Sign In</a>
+        <p style="color: #999; font-size: 14px;">Or copy and paste this link: ${magicLink}</p>
+        <p style="color: #999; font-size: 12px;">This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>
+      </div>
+    `,
+  };
+
+  try {
+    await sgMail.send(msg);
+    console.log(`[MagicLink] Email sent to ${to}`);
+    return true;
+  } catch (error: any) {
+    console.error("[MagicLink] Failed to send email:", error?.response?.body || error);
+    return false;
+  }
+}
 
 router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
   try {
@@ -19,11 +59,15 @@ router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
     
     console.log(`[MagicLink] Generated for ${email}: ${magicLink}`);
     
+    const emailSent = await sendMagicLinkEmail(email, magicLink);
+    
+    if (!emailSent) {
+      return res.status(500).json({ error: "Failed to send magic link email. Please try again." });
+    }
+    
     res.json({ 
       success: true, 
-      message: "Magic link generated",
-      // In dev mode, return the link directly for testing
-      ...(process.env.NODE_ENV !== "production" && { magicLink }),
+      message: "Check your email for the sign-in link",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
