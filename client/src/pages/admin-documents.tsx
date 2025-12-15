@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch } from "lucide-react";
+import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3 } from "lucide-react";
 import type { Document } from "@shared/schema";
 
 const CATEGORY_OPTIONS = [
@@ -206,6 +206,12 @@ export default function AdminDocuments() {
               <Link href="/admin/bulk-upload">
                 <FolderUp className="w-4 h-4 mr-2" />
                 Bulk Upload
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-usage">
+              <Link href="/admin/usage">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">

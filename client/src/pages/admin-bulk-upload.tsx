@@ -16,7 +16,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Loader2, FileText, ArrowLeft, CheckCircle2, XCircle, FolderUp } from "lucide-react";
+import { Upload, Loader2, FileText, ArrowLeft, CheckCircle2, XCircle, FolderUp, BarChart3 } from "lucide-react";
 
 const CATEGORY_OPTIONS = [
   { label: "Budget", value: "budget" },
@@ -231,12 +231,20 @@ export default function AdminBulkUpload() {
               <p className="text-sm text-muted-foreground">Upload multiple documents at once</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" asChild data-testid="link-back-documents">
-            <Link href="/admin/documents">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Documents
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild data-testid="link-usage">
+              <Link href="/admin/usage">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild data-testid="link-back-documents">
+              <Link href="/admin/documents">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Documents
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 

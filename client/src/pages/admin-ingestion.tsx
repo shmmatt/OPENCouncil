@@ -42,7 +42,8 @@ import {
   Trash2,
   CheckSquare,
   Link2,
-  Plus
+  Plus,
+  BarChart3
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 import { NH_TOWNS } from "@shared/schema";
@@ -716,6 +717,12 @@ export default function AdminIngestion() {
               <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
                 v2 Documents
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-usage">
+              <Link href="/admin/usage">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild data-testid="link-back-documents">
