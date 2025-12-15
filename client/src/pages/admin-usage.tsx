@@ -186,19 +186,35 @@ function EngagementSection({ data }: { data: EngagementMetrics | undefined }) {
             <CardTitle className="text-sm font-medium">Sessions Per Day</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-1 h-20">
-              {data.sessionsPerDay.map((day, i) => {
-                const max = Math.max(...data.sessionsPerDay.map(d => d.count), 1);
-                const height = (day.count / max) * 100;
-                return (
-                  <div 
-                    key={i} 
-                    className="flex-1 bg-primary rounded-t"
-                    style={{ height: `${Math.max(height, 4)}%` }}
-                    title={`${day.date}: ${day.count} sessions`}
-                  />
-                );
-              })}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end gap-1 h-20">
+                {data.sessionsPerDay.map((day, i) => {
+                  const max = Math.max(...data.sessionsPerDay.map(d => d.count), 1);
+                  const height = (day.count / max) * 100;
+                  return (
+                    <div 
+                      key={i} 
+                      className="flex-1 flex flex-col items-center"
+                    >
+                      <div 
+                        className="w-full bg-primary rounded-t"
+                        style={{ height: `${Math.max(height, 4)}%` }}
+                        title={`${day.date}: ${day.count} sessions`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1">
+                {data.sessionsPerDay.map((day, i) => {
+                  const dateStr = day.date.split('-').slice(1).join('/');
+                  return (
+                    <div key={i} className="flex-1 text-center">
+                      <span className="text-xs text-muted-foreground">{dateStr}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -461,19 +477,35 @@ function CostSection({ data }: { data: CostMetrics | undefined }) {
             <CardTitle className="text-sm font-medium">Daily Cost Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-1 h-20">
-              {data.costPerDay.map((day, i) => {
-                const max = Math.max(...data.costPerDay.map(d => d.cost), 0.01);
-                const height = (day.cost / max) * 100;
-                return (
-                  <div 
-                    key={i} 
-                    className="flex-1 bg-primary rounded-t"
-                    style={{ height: `${Math.max(height, 4)}%` }}
-                    title={`${day.date}: $${day.cost.toFixed(4)}`}
-                  />
-                );
-              })}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end gap-1 h-20">
+                {data.costPerDay.map((day, i) => {
+                  const max = Math.max(...data.costPerDay.map(d => d.cost), 0.01);
+                  const height = (day.cost / max) * 100;
+                  return (
+                    <div 
+                      key={i} 
+                      className="flex-1 flex flex-col items-center"
+                    >
+                      <div 
+                        className="w-full bg-primary rounded-t"
+                        style={{ height: `${Math.max(height, 4)}%` }}
+                        title={`${day.date}: $${day.cost.toFixed(4)}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1">
+                {data.costPerDay.map((day, i) => {
+                  const dateStr = day.date.split('-').slice(1).join('/');
+                  return (
+                    <div key={i} className="flex-1 text-center">
+                      <span className="text-xs text-muted-foreground">{dateStr}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
