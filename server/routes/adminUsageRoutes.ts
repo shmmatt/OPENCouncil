@@ -1,6 +1,5 @@
-import type { Express } from "express";
-import { requireRole } from "../auth/middleware";
-import type { IdentityRequest } from "../auth/types";
+import type { Express, Request, Response } from "express";
+import { authenticateAdmin } from "../middleware/auth";
 import {
   getOverviewMetrics,
   getEngagementMetrics,
@@ -16,8 +15,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Overview metrics (At-a-Glance Health)
   app.get(
     "/api/admin/usage/overview",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const metrics = await getOverviewMetrics();
         res.json(metrics);
@@ -31,8 +30,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Engagement metrics
   app.get(
     "/api/admin/usage/engagement",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getEngagementMetrics(days);
@@ -47,8 +46,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Town Meeting template metrics (placeholder-ready)
   app.get(
     "/api/admin/usage/town-meeting",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getTownMeetingMetrics(days);
@@ -63,8 +62,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Recent minutes engagement metrics
   app.get(
     "/api/admin/usage/minutes",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getMinutesEngagementMetrics(days);
@@ -79,8 +78,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Topic & issue demand metrics
   app.get(
     "/api/admin/usage/topics",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getTopicMetrics(days);
@@ -95,8 +94,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Trust & risk signals
   app.get(
     "/api/admin/usage/trust",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getTrustMetrics(days);
@@ -111,8 +110,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Cost & efficiency metrics
   app.get(
     "/api/admin/usage/costs",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 7;
         const metrics = await getCostMetrics(days);
@@ -127,8 +126,8 @@ export function registerAdminUsageRoutes(app: Express) {
   // Alerts panel
   app.get(
     "/api/admin/usage/alerts",
-    requireRole("admin", "municipal_admin"),
-    async (req: IdentityRequest, res) => {
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
       try {
         const days = parseInt(req.query.days as string) || 1;
         const alerts = await getAlerts(days);
