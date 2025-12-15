@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -17,6 +17,7 @@ import remarkGfm from "remark-gfm";
 import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
 import type { ChatNotice } from "@shared/chatNotices";
 import { MessageNotices } from "@/components/MessageNotices";
+import { useToast } from "@/hooks/use-toast";
 
 // V2 response types
 interface SourceCitation {
@@ -419,7 +420,32 @@ export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [sharedLinkQuestion, setSharedLinkQuestion] = useState<string | null>(null);
+  const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sharedLinkProcessedRef = useRef(false);
+  const { toast } = useToast();
+
+  // Detect ?q= URL parameter for shareable links
+  useEffect(() => {
+    if (sharedLinkProcessedRef.current) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const questionParam = urlParams.get("q");
+    
+    if (questionParam) {
+      const decodedQuestion = questionParam;
+      setSharedLinkQuestion(decodedQuestion);
+      setIsProcessingSharedLink(true);
+      sharedLinkProcessedRef.current = true;
+      
+      // Remove only the 'q' parameter, preserve other params (like utm_source, etc.)
+      urlParams.delete("q");
+      const remainingParams = urlParams.toString();
+      const newUrl = window.location.pathname + (remainingParams ? `?${remainingParams}` : "");
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
 
   const { data: sessions } = useQuery<ChatSession[]>({
     queryKey: ["/api/chat/sessions"],
@@ -440,6 +466,55 @@ export default function Chat() {
       setActiveSessionId(newSession.id);
     },
   });
+
+  // Send message to a specific session (used for shared links)
+  const sendToSession = useCallback(async (sessionId: string, content: string) => {
+    setPendingMessage(content);
+    try {
+      await apiRequest("POST", `/api/chat/v2/sessions/${sessionId}/messages`, { content });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+    } finally {
+      setPendingMessage(null);
+      setIsProcessingSharedLink(false);
+    }
+  }, []);
+
+  // Auto-create session and send message when shared link question is detected
+  useEffect(() => {
+    if (!sharedLinkQuestion || !isProcessingSharedLink) return;
+    
+    const processSharedLink = async () => {
+      const questionToSend = sharedLinkQuestion;
+      try {
+        // Create a new session for the shared link
+        const res = await apiRequest("POST", "/api/chat/sessions", { 
+          title: questionToSend.slice(0, 50) + (questionToSend.length > 50 ? "..." : "")
+        });
+        const newSession: ChatSession = await res.json();
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+        setActiveSessionId(newSession.id);
+        
+        // Send the question
+        await sendToSession(newSession.id, questionToSend);
+        setSharedLinkQuestion(null);
+      } catch (error) {
+        console.error("Failed to process shared link:", error);
+        setIsProcessingSharedLink(false);
+        setSharedLinkQuestion(null);
+        // Put the question in the input field so user can retry
+        setInputValue(questionToSend);
+        toast({
+          title: "Could not process shared link",
+          description: "Your question has been added to the input field. Please try sending it manually.",
+          variant: "destructive",
+        });
+      }
+    };
+    
+    processSharedLink();
+  }, [sharedLinkQuestion, isProcessingSharedLink, sendToSession, toast]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -535,7 +610,20 @@ export default function Chat() {
 
         <ScrollArea className="flex-1 p-4">
           <div className="max-w-4xl mx-auto space-y-6">
-            {!activeSessionId ? (
+            {isProcessingSharedLink && sharedLinkQuestion ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Link2 className="w-8 h-8 text-primary animate-pulse" />
+                </div>
+                <h2 className="text-xl font-semibold mb-2" data-testid="text-shared-link-loading">Processing Your Question</h2>
+                <p className="text-muted-foreground mb-4 max-w-md">
+                  Starting a new conversation from your shared link...
+                </p>
+                <div className="bg-card border border-card-border rounded-lg p-4 max-w-md">
+                  <p className="text-sm italic text-muted-foreground">"{sharedLinkQuestion}"</p>
+                </div>
+              </div>
+            ) : !activeSessionId ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <MessageCircle className="w-16 h-16 text-muted-foreground mb-4" />
                 <h2 className="text-xl font-semibold mb-2">Start a New Conversation</h2>
