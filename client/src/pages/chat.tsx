@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -251,16 +252,21 @@ function ChatSidebar({
         </Select>
       </div>
 
-      {/* Recent minutes updates */}
-      <div className="p-3 border-b border-sidebar-border">
-        <h3 className="text-xs font-medium text-muted-foreground mb-2">
-          Recent Minutes Updates
-        </h3>
-        <RecentMinutesUpdates 
-          selectedTown={selectedTown}
-          onAskAboutMeeting={onInsertPrompt}
-        />
-      </div>
+      {/* Recent minutes updates - collapsible */}
+      <Collapsible defaultOpen={false} className="border-b border-sidebar-border">
+        <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover-elevate" data-testid="button-toggle-minutes">
+          <h3 className="text-xs font-medium text-muted-foreground">
+            Recent Minutes Updates
+          </h3>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="px-3 pb-3">
+          <RecentMinutesUpdates 
+            selectedTown={selectedTown}
+            onAskAboutMeeting={onInsertPrompt}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       <Separator />
 
