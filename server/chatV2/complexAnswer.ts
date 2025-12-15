@@ -9,9 +9,7 @@ import { buildMergedRetrievalQuery } from "./pipelineUtils";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { 
-  selectScopeNotice, 
   archiveNotConfiguredNotice, 
-  noDocsScopeNotice,
   processingErrorNotice,
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
@@ -237,20 +235,15 @@ export async function generateComplexDraftAnswer(
     townPreference: townPref,
   });
 
-  // Build notice based on doc source type
-  // CRITICAL: Use retrievalDocCount for sourceCount - this is derived ONLY from file_search_response
-  const scopeNotice = selectScopeNotice({ 
-    docSourceType, 
-    docSourceTown, 
-    sourceCount: retrievalDocCount,
-  });
+  // Scope badges disabled - classification was unreliable
+  // TODO: Re-enable when badge logic analyzes answer content, not just document names
 
   return {
     draftAnswerText,
     sourceDocumentNames: uniqueRetrievalDocNames,
     docSourceType,
     docSourceTown,
-    notices: [scopeNotice],
+    notices: [],
   };
 }
 

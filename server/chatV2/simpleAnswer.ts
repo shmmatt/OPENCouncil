@@ -8,10 +8,7 @@ import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { isRSAQuestion } from "./router";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { 
-  selectScopeNotice,
   archiveNotConfiguredNotice,
-  statewideScopeNotice,
-  noDocsScopeNotice,
   processingErrorNotice,
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
@@ -208,7 +205,7 @@ export async function generateSimpleAnswer(
         sourceDocumentNames: [],
         docSourceType: "statewide" as DocSourceType,
         docSourceTown: null,
-        notices: [statewideScopeNotice()],
+        notices: [],
       };
     }
 
@@ -220,7 +217,7 @@ export async function generateSimpleAnswer(
           sourceDocumentNames: [],
           docSourceType: "statewide" as DocSourceType,
           docSourceTown: null,
-          notices: [statewideScopeNotice()],
+          notices: [],
         };
       }
       return {
@@ -228,7 +225,7 @@ export async function generateSimpleAnswer(
         sourceDocumentNames: [],
         docSourceType: "none" as DocSourceType,
         docSourceTown: null,
-        notices: [noDocsScopeNotice()],
+        notices: [],
       };
     }
 
@@ -254,31 +251,15 @@ export async function generateSimpleAnswer(
       retrievalDocNames: retrievalDocNames.slice(0, 5),
     });
 
-    // Build notice based on doc source type
-    // CRITICAL: Use retrievalDocCount for sourceCount - this is derived ONLY from file_search_response
-    const scopeNotice = selectScopeNotice({ 
-      docSourceType, 
-      docSourceTown, 
-      sourceCount: retrievalDocCount,
-      isRSAQuestion: isRSA,
-    });
-    
-    // Run sanity check in development to catch scope mismatches
-    // Use retrievalDocCount - derived from file_search_response
-    checkSimpleAnswerScopeMismatch(
-      rawAnswerText,
-      docSourceType,
-      docSourceTown,
-      retrievalDocCount,
-      logContext
-    );
+    // Scope badges disabled - classification was unreliable
+    // TODO: Re-enable when badge logic analyzes answer content, not just document names
     
     return { 
       answerText: rawAnswerText, 
       sourceDocumentNames: retrievalDocNames,
       docSourceType,
       docSourceTown,
-      notices: [scopeNotice],
+      notices: [],
     };
   } catch (error) {
     if (isQuotaError(error)) {
