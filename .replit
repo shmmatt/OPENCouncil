@@ -49,3 +49,6 @@ ADMIN_PASSWORD = "Lui2011#"
 CHAT_DEBUG_LOGGING = "1"
 LOG_LEVEL = "debug"
 SENDGRID_FROM_EMAIL = "noreply@opencouncil.co"
+
+[userenv.production]
+APP_BASE_URL = "https://opencouncil.co"

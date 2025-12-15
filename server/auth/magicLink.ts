@@ -55,7 +55,8 @@ router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
     const { email } = sendMagicLinkSchema.parse(req.body);
     
     const token = generateMagicLinkToken(email);
-    const magicLink = `${req.protocol}://${req.get("host")}/api/auth/verify?token=${token}`;
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const magicLink = `${baseUrl}/api/auth/verify?token=${token}`;
     
     console.log(`[MagicLink] Generated for ${email}: ${magicLink}`);
     
