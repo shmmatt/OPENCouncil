@@ -59,15 +59,25 @@ router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
     
     console.log(`[MagicLink] Generated for ${email}: ${magicLink}`);
     
+    const isDev = process.env.NODE_ENV !== "production";
     const emailSent = await sendMagicLinkEmail(email, magicLink);
     
     if (!emailSent) {
+      if (isDev) {
+        console.warn("[MagicLink] Email sending failed in dev mode, returning link directly");
+        return res.json({ 
+          success: true, 
+          message: "Magic link generated (dev mode - email sending failed)",
+          magicLink,
+        });
+      }
       return res.status(500).json({ error: "Failed to send magic link email. Please try again." });
     }
     
     res.json({ 
       success: true, 
       message: "Check your email for the sign-in link",
+      ...(isDev && { magicLink }),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
