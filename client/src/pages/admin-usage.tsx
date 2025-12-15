@@ -560,8 +560,13 @@ export default function AdminUsageDashboard() {
   const token = localStorage.getItem("adminToken");
 
   const fetchWithAuth = useCallback(async (url: string) => {
+    const currentToken = localStorage.getItem("adminToken");
+    if (!currentToken) {
+      setLocation("/admin/login");
+      throw new Error("No token");
+    }
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${currentToken}` },
     });
     if (res.status === 401) {
       localStorage.removeItem("adminToken");
@@ -572,7 +577,7 @@ export default function AdminUsageDashboard() {
       throw new Error(`Failed to fetch: ${res.statusText}`);
     }
     return res.json();
-  }, [token, setLocation]);
+  }, [setLocation]);
 
   const overviewQuery = useQuery<OverviewMetrics>({
     queryKey: [`/api/admin/usage/overview`],
