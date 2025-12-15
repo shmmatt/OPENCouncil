@@ -38,6 +38,12 @@ async function sendMagicLinkEmail(to: string, magicLink: string): Promise<boolea
         <p style="color: #999; font-size: 12px;">This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>
       </div>
     `,
+    trackingSettings: {
+      clickTracking: {
+        enable: false,
+        enableText: false,
+      },
+    },
   };
 
   try {
