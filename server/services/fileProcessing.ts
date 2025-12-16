@@ -8,6 +8,7 @@ let mammothModule: { extractRawText: (options: { path: string }) => Promise<{ va
 async function getPdfParser(): Promise<(buffer: Buffer, options?: any) => Promise<{ text: string }>> {
   if (!pdfParseModule) {
     // Use direct path to avoid pdf-parse trying to load test files in production
+    // @ts-ignore - pdf-parse types don't include this path but it works at runtime
     const mod = await import("pdf-parse/lib/pdf-parse.js");
     pdfParseModule = (mod as any).default || mod;
   }
