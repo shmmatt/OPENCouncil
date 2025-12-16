@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3 } from "lucide-react";
+import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3, Link2, Copy, Check } from "lucide-react";
 import type { Document } from "@shared/schema";
 
 const CATEGORY_OPTIONS = [
@@ -63,6 +63,11 @@ export default function AdminDocuments() {
   const [notes, setNotes] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+  
+  // URL Generator state
+  const [questionInput, setQuestionInput] = useState("");
+  const [generatedUrl, setGeneratedUrl] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const { data: documents, isLoading } = useQuery<Document[]>({
     queryKey: ["/api/admin/documents"],
@@ -180,6 +185,34 @@ export default function AdminDocuments() {
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     setLocation("/admin/login");
+  };
+
+  const generateShareableUrl = () => {
+    if (!questionInput.trim()) return;
+    const baseUrl = window.location.origin;
+    const encodedQuestion = encodeURIComponent(questionInput.trim());
+    const url = `${baseUrl}/chat?q=${encodedQuestion}`;
+    setGeneratedUrl(url);
+    setCopied(false);
+  };
+
+  const copyToClipboard = async () => {
+    if (!generatedUrl) return;
+    try {
+      await navigator.clipboard.writeText(generatedUrl);
+      setCopied(true);
+      toast({
+        title: "Copied to clipboard",
+        description: "Shareable link is ready to paste",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Please select and copy the URL manually",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -326,6 +359,69 @@ export default function AdminDocuments() {
                 )}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5" />
+              Shareable Link Generator
+            </CardTitle>
+            <CardDescription>
+              Create pre-populated chat links for social media sharing
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="question-input">Question</Label>
+              <Textarea
+                id="question-input"
+                placeholder="Enter a question, e.g., 'What are the rules for public meetings in NH?'"
+                value={questionInput}
+                onChange={(e) => setQuestionInput(e.target.value)}
+                rows={2}
+                data-testid="input-question-url"
+              />
+            </div>
+            
+            <Button 
+              onClick={generateShareableUrl}
+              disabled={!questionInput.trim()}
+              data-testid="button-generate-url"
+            >
+              <Link2 className="w-4 h-4 mr-2" />
+              Generate Shareable Link
+            </Button>
+
+            {generatedUrl && (
+              <div className="space-y-2 p-4 bg-muted rounded-md">
+                <Label>Generated URL</Label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    readOnly 
+                    value={generatedUrl} 
+                    className="font-mono text-sm"
+                    data-testid="input-generated-url"
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={copyToClipboard}
+                    data-testid="button-copy-url"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Share this link on social media. When clicked, it will open the chat and automatically send this question.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
