@@ -18,11 +18,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     inputPer1M: 1.25,
     outputPer1M: 10.00,
   },
-  "gemini-3-pro": {
+  "gemini-2.5-pro-preview-06-05": {
     provider: "google",
-    model: "gemini-3-pro",
-    inputPer1M: 2.00,
-    outputPer1M: 12.00,
+    model: "gemini-2.5-pro-preview-06-05",
+    inputPer1M: 1.25,
+    outputPer1M: 10.00,
   },
   "gemini-2.0-flash": {
     provider: "google",
