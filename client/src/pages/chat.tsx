@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2 } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -422,6 +422,8 @@ export default function Chat() {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sharedLinkQuestion, setSharedLinkQuestion] = useState<string | null>(null);
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
@@ -517,20 +519,84 @@ export default function Chat() {
   }, [sharedLinkQuestion, isProcessingSharedLink, sendToSession, toast]);
 
   const sendMessageMutation = useMutation({
-    mutationFn: async (content: string) => {
-      // Use v2 chat endpoint for enhanced pipeline with logging
-      return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
+    mutationFn: async ({ content, file }: { content: string; file: File | null }) => {
+      if (file) {
+        const formData = new FormData();
+        formData.append("content", content);
+        formData.append("file", file);
+        
+        const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/upload`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ message: "Upload failed" }));
+          throw new Error(error.message || "Upload failed");
+        }
+        
+        return response;
+      } else {
+        return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
+      }
     },
     onSuccess: () => {
       setPendingMessage(null);
+      setSelectedFile(null);
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
     },
-    onError: () => {
+    onError: (error) => {
       setPendingMessage(null);
+      toast({
+        title: "Failed to send message",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
     },
   });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const allowedTypes = [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+      ];
+      const allowedExtensions = [".pdf", ".docx", ".txt"];
+      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+      
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(ext)) {
+        toast({
+          title: "Invalid file type",
+          description: "Only PDF, DOCX, and TXT files are supported.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (file.size > 25 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Maximum file size is 25MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setSelectedFile(file);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleFollowUpClick = (question: string) => {
     setInputValue(question);
@@ -552,11 +618,14 @@ export default function Chat() {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || !activeSessionId) return;
+    if ((!inputValue.trim() && !selectedFile) || !activeSessionId) return;
 
     const messageContent = inputValue.trim();
-    setPendingMessage(messageContent);
-    sendMessageMutation.mutate(messageContent);
+    const displayMessage = selectedFile 
+      ? `${messageContent}\n\n[Attached: ${selectedFile.name}]`
+      : messageContent;
+    setPendingMessage(displayMessage);
+    sendMessageMutation.mutate({ content: messageContent, file: selectedFile });
     setInputValue("");
   };
 
@@ -675,12 +744,52 @@ export default function Chat() {
 
         <div className="border-t bg-card p-4">
           <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+            {selectedFile && (
+              <div className="mb-2 flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
+                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm truncate flex-1" data-testid="text-attached-file">
+                  {selectedFile.name}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  ({(selectedFile.size / 1024).toFixed(1)} KB)
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleRemoveFile}
+                  data-testid="button-remove-file"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
             <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-[60px] w-[60px] flex-shrink-0"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!activeSessionId || sendMessageMutation.isPending}
+                data-testid="button-attach-file"
+              >
+                <Paperclip className="w-5 h-5" />
+              </Button>
               <Textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about your municipal documents..."
+                placeholder={selectedFile ? "Ask a question about this document..." : "Ask about your municipal documents..."}
                 className="min-h-[60px] resize-none"
                 disabled={!activeSessionId || sendMessageMutation.isPending}
                 data-testid="input-message"
@@ -688,7 +797,7 @@ export default function Chat() {
               <Button
                 type="submit"
                 size="icon"
-                disabled={!activeSessionId || !inputValue.trim() || sendMessageMutation.isPending}
+                disabled={!activeSessionId || (!inputValue.trim() && !selectedFile) || sendMessageMutation.isPending}
                 className="h-[60px] w-[60px]"
                 data-testid="button-send"
               >
@@ -700,7 +809,7 @@ export default function Chat() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              Press Enter to send, Shift+Enter for new line
+              Press Enter to send, Shift+Enter for new line. Attach PDF, DOCX, or TXT files.
             </p>
           </form>
         </div>
