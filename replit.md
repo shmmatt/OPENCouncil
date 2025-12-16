@@ -39,6 +39,13 @@ The chat pipeline detects question scope (local, statewide, mixed, null) using p
 ### Town Preference & Recent Minutes Updates
 The system supports persistent town preferences for anonymous users and chat sessions. A priority cascade resolves town preference for retrieval. API endpoints provide lists of available towns, allow preference updates, and offer public/admin feeds of recently ingested meeting minutes. The chat sidebar includes a town selector and a "Recent Minutes Updates" section.
 
+### Chat File Upload
+Users can attach documents (PDF, DOCX, TXT up to 25MB) to chat messages for AI analysis. The system:
+1. Extracts text from uploaded files using existing file processing utilities (pdf-parse, mammoth)
+2. Includes the extracted text in the LLM prompt for document-grounded responses
+3. Stores attachment metadata (filename, mimeType, extractedText) in the chat_messages table
+4. Provides UI affordances including an attach button (paperclip icon), selected file display, and error handling for unsupported file types
+
 ### Build & Deployment
 The application uses Vite for frontend development and esbuild for backend bundling. It is designed for single-server deployment, serving static files and the API, with external managed PostgreSQL and environment variable-based configuration.
 
