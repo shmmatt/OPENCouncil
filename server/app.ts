@@ -82,8 +82,9 @@ export default async function runApp(
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Log the error but don't throw it - that causes connection issues
+    console.error("Server error:", err);
     res.status(status).json({ message });
-    throw err;
   });
 
   // Initialize admin account from environment variables

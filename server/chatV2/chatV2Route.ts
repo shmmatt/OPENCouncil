@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { Express, Response } from "express";
+import type { Express, Response, NextFunction } from "express";
 import type { IdentityRequest } from "../auth/types";
 import { storage } from "../storage";
 import { routeQuestion } from "./router";
@@ -618,7 +618,20 @@ export function registerChatV2Routes(app: Express): void {
 
   app.post(
     "/api/chat/v2/sessions/:sessionId/messages/upload",
-    chatUpload.single("file"),
+    (req: IdentityRequest, res: Response, next: NextFunction) => {
+      chatUpload.single("file")(req, res, (err: any) => {
+        if (err) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ message: "File too large. Maximum size is 25MB." });
+          }
+          if (err.message) {
+            return res.status(400).json({ message: err.message });
+          }
+          return res.status(400).json({ message: "File upload failed" });
+        }
+        next();
+      });
+    },
     async (req: IdentityRequest, res: Response) => {
       const startTime = Date.now();
       const requestId = randomUUID();
