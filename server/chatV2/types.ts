@@ -68,6 +68,11 @@ export interface ChatV2Request {
     town?: string;
     board?: string;
   };
+  attachment?: {
+    filename: string;
+    mimeType: string;
+    extractedText: string;
+  };
 }
 
 import type { ChatNotice } from "@shared/chatNotices";

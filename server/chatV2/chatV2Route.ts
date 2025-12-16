@@ -31,6 +31,24 @@ import type {
 } from "./types";
 import type { ChatNotice } from "@shared/chatNotices";
 import { logWarn as logWarning } from "../utils/logger";
+import multer from "multer";
+import * as path from "path";
+import * as fs from "fs/promises";
+import { extractPreviewText, getMimeType } from "../services/fileProcessing";
+
+const chatUpload = multer({
+  dest: "uploads/chat/",
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.pdf', '.docx', '.txt'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, DOCX, and TXT files are allowed.'));
+    }
+  },
+});
 
 export function registerChatV2Routes(app: Express): void {
   app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: IdentityRequest, res: Response) => {
@@ -597,6 +615,282 @@ export function registerChatV2Routes(app: Express): void {
       }
     }
   });
+
+  app.post(
+    "/api/chat/v2/sessions/:sessionId/messages/upload",
+    chatUpload.single("file"),
+    async (req: IdentityRequest, res: Response) => {
+      const startTime = Date.now();
+      const requestId = randomUUID();
+      const { sessionId } = req.params;
+      const uploadedFile = req.file;
+
+      const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
+
+      try {
+        const content = req.body.content || "";
+        let metadata: { town?: string; board?: string } | undefined;
+        
+        try {
+          if (req.body.metadata) {
+            metadata = JSON.parse(req.body.metadata);
+          }
+        } catch {
+          metadata = undefined;
+        }
+
+        logInfo("chat_v2_upload_request_received", {
+          ...logCtx,
+          stage: "entry",
+          userQuestion: sanitizeUserContent(content, 200),
+          hasFile: !!uploadedFile,
+          filename: uploadedFile?.originalname,
+        });
+
+        if (!content.trim() && !uploadedFile) {
+          return res.status(400).json({ message: "Message content or file is required" });
+        }
+
+        const session = await storage.getChatSessionById(sessionId);
+        if (!session) {
+          if (uploadedFile) {
+            await fs.unlink(uploadedFile.path).catch(() => {});
+          }
+          return res.status(404).json({ message: "Chat session not found" });
+        }
+
+        let attachmentInfo: {
+          filename: string;
+          mimeType: string;
+          extractedText: string;
+        } | undefined;
+
+        if (uploadedFile) {
+          try {
+            const extractedText = await extractPreviewText(
+              uploadedFile.path,
+              uploadedFile.originalname,
+              30000
+            );
+
+            attachmentInfo = {
+              filename: uploadedFile.originalname,
+              mimeType: getMimeType(uploadedFile.originalname),
+              extractedText,
+            };
+
+            logDebug("chat_file_extracted", {
+              ...logCtx,
+              stage: "file_extraction",
+              filename: uploadedFile.originalname,
+              extractedLength: extractedText.length,
+            });
+          } finally {
+            await fs.unlink(uploadedFile.path).catch(() => {});
+          }
+        }
+
+        const allMessages = await storage.getMessagesBySessionId(sessionId);
+        const trimmedContent = content.trim();
+
+        const displayContent = attachmentInfo
+          ? `${trimmedContent}\n\n[Attached: ${attachmentInfo.filename}]`
+          : trimmedContent;
+
+        const userMessage = await storage.createChatMessage({
+          sessionId,
+          role: "user",
+          content: displayContent,
+          citations: null,
+          attachmentFilename: attachmentInfo?.filename || null,
+          attachmentMimeType: attachmentInfo?.mimeType || null,
+          attachmentExtractedText: attachmentInfo?.extractedText || null,
+        });
+
+        const chatHistory: ChatHistoryMessage[] = allMessages
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }));
+
+        const resolvedTown = await resolveTownPreference({
+          explicitTown: metadata?.town,
+          sessionId,
+          actor: req.actor,
+        });
+
+        const enhancedMetadata = {
+          ...metadata,
+          town: resolvedTown,
+        };
+
+        const questionWithAttachment = attachmentInfo
+          ? `${trimmedContent || "Please analyze this document."}\n\n---\nATTACHED DOCUMENT (${attachmentInfo.filename}):\n${attachmentInfo.extractedText.slice(0, 20000)}`
+          : trimmedContent;
+
+        const routerOutput = await routeQuestion(
+          questionWithAttachment,
+          chatHistory.slice(-6),
+          enhancedMetadata,
+          logCtx
+        );
+
+        logDebug("upload_router_output", {
+          ...logCtx,
+          stage: "router",
+          complexity: routerOutput.complexity,
+          domains: routerOutput.domains,
+        });
+
+        let answerText: string;
+        let sourceDocumentNames: string[] = [];
+        let criticScore: CriticScore = { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 };
+        let limitationsNote: string | undefined;
+        let suggestedFollowUps: string[] = [];
+        let notices: ChatNotice[] = [];
+        let docSourceType: DocSourceType = "none";
+        let docSourceTown: string | null = null;
+
+        const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
+
+        if (routerOutput.complexity === "simple") {
+          const simpleResult = await generateSimpleAnswer({
+            question: questionWithAttachment,
+            routerOutput,
+            sessionHistory: trimmedHistory,
+            userHints: enhancedMetadata,
+            logContext: logCtx,
+          });
+
+          answerText = simpleResult.answerText;
+          sourceDocumentNames = simpleResult.sourceDocumentNames;
+          docSourceType = simpleResult.docSourceType;
+          docSourceTown = simpleResult.docSourceTown;
+          notices = simpleResult.notices;
+        } else {
+          const retrievalPlan = await planRetrieval({
+            question: questionWithAttachment,
+            routerOutput,
+            userHints: enhancedMetadata,
+            logContext: logCtx,
+          });
+
+          const draftResult = await generateComplexDraftAnswer({
+            question: questionWithAttachment,
+            retrievalPlan,
+            sessionHistory: trimmedHistory,
+            logContext: logCtx,
+          });
+
+          sourceDocumentNames = draftResult.sourceDocumentNames;
+          docSourceType = draftResult.docSourceType;
+          docSourceTown = draftResult.docSourceTown;
+          notices = draftResult.notices;
+
+          const runCritic = shouldRunCritic(draftResult.draftAnswerText.length, questionWithAttachment);
+
+          if (runCritic) {
+            const critiqueResult = await critiqueAndImproveAnswer({
+              question: questionWithAttachment,
+              draftAnswerText: draftResult.draftAnswerText,
+              routerOutput,
+              retrievalPlan,
+              logContext: logCtx,
+            });
+
+            answerText = critiqueResult.improvedAnswerText;
+            criticScore = critiqueResult.criticScore;
+            limitationsNote = critiqueResult.limitationsNote;
+            suggestedFollowUps = critiqueResult.suggestedFollowUps;
+          } else {
+            answerText = draftResult.draftAnswerText;
+          }
+        }
+
+        if (suggestedFollowUps.length === 0) {
+          suggestedFollowUps = await generateFollowups({
+            userQuestion: trimmedContent || "Analyze this document",
+            answerText,
+            townPreference: resolvedTown,
+            detectedDomains: routerOutput.domains,
+            logContext: logCtx,
+          });
+        }
+
+        const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
+
+        const answerMeta: FinalAnswerMeta = {
+          complexity: routerOutput.complexity,
+          requiresClarification: false,
+          criticScore,
+          limitationsNote,
+        };
+
+        const v2Metadata = {
+          v2: true,
+          answerMeta,
+          sources,
+          suggestedFollowUps,
+          notices,
+        };
+
+        const assistantMessage = await storage.createChatMessage({
+          sessionId,
+          role: "assistant",
+          content: answerText,
+          citations: JSON.stringify(v2Metadata),
+        });
+
+        if (chatHistory.filter((m) => m.role === "user").length === 0) {
+          const title = (trimmedContent || attachmentInfo?.filename || "Document Analysis").slice(0, 60);
+          await storage.updateChatSession(sessionId, { title });
+        }
+
+        const response: ChatV2Response = {
+          message: {
+            id: assistantMessage.id,
+            sessionId,
+            role: "assistant",
+            content: answerText,
+            createdAt: assistantMessage.createdAt.toISOString(),
+          },
+          answerMeta,
+          sources,
+          suggestedFollowUps,
+        };
+
+        const duration = Date.now() - startTime;
+
+        logInfo("chat_v2_upload_response_ready", {
+          ...logCtx,
+          stage: "exit",
+          complexity: answerMeta.complexity,
+          sourceCount: sources.length,
+          durationMs: duration,
+          hasAttachment: !!attachmentInfo,
+        });
+
+        return res.json(response);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (uploadedFile) {
+          await fs.unlink(uploadedFile.path).catch(() => {});
+        }
+
+        logError("chat_v2_upload_error", {
+          ...logCtx,
+          stage: "error",
+          error: error instanceof Error ? error.message : String(error),
+          durationMs: duration,
+        });
+
+        return res.status(500).json({
+          message: error instanceof Error ? error.message : "Failed to process message with file",
+        });
+      }
+    }
+  );
 }
 
 function buildClarificationResponse(questions: string[]): string {

@@ -138,6 +138,9 @@ export const chatMessages = pgTable("chat_messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   citations: text("citations"),
+  attachmentFilename: text("attachment_filename"),
+  attachmentMimeType: text("attachment_mime_type"),
+  attachmentExtractedText: text("attachment_extracted_text"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
