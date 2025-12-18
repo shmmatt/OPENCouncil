@@ -246,7 +246,7 @@ export async function generateComplexDraftAnswer(
     stage: "complexAnswer_docSource",
     docSourceType,
     docSourceTown,
-    snippetCount: retrievedSnippets.length,
+    snippetCount: snippetsForSynthesis.length,
     retrievalDocCount,
     townPreference: townPref,
   });
