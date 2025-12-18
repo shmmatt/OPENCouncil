@@ -8,11 +8,13 @@
  * Runs after initial retrieval in both simple and complex paths.
  */
 
-import { ai } from "../gemini-client";
+import { GoogleGenAI } from "@google/genai";
 import { logDebug, logError } from "../utils/logger";
 import { logLlmRequest, logLlmResponse } from "../utils/llmLogging";
 import type { PipelineLogContext, RouterOutput, RetrievalPlan } from "./types";
 import { extractTokenCounts, logLLMCall } from "../llm/callLLMWithLogging";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const MODEL_NAME = "gemini-2.0-flash";
 

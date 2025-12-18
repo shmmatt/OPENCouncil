@@ -5,12 +5,14 @@ import { storage } from "../storage";
 import { routeQuestion } from "./router";
 import { generateSimpleAnswer } from "./simpleAnswer";
 import { planRetrieval } from "./retrievalPlanner";
-import { generateComplexDraftAnswer } from "./complexAnswer";
+import { generateComplexDraftAnswer, performExpansionRetrieval } from "./complexAnswer";
+import type { RetrievedChunk } from "./complexAnswer";
+import { getOrCreateFileSearchStoreId } from "../gemini-store";
 import { critiqueAndImproveAnswer } from "./critic";
 import { generateFollowups } from "./generateFollowups";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
-import { shouldRunCritic } from "./chatConfig";
+import { shouldRunCritic, chatConfig } from "./chatConfig";
 import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
 import {
   shouldBypassRouterForFollowup,
@@ -19,6 +21,11 @@ import {
   resolveTownPreference,
 } from "./pipelineUtils";
 import { isRSAQuestion } from "./router";
+import {
+  evaluateEvidenceCoverage,
+  buildRetrievalSummary,
+  mergeRetrievalResults,
+} from "./evidenceGate";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -278,6 +285,10 @@ export function registerChatV2Routes(app: Express): void {
       let townPreference: string | undefined;
       let docSourceType: DocSourceType = "none";
       let docSourceTown: string | null = null;
+      
+      // Evidence coverage gate metrics (only populated for complex path)
+      let coverageScore: number | undefined;
+      let retrievalPassCount = 1;
 
       if (routerOutput.complexity === "simple") {
         logDebug("chat_v2_simple_path", {
@@ -331,6 +342,7 @@ export function registerChatV2Routes(app: Express): void {
           ...logCtx,
           stage: "complex_path_start",
           domains: routerOutput.domains,
+          evidenceGateEnabled: chatConfig.ENABLE_EVIDENCE_GATE,
         });
 
         const retrievalPlan = await planRetrieval({
@@ -351,13 +363,135 @@ export function registerChatV2Routes(app: Express): void {
         });
 
         const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
+        
+        let additionalChunks: RetrievedChunk[] = [];
 
-        const draftResult = await generateComplexDraftAnswer({
+        // Initial retrieval and draft generation
+        let draftResult = await generateComplexDraftAnswer({
           question: content.trim(),
           retrievalPlan,
           sessionHistory: trimmedHistory,
           logContext: logCtx,
         });
+
+        logDebug("complex_answer_initial_draft", {
+          ...logCtx,
+          stage: "complexAnswer",
+          sourceCount: draftResult.sourceDocumentNames.length,
+          sourceDocNames: draftResult.sourceDocumentNames.slice(0, 5),
+          draftLength: draftResult.draftAnswerText.length,
+          retrievedChunkCount: draftResult.retrievedChunks.length,
+        });
+
+        // Evidence Coverage Gate - evaluate and potentially expand retrieval
+        if (chatConfig.ENABLE_EVIDENCE_GATE && draftResult.retrievedChunks.length > 0) {
+          const storeId = await getOrCreateFileSearchStoreId();
+          
+          if (storeId) {
+            logDebug("evidence_gate_start", {
+              ...logCtx,
+              stage: "evidenceGate",
+              initialChunkCount: draftResult.retrievedChunks.length,
+              initialDocCount: draftResult.sourceDocumentNames.length,
+            });
+
+            const retrievalSummary = buildRetrievalSummary(draftResult.retrievedChunks);
+            
+            const gateOutput = await evaluateEvidenceCoverage({
+              question: content.trim(),
+              retrievalSummary,
+              logContext: logCtx,
+            });
+
+            coverageScore = gateOutput.coverageScore;
+
+            logDebug("evidence_gate_result", {
+              ...logCtx,
+              stage: "evidenceGate",
+              coverageScore: gateOutput.coverageScore,
+              decision: gateOutput.decision,
+              questionIntent: gateOutput.questionIntent,
+              recommendedPassCount: gateOutput.recommendedPasses.length,
+              diversity: gateOutput.diversityMetrics,
+            });
+
+            // Execute expansion passes if recommended
+            if (gateOutput.decision === "expand" && gateOutput.recommendedPasses.length > 0) {
+              const maxExpansionPasses = Math.min(
+                gateOutput.recommendedPasses.length,
+                chatConfig.MAX_COVERAGE_RETRIEVAL_PASSES
+              );
+
+              for (let passIdx = 0; passIdx < maxExpansionPasses; passIdx++) {
+                const pass = gateOutput.recommendedPasses[passIdx];
+                retrievalPassCount++;
+
+                logDebug("expansion_pass_start", {
+                  ...logCtx,
+                  stage: "evidenceGate_expansion",
+                  passNumber: passIdx + 1,
+                  rationale: pass.rationale,
+                  queryCount: pass.queries.length,
+                });
+
+                const expansionChunks = await performExpansionRetrieval({
+                  queries: pass.queries,
+                  storeId,
+                  logContext: logCtx,
+                  passNumber: passIdx + 1,
+                });
+
+                additionalChunks.push(...expansionChunks);
+
+                logDebug("expansion_pass_complete", {
+                  ...logCtx,
+                  stage: "evidenceGate_expansion",
+                  passNumber: passIdx + 1,
+                  chunksRetrieved: expansionChunks.length,
+                  totalAdditionalChunks: additionalChunks.length,
+                });
+
+                // Check if we've hit the max combined chunks limit
+                const totalChunks = draftResult.retrievedChunks.length + additionalChunks.length;
+                if (totalChunks >= chatConfig.MAX_COMBINED_CHUNKS) {
+                  logDebug("expansion_capped", {
+                    ...logCtx,
+                    stage: "evidenceGate_expansion",
+                    reason: "max_chunks_reached",
+                    totalChunks,
+                    maxAllowed: chatConfig.MAX_COMBINED_CHUNKS,
+                  });
+                  break;
+                }
+              }
+
+              // Re-synthesize with expanded evidence if we got additional chunks
+              if (additionalChunks.length > 0) {
+                logDebug("resynthesis_start", {
+                  ...logCtx,
+                  stage: "evidenceGate_resynthesis",
+                  originalChunks: draftResult.retrievedChunks.length,
+                  additionalChunks: additionalChunks.length,
+                });
+
+                draftResult = await generateComplexDraftAnswer({
+                  question: content.trim(),
+                  retrievalPlan,
+                  sessionHistory: trimmedHistory,
+                  logContext: logCtx,
+                  additionalChunks,
+                });
+
+                logDebug("resynthesis_complete", {
+                  ...logCtx,
+                  stage: "evidenceGate_resynthesis",
+                  newDraftLength: draftResult.draftAnswerText.length,
+                  totalSourceDocs: draftResult.sourceDocumentNames.length,
+                });
+              }
+            }
+          }
+        }
 
         sourceDocumentNames = draftResult.sourceDocumentNames;
         docSourceType = draftResult.docSourceType;
@@ -370,6 +504,8 @@ export function registerChatV2Routes(app: Express): void {
           sourceCount: sourceDocumentNames.length,
           sourceDocNames: sourceDocumentNames.slice(0, 5),
           draftLength: draftResult.draftAnswerText.length,
+          coverageScore,
+          retrievalPassCount,
         });
 
         const runCritic = shouldRunCritic(draftResult.draftAnswerText.length, content.trim());
@@ -520,6 +656,9 @@ export function registerChatV2Routes(app: Express): void {
         answerLength: answerText.length,
         docSourceType,
         docSourceTown,
+        // Evidence gate metrics
+        coverageScore,
+        retrievalPassCount,
       });
 
       return res.json(response);

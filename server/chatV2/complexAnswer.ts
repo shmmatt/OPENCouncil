@@ -23,6 +23,7 @@ interface ComplexAnswerOptions {
   retrievalPlan: RetrievalPlan;
   sessionHistory: ChatHistoryMessage[];
   logContext?: PipelineLogContext;
+  additionalChunks?: RetrievedChunk[];
 }
 
 interface ComplexDraftResult {
@@ -31,12 +32,19 @@ interface ComplexDraftResult {
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
   notices: ChatNotice[];
+  retrievedChunks: RetrievedChunk[];
+}
+
+export interface RetrievedChunk {
+  source: string;
+  content: string;
+  documentNames: string[];
 }
 
 export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
-  const { question, retrievalPlan, sessionHistory, logContext } = options;
+  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [] } = options;
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -48,12 +56,12 @@ export async function generateComplexDraftAnswer(
       docSourceType: "none" as DocSourceType,
       docSourceTown: null,
       notices: [archiveNotConfiguredNotice()],
+      retrievedChunks: [],
     };
   }
 
-  // CRITICAL: Accumulate retrieval doc names from File Search responses
-  // This is the ONLY signal used for scope/no-doc notice logic
   const allRetrievalDocNames: string[] = [];
+  const retrievedChunks: RetrievedChunk[] = [];
 
   const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
@@ -63,9 +71,8 @@ export async function generateComplexDraftAnswer(
     stage: "complexAnswer_prompts",
     promptCount: retrievalPrompts.length,
     prompts: retrievalPrompts.map(p => ({ label: p.sourceLabel, queryLength: p.query.length })),
+    additionalChunksCount: additionalChunks.length,
   });
-
-  const retrievedSnippets: { source: string; content: string }[] = [];
 
   for (let i = 0; i < retrievalPrompts.length; i++) {
     const prompt = retrievalPrompts[i];
@@ -130,7 +137,6 @@ export async function generateComplexDraftAnswer(
         durationMs,
       });
 
-      // Log usage for cost tracking
       if (logContext?.actor) {
         const tokens = extractTokenCounts(response);
         await logLLMCall(
@@ -155,17 +161,16 @@ export async function generateComplexDraftAnswer(
         durationMs,
       });
 
-      if (snippetContent.length > 50) {
-        retrievedSnippets.push({
-          source: prompt.sourceLabel,
-          content: snippetContent,
-        });
-      }
-
-      // CRITICAL: Extract retrieval doc count from File Search response
-      // This is the ONLY signal used for notice logic
       const retrievalResult = extractRetrievalDocCount(response);
       allRetrievalDocNames.push(...retrievalResult.documentNames);
+
+      if (snippetContent.length > 50) {
+        retrievedChunks.push({
+          source: prompt.sourceLabel,
+          content: snippetContent,
+          documentNames: retrievalResult.documentNames,
+        });
+      }
     } catch (error) {
       if (isQuotaError(error)) {
         const errMessage = error instanceof Error ? error.message : String(error);
@@ -189,7 +194,12 @@ export async function generateComplexDraftAnswer(
     }
   }
 
-  // Compute unique retrieval doc count from accumulated File Search results
+  // Merge additional chunks from evidence gate expansion passes
+  for (const chunk of additionalChunks) {
+    retrievedChunks.push(chunk);
+    allRetrievalDocNames.push(...chunk.documentNames);
+  }
+
   const uniqueRetrievalDocNames = Array.from(new Set(allRetrievalDocNames));
   const retrievalDocCount = uniqueRetrievalDocNames.length;
 
@@ -206,13 +216,19 @@ export async function generateComplexDraftAnswer(
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "complexAnswer_synthesis",
-    retrievedSnippetCount: retrievedSnippets.length,
+    retrievedChunkCount: retrievedChunks.length,
     retrievalDocCount,
+    hadAdditionalChunks: additionalChunks.length > 0,
   });
+
+  const snippetsForSynthesis = retrievedChunks.map(c => ({
+    source: c.source,
+    content: c.content,
+  }));
 
   const draftAnswerText = await synthesizeDraftAnswer(
     question,
-    retrievedSnippets,
+    snippetsForSynthesis,
     sessionHistory,
     retrievalPlan,
     logContext
@@ -244,7 +260,91 @@ export async function generateComplexDraftAnswer(
     docSourceType,
     docSourceTown,
     notices: [],
+    retrievedChunks,
   };
+}
+
+export async function performExpansionRetrieval(options: {
+  queries: string[];
+  storeId: string;
+  logContext?: PipelineLogContext;
+  passNumber: number;
+}): Promise<RetrievedChunk[]> {
+  const { queries, storeId, logContext, passNumber } = options;
+  const chunks: RetrievedChunk[] = [];
+
+  for (let i = 0; i < queries.length; i++) {
+    const query = queries[i];
+    const retrievalStage = `evidenceGate_expansion_pass${passNumber}_${i + 1}`;
+    const retrievalSystemPrompt = `You are a document retrieval assistant. Extract relevant information from municipal documents to answer the query. Be thorough and include specific details, quotes, and section references when available.`;
+
+    logDebug("expansion_retrieval_start", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: retrievalStage,
+      passNumber,
+      queryIndex: i + 1,
+      queryLength: query.length,
+    });
+
+    const startTime = Date.now();
+
+    try {
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: [{ role: "user", parts: [{ text: query }] }],
+        config: {
+          systemInstruction: retrievalSystemPrompt,
+          tools: [
+            {
+              fileSearch: {
+                fileSearchStoreNames: [storeId],
+              },
+            } as any,
+          ],
+        },
+      });
+
+      const snippetContent = response.text || "";
+      const durationMs = Date.now() - startTime;
+      const retrievalResult = extractRetrievalDocCount(response);
+
+      logDebug("expansion_retrieval_result", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: retrievalStage,
+        passNumber,
+        queryIndex: i + 1,
+        snippetLength: snippetContent.length,
+        docCount: retrievalResult.documentNames.length,
+        durationMs,
+      });
+
+      if (snippetContent.length > 50) {
+        chunks.push({
+          source: `Expansion Pass ${passNumber} - Query ${i + 1}`,
+          content: snippetContent,
+          documentNames: retrievalResult.documentNames,
+        });
+      }
+    } catch (error) {
+      if (isQuotaError(error)) {
+        throw new GeminiQuotaExceededError(
+          error instanceof Error ? error.message : "Gemini quota exceeded in expansion retrieval"
+        );
+      }
+      
+      logLlmError({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: retrievalStage,
+        model: MODEL_NAME,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+    }
+  }
+
+  return chunks;
 }
 
 interface RetrievalPrompt {
