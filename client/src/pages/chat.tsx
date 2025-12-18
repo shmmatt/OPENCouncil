@@ -520,23 +520,34 @@ export default function Chat() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ content, file }: { content: string; file: File | null }) => {
+      if (!activeSessionId) {
+        throw new Error("No active chat session. Please start a new chat first.");
+      }
+      
       if (file) {
         const formData = new FormData();
         formData.append("content", content);
         formData.append("file", file);
         
-        const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/upload`, {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-        
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ message: "Upload failed" }));
-          throw new Error(error.message || "Upload failed");
+        try {
+          const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/upload`, {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+          });
+          
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ message: "Upload failed" }));
+            throw new Error(error.message || "Upload failed");
+          }
+          
+          return response;
+        } catch (error) {
+          if (error instanceof TypeError && error.message === "Failed to fetch") {
+            throw new Error("Network error - the request may have timed out. Please try again with a smaller file.");
+          }
+          throw error;
         }
-        
-        return response;
       } else {
         return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
       }

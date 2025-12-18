@@ -686,6 +686,18 @@ export function registerChatV2Routes(app: Express): void {
               30000
             );
 
+            if (!extractedText || extractedText.trim().length === 0) {
+              logWarn("chat_file_extraction_empty", {
+                ...logCtx,
+                stage: "file_extraction",
+                filename: uploadedFile.originalname,
+              });
+              await fs.unlink(uploadedFile.path).catch(() => {});
+              return res.status(400).json({ 
+                message: "Could not extract text from the file. The file may be empty, corrupted, or contain only images. Please try a different file." 
+              });
+            }
+
             attachmentInfo = {
               filename: uploadedFile.originalname,
               mimeType: getMimeType(uploadedFile.originalname),
@@ -697,6 +709,17 @@ export function registerChatV2Routes(app: Express): void {
               stage: "file_extraction",
               filename: uploadedFile.originalname,
               extractedLength: extractedText.length,
+            });
+          } catch (extractionError) {
+            logError("chat_file_extraction_error", {
+              ...logCtx,
+              stage: "file_extraction",
+              filename: uploadedFile.originalname,
+              error: extractionError instanceof Error ? extractionError.message : String(extractionError),
+            });
+            await fs.unlink(uploadedFile.path).catch(() => {});
+            return res.status(400).json({ 
+              message: "Failed to process the file. Please ensure the file is valid and try again." 
             });
           } finally {
             await fs.unlink(uploadedFile.path).catch(() => {});
