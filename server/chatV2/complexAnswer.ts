@@ -16,7 +16,7 @@ import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro-preview-06-05";
+const MODEL_NAME = "gemini-2.5-pro";
 
 interface ComplexAnswerOptions {
   question: string;

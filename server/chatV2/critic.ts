@@ -8,7 +8,7 @@ import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro-preview-06-05";
+const MODEL_NAME = "gemini-2.5-pro";
 
 const CRITIC_SYSTEM_PROMPT = `You are a careful municipal governance QA critic for New Hampshire. Your role is to evaluate and improve draft answers to ensure they are accurate, helpful, and appropriately cautious.
 
