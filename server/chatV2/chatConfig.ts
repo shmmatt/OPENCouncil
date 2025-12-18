@@ -74,6 +74,47 @@ export const chatConfig = {
    */
   MAX_HISTORY_TURNS_FOR_ROUTER: 2,
   MAX_HISTORY_TURNS_FOR_ANSWER: 4,
+
+  // =====================================================
+  // EVIDENCE COVERAGE GATE SETTINGS
+  // =====================================================
+
+  /**
+   * Enable Evidence Coverage Gate to evaluate retrieval quality
+   * and trigger additional retrieval passes when needed.
+   */
+  ENABLE_EVIDENCE_GATE: true,
+
+  /**
+   * Maximum additional retrieval passes the gate can trigger.
+   * Keeps costs bounded while allowing for evidence expansion.
+   */
+  MAX_COVERAGE_RETRIEVAL_PASSES: 2,
+
+  /**
+   * Maximum combined chunks from all retrieval passes.
+   * Prevents token bloat in synthesis prompts.
+   */
+  MAX_COMBINED_CHUNKS: 40,
+
+  /**
+   * Minimum coverage score to skip expansion.
+   * Below this threshold, the gate will recommend additional passes.
+   */
+  MIN_COVERAGE_SCORE_FOR_SKIP: 0.7,
+
+  /**
+   * Question intents that typically require broader coverage.
+   * These will be more likely to trigger retrieval expansion.
+   */
+  BROAD_COVERAGE_INTENTS: [
+    "mechanism",
+    "breakdown", 
+    "why",
+    "compare",
+    "process",
+    "mixed",
+  ],
 };
 
 /**

@@ -360,7 +360,7 @@ export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups'
 export type LlmProvider = 'google' | 'openai' | 'other';
 
 // Status types for ingestion jobs
-export type IngestionJobStatus = "staging" | "needs_review" | "approved" | "rejected" | "indexed";
+export type IngestionJobStatus = "staging" | "needs_review" | "approved" | "rejected" | "indexed" | "index_failed";
 
 // Extended types for API responses
 export interface IngestionJobWithBlob extends IngestionJob {

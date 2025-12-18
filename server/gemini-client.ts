@@ -10,7 +10,6 @@ export interface DocumentMetadata {
   board?: string;
   year?: string;
   notes?: string;
-  // Minutes-specific fields
   isMinutes?: boolean;
   meetingDate?: string | null;
   meetingType?: string | null;
@@ -20,6 +19,51 @@ export interface DocumentMetadata {
 interface UploadResult {
   fileId: string;
   storeId: string;
+}
+
+interface RetryConfig {
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 5,
+  baseDelayMs: 1000,
+  maxDelayMs: 30000,
+};
+
+function isRetryableError(error: any): boolean {
+  if (!error) return false;
+  
+  const errorMessage = error.message?.toLowerCase() || "";
+  const errorCode = error.code || error.statusCode || error.status;
+  
+  if (errorCode === 503 || errorCode === "503") return true;
+  if (errorCode === 429 || errorCode === "429") return true;
+  if (errorCode === 500 || errorCode === "500") return true;
+  if (errorCode === 502 || errorCode === "502") return true;
+  if (errorCode === 504 || errorCode === "504") return true;
+  
+  if (errorMessage.includes("service unavailable")) return true;
+  if (errorMessage.includes("temporarily unavailable")) return true;
+  if (errorMessage.includes("rate limit")) return true;
+  if (errorMessage.includes("quota exceeded")) return true;
+  if (errorMessage.includes("timeout")) return true;
+  if (errorMessage.includes("econnreset")) return true;
+  if (errorMessage.includes("network error")) return true;
+  
+  return false;
+}
+
+function calculateBackoffDelay(attempt: number, config: RetryConfig): number {
+  const exponentialDelay = config.baseDelayMs * Math.pow(2, attempt);
+  const jitter = Math.random() * config.baseDelayMs;
+  return Math.min(exponentialDelay + jitter, config.maxDelayMs);
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getMimeType(filename: string): string {
@@ -41,113 +85,127 @@ function getMimeType(filename: string): string {
 export async function uploadDocumentToFileStore(
   filePath: string,
   filename: string,
-  metadata: DocumentMetadata
+  metadata: DocumentMetadata,
+  retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
 ): Promise<UploadResult> {
-  try {
-    // Get or create File Search store
-    let storeId = await getOrCreateFileSearchStoreId();
-    
-    if (!storeId) {
-      const store = await ai.fileSearchStores.create({
-        config: { displayName: "OPENCouncil Municipal Documents" },
-      });
-      storeId = store.name || "";
-      if (storeId) {
-        setFileSearchStoreId(storeId);
-        console.log(`Created File Search store: ${storeId}`);
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+    try {
+      return await attemptUploadToFileStore(filePath, filename, metadata);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < retryConfig.maxRetries && isRetryableError(error)) {
+        const delay = calculateBackoffDelay(attempt, retryConfig);
+        console.warn(
+          `File Search upload attempt ${attempt + 1}/${retryConfig.maxRetries + 1} failed with retryable error. ` +
+          `Retrying in ${Math.round(delay)}ms...`,
+          { error: lastError.message, filename }
+        );
+        await sleep(delay);
       } else {
-        throw new Error("Failed to create File Search store");
+        console.error(
+          `File Search upload failed after ${attempt + 1} attempt(s)`,
+          { error: lastError.message, filename, isRetryable: isRetryableError(error) }
+        );
+        break;
       }
     }
+  }
+  
+  throw new Error(`Failed to upload document after ${retryConfig.maxRetries + 1} attempts: ${lastError?.message}`);
+}
 
-    // Build display name with metadata for better searchability
-    const displayName = buildDisplayName(filename, metadata);
+async function attemptUploadToFileStore(
+  filePath: string,
+  filename: string,
+  metadata: DocumentMetadata
+): Promise<UploadResult> {
+  let storeId = await getOrCreateFileSearchStoreId();
+  
+  if (!storeId) {
+    const store = await ai.fileSearchStores.create({
+      config: { displayName: "OPENCouncil Municipal Documents" },
+    });
+    storeId = store.name || "";
+    if (storeId) {
+      setFileSearchStoreId(storeId);
+      console.log(`Created File Search store: ${storeId}`);
+    } else {
+      throw new Error("Failed to create File Search store");
+    }
+  }
 
-    // Build custom metadata for filtering (only include non-empty values)
-    const customMetadata: Array<{ key: string; stringValue: string }> = [];
-    
-    // If isMinutes is true, force category to meeting_minutes
-    const finalCategory = metadata.isMinutes ? "meeting_minutes" : metadata.category;
-    
-    // Category is always required
-    customMetadata.push({ key: "category", stringValue: finalCategory });
-    
-    // Only add optional fields if they have values
-    if (metadata.town) {
-      customMetadata.push({ key: "town", stringValue: metadata.town });
-    }
-    if (metadata.board) {
-      customMetadata.push({ key: "board", stringValue: metadata.board });
-    }
-    if (metadata.year) {
-      customMetadata.push({ key: "year", stringValue: metadata.year });
-    }
-    if (metadata.notes) {
-      customMetadata.push({ key: "notes", stringValue: metadata.notes });
-    }
-    
-    // Minutes-specific metadata
-    if (metadata.isMinutes !== undefined) {
-      customMetadata.push({ key: "isMinutes", stringValue: String(metadata.isMinutes) });
-    }
-    if (metadata.meetingDate) {
-      customMetadata.push({ key: "meetingDate", stringValue: metadata.meetingDate });
-    }
-    if (metadata.meetingType) {
-      customMetadata.push({ key: "meetingType", stringValue: metadata.meetingType });
-    }
+  const displayName = buildDisplayName(filename, metadata);
+  const customMetadata: Array<{ key: string; stringValue: string }> = [];
+  
+  const finalCategory = metadata.isMinutes ? "meeting_minutes" : metadata.category;
+  
+  customMetadata.push({ key: "category", stringValue: finalCategory });
+  
+  if (metadata.town) {
+    customMetadata.push({ key: "town", stringValue: metadata.town });
+  }
+  if (metadata.board) {
+    customMetadata.push({ key: "board", stringValue: metadata.board });
+  }
+  if (metadata.year) {
+    customMetadata.push({ key: "year", stringValue: metadata.year });
+  }
+  if (metadata.notes) {
+    customMetadata.push({ key: "notes", stringValue: metadata.notes });
+  }
+  if (metadata.isMinutes !== undefined) {
+    customMetadata.push({ key: "isMinutes", stringValue: String(metadata.isMinutes) });
+  }
+  if (metadata.meetingDate) {
+    customMetadata.push({ key: "meetingDate", stringValue: metadata.meetingDate });
+  }
+  if (metadata.meetingType) {
+    customMetadata.push({ key: "meetingType", stringValue: metadata.meetingType });
+  }
 
-    // Determine MIME type from filename
-    const mimeType = getMimeType(filename);
+  const mimeType = getMimeType(filename);
 
-    // Upload and import file to File Search store
-    const operation = await ai.fileSearchStores.uploadToFileSearchStore({
-      file: filePath,
-      fileSearchStoreName: storeId,
-      config: {
-        displayName: displayName,
-        mimeType: mimeType,
-        customMetadata: customMetadata,
-        chunkingConfig: {
-          whiteSpaceConfig: {
-            maxTokensPerChunk: 200,
-            maxOverlapTokens: 20,
-          },
+  const operation = await ai.fileSearchStores.uploadToFileSearchStore({
+    file: filePath,
+    fileSearchStoreName: storeId,
+    config: {
+      displayName: displayName,
+      mimeType: mimeType,
+      customMetadata: customMetadata,
+      chunkingConfig: {
+        whiteSpaceConfig: {
+          maxTokensPerChunk: 200,
+          maxOverlapTokens: 20,
         },
       },
-    });
+    },
+  });
 
-    // Log initial operation structure for debugging
-    console.log("Upload operation response:", JSON.stringify(operation, null, 2));
+  console.log("Upload operation response:", JSON.stringify(operation, null, 2));
 
-    // The upload operation returns documentName directly in response - that's our file ID
-    // No polling needed - the upload completes synchronously
-    const opResponse = operation as any;
-    
-    // Extract the file ID from response.documentName
-    let fileId = opResponse.response?.documentName 
-              || opResponse.documentName
-              || opResponse.response?.files?.[0]?.name;
-    
-    if (!fileId) {
-      console.error("Could not find documentName in response");
-      throw new Error("Failed to extract document ID from Gemini upload response");
-    }
-    
-    console.log(`Extracted file ID: ${fileId}`);
-
-    console.log(`Document uploaded and indexed: ${displayName}`);
-    console.log(`File ID: ${fileId}`);
-    console.log(`Metadata: category=${finalCategory}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}, isMinutes=${metadata.isMinutes || false}, meetingDate=${metadata.meetingDate || 'N/A'}`);
-
-    return {
-      fileId,
-      storeId: storeId,
-    };
-  } catch (error) {
-    console.error("Error uploading to File Search:", error);
-    throw new Error(`Failed to upload document: ${error}`);
+  const opResponse = operation as any;
+  
+  let fileId = opResponse.response?.documentName 
+            || opResponse.documentName
+            || opResponse.response?.files?.[0]?.name;
+  
+  if (!fileId) {
+    console.error("Could not find documentName in response");
+    throw new Error("Failed to extract document ID from Gemini upload response");
   }
+  
+  console.log(`Extracted file ID: ${fileId}`);
+  console.log(`Document uploaded and indexed: ${displayName}`);
+  console.log(`File ID: ${fileId}`);
+  console.log(`Metadata: category=${finalCategory}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}, isMinutes=${metadata.isMinutes || false}, meetingDate=${metadata.meetingDate || 'N/A'}`);
+
+  return {
+    fileId,
+    storeId: storeId,
+  };
 }
 
 function buildDisplayName(filename: string, metadata: DocumentMetadata): string {

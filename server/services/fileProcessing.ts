@@ -7,9 +7,28 @@ let mammothModule: { extractRawText: (options: { path: string }) => Promise<{ va
 
 async function getPdfParser(): Promise<(buffer: Buffer, options?: any) => Promise<{ text: string }>> {
   if (!pdfParseModule) {
-    // Use the main pdf-parse export
-    const mod = await import("pdf-parse");
-    pdfParseModule = (mod as any).default || mod;
+    try {
+      const mod = await import("pdf-parse");
+      const pdfParse = (mod as any).default || mod;
+      
+      if (typeof pdfParse === "function") {
+        pdfParseModule = pdfParse;
+      } else if (typeof pdfParse?.default === "function") {
+        pdfParseModule = pdfParse.default;
+      } else if (pdfParse && typeof pdfParse === "object") {
+        const possibleFn = Object.values(pdfParse).find(v => typeof v === "function");
+        if (possibleFn) {
+          pdfParseModule = possibleFn as typeof pdfParseModule;
+        } else {
+          throw new Error("pdf-parse module did not export a callable function");
+        }
+      } else {
+        throw new Error("pdf-parse module structure not recognized");
+      }
+    } catch (importError) {
+      console.error("Failed to import pdf-parse:", importError);
+      throw importError;
+    }
   }
   return pdfParseModule!;
 }
@@ -39,12 +58,17 @@ export async function extractPreviewText(
   
   try {
     if (ext === ".pdf") {
-      const pdfParse = await getPdfParser();
-      const dataBuffer = await fs.readFile(filePath);
-      const pdfData = await pdfParse(dataBuffer, {
-        max: 5, // First 5 pages
-      });
-      return pdfData.text.slice(0, maxLength);
+      try {
+        const pdfParse = await getPdfParser();
+        const dataBuffer = await fs.readFile(filePath);
+        const pdfData = await pdfParse(dataBuffer, {
+          max: 5,
+        });
+        return pdfData.text.slice(0, maxLength);
+      } catch (pdfError) {
+        console.warn(`PDF text extraction failed for ${filename}, proceeding without preview:`, pdfError);
+        return "";
+      }
     } else if (ext === ".txt") {
       const text = await fs.readFile(filePath, "utf-8");
       return text.slice(0, maxLength);
@@ -54,14 +78,14 @@ export async function extractPreviewText(
         const result = await mammoth.extractRawText({ path: filePath });
         return result.value.slice(0, maxLength);
       } catch (docxError) {
-        console.error(`Error extracting DOCX text:`, docxError);
+        console.warn(`DOCX text extraction failed for ${filename}, proceeding without preview:`, docxError);
         return "";
       }
     }
     
     return "";
   } catch (error) {
-    console.error(`Error extracting text from ${filename}:`, error);
+    console.warn(`Text extraction failed for ${filename}, proceeding without preview:`, error);
     return "";
   }
 }

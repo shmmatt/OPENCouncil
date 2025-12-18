@@ -661,16 +661,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Index approved job to File Search
   app.post("/api/admin/ingestion/jobs/:jobId/index", authenticateAdmin, async (req, res) => {
+    const { jobId } = req.params;
+    
     try {
-      const { jobId } = req.params;
-
       const job = await storage.getIngestionJobWithBlob(jobId);
       if (!job) {
         return res.status(404).json({ message: "Ingestion job not found" });
       }
 
-      if (job.status !== "approved") {
-        return res.status(400).json({ message: `Job must be approved before indexing. Current status: ${job.status}` });
+      if (job.status !== "approved" && job.status !== "index_failed") {
+        return res.status(400).json({ message: `Job must be approved or index_failed to retry indexing. Current status: ${job.status}` });
       }
 
       if (!job.documentId) {
@@ -682,17 +682,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Job must have final metadata" });
       }
 
-      // Upload to Gemini File Search
+      // Upload to Gemini File Search (with retry logic built-in)
       const { fileId, storeId } = await uploadDocumentToFileStore(
         job.fileBlob.storagePath,
         job.fileBlob.originalFilename,
         finalMetadata
       );
 
-      // Get the previous current version (if any)
       const previousVersion = await storage.getCurrentVersionForDocument(job.documentId);
 
-      // Parse meetingDate to Date object if present
       let meetingDateObj: Date | null = null;
       if (finalMetadata.meetingDate) {
         const parsed = new Date(finalMetadata.meetingDate);
@@ -701,7 +699,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Create DocumentVersion with minutes-specific fields
       const version = await storage.createDocumentVersion({
         documentId: job.documentId,
         fileBlobId: job.fileBlobId,
@@ -715,16 +712,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isMinutes: finalMetadata.isMinutes || false,
       });
 
-      // Set this version as current (will unset previous)
       await storage.setCurrentVersion(job.documentId, version.id);
 
-      // Update ingestion job
       await storage.updateIngestionJob(jobId, {
         status: "indexed",
         documentVersionId: version.id,
+        statusNote: null,
       });
 
-      // Also create legacy document record for backwards compatibility
       await storage.createDocument({
         filename: job.fileBlob.storagePath.split('/').pop() || job.fileBlob.originalFilename,
         originalName: job.fileBlob.originalFilename,
@@ -746,8 +741,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "indexed",
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to index ingestion job";
       console.error("Error indexing ingestion job:", error);
-      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to index ingestion job" });
+      
+      // Mark job as index_failed instead of just returning error
+      try {
+        await storage.updateIngestionJob(jobId, {
+          status: "index_failed",
+          statusNote: `Indexing failed: ${errorMessage}`,
+        });
+      } catch (updateError) {
+        console.error("Failed to update job status to index_failed:", updateError);
+      }
+      
+      res.status(500).json({ 
+        message: errorMessage,
+        status: "index_failed",
+        retryable: true,
+      });
     }
   });
 
