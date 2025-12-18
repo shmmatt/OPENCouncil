@@ -656,9 +656,8 @@ export function registerChatV2Routes(app: Express): void {
         answerLength: answerText.length,
         docSourceType,
         docSourceTown,
-        // Evidence gate metrics
-        coverageScore,
-        retrievalPassCount,
+        // Evidence gate metrics (only for complex path when gate ran)
+        ...(coverageScore !== undefined && { coverageScore, retrievalPassCount }),
       });
 
       return res.json(response);
