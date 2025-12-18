@@ -146,6 +146,8 @@ export function createBypassedRouterOutput(
     requiresClarification: false,
     clarificationQuestions: [],
     rerankedQuestion: "",
+    scopeHint: null,
+    requiresComposedAnswer: false,
   };
 }
 

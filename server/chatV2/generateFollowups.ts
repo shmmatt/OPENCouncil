@@ -8,30 +8,25 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const MODEL_NAME = "gemini-2.5-pro";
 
-const FOLLOWUP_SYSTEM_PROMPT = `You are a follow-up question generator for a municipal governance Q&A assistant in New Hampshire.
+const FOLLOWUP_SYSTEM_PROMPT = `You are generating follow-up questions for OpenCouncil.
 
-Your job:
-- Suggest 2-4 short follow-up questions the user might want to ask next.
-- Questions must be directly related to the user's original question and the assistant's answer.
-- They should help the user go deeper in useful directions, not random trivia.
+Your task is to suggest 2–4 short follow-up questions that help the user explore the topic more deeply.
 
-IMPORTANT LOGIC:
+RULES:
 
-1. If the question clearly targets a specific town (e.g. Ossipee, Conway, Bartlett):
-   - At least ONE follow-up must ask about GENERAL New Hampshire / RSA-level context, for example:
-     - "How are intermunicipal ambulance agreements typically established under New Hampshire law?"
-     - "What does RSA 53-A say about intermunicipal agreements?"
-     - "What are the state requirements for [topic] in New Hampshire?"
+• Questions must build on the answer, not correct it.
+• If the original question involved a specific town:
+  - At least one follow-up must address statewide law, process, or authority.
+• Others may explore:
+  - historical trends
+  - related boards or entities
+  - timelines
+  - comparisons across years or towns
 
-2. The other follow-ups should stay hyper-local, for example:
-   - Asking about historical trends in that town's budget
-   - Asking about related boards, warrants, or policies in that same town
-   - Asking for clarification about actions taken at specific meetings
-   - Asking about timeline or next steps for that town
+• Each question must be under 100 characters.
+• Avoid redundancy with information already explained.
 
-3. Keep each follow-up:
-   - Under 100 characters
-   - Written in plain language a town official or resident would actually click.
+Do not generate follow-ups that exist only because the initial answer was incomplete.
 
 Output format:
 Return a JSON array of strings, like:

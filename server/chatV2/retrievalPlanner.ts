@@ -6,55 +6,61 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const PLANNER_SYSTEM_PROMPT = `You are a retrieval planner for a municipal governance Q&A assistant in New Hampshire.
+const PLANNER_SYSTEM_PROMPT = `You are the retrieval planning agent for OpenCouncil.
 
-Given a complex municipal governance question and routing information, decide which document types to search and what information is needed.
+Your job is to design a document retrieval plan that provides sufficient evidence to answer the user's question accurately and completely.
 
-Document categories available:
-- budget: Town budgets, financial reports
-- zoning: Zoning ordinances, maps, regulations
-- meeting_minutes: Board/committee meeting minutes (IMPORTANT: Use this category when user asks about what happened at a meeting, meeting discussions, board decisions, votes, or actions taken at meetings)
-- town_report: Annual town reports
-- warrant_article: Town meeting warrant articles
-- ordinance: Local ordinances and bylaws
-- policy: Policies and procedures
-- planning_board_docs: Planning board materials, site plans
-- zba_docs: Zoning Board of Adjustment materials, variances
-- licensing_permits: Licenses and permit information
-- cip: Capital Improvement Plans
-- elections: Election materials
-- misc_other: Other documents
+Inputs include:
+- user question
+- detected domains
+- scopeHint ("local", "statewide", "mixed")
+- requiresComposedAnswer (boolean)
 
-SPECIAL GUIDANCE FOR MEETING MINUTES:
-When a user's question mentions any of these, prioritize "meeting_minutes" category:
-- "minutes", "meeting", "last night's meeting", "meeting on [date]"
-- "what did the [board] decide", "what was discussed", "what happened at"
-- "vote on", "approved by", "actions taken", "motion to"
-- Questions about specific board discussions or decisions on dates
-For meeting-related questions, ONLY include "meeting_minutes" in categories to focus the search.
+You must output a JSON retrieval plan specifying:
+- townPreference (string or null)
+- allowStatewideFallback (boolean)
+- categories (array)
+- boards (array or null)
+- rsaChapters (array or null)
+- preferRecent (boolean)
+- infoNeeds (array of information goals)
 
-RECENCY PREFERENCE:
-When the user's question includes words like "currently", "now", "this year", "recent", "latest", or a specific year (e.g. "2025"), you must:
-- Set "preferRecent": true
-- Prefer recent meeting_minutes and current or specified year budgets for the town
-- Set categories to focus on ["meeting_minutes", "budget"] first; include "town_report", "policy", or "ordinance" only if clearly relevant
-- In infoNeeds, be explicit that you want "most recent" or "current-year" data, not historical information
+CRITICAL RULES:
 
-HYPER-LOCAL PREFERENCE (IMPORTANT):
-- If the user question names a specific town (e.g. "Ossipee", "Conway", "Bartlett"):
-  - Set filters.townPreference to that exact town name.
-  - Set filters.allowStatewideFallback to false UNLESS the user explicitly asks about "New Hampshire" or state law in general.
-- If the user explicitly asks about state-wide law or "New Hampshire" generally, you may set filters.townPreference to null and allowStatewideFallback to true.
+• MEETING MINUTES AND BUDGET GUIDANCE (MANDATORY):
+  - If the user asks about what happened at a meeting, board decisions, votes, discussions, or actions taken:
+    - ALWAYS include "meeting_minutes" in categories
+  - If the user asks about costs, spending, budgets, or financial matters:
+    - ALWAYS include "budget" and/or "town_report" in categories
+  - For meeting-related questions with a specific town, prioritize town-specific minutes
 
-MEETING-MINUTES AND BUDGET GUIDANCE:
-- If the user is asking what happened at a meeting, about board decisions, or about how something was decided:
-  - Always include "meeting_minutes" in filters.categories.
-- If the user is asking about costs, spending, or budgets:
-  - Always include "budget" and/or "town_report" in filters.categories.
+• If requiresComposedAnswer is true:
+  - Plan for MULTIPLE contributing facets when the question has multiple causes
+  - Include diverse categories when the question involves multi-factor explanations
+  - Still ensure meeting_minutes/budget are included when relevant
 
-RSA / STATUTE GUIDANCE:
-- Do NOT set rsaChapters in filters.rsaChapters unless the user explicitly asks about state law, statutes, or "RSA".
-- Default to local documents (meeting_minutes, budget, ordinance) over RSA references.
+• Scope handling:
+  - If scopeHint is "mixed":
+    - set townPreference to the relevant town
+    - set allowStatewideFallback = true
+  - If scopeHint is "local":
+    - set allowStatewideFallback = false (prefer local documents)
+    - Only set allowStatewideFallback = true if requiresComposedAnswer AND the question clearly requires statewide process context
+  - If scopeHint is "statewide":
+    - set townPreference = null
+    - set allowStatewideFallback = true
+
+• RECENCY PREFERENCE:
+  When the user's question includes "currently", "now", "this year", "recent", "latest", or a specific year:
+  - Set "preferRecent": true
+  - Focus on recent meeting_minutes and current-year budgets
+  - In infoNeeds, be explicit about wanting "most recent" or "current-year" data
+
+• Information goals:
+  - Include at least one infoNeed describing local decisions, changes, or data
+  - When requiresComposedAnswer is true, also include process/mechanism context if relevant
+
+• Do NOT assume municipal budgets alone explain outcomes that involve schools, counties, or state processes.
 
 You MUST respond with valid JSON only:
 {
@@ -87,12 +93,15 @@ export async function planRetrieval(
     ? `Scope hint: ${routerOutput.scopeHint}` 
     : "Scope hint: not determined";
 
-  const userPrompt = `Create a retrieval plan for this complex question:
+  const requiresComposedAnswer = routerOutput.requiresComposedAnswer ?? false;
+
+  const userPrompt = `Create a retrieval plan for this question:
 
 Question: "${routerOutput.rerankedQuestion || question}"
 
 Detected domains: ${routerOutput.domains.join(", ")}
 ${scopeContext}
+requiresComposedAnswer: ${requiresComposedAnswer}
 ${userHints?.town ? `Town hint: ${userHints.town}` : "No town specified"}
 ${userHints?.board ? `Board hint: ${userHints.board}` : "No board specified"}
 
@@ -169,7 +178,8 @@ Respond with valid JSON only.`;
         : routerOutput.domains;
       
       if (routerOutput.scopeHint === "local") {
-        allowStatewideFallback = false;
+        // For local questions, prefer local documents unless LLM specifically allowed fallback
+        allowStatewideFallback = parsed.filters?.allowStatewideFallback === true;
       } else if (routerOutput.scopeHint === "statewide") {
         townPreference = undefined;
         allowStatewideFallback = true;

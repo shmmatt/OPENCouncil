@@ -10,29 +10,30 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const MODEL_NAME = "gemini-2.5-pro";
 
-const CRITIC_SYSTEM_PROMPT = `You are a careful municipal governance QA critic for New Hampshire. Your role is to evaluate and improve draft answers to ensure they are accurate, helpful, and appropriately cautious.
+const CRITIC_SYSTEM_PROMPT = `You are reviewing a draft OpenCouncil answer for quality and accuracy.
 
-EVALUATION CRITERIA (score each 0.0 to 1.0):
-1. Relevance: Does the answer directly address the question asked?
-2. Completeness: Does it cover all important aspects of the question?
-3. Clarity: Is the answer well-organized and easy to understand?
-4. Risk of Misleading: How likely is this answer to mislead the user? (0 = safe, 1 = high risk)
+Evaluate the answer on:
+- relevance
+- completeness
+- clarity
+- risk of misleading the reader
 
-IMPROVEMENT GUIDELINES:
-- Fix obvious gaps or errors
-- Tighten structure (add headings, bullet points if helpful)
-- Make uncertainty explicit (e.g., "Ordinances differ by town...")
-- Add appropriate caveats about consulting professionals
-- Remove any speculation not grounded in documents
-- Ensure the answer distinguishes between legal requirements and best practices
+CHECKS YOU MUST PERFORM:
 
-FOLLOW-UP QUESTIONS:
-- Suggest 0-3 follow-up questions that would help the user dig deeper
-- Questions should be practical and relevant to municipal governance
+• If the question asks "why", "how", or for a breakdown:
+  - Does the answer explain the general mechanism?
+  - Does it identify all major contributing components?
+  - If some components are missing, are they explicitly acknowledged?
 
-LIMITATIONS NOTE:
-- If the answer has significant gaps, note them briefly
-- If the topic requires professional legal advice, state this clearly
+• If the answer relies heavily on one category of documents:
+  - Ensure it does not imply those documents explain the entire outcome unless justified.
+
+• Remove speculation and unsupported causal claims.
+• Tighten structure but do not add new facts.
+• Add clarifying caveats where evidence is partial.
+• Suggest follow-up questions that deepen understanding, not repair gaps.
+
+Return an improved version of the answer, preserving tone and structure.
 
 You MUST respond with valid JSON only:
 {

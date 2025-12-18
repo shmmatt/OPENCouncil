@@ -409,7 +409,10 @@ export function registerChatV2Routes(app: Express): void {
               initialDocCount: draftResult.sourceDocumentNames.length,
             });
 
-            const retrievalSummary = buildRetrievalSummary(draftResult.retrievedChunks);
+            const retrievalSummary = buildRetrievalSummary(
+              draftResult.sourceDocumentNames,
+              draftResult.retrievedChunks.map(c => ({ source: c.source, content: c.content }))
+            );
             
             // Build conversation context from history
             const conversationContext = chatHistory.length > 0

@@ -23,6 +23,7 @@ export interface RouterOutput {
   clarificationQuestions: string[];
   rerankedQuestion: string;
   scopeHint: ScopeHint;
+  requiresComposedAnswer?: boolean;
 }
 
 export interface RetrievalPlan {

@@ -73,39 +73,45 @@ function combineScopeHints(detected: ScopeHint, llm: ScopeHint): ScopeHint {
   return llm || detected || null;
 }
 
-const ROUTER_SYSTEM_PROMPT = `You are a router for a municipal governance Q&A assistant that helps small-town elected officials and public workers in New Hampshire.
+const ROUTER_SYSTEM_PROMPT = `You are the routing and classification agent for OpenCouncil, a municipal governance Q&A system.
 
-Your job is to analyze each user question and determine:
-1. COMPLEXITY: Is this a "simple" or "complex" question?
-   - Simple: Straightforward, single-topic questions with clear answers (e.g., "What is the quorum for a planning board?")
-   - Complex: Multi-part questions, comparative analysis, procedural questions requiring multiple sources (e.g., "How does the site plan review process differ between Conway and Bartlett?")
+Your job is to analyze the user's question and return a JSON object that determines how the system should handle it.
 
-2. DOMAINS: What document categories are relevant? Choose from:
-   - budget, zoning, meeting_minutes, town_report, warrant_article
-   - ordinance, policy, planning_board_docs, zba_docs, licensing_permits
-   - cip, elections, misc_other
+You must determine:
 
-IMPORTANT FOR MEETING MINUTES:
-If the user asks about:
-- "minutes", "meeting minutes", "last night's meeting"
-- What a board "decided", "discussed", "voted on"
-- What happened at a specific meeting or date
-- Actions, motions, or decisions made by a board
-Then the primary domain should be "meeting_minutes".
+1. complexity: "simple" or "complex"
+2. detectedDomains: an array of relevant document domains (e.g., budget, meeting_minutes, zoning, policy, elections, misc_other)
+3. requiresClarification: true or false
+4. clarificationQuestions: optional array of short questions if clarification is required
+5. rerankedQuestion: a cleaned, retrieval-optimized version of the user's question
+6. scopeHint: "local", "statewide", "mixed", or null
+7. requiresComposedAnswer: true or false
 
-3. CLARIFICATION: Does the question need clarification before answering?
-   - Only require clarification if the question is genuinely ambiguous about WHICH town or topic
-   - Do NOT ask for clarification on common governance terms
+IMPORTANT GUIDELINES:
 
-4. RERANKED QUESTION: Clean up the user's question for better retrieval (fix typos, expand abbreviations, etc.)
-   IMPORTANT: If the user names a specific town (e.g., "Ossipee", "Conway", "Bartlett"), you MUST preserve that town name in rerankedQuestion.
-   The town name is critical for downstream retrieval - never strip it out or generalize it.
+• Complexity
+  - Use "simple" only for narrow factual lookups.
+  - Use "complex" for questions involving causes, explanations, comparisons, processes, or multiple contributing factors.
 
-5. SCOPE HINT: Determine the scope of the question:
-   - "local": Question specifically about a town/municipality (e.g., "What is Ossipee's budget?")
-   - "statewide": Question about NH law, RSAs, or state-level requirements without referencing a specific town
-   - "mixed": Question mentions both a specific town AND state law/RSAs
-   - null: Cannot determine scope
+• requiresComposedAnswer
+  Set this to true when the user is asking:
+  - why something changed
+  - how something is calculated or determined
+  - for a breakdown of components
+  - to explain or interpret a document, bill, notice, or outcome
+  These questions require a complete, multi-part answer in a single response.
+
+• Scope
+  - Use "local" ONLY when the question is explicitly about a town-specific fact or event.
+  - Use "statewide" ONLY when the question is explicitly about NH law or general practice.
+  - Use "mixed" when:
+    - the question references a specific town AND
+    - understanding requires statewide process, law, or multi-entity context.
+  When in doubt between "local" and "mixed", choose "mixed".
+
+• Do NOT assume that a town name means the answer should be purely local.
+• Do NOT collapse multi-factor questions into a single domain.
+• Do NOT answer the question; only classify and prepare it.
 
 You MUST respond with valid JSON only, no other text. Use this exact format:
 {
@@ -114,7 +120,8 @@ You MUST respond with valid JSON only, no other text. Use this exact format:
   "requiresClarification": true | false,
   "clarificationQuestions": ["question1", "question2"] (empty array if no clarification needed),
   "rerankedQuestion": "cleaned up question text",
-  "scopeHint": "local" | "statewide" | "mixed" | null
+  "scopeHint": "local" | "statewide" | "mixed" | null,
+  "requiresComposedAnswer": true | false
 }`;
 
 const MODEL_NAME = "gemini-2.5-flash";
@@ -213,6 +220,7 @@ Remember: Respond with valid JSON only, no other text.`;
           : [],
         rerankedQuestion: parsed.rerankedQuestion || question,
         scopeHint: finalScopeHint,
+        requiresComposedAnswer: Boolean(parsed.requiresComposedAnswer),
       };
     } catch (parseError) {
       logLlmError({
@@ -257,5 +265,6 @@ function getDefaultRouterOutput(question: string, userHints?: { town?: string })
     clarificationQuestions: [],
     rerankedQuestion: question,
     scopeHint: detectScopeHint(question, userHints),
+    requiresComposedAnswer: false,
   };
 }
