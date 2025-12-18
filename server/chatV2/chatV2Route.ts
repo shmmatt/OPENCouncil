@@ -686,30 +686,26 @@ export function registerChatV2Routes(app: Express): void {
               30000
             );
 
+            attachmentInfo = {
+              filename: uploadedFile.originalname,
+              mimeType: getMimeType(uploadedFile.originalname),
+              extractedText: extractedText || "(File uploaded but text could not be extracted - file may contain images or be password protected)",
+            };
+
             if (!extractedText || extractedText.trim().length === 0) {
               logWarn("chat_file_extraction_empty", {
                 ...logCtx,
                 stage: "file_extraction",
                 filename: uploadedFile.originalname,
               });
-              await fs.unlink(uploadedFile.path).catch(() => {});
-              return res.status(400).json({ 
-                message: "Could not extract text from the file. The file may be empty, corrupted, or contain only images. Please try a different file." 
+            } else {
+              logDebug("chat_file_extracted", {
+                ...logCtx,
+                stage: "file_extraction",
+                filename: uploadedFile.originalname,
+                extractedLength: extractedText.length,
               });
             }
-
-            attachmentInfo = {
-              filename: uploadedFile.originalname,
-              mimeType: getMimeType(uploadedFile.originalname),
-              extractedText,
-            };
-
-            logDebug("chat_file_extracted", {
-              ...logCtx,
-              stage: "file_extraction",
-              filename: uploadedFile.originalname,
-              extractedLength: extractedText.length,
-            });
           } catch (extractionError) {
             logError("chat_file_extraction_error", {
               ...logCtx,
@@ -717,10 +713,12 @@ export function registerChatV2Routes(app: Express): void {
               filename: uploadedFile.originalname,
               error: extractionError instanceof Error ? extractionError.message : String(extractionError),
             });
-            await fs.unlink(uploadedFile.path).catch(() => {});
-            return res.status(400).json({ 
-              message: "Failed to process the file. Please ensure the file is valid and try again." 
-            });
+            // Still proceed with the upload, but note the extraction failed
+            attachmentInfo = {
+              filename: uploadedFile.originalname,
+              mimeType: getMimeType(uploadedFile.originalname),
+              extractedText: "(File uploaded but text extraction failed)",
+            };
           } finally {
             await fs.unlink(uploadedFile.path).catch(() => {});
           }
