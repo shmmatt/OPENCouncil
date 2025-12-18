@@ -6,7 +6,7 @@ import type { PipelineLogContext } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 const FOLLOWUP_SYSTEM_PROMPT = `You are generating follow-up questions for OpenCouncil.
 

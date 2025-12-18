@@ -17,7 +17,7 @@ import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from 
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 interface ComplexAnswerOptions {
   question: string;

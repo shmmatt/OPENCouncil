@@ -16,7 +16,7 @@ import { extractTokenCounts, logLLMCall } from "../llm/callLLMWithLogging";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.0-flash";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 /**
  * Question intent types that the gate uses to determine coverage needs

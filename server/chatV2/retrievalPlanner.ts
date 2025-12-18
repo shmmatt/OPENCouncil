@@ -75,7 +75,7 @@ You MUST respond with valid JSON only:
   "preferRecent": true | false
 }`;
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 interface PlanRetrievalOptions {
   question: string;

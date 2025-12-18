@@ -8,7 +8,7 @@ import type { ChatNotice } from "@shared/chatNotices";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 const CRITIC_SYSTEM_PROMPT = `You are reviewing a draft OpenCouncil answer for quality and accuracy.
 

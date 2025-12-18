@@ -16,7 +16,7 @@ import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from 
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-const MODEL_NAME = "gemini-2.5-pro";
+const MODEL_NAME = "gemini-3-flash-preview";
 
 const RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA).
 
