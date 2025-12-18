@@ -12,6 +12,7 @@ import {
   processingErrorNotice,
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
+import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -35,6 +36,7 @@ interface SimpleAnswerOptions {
   sessionHistory: ChatHistoryMessage[];
   userHints?: { town?: string; board?: string };
   logContext?: PipelineLogContext;
+  composedAnswerFlags?: ComposedAnswerFlags;
 }
 
 interface SimpleAnswerResult {
@@ -43,12 +45,13 @@ interface SimpleAnswerResult {
   docSourceType: import("./types").DocSourceType;
   docSourceTown: string | null;
   notices: ChatNotice[];
+  composedAnswerApplied?: boolean;
 }
 
 export async function generateSimpleAnswer(
   options: SimpleAnswerOptions
 ): Promise<SimpleAnswerResult> {
-  const { question, routerOutput, sessionHistory, userHints, logContext } = options;
+  const { question, routerOutput, sessionHistory, userHints, logContext, composedAnswerFlags } = options;
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -83,7 +86,11 @@ export async function generateSimpleAnswer(
     parts: [{ text: enhancedQuestion }],
   });
 
-  const systemInstruction = buildSimpleAnswerSystemPrompt(userHints);
+  const baseSystemPrompt = buildSimpleAnswerSystemPrompt(userHints);
+  
+  const { prompt: systemInstruction, composedAnswerApplied } = composedAnswerFlags
+    ? augmentSystemPromptWithComposedAnswer(baseSystemPrompt, composedAnswerFlags, userHints?.town)
+    : { prompt: baseSystemPrompt, composedAnswerApplied: false };
 
   logLlmRequest({
     requestId: logContext?.requestId,
@@ -96,6 +103,7 @@ export async function generateSimpleAnswer(
       domains: routerOutput.domains,
       historyLength: sessionHistory.length,
       hasUserHints: !!userHints,
+      composedAnswerApplied,
     },
   });
 
@@ -260,6 +268,7 @@ export async function generateSimpleAnswer(
       docSourceType,
       docSourceTown,
       notices: [],
+      composedAnswerApplied,
     };
   } catch (error) {
     if (isQuotaError(error)) {

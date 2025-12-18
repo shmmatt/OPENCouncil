@@ -13,6 +13,7 @@ import {
   processingErrorNotice,
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
+import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -24,6 +25,7 @@ interface ComplexAnswerOptions {
   sessionHistory: ChatHistoryMessage[];
   logContext?: PipelineLogContext;
   additionalChunks?: RetrievedChunk[];
+  composedAnswerFlags?: ComposedAnswerFlags;
 }
 
 interface ComplexDraftResult {
@@ -33,6 +35,7 @@ interface ComplexDraftResult {
   docSourceTown: string | null;
   notices: ChatNotice[];
   retrievedChunks: RetrievedChunk[];
+  composedAnswerApplied?: boolean;
 }
 
 export interface RetrievedChunk {
@@ -44,7 +47,7 @@ export interface RetrievedChunk {
 export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
-  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [] } = options;
+  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags } = options;
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -226,12 +229,13 @@ export async function generateComplexDraftAnswer(
     content: c.content,
   }));
 
-  const draftAnswerText = await synthesizeDraftAnswer(
+  const { text: draftAnswerText, composedAnswerApplied } = await synthesizeDraftAnswer(
     question,
     snippetsForSynthesis,
     sessionHistory,
     retrievalPlan,
-    logContext
+    logContext,
+    composedAnswerFlags
   );
 
   // Determine docSourceType based on actual retrieved documents (from File Search)
@@ -261,6 +265,7 @@ export async function generateComplexDraftAnswer(
     docSourceTown,
     notices: [],
     retrievedChunks,
+    composedAnswerApplied,
   };
 }
 
@@ -445,10 +450,14 @@ async function synthesizeDraftAnswer(
   snippets: { source: string; content: string }[],
   history: ChatHistoryMessage[],
   plan: RetrievalPlan,
-  logContext?: PipelineLogContext
-): Promise<string> {
+  logContext?: PipelineLogContext,
+  composedAnswerFlags?: ComposedAnswerFlags
+): Promise<{ text: string; composedAnswerApplied: boolean }> {
   if (snippets.length === 0) {
-    return "No directly relevant material was found in the OpenCouncil archive for this question. The available documents for this municipality do not address this question directly. You may wish to consult municipal records or counsel for more specific guidance.";
+    return {
+      text: "No directly relevant material was found in the OpenCouncil archive for this question. The available documents for this municipality do not address this question directly. You may wish to consult municipal records or counsel for more specific guidance.",
+      composedAnswerApplied: false,
+    };
   }
 
   const snippetText = snippets
@@ -494,7 +503,7 @@ Additional rules:
 
 Provide your answer:`;
 
-  const synthesisSystemPrompt = `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices.
+  const baseSynthesisSystemPrompt = `You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices.
 
 For complex answers, use this structure exactly:
 1. "### At a glance" - 2-4 bullet summary
@@ -511,6 +520,10 @@ HYPER-LOCAL FOCUS (IMPORTANT):
 - You may mention that state law or RSAs might apply, but do not describe their content in detail unless the user asked for that.
 - Focus on specific meeting minutes, budget line items, and local decisions rather than theoretical RSA frameworks.`;
 
+  const { prompt: synthesisSystemPrompt, composedAnswerApplied } = composedAnswerFlags
+    ? augmentSystemPromptWithComposedAnswer(baseSynthesisSystemPrompt, composedAnswerFlags, plan.filters.townPreference)
+    : { prompt: baseSynthesisSystemPrompt, composedAnswerApplied: false };
+
   logLlmRequest({
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -523,6 +536,7 @@ HYPER-LOCAL FOCUS (IMPORTANT):
       snippetCount: snippets.length,
       historyLength: history.length,
       townPreference: plan.filters.townPreference,
+      composedAnswerApplied,
     },
   });
 
@@ -565,7 +579,7 @@ HYPER-LOCAL FOCUS (IMPORTANT):
       );
     }
 
-    return responseText;
+    return { text: responseText, composedAnswerApplied };
   } catch (error) {
     if (isQuotaError(error)) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -587,7 +601,7 @@ HYPER-LOCAL FOCUS (IMPORTANT):
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
-    return "An error occurred while processing the retrieved documents. Please try again in a moment.";
+    return { text: "An error occurred while processing the retrieved documents. Please try again in a moment.", composedAnswerApplied: false };
   }
 }
 

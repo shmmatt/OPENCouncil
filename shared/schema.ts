@@ -356,7 +356,7 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 // Actor types for identity tracking
 export type ActorType = 'user' | 'anon';
 export type UserRole = 'user' | 'admin' | 'municipal_admin';
-export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'simpleAnswer' | 'critic' | 'other';
+export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'simpleAnswer' | 'critic' | 'evidenceGate' | 'other';
 export type LlmProvider = 'google' | 'openai' | 'other';
 
 // Status types for ingestion jobs

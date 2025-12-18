@@ -26,6 +26,7 @@ import {
   buildRetrievalSummary,
   mergeRetrievalResults,
 } from "./evidenceGate";
+import { computeComposedAnswerFlags, type ComposedAnswerFlags } from "./composedFirstAnswer";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -289,6 +290,16 @@ export function registerChatV2Routes(app: Express): void {
       // Evidence coverage gate metrics (only populated for complex path)
       let coverageScore: number | undefined;
       let retrievalPassCount = 1;
+      
+      // Composed first answer detection (for both paths)
+      const hasAttachment = false; // Will be set in file upload handler
+      const composedAnswerFlags = computeComposedAnswerFlags(
+        content.trim(),
+        hasAttachment,
+        routerOutput,
+        logCtx
+      );
+      let composedAnswerApplied = false;
 
       if (routerOutput.complexity === "simple") {
         logDebug("chat_v2_simple_path", {
@@ -306,6 +317,7 @@ export function registerChatV2Routes(app: Express): void {
           sessionHistory: trimmedHistory,
           userHints: enhancedMetadata,
           logContext: logCtx,
+          composedAnswerFlags,
         });
 
         answerText = simpleResult.answerText;
@@ -314,6 +326,7 @@ export function registerChatV2Routes(app: Express): void {
         docSourceType = simpleResult.docSourceType;
         docSourceTown = simpleResult.docSourceTown;
         notices = simpleResult.notices;
+        composedAnswerApplied = simpleResult.composedAnswerApplied || false;
 
         logDebug("simple_answer_result", {
           ...logCtx,
@@ -372,6 +385,7 @@ export function registerChatV2Routes(app: Express): void {
           retrievalPlan,
           sessionHistory: trimmedHistory,
           logContext: logCtx,
+          composedAnswerFlags,
         });
 
         logDebug("complex_answer_initial_draft", {
@@ -397,8 +411,17 @@ export function registerChatV2Routes(app: Express): void {
 
             const retrievalSummary = buildRetrievalSummary(draftResult.retrievedChunks);
             
+            // Build conversation context from history
+            const conversationContext = chatHistory.length > 0
+              ? chatHistory.slice(-4).map(m => `${m.role}: ${m.content.slice(0, 200)}`).join("\n")
+              : "";
+            
             const gateOutput = await evaluateEvidenceCoverage({
-              question: content.trim(),
+              userQuestion: content.trim(),
+              conversationContext,
+              townPreference: resolvedTown || null,
+              routerOutput,
+              retrievalPlan,
               retrievalSummary,
               logContext: logCtx,
             });
@@ -409,14 +432,14 @@ export function registerChatV2Routes(app: Express): void {
               ...logCtx,
               stage: "evidenceGate",
               coverageScore: gateOutput.coverageScore,
-              decision: gateOutput.decision,
+              shouldExpandRetrieval: gateOutput.shouldExpandRetrieval,
               questionIntent: gateOutput.questionIntent,
               recommendedPassCount: gateOutput.recommendedPasses.length,
-              diversity: gateOutput.diversityMetrics,
+              missingFacets: gateOutput.missingFacets.slice(0, 3),
             });
 
             // Execute expansion passes if recommended
-            if (gateOutput.decision === "expand" && gateOutput.recommendedPasses.length > 0) {
+            if (gateOutput.shouldExpandRetrieval && gateOutput.recommendedPasses.length > 0) {
               const maxExpansionPasses = Math.min(
                 gateOutput.recommendedPasses.length,
                 chatConfig.MAX_COVERAGE_RETRIEVAL_PASSES
@@ -430,12 +453,12 @@ export function registerChatV2Routes(app: Express): void {
                   ...logCtx,
                   stage: "evidenceGate_expansion",
                   passNumber: passIdx + 1,
-                  rationale: pass.rationale,
-                  queryCount: pass.queries.length,
+                  reason: pass.reason,
+                  queryText: pass.queryText,
                 });
 
                 const expansionChunks = await performExpansionRetrieval({
-                  queries: pass.queries,
+                  queries: [pass.queryText],
                   storeId,
                   logContext: logCtx,
                   passNumber: passIdx + 1,
@@ -480,6 +503,7 @@ export function registerChatV2Routes(app: Express): void {
                   sessionHistory: trimmedHistory,
                   logContext: logCtx,
                   additionalChunks,
+                  composedAnswerFlags,
                 });
 
                 logDebug("resynthesis_complete", {
@@ -497,6 +521,7 @@ export function registerChatV2Routes(app: Express): void {
         docSourceType = draftResult.docSourceType;
         docSourceTown = draftResult.docSourceTown;
         notices = draftResult.notices;
+        composedAnswerApplied = draftResult.composedAnswerApplied || false;
 
         logDebug("complex_answer_draft", {
           ...logCtx,
@@ -658,6 +683,13 @@ export function registerChatV2Routes(app: Express): void {
         docSourceTown,
         // Evidence gate metrics (only for complex path when gate ran)
         ...(coverageScore !== undefined && { coverageScore, retrievalPassCount }),
+        // Composed answer metrics
+        requiresComposedFirstAnswer: composedAnswerFlags.requiresComposedFirstAnswer,
+        hasUserArtifact: composedAnswerFlags.hasUserArtifact,
+        composedAnswerApplied,
+        ...(composedAnswerFlags.requiresComposedFirstAnswer && {
+          composedIntentType: composedAnswerFlags.detectedIntent,
+        }),
       });
 
       return res.json(response);

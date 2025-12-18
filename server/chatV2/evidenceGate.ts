@@ -404,7 +404,7 @@ export function buildRetrievalSummary(
   snippets: Array<{ source: string; content: string }>,
   maxSnippetChars: number = 2000
 ): RetrievalResultsSummary {
-  const uniqueDocs = [...new Set(documentNames)];
+  const uniqueDocs = Array.from(new Set(documentNames));
   
   // Extract metadata from document names (format: "Category | Town | Title | Year")
   const categories = new Set<string>();
@@ -412,7 +412,7 @@ export function buildRetrievalSummary(
   const towns = new Set<string>();
   
   for (const docName of uniqueDocs) {
-    const parts = docName.split(" | ").map(s => s.trim());
+    const parts = docName.split(" | ").map((s: string) => s.trim());
     if (parts.length >= 1) {
       const category = parts[0].toLowerCase().replace(/\s+/g, "_");
       if (category && !category.includes("statewide")) {
@@ -446,9 +446,9 @@ export function buildRetrievalSummary(
   return {
     chunkCount: snippets.length,
     distinctDocCount: uniqueDocs.length,
-    distinctCategories: [...categories],
-    boardsRepresented: [...boards],
-    townsRepresented: [...towns],
+    distinctCategories: Array.from(categories),
+    boardsRepresented: Array.from(boards),
+    townsRepresented: Array.from(towns),
     topDocNames: uniqueDocs.slice(0, 10),
     snippetSample: snippetSample.trim(),
   };
@@ -491,7 +491,7 @@ export function mergeRetrievalResults(
   }
 
   // Merge document names
-  const mergedDocNames = [...new Set([...existingDocNames, ...newDocNames])];
+  const mergedDocNames = Array.from(new Set([...existingDocNames, ...newDocNames]));
 
   return { mergedSnippets, mergedDocNames };
 }

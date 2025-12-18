@@ -36,6 +36,12 @@ A three-tier fallback system extracts and finalizes town information: LLM-extrac
 ### Scope Preferences (Chat v2)
 The chat pipeline detects question scope (local, statewide, mixed, null) using patterns and LLM output. This informs retrieval behavior, allowing strict town filtering for local questions and statewide document search for broader queries. An RSA fallback provides general knowledge answers when no relevant documents are found for statewide legal questions.
 
+### Evidence Coverage Gate (Chat v2)
+The complex answer path includes an Evidence Coverage Gate that evaluates retrieval quality after initial document retrieval. If coverage is insufficient for the question type (causal, mechanism, breakdown, process), the gate triggers up to 2 additional retrieval passes with targeted queries. The gate uses diversity metrics (category, board, document coverage) and LLM assessment to determine when expansion is needed.
+
+### Composed First Answer Pattern (Chat v2)
+For explanatory/causal/mechanism questions, the pipeline detects intent types (causal, mechanism, breakdown, interpretation) using generalized pattern matching. When detected, synthesis prompts are augmented with structured response guidelines encouraging complete explanations with examples. This applies to both simple and complex answer paths.
+
 ### Town Preference & Recent Minutes Updates
 The system supports persistent town preferences for anonymous users and chat sessions. A priority cascade resolves town preference for retrieval. API endpoints provide lists of available towns, allow preference updates, and offer public/admin feeds of recently ingested meeting minutes. The chat sidebar includes a town selector and a "Recent Minutes Updates" section.
 
