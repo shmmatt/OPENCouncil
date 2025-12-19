@@ -14,10 +14,9 @@ import {
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
 import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-const MODEL_NAME = "gemini-3-flash-preview";
 
 interface ComplexAnswerOptions {
   question: string;
@@ -48,6 +47,7 @@ export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
   const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags } = options;
+  const { model: summaryModel } = getModelForStage('complexSummary');
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -86,7 +86,7 @@ export async function generateComplexDraftAnswer(
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: retrievalStage,
-      model: MODEL_NAME,
+      model: summaryModel,
       systemPrompt: retrievalSystemPrompt,
       userPrompt: prompt.query,
       extra: {
@@ -113,7 +113,7 @@ export async function generateComplexDraftAnswer(
 
     try {
       const response = await ai.models.generateContent({
-        model: MODEL_NAME,
+        model: summaryModel,
         contents: [{ role: "user", parts: [{ text: prompt.query }] }],
         config: {
           systemInstruction: retrievalSystemPrompt,
@@ -135,7 +135,7 @@ export async function generateComplexDraftAnswer(
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: retrievalStage,
-        model: MODEL_NAME,
+        model: summaryModel,
         responseText: snippetContent,
         durationMs,
       });
@@ -148,7 +148,7 @@ export async function generateComplexDraftAnswer(
             sessionId: logContext.sessionId,
             requestId: logContext.requestId,
             stage: "other",
-            model: MODEL_NAME,
+            model: summaryModel,
             metadata: { subStage: retrievalStage },
           },
           { text: snippetContent, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
@@ -181,7 +181,7 @@ export async function generateComplexDraftAnswer(
           requestId: logContext?.requestId,
           sessionId: logContext?.sessionId,
           stage: retrievalStage,
-          model: MODEL_NAME,
+          model: summaryModel,
           error: error instanceof Error ? error : new Error(String(error)),
         });
         throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in complexAnswer retrieval");
@@ -191,7 +191,7 @@ export async function generateComplexDraftAnswer(
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: retrievalStage,
-        model: MODEL_NAME,
+        model: summaryModel,
         error: error instanceof Error ? error : new Error(String(error)),
       });
     }
@@ -276,6 +276,7 @@ export async function performExpansionRetrieval(options: {
   passNumber: number;
 }): Promise<RetrievedChunk[]> {
   const { queries, storeId, logContext, passNumber } = options;
+  const { model: summaryModel } = getModelForStage('complexSummary');
   const chunks: RetrievedChunk[] = [];
 
   for (let i = 0; i < queries.length; i++) {
@@ -296,7 +297,7 @@ export async function performExpansionRetrieval(options: {
 
     try {
       const response = await ai.models.generateContent({
-        model: MODEL_NAME,
+        model: summaryModel,
         contents: [{ role: "user", parts: [{ text: query }] }],
         config: {
           systemInstruction: retrievalSystemPrompt,
@@ -343,7 +344,7 @@ export async function performExpansionRetrieval(options: {
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: retrievalStage,
-        model: MODEL_NAME,
+        model: summaryModel,
         error: error instanceof Error ? error : new Error(String(error)),
       });
     }
@@ -453,6 +454,8 @@ async function synthesizeDraftAnswer(
   logContext?: PipelineLogContext,
   composedAnswerFlags?: ComposedAnswerFlags
 ): Promise<{ text: string; composedAnswerApplied: boolean }> {
+  const { model: synthesisModel } = getModelForStage('complexSynthesis');
+  
   if (snippets.length === 0) {
     return {
       text: "No directly relevant material was found in the OpenCouncil archive for this question. The available documents for this municipality do not address this question directly. You may wish to consult municipal records or counsel for more specific guidance.",
@@ -552,7 +555,7 @@ STYLE RULES:
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "complexAnswer_synthesis",
-    model: MODEL_NAME,
+    model: synthesisModel,
     systemPrompt: synthesisSystemPrompt,
     userPrompt: synthesisPrompt,
     temperature: 0.3,
@@ -568,7 +571,7 @@ STYLE RULES:
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: synthesisModel,
       contents: [{ role: "user", parts: [{ text: synthesisPrompt }] }],
       config: {
         systemInstruction: synthesisSystemPrompt,
@@ -583,7 +586,7 @@ STYLE RULES:
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "complexAnswer_synthesis",
-      model: MODEL_NAME,
+      model: synthesisModel,
       responseText,
       durationMs,
     });
@@ -597,7 +600,7 @@ STYLE RULES:
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "synthesis",
-          model: MODEL_NAME,
+          model: synthesisModel,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -611,7 +614,7 @@ STYLE RULES:
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "complexAnswer_synthesis",
-        model: MODEL_NAME,
+        model: synthesisModel,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in complexAnswer synthesis");
@@ -621,7 +624,7 @@ STYLE RULES:
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "complexAnswer_synthesis",
-      model: MODEL_NAME,
+      model: synthesisModel,
       error: error instanceof Error ? error : new Error(String(error)),
     });
 

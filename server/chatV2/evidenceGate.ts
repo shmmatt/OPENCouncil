@@ -13,10 +13,9 @@ import { logDebug, logError } from "../utils/logger";
 import { logLlmRequest, logLlmResponse } from "../utils/llmLogging";
 import type { PipelineLogContext, RouterOutput, RetrievalPlan } from "./types";
 import { extractTokenCounts, logLLMCall } from "../llm/callLLMWithLogging";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-const MODEL_NAME = "gemini-3-flash-preview";
 
 /**
  * Question intent types that the gate uses to determine coverage needs
@@ -203,6 +202,7 @@ export async function evaluateEvidenceCoverage(options: {
     retrievalSummary, 
     logContext 
   } = options;
+  const { model: modelName } = getModelForStage('evidenceGate');
 
   logDebug("coverage_gate_start", {
     requestId: logContext?.requestId,
@@ -248,7 +248,7 @@ Respond with valid JSON only.`;
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "evidenceGate",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: EVIDENCE_GATE_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.2,
@@ -262,7 +262,7 @@ Respond with valid JSON only.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: EVIDENCE_GATE_SYSTEM_PROMPT,
@@ -277,7 +277,7 @@ Respond with valid JSON only.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "evidenceGate",
-      model: MODEL_NAME,
+      model: modelName,
       responseText,
       durationMs,
     });
@@ -291,7 +291,7 @@ Respond with valid JSON only.`;
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "evidenceGate",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );

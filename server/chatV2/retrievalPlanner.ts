@@ -3,6 +3,7 @@ import type { RouterOutput, RetrievalPlan, PipelineLogContext } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -75,8 +76,6 @@ You MUST respond with valid JSON only:
   "preferRecent": true | false
 }`;
 
-const MODEL_NAME = "gemini-3-flash-preview";
-
 interface PlanRetrievalOptions {
   question: string;
   routerOutput: RouterOutput;
@@ -88,6 +87,7 @@ export async function planRetrieval(
   options: PlanRetrievalOptions
 ): Promise<RetrievalPlan> {
   const { question, routerOutput, userHints, logContext } = options;
+  const { model: modelName } = getModelForStage('retrievalPlanner');
 
   const scopeContext = routerOutput.scopeHint 
     ? `Scope hint: ${routerOutput.scopeHint}` 
@@ -111,7 +111,7 @@ Respond with valid JSON only.`;
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "retrievalPlanner",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: PLANNER_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.2,
@@ -127,7 +127,7 @@ Respond with valid JSON only.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: PLANNER_SYSTEM_PROMPT,
@@ -142,7 +142,7 @@ Respond with valid JSON only.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "retrievalPlanner",
-      model: MODEL_NAME,
+      model: modelName,
       responseText,
       durationMs,
     });
@@ -156,7 +156,7 @@ Respond with valid JSON only.`;
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "retrievalPlanner",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -211,7 +211,7 @@ Respond with valid JSON only.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "retrievalPlanner_parse",
-        model: MODEL_NAME,
+        model: modelName,
         error: parseError instanceof Error ? parseError : new Error(String(parseError)),
       });
       return getDefaultRetrievalPlan(routerOutput, userHints);
@@ -223,7 +223,7 @@ Respond with valid JSON only.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "retrievalPlanner",
-        model: MODEL_NAME,
+        model: modelName,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in retrievalPlanner");
@@ -233,7 +233,7 @@ Respond with valid JSON only.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "retrievalPlanner",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
     

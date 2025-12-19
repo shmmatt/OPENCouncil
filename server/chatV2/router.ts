@@ -3,6 +3,7 @@ import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, ScopeHint } 
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -124,14 +125,14 @@ You MUST respond with valid JSON only, no other text. Use this exact format:
   "requiresComposedAnswer": true | false
 }`;
 
-const MODEL_NAME = "gemini-3-flash-preview";
-
 export async function routeQuestion(
   question: string,
   recentHistory: ChatHistoryMessage[],
   userHints?: { town?: string; board?: string },
   logContext?: PipelineLogContext
 ): Promise<RouterOutput> {
+  const { model: modelName } = getModelForStage('router');
+  
   const historyContext = recentHistory.length > 0
     ? `\nRecent conversation context:\n${recentHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join("\n")}`
     : "";
@@ -150,7 +151,7 @@ Remember: Respond with valid JSON only, no other text.`;
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "router",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: ROUTER_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.2,
@@ -164,7 +165,7 @@ Remember: Respond with valid JSON only, no other text.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: ROUTER_SYSTEM_PROMPT,
@@ -179,7 +180,7 @@ Remember: Respond with valid JSON only, no other text.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "router",
-      model: MODEL_NAME,
+      model: modelName,
       responseText,
       durationMs,
     });
@@ -193,7 +194,7 @@ Remember: Respond with valid JSON only, no other text.`;
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "router",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -227,7 +228,7 @@ Remember: Respond with valid JSON only, no other text.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "router_parse",
-        model: MODEL_NAME,
+        model: modelName,
         error: parseError instanceof Error ? parseError : new Error(String(parseError)),
       });
       return getDefaultRouterOutput(question, userHints);
@@ -239,7 +240,7 @@ Remember: Respond with valid JSON only, no other text.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "router",
-        model: MODEL_NAME,
+        model: modelName,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in router");
@@ -249,7 +250,7 @@ Remember: Respond with valid JSON only, no other text.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "router",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
     

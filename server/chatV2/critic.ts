@@ -5,10 +5,9 @@ import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { infoOnlyNotice } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-const MODEL_NAME = "gemini-3-flash-preview";
 
 const CRITIC_SYSTEM_PROMPT = `You are reviewing a draft OpenCouncil answer for quality and accuracy.
 
@@ -68,6 +67,7 @@ export async function critiqueAndImproveAnswer(
   options: CritiqueOptions
 ): Promise<CritiqueResult> {
   const { question, draftAnswerText, routerOutput, retrievalPlan, logContext } = options;
+  const { model: modelName } = getModelForStage('critic');
 
   const contextInfo = buildContextInfo(routerOutput, retrievalPlan);
 
@@ -95,7 +95,7 @@ Respond with valid JSON only.`;
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "critic",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: CRITIC_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.3,
@@ -111,7 +111,7 @@ Respond with valid JSON only.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: CRITIC_SYSTEM_PROMPT,
@@ -126,7 +126,7 @@ Respond with valid JSON only.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "critic",
-      model: MODEL_NAME,
+      model: modelName,
       responseText,
       durationMs,
     });
@@ -140,7 +140,7 @@ Respond with valid JSON only.`;
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "critic",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -175,7 +175,7 @@ Respond with valid JSON only.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "critic_parse",
-        model: MODEL_NAME,
+        model: modelName,
         error: parseError instanceof Error ? parseError : new Error(String(parseError)),
       });
       return getDefaultCritiqueResult(draftAnswerText);
@@ -187,7 +187,7 @@ Respond with valid JSON only.`;
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "critic",
-        model: MODEL_NAME,
+        model: modelName,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in critic");
@@ -197,7 +197,7 @@ Respond with valid JSON only.`;
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "critic",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
     

@@ -3,10 +3,9 @@ import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging"
 import { isQuotaError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import type { PipelineLogContext } from "./types";
+import { getModelForStage } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-const MODEL_NAME = "gemini-3-flash-preview";
 
 const FOLLOWUP_SYSTEM_PROMPT = `You are generating follow-up questions for OpenCouncil.
 
@@ -44,6 +43,7 @@ export async function generateFollowups(
   params: GenerateFollowupsParams
 ): Promise<string[]> {
   const { userQuestion, answerText, townPreference, detectedDomains, logContext } = params;
+  const { model: modelName } = getModelForStage('followups');
 
   const townContext = townPreference
     ? `The question is about a specific town: ${townPreference}`
@@ -73,7 +73,7 @@ Remember:
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "generateFollowups",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: FOLLOWUP_SYSTEM_PROMPT,
     userPrompt,
     temperature: 0.4,
@@ -88,7 +88,7 @@ Remember:
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: FOLLOWUP_SYSTEM_PROMPT,
@@ -103,7 +103,7 @@ Remember:
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "generateFollowups",
-      model: MODEL_NAME,
+      model: modelName,
       responseText,
       durationMs,
     });
@@ -117,7 +117,7 @@ Remember:
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "followups",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -141,7 +141,7 @@ Remember:
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "generateFollowups_parse",
-        model: MODEL_NAME,
+        model: modelName,
         error: parseError instanceof Error ? parseError : new Error(String(parseError)),
       });
       return [];
@@ -152,7 +152,7 @@ Remember:
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "generateFollowups",
-        model: MODEL_NAME,
+        model: modelName,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       return [];
@@ -162,7 +162,7 @@ Remember:
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "generateFollowups",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
 

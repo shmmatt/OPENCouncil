@@ -13,10 +13,9 @@ import {
 } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
 import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
+import { getModelForStage, type ModelContext } from "../llm/modelRegistry";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
-const MODEL_NAME = "gemini-3-flash-preview";
 
 const RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA).
 
@@ -52,6 +51,14 @@ export async function generateSimpleAnswer(
   options: SimpleAnswerOptions
 ): Promise<SimpleAnswerResult> {
   const { question, routerOutput, sessionHistory, userHints, logContext, composedAnswerFlags } = options;
+
+  // Build context for model selection (enables escalation for complex questions)
+  const modelContext: ModelContext = {
+    complexity: routerOutput.complexity,
+    requiresComposedAnswer: routerOutput.requiresComposedAnswer,
+    scopeHint: routerOutput.scopeHint,
+  };
+  const { model: modelName, wasEscalated, escalationReason } = getModelForStage('simpleAnswer', modelContext);
 
   const storeId = await getOrCreateFileSearchStoreId();
 
@@ -96,7 +103,7 @@ export async function generateSimpleAnswer(
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "simpleAnswer",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: systemInstruction,
     userPrompt: enhancedQuestion,
     extra: {
@@ -104,6 +111,8 @@ export async function generateSimpleAnswer(
       historyLength: sessionHistory.length,
       hasUserHints: !!userHints,
       composedAnswerApplied,
+      modelWasEscalated: wasEscalated,
+      escalationReason,
     },
   });
 
@@ -123,7 +132,7 @@ export async function generateSimpleAnswer(
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
@@ -177,7 +186,7 @@ export async function generateSimpleAnswer(
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer",
-      model: MODEL_NAME,
+      model: modelName,
       responseText: rawAnswerText,
       durationMs,
     });
@@ -191,7 +200,7 @@ export async function generateSimpleAnswer(
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "simpleAnswer",
-          model: MODEL_NAME,
+          model: modelName,
         },
         { text: rawAnswerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
@@ -277,7 +286,7 @@ export async function generateSimpleAnswer(
         requestId: logContext?.requestId,
         sessionId: logContext?.sessionId,
         stage: "simpleAnswer",
-        model: MODEL_NAME,
+        model: modelName,
         error: error instanceof Error ? error : new Error(String(error)),
       });
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in simpleAnswer");
@@ -287,7 +296,7 @@ export async function generateSimpleAnswer(
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
@@ -366,11 +375,13 @@ async function generateRSAGeneralKnowledgeAnswer(
   question: string,
   logContext?: PipelineLogContext
 ): Promise<string> {
+  const { model: modelName } = getModelForStage('degraded');
+  
   logLlmRequest({
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "simpleAnswer_rsaFallback",
-    model: MODEL_NAME,
+    model: modelName,
     systemPrompt: RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
     userPrompt: question,
     temperature: 0.3,
@@ -380,7 +391,7 @@ async function generateRSAGeneralKnowledgeAnswer(
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: [{ role: "user", parts: [{ text: question }] }],
       config: {
         systemInstruction: RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
@@ -395,7 +406,7 @@ async function generateRSAGeneralKnowledgeAnswer(
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer_rsaFallback",
-      model: MODEL_NAME,
+      model: modelName,
       responseText: answerText,
       durationMs,
     });
@@ -409,7 +420,7 @@ async function generateRSAGeneralKnowledgeAnswer(
           sessionId: logContext.sessionId,
           requestId: logContext.requestId,
           stage: "simpleAnswer",
-          model: MODEL_NAME,
+          model: modelName,
           metadata: { fallback: "rsa" },
         },
         { text: answerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
@@ -426,7 +437,7 @@ async function generateRSAGeneralKnowledgeAnswer(
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer_rsaFallback",
-      model: MODEL_NAME,
+      model: modelName,
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
