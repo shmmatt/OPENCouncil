@@ -36,6 +36,14 @@ A three-tier fallback system extracts and finalizes town information: LLM-extrac
 ### Scope Preferences (Chat v2)
 The chat pipeline detects question scope (local, statewide, mixed, null) using patterns and LLM output. This informs retrieval behavior, allowing strict town filtering for local questions and statewide document search for broader queries. An RSA fallback provides general knowledge answers when no relevant documents are found for statewide legal questions.
 
+### Model Registry & Dynamic Model Selection (Chat v2)
+A centralized model registry (`server/llm/modelRegistry.ts`) manages LLM model selection across all pipeline stages:
+- **Fast models** (gemini-2.5-flash): Used for control stages (router, retrieval planner, critic, evidence gate, follow-ups)
+- **High-quality models** (gemini-3-flash-preview): Used for synthesis (complex answer) and escalated simple answers
+- **Escalation rules**: Simple answers escalate to high-quality model when `requiresComposedAnswer=true` or `hasUserArtifact=true`
+- **Environment overrides**: Each stage can be overridden via environment variables (MODEL_ROUTER, MODEL_SIMPLE, etc.)
+- **Fallback wrapper**: `withModelFallback()` provides automatic retry with fallback to degraded model on errors
+
 ### Evidence Coverage Gate (Chat v2)
 The complex answer path includes an Evidence Coverage Gate that evaluates retrieval quality after initial document retrieval. If coverage is insufficient for the question type (causal, mechanism, breakdown, process), the gate triggers up to 2 additional retrieval passes with targeted queries. The gate uses diversity metrics (category, board, document coverage) and LLM assessment to determine when expansion is needed.
 

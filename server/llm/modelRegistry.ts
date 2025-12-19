@@ -128,6 +128,69 @@ export function getFallbackModel(): string {
 }
 
 /**
+ * Retry configuration for LLM calls
+ */
+export interface RetryConfig {
+  maxRetries: number;
+  retryDelayMs: number;
+  useFallbackOnRetry: boolean;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 1,
+  retryDelayMs: 500,
+  useFallbackOnRetry: true,
+};
+
+/**
+ * Wrapper for LLM calls with automatic retry and fallback
+ * 
+ * @param fn - Function that makes the LLM call, receives model name as parameter
+ * @param stage - Pipeline stage for model selection
+ * @param ctx - Model context for escalation decisions
+ * @param config - Retry configuration
+ * @returns Result from the LLM call
+ */
+export async function withModelFallback<T>(
+  fn: (model: string) => Promise<T>,
+  stage: ModelStage,
+  ctx: ModelContext = {},
+  config: Partial<RetryConfig> = {}
+): Promise<{ result: T; modelUsed: string; didFallback: boolean }> {
+  const { maxRetries, retryDelayMs, useFallbackOnRetry } = { ...DEFAULT_RETRY_CONFIG, ...config };
+  
+  const { model: primaryModel } = getModelForStage(stage, ctx);
+  
+  let lastError: Error | null = null;
+  let attempt = 0;
+  let currentModel = primaryModel;
+  let didFallback = false;
+  
+  while (attempt <= maxRetries) {
+    try {
+      const result = await fn(currentModel);
+      return { result, modelUsed: currentModel, didFallback };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      attempt++;
+      
+      if (attempt <= maxRetries) {
+        // Switch to fallback model on retry if configured
+        if (useFallbackOnRetry && currentModel !== getFallbackModel()) {
+          currentModel = getFallbackModel();
+          didFallback = true;
+        }
+        
+        // Brief delay before retry
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Model names for reference
  */
 export const ModelNames = MODELS;

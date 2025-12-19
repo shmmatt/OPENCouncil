@@ -36,6 +36,7 @@ interface SimpleAnswerOptions {
   userHints?: { town?: string; board?: string };
   logContext?: PipelineLogContext;
   composedAnswerFlags?: ComposedAnswerFlags;
+  hasUserArtifact?: boolean;
 }
 
 interface SimpleAnswerResult {
@@ -50,13 +51,14 @@ interface SimpleAnswerResult {
 export async function generateSimpleAnswer(
   options: SimpleAnswerOptions
 ): Promise<SimpleAnswerResult> {
-  const { question, routerOutput, sessionHistory, userHints, logContext, composedAnswerFlags } = options;
+  const { question, routerOutput, sessionHistory, userHints, logContext, composedAnswerFlags, hasUserArtifact } = options;
 
-  // Build context for model selection (enables escalation for complex questions)
+  // Build context for model selection (enables escalation for complex questions or user artifacts)
   const modelContext: ModelContext = {
     complexity: routerOutput.complexity,
     requiresComposedAnswer: routerOutput.requiresComposedAnswer,
     scopeHint: routerOutput.scopeHint,
+    hasUserArtifact: hasUserArtifact ?? false,
   };
   const { model: modelName, wasEscalated, escalationReason } = getModelForStage('simpleAnswer', modelContext);
 

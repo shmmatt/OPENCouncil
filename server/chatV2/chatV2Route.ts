@@ -318,6 +318,7 @@ export function registerChatV2Routes(app: Express): void {
           userHints: enhancedMetadata,
           logContext: logCtx,
           composedAnswerFlags,
+          hasUserArtifact: hasAttachment,
         });
 
         answerText = simpleResult.answerText;
@@ -967,6 +968,7 @@ export function registerChatV2Routes(app: Express): void {
             sessionHistory: trimmedHistory,
             userHints: enhancedMetadata,
             logContext: logCtx,
+            hasUserArtifact: !!attachmentInfo,
           });
 
           answerText = simpleResult.answerText;
