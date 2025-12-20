@@ -247,6 +247,11 @@ export default function AdminDocuments() {
                 Analytics
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-chat-analytics">
+              <Link href="/admin/chat-analytics">
+                Chat Reviews
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="w-4 h-4 mr-2" />
               Logout

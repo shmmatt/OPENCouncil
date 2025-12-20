@@ -36,6 +36,8 @@ import type {
   InsertLlmCostLog,
   Event,
   InsertEvent,
+  ChatAnalytics,
+  InsertChatAnalytics,
   MinutesUpdateItem,
   ActorIdentifier,
 } from "@shared/schema";
@@ -138,6 +140,12 @@ export interface IStorage {
   // Recent minutes updates
   getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]>;
   getRecentMinutesUpdatesAdmin(params: { town?: string; board?: string; limit?: number }): Promise<MinutesUpdateItem[]>;
+
+  // Chat Analytics operations
+  createChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics>;
+  getChatAnalyticsBySessionId(sessionId: string): Promise<ChatAnalytics | undefined>;
+  upsertChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics>;
+  getAllChatSessions(): Promise<ChatSession[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -766,6 +774,46 @@ export class DatabaseStorage implements IStorage {
       ingestedAt: r.ingestedAt.toISOString(),
       fileSearchDocumentName: r.fileSearchDocumentName,
     }));
+  }
+
+  // Chat Analytics operations
+  async createChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics> {
+    const [result] = await db.insert(schema.chatAnalytics).values(analytics).returning();
+    return result;
+  }
+
+  async getChatAnalyticsBySessionId(sessionId: string): Promise<ChatAnalytics | undefined> {
+    const [result] = await db
+      .select()
+      .from(schema.chatAnalytics)
+      .where(eq(schema.chatAnalytics.sessionId, sessionId));
+    return result;
+  }
+
+  async upsertChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics> {
+    const existing = await this.getChatAnalyticsBySessionId(analytics.sessionId);
+    if (existing) {
+      await db
+        .update(schema.chatAnalytics)
+        .set({
+          summary: analytics.summary,
+          critique: analytics.critique,
+          missingDocsSuggestions: analytics.missingDocsSuggestions,
+          documentQualityScore: analytics.documentQualityScore,
+          answerQualityScore: analytics.answerQualityScore,
+          analyzedAt: new Date(),
+        })
+        .where(eq(schema.chatAnalytics.sessionId, analytics.sessionId));
+      return (await this.getChatAnalyticsBySessionId(analytics.sessionId))!;
+    }
+    return await this.createChatAnalytics(analytics);
+  }
+
+  async getAllChatSessions(): Promise<ChatSession[]> {
+    return await db
+      .select()
+      .from(schema.chatSessions)
+      .orderBy(desc(schema.chatSessions.updatedAt));
   }
 }
 

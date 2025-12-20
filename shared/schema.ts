@@ -195,6 +195,18 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Chat Analytics: LLM-generated analysis of chat sessions for admin review
+export const chatAnalytics = pgTable("chat_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => chatSessions.id, { onDelete: "cascade" }).unique(),
+  summary: text("summary").notNull(),
+  critique: text("critique").notNull(),
+  missingDocsSuggestions: text("missing_docs_suggestions"),
+  documentQualityScore: integer("document_quality_score"), // 1-10 scale
+  answerQualityScore: integer("answer_quality_score"), // 1-10 scale
+  analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
+});
+
 // Document metadata schema for validation
 export const ALLOWED_CATEGORIES = [
   "budget", "zoning", "meeting_minutes", "town_report", "warrant_article",
@@ -309,6 +321,11 @@ export const insertEventSchema = createInsertSchema(events).omit({
   createdAt: true,
 });
 
+export const insertChatAnalyticsSchema = createInsertSchema(chatAnalytics).omit({
+  id: true,
+  analyzedAt: true,
+});
+
 // Types
 export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
@@ -352,6 +369,9 @@ export type InsertLlmCostLog = z.infer<typeof insertLlmCostLogSchema>;
 
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
+
+export type ChatAnalytics = typeof chatAnalytics.$inferSelect;
+export type InsertChatAnalytics = z.infer<typeof insertChatAnalyticsSchema>;
 
 // Actor types for identity tracking
 export type ActorType = 'user' | 'anon';

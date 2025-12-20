@@ -18,6 +18,7 @@ import * as path from "path";
 import { z } from "zod";
 import { registerChatV2Routes } from "./chatV2/chatV2Route";
 import { registerAdminUsageRoutes } from "./routes/adminUsageRoutes";
+import { registerAdminChatAnalyticsRoutes } from "./routes/adminChatAnalyticsRoutes";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1101,6 +1102,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register Admin Usage Dashboard Routes
   registerAdminUsageRoutes(app);
+
+  // Register Admin Chat Analytics Routes
+  registerAdminChatAnalyticsRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
