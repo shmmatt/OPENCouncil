@@ -211,19 +211,40 @@ export async function analyzeChatSession(sessionId: string): Promise<ChatAnalyti
     .map(m => `[${m.role.toUpperCase()}]: ${m.content}`)
     .join("\n\n");
 
-  const prompt = `You are analyzing a chat conversation between a user and OPENCouncil, an AI assistant for New Hampshire municipal government officials.
+  const prompt = `You are a HARSH CRITIC analyzing chat conversations between users and OPENCouncil, an AI assistant for New Hampshire municipal officials. Your job is to ruthlessly identify failures and gaps.
 
-Analyze this conversation transcript and provide:
+BE BRUTALLY HONEST. Do NOT sugarcoat or make excuses. If the AI failed, say so clearly.
 
-1. **Summary** (2-3 sentences): A brief summary of what the user was asking about and the main topics discussed.
+SCORING GUIDELINES - BE STRICT:
+- Score 1-3: FAILURE - AI couldn't answer, gave wrong info, no citations, or said "I don't have that document"
+- Score 4-5: POOR - Generic advice without specific citations, vague responses, missing key details
+- Score 6-7: ACCEPTABLE - Answered with some citations but incomplete or could be better
+- Score 8-9: GOOD - Solid answer with proper citations and specific information
+- Score 10: EXCEPTIONAL - Perfect response with comprehensive citations (rare)
 
-2. **Critique** (2-4 sentences): Evaluate the quality of OPENCouncil's responses. Were they helpful? Accurate? Did they properly cite sources? Were there any issues with the responses?
+AUTOMATIC LOW SCORES (1-3):
+- If AI said "I don't have access to" or "I couldn't find" specific documents = Score 2-3 max
+- If AI gave generic legal advice without citing specific NH RSAs or town ordinances = Score 3-4 max
+- If AI failed to answer the user's actual question = Score 1-2
+- If user asked for specific town info and AI gave general info = Score 3-4 max
+- If response lacks ANY citations = Score 4 max for document quality
 
-3. **Missing Documents Suggestions**: If the AI seemed to lack relevant information or gave generic answers, suggest what types of documents we should find and ingest to improve future responses. Be specific (e.g., "Conway Zoning Ordinance 2024", "Ossipee Planning Board meeting minutes from 2023"). If the responses were adequate, say "None identified."
+Analyze this conversation:
 
-4. **Document Quality Score** (1-10): Rate how well the AI used available documents. 10 = excellent citations and document use, 1 = no documents referenced or documents were irrelevant.
+1. **Summary**: What did the user ask for? Did they get it? Be direct.
 
-5. **Answer Quality Score** (1-10): Rate the overall quality of OPENCouncil's answers. 10 = perfectly helpful, accurate, well-cited, 1 = unhelpful, inaccurate, or potentially misleading.
+2. **Critique**: Be HARSH. What went wrong? What was missing? Don't praise mediocre responses. If the AI said it lacked documents, that's a FAILURE. If citations were missing, say so. If the answer was vague or generic, call it out. Only praise genuinely excellent responses.
+
+3. **Missing Documents Suggestions**: CRITICAL - If the AI failed to provide specific information, LIST EXACTLY what documents we need to ingest. Be specific:
+   - Town name + document type + year (e.g., "Ossipee Zoning Ordinance 2024")
+   - Specific RSA chapters if legal questions went unanswered
+   - Board meeting minutes with date ranges
+   - Master plans, budgets, or other municipal documents
+   DO NOT say "None identified" unless the response was truly complete and well-cited.
+
+4. **Document Quality Score**: How well did the AI cite and use source documents? Remember: NO citations = max score of 4. Said "I don't have this document" = max score of 3.
+
+5. **Answer Quality Score**: Did the user get what they actually needed? Generic advice = low score. Missing the user's actual question = very low score.
 
 TRANSCRIPT:
 ${transcript}
@@ -233,8 +254,8 @@ Respond in this exact JSON format:
   "summary": "...",
   "critique": "...",
   "missingDocsSuggestions": "...",
-  "documentQualityScore": 7,
-  "answerQualityScore": 8
+  "documentQualityScore": 5,
+  "answerQualityScore": 4
 }`;
 
   try {
