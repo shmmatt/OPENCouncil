@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -150,6 +150,9 @@ function formatCost(cost: number): string {
 
 export default function AdminChatAnalytics() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const token = localStorage.getItem("adminToken");
+  
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortField, setSortField] = useState("date");
@@ -161,6 +164,28 @@ export default function AdminChatAnalytics() {
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
+    const currentToken = localStorage.getItem("adminToken");
+    if (!currentToken) {
+      setLocation("/admin/login");
+      throw new Error("No auth token");
+    }
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${currentToken}`,
+      },
+    });
+    if (res.status === 401) {
+      localStorage.removeItem("adminToken");
+      setLocation("/admin/login");
+      throw new Error("Session expired");
+    }
+    if (!res.ok) throw new Error("Request failed");
+    return res.json();
+  }, [setLocation]);
 
   const queryParams = new URLSearchParams({
     page: page.toString(),
@@ -175,39 +200,21 @@ export default function AdminChatAnalytics() {
 
   const { data, isLoading, refetch } = useQuery<ChatAnalyticsListResult>({
     queryKey: ["/api/admin/chat-analytics", page, pageSize, sortField, sortOrder, search, filterAnalyzed],
-    queryFn: async () => {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(`/api/admin/chat-analytics?${queryParams.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
+    queryFn: () => fetchWithAuth(`/api/admin/chat-analytics?${queryParams.toString()}`),
+    enabled: !!token,
   });
 
   const { data: sessionDetails, isLoading: detailsLoading } = useQuery<SessionDetails>({
     queryKey: ["/api/admin/chat-analytics", selectedSessionId],
-    queryFn: async () => {
-      if (!selectedSessionId) return null;
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(`/api/admin/chat-analytics/${selectedSessionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-    enabled: !!selectedSessionId,
+    queryFn: () => fetchWithAuth(`/api/admin/chat-analytics/${selectedSessionId}`),
+    enabled: !!selectedSessionId && !!token,
   });
 
   const analyzeMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch(`/api/admin/chat-analytics/${sessionId}/analyze`, {
+      return fetchWithAuth(`/api/admin/chat-analytics/${sessionId}/analyze`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to analyze");
-      return res.json();
     },
     onSuccess: () => {
       toast({ title: "Analysis complete", description: "Chat session has been analyzed." });
@@ -220,17 +227,11 @@ export default function AdminChatAnalytics() {
 
   const batchAnalyzeMutation = useMutation({
     mutationFn: async (sessionIds: string[]) => {
-      const token = localStorage.getItem("adminToken");
-      const res = await fetch("/api/admin/chat-analytics/batch-analyze", {
+      return fetchWithAuth("/api/admin/chat-analytics/batch-analyze", {
         method: "POST",
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionIds }),
       });
-      if (!res.ok) throw new Error("Failed to batch analyze");
-      return res.json();
     },
     onSuccess: (results: { sessionId: string; success: boolean; error?: string }[]) => {
       const successful = results.filter(r => r.success).length;
@@ -290,6 +291,21 @@ export default function AdminChatAnalytics() {
   const items = data?.items || [];
   const total = data?.total || 0;
   const totalPages = data?.totalPages || 1;
+
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-96">
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground mb-4">Admin authentication required</p>
+            <Link href="/admin/login">
+              <Button data-testid="button-login">Go to Login</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
