@@ -19,7 +19,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA).
 
-Provide a concise, plain-language summary based on general knowledge. When appropriate, mention that this is not based on OpenCouncil-indexed municipal documents, and recommend consulting the official RSA text or municipal counsel for precise legal language.
+Provide a concise, plain-language summary based on general knowledge. Recommend consulting the official RSA text or municipal counsel for precise legal language when appropriate.
 
 Guidelines:
 - Provide a 2-6 sentence answer summarizing the RSA or concept
@@ -67,7 +67,7 @@ export async function generateSimpleAnswer(
   if (!storeId) {
     return {
       answerText:
-        "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
+        "Document search is not yet configured. Please contact your administrator to set up document indexing.",
       sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null,
@@ -240,7 +240,7 @@ export async function generateSimpleAnswer(
         };
       }
       return {
-        answerText: "No directly relevant material was found in the OpenCouncil archive for this question. The following general guidance may still be helpful, but local procedures can differ.",
+        answerText: "No directly relevant material was found in available documents for this question. The following general guidance may still be helpful, but local procedures can differ.",
         sourceDocumentNames: [],
         docSourceType: "none" as DocSourceType,
         docSourceTown: null,
@@ -304,7 +304,7 @@ export async function generateSimpleAnswer(
 
     return {
       answerText:
-        "The OpenCouncil archive is temporarily unavailable. Please try again in a moment.",
+        "Document search is temporarily unavailable. Please try again in a moment.",
       sourceDocumentNames: [],
       docSourceType: "none" as DocSourceType,
       docSourceTown: null,

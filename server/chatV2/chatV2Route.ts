@@ -1104,11 +1104,11 @@ export function registerChatV2Routes(app: Express): void {
 
 function buildClarificationResponse(questions: string[]): string {
   if (questions.length === 1) {
-    return `Before I can answer, I need a bit more information:\n\n${questions[0]}`;
+    return questions[0];
   }
 
   const questionList = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
-  return `Before I can provide a complete answer, I have a few clarifying questions:\n\n${questionList}\n\nPlease provide any details you can, and I'll give you a more accurate response.`;
+  return `${questionList}`;
 }
 
 interface CachedV2Data {

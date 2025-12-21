@@ -3,35 +3,30 @@ import type { ChatNotice } from "@shared/chatNotices";
 import { NOTICE_CODES } from "@shared/chatNotices";
 
 const LOCAL_SCOPE_MESSAGE = 
-  "Based on documents available in the OpenCouncil archive for this municipality. " +
+  "Based on available documents for this municipality. " +
   "These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. " +
-  "Details may be incomplete depending on what municipalities have published or digitized. " +
-  "This information is informational only and is not legal advice.";
+  "Details may be incomplete depending on what municipalities have published or digitized.";
 
 const STATEWIDE_SCOPE_MESSAGE =
   "Informed primarily by New Hampshire statutory and regulatory context. " +
-  "This summary is not based on a specific municipality's OpenCouncil-indexed documents. " +
-  "For exact legal language or application, consult the official RSA text or municipal counsel. " +
-  "This information is informational only and is not legal advice.";
+  "For exact legal language or application, consult the official RSA text or municipal counsel.";
 
 const NO_DOC_SCOPE_MESSAGE =
-  "No directly relevant material was found in the OpenCouncil archive for this question. " +
+  "No directly relevant material was found in available documents for this question. " +
   "Where possible, this response reflects general New Hampshire municipal practice. " +
-  "Local procedures may differ, and consulting municipal records or counsel may provide more specific guidance. " +
-  "This information is informational only and is not legal advice.";
+  "Local procedures may differ.";
 
 const MIXED_SCOPE_MESSAGE =
   "Based on both local municipal documents and statewide New Hampshire statutory context. " +
   "These materials include local meeting minutes, budgets, and policy records, as well as RSA references. " +
-  "Local procedures may vary. This information is informational only and is not legal advice.";
+  "Local procedures may vary.";
 
 export function localScopeNotice(town: string | null): ChatNotice {
   const label = town ? `Local: ${town}` : "Local docs";
   const message = town
-    ? `Based on documents from the Town of ${town} in the OpenCouncil archive. ` +
+    ? `Based on available documents from the Town of ${town}. ` +
       "These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. " +
-      "Details may be incomplete depending on what the municipality has published or digitized. " +
-      "This information is informational only and is not legal advice."
+      "Details may be incomplete depending on what the municipality has published or digitized."
     : LOCAL_SCOPE_MESSAGE;
 
   return {
@@ -66,9 +61,9 @@ export function noDocsScopeNotice(): ChatNotice {
 export function mixedScopeNotice(town: string | null): ChatNotice {
   const label = town ? `Mixed: ${town} + NH law` : "Mixed sources";
   const message = town
-    ? `Based on documents from the Town of ${town} and statewide New Hampshire statutory context. ` +
+    ? `Based on available documents from the Town of ${town} and statewide New Hampshire statutory context. ` +
       "These materials include local meeting minutes, budgets, and policy records, as well as RSA references. " +
-      "Local procedures may vary. This information is informational only and is not legal advice."
+      "Local procedures may vary."
     : MIXED_SCOPE_MESSAGE;
 
   return {
@@ -95,7 +90,7 @@ export function archiveNotConfiguredNotice(): ChatNotice {
     kind: "system",
     code: NOTICE_CODES.ARCHIVE_NOT_CONFIGURED,
     label: "Archive unavailable",
-    message: "The OpenCouncil archive is not yet configured. Please contact your administrator to set up document indexing.",
+    message: "Document search is not yet configured. Please contact your administrator to set up document indexing.",
     severity: "warning",
   };
 }
@@ -189,11 +184,11 @@ export function generateStatewideDisclaimer(): string {
 /** @deprecated No longer needed - notices handle this */
 export function generateNoDocsFoundMessage(isRSA: boolean): string {
   if (isRSA) {
-    return "No directly relevant material was found in the OpenCouncil archive for this RSA/state law question. " +
+    return "No directly relevant material was found in available documents for this RSA/state law question. " +
       "The following general guidance may still be helpful, but local procedures can differ.";
   }
   
-  return "No directly relevant material was found in the OpenCouncil archive for this question. " +
+  return "No directly relevant material was found in available documents for this question. " +
     "The following general guidance may still be helpful, but local procedures can differ.";
 }
 
@@ -212,19 +207,18 @@ export function selectScopeNote(options: {
   switch (docSourceType) {
     case "local":
       if (docSourceTown) {
-        return `\n\n---\n**Source scope:** Based on documents from the Town of ${docSourceTown} in the OpenCouncil archive. ` +
+        return `\n\n---\n**Source scope:** Based on available documents from the Town of ${docSourceTown}. ` +
           "These materials include meeting minutes, budgets, warrant articles, town reports, or policy records where available. " +
-          "Details may be incomplete depending on what the municipality has published or digitized. " +
-          "This information is informational only and is not legal advice.";
+          "Details may be incomplete depending on what the municipality has published or digitized.";
       }
       return LOCAL_SCOPE_NOTE;
     case "statewide":
       return STATEWIDE_SCOPE_NOTE;
     case "mixed":
       if (docSourceTown) {
-        return `\n\n---\n**Source scope:** Based on documents from the Town of ${docSourceTown} and statewide New Hampshire statutory context. ` +
+        return `\n\n---\n**Source scope:** Based on available documents from the Town of ${docSourceTown} and statewide New Hampshire statutory context. ` +
           "These materials include local meeting minutes, budgets, and policy records, as well as RSA references. " +
-          "Local procedures may vary. This information is informational only and is not legal advice.";
+          "Local procedures may vary.";
       }
       return MIXED_SCOPE_NOTE;
     case "none":
