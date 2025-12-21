@@ -56,7 +56,7 @@ const DEFAULT_MODELS: Record<ModelStage, string> = {
   retrievalPlanner: MODELS.FAST,
   simpleAnswer: MODELS.FAST,
   complexSummary: MODELS.FAST,
-  complexSynthesis: MODELS.HIGH_QUALITY,
+  complexSynthesis: MODELS.FAST,
   critic: MODELS.FAST,
   evidenceGate: MODELS.FAST,
   followups: MODELS.FAST,
