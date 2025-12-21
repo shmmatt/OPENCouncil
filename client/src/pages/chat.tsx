@@ -397,7 +397,71 @@ function MessageBubble({
   );
 }
 
-function TypingIndicator() {
+interface TypingIndicatorProps {
+  hasFile?: boolean;
+  messageContent?: string;
+}
+
+const STATUS_PHRASES = {
+  initial: ["Thinking..."],
+  document: [
+    "Analyzing your document...",
+    "Extracting key information...",
+    "Cross-referencing sources...",
+    "Finding relevant sections...",
+  ],
+  search: [
+    "Searching through documents...",
+    "Finding relevant information...",
+    "Reviewing municipal records...",
+    "Gathering insights...",
+  ],
+  general: [
+    "Formulating response...",
+    "Analyzing your question...",
+    "Preparing your answer...",
+    "Putting it all together...",
+  ],
+};
+
+function getContextType(hasFile?: boolean, messageContent?: string): keyof typeof STATUS_PHRASES {
+  if (hasFile) return "document";
+  
+  const content = (messageContent || "").toLowerCase();
+  const searchTerms = ["find", "search", "look for", "where", "what", "when", "who", "meeting", "minutes", "document", "report"];
+  
+  if (searchTerms.some(term => content.includes(term))) {
+    return "search";
+  }
+  
+  return "general";
+}
+
+function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [showPhrase, setShowPhrase] = useState(false);
+  const contextType = getContextType(hasFile, messageContent);
+  const phrases = STATUS_PHRASES[contextType];
+
+  useEffect(() => {
+    // Show dots first, then show phrase after brief delay
+    const initialTimer = setTimeout(() => {
+      setShowPhrase(true);
+    }, 800);
+
+    return () => clearTimeout(initialTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!showPhrase) return;
+
+    const interval = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % phrases.length);
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [showPhrase, phrases.length]);
+
   return (
     <div className="flex gap-4 justify-start">
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -405,10 +469,20 @@ function TypingIndicator() {
       </div>
       <div className="flex flex-col gap-2 max-w-3xl">
         <div className="rounded-lg px-4 py-3 bg-card border border-card-border">
-          <div className="flex gap-1">
-            <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
-            <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
-            <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            {showPhrase && (
+              <span 
+                className="text-sm text-muted-foreground animate-in fade-in duration-300"
+                data-testid="text-typing-status"
+              >
+                {phrases[phraseIndex]}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -746,7 +820,12 @@ export default function Chat() {
                     </div>
                   </div>
                 )}
-                {sendMessageMutation.isPending && <TypingIndicator />}
+                {sendMessageMutation.isPending && (
+                  <TypingIndicator 
+                    hasFile={!!selectedFile} 
+                    messageContent={pendingMessage || inputValue} 
+                  />
+                )}
                 <div ref={messagesEndRef} />
               </>
             )}
