@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType } from "./types";
+import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType, SynthesisOutput } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { logDebug } from "../utils/logger";
@@ -15,6 +15,12 @@ import {
 import type { ChatNotice } from "@shared/chatNotices";
 import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
 import { getModelForStage } from "../llm/modelRegistry";
+import { 
+  twoLaneRetrieve,
+  extractTwoLaneDocNames,
+  buildTwoLaneSnippetText,
+  classifyTwoLaneDocSource,
+} from "./twoLaneRetrieve";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 

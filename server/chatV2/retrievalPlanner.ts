@@ -187,6 +187,14 @@ Respond with valid JSON only.`;
         allowStatewideFallback = true;
       }
       
+      // Determine if we should force parallel state lane retrieval
+      // Default true - state lane is cheap and often provides useful context
+      const forceParallelStateRetrieval = determineParallelStateRetrieval(
+        routerOutput.scopeHint,
+        requiresComposedAnswer,
+        allowStatewideFallback
+      );
+
       return {
         filters: {
           townPreference,
@@ -205,6 +213,7 @@ Respond with valid JSON only.`;
           ? parsed.infoNeeds
           : ["General information about the topic"],
         preferRecent,
+        forceParallelStateRetrieval,
       };
     } catch (parseError) {
       logLlmError({
@@ -255,7 +264,39 @@ function getDefaultRetrievalPlan(
     },
     infoNeeds: ["General information about the topic"],
     preferRecent: false,
+    forceParallelStateRetrieval: true, // Default to running parallel state lane
   };
+}
+
+/**
+ * Determine if parallel state lane retrieval should be forced.
+ * 
+ * Default is true - the state lane is cheap and often useful.
+ * Only skip for purely local trivial questions.
+ */
+function determineParallelStateRetrieval(
+  scopeHint: import("./types").ScopeHint,
+  requiresComposedAnswer: boolean,
+  allowStatewideFallback: boolean
+): boolean {
+  // Always use parallel state lane for composed answers (they often need process context)
+  if (requiresComposedAnswer) {
+    return true;
+  }
+  
+  // Always use for mixed scope
+  if (scopeHint === "mixed") {
+    return true;
+  }
+  
+  // Always use for statewide scope
+  if (scopeHint === "statewide") {
+    return true;
+  }
+  
+  // For local scope, still use state lane by default (unless explicitly disabled)
+  // State lane adds minimal latency due to parallel execution
+  return allowStatewideFallback;
 }
 
 const RECENCY_KEYWORDS = [

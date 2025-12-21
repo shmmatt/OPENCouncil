@@ -14,6 +14,13 @@ import {
 import type { ChatNotice } from "@shared/chatNotices";
 import { augmentSystemPromptWithComposedAnswer, type ComposedAnswerFlags } from "./composedFirstAnswer";
 import { getModelForStage, type ModelContext } from "../llm/modelRegistry";
+import { chatConfig } from "./chatConfig";
+import { 
+  twoLaneRetrieve,
+  extractTwoLaneDocNames,
+  buildTwoLaneSnippetText,
+  classifyTwoLaneDocSource,
+} from "./twoLaneRetrieve";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -118,6 +125,45 @@ export async function generateSimpleAnswer(
     },
   });
 
+  // ===== TWO-LANE RETRIEVAL INTEGRATION =====
+  // If enabled, run parallel local + state retrieval first
+  let twoLaneResult: Awaited<ReturnType<typeof twoLaneRetrieve>> | null = null;
+  let useTwoLaneResults = false;
+  
+  if (chatConfig.ENABLE_PARALLEL_STATE_LANE) {
+    try {
+      twoLaneResult = await twoLaneRetrieve({
+        userQuestion: question,
+        rerankedQuestion: routerOutput.rerankedQuestion || question,
+        townPreference: userHints?.town,
+        domains: routerOutput.domains,
+        scopeHint: routerOutput.scopeHint,
+        logContext,
+      });
+      
+      useTwoLaneResults = twoLaneResult.mergedTopChunks.length > 0;
+      
+      logDebug("simpleAnswer_twoLane_result", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer_twoLane",
+        localCount: twoLaneResult.debug.localCount,
+        stateCount: twoLaneResult.debug.stateCount,
+        mergedCount: twoLaneResult.debug.mergedCount,
+        durationMs: twoLaneResult.debug.durationMs,
+        useTwoLaneResults,
+      });
+    } catch (twoLaneError) {
+      logDebug("simpleAnswer_twoLane_error", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer_twoLane",
+        error: twoLaneError instanceof Error ? twoLaneError.message : String(twoLaneError),
+      });
+      // Fall back to single File Search
+    }
+  }
+
   logFileSearchRequest({
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -127,51 +173,146 @@ export async function generateSimpleAnswer(
     filters: {
       domains: routerOutput.domains,
       town: userHints?.town,
+      twoLaneEnabled: chatConfig.ENABLE_PARALLEL_STATE_LANE,
     },
   });
 
   const startTime = Date.now();
 
   try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        tools: [
-          {
-            fileSearch: {
-              fileSearchStoreNames: [storeId],
-            },
-          } as any,
-        ],
-      },
-    });
-
-    const rawAnswerText = response.text || "";
-    const durationMs = Date.now() - startTime;
-
-    // CRITICAL: Extract retrieval doc count from File Search response
-    // This is the ONLY signal used for scope/no-doc notice logic
-    const retrievalResult = extractRetrievalDocCount(response);
-    const retrievalDocCount = retrievalResult.count;
-    const retrievalDocNames = retrievalResult.documentNames;
+    // If two-lane retrieval succeeded, use its combined evidence
+    // Otherwise fall back to standard File Search
+    let rawAnswerText: string;
+    let retrievalDocCount: number;
+    let retrievalDocNames: string[];
+    let durationMs: number;
     
-    // Grounding info is for LOGGING ONLY - not for notice logic
-    const groundingInfo = extractGroundingInfoForLogging(response);
+    if (useTwoLaneResults && twoLaneResult) {
+      // Use two-lane results - build context from both lanes
+      const twoLaneSnippet = buildTwoLaneSnippetText(twoLaneResult);
+      retrievalDocNames = extractTwoLaneDocNames(twoLaneResult);
+      retrievalDocCount = retrievalDocNames.length;
+      
+      // Build enhanced prompt with two-lane evidence
+      const twoLaneContents = [...contents];
+      if (twoLaneSnippet) {
+        twoLaneContents[twoLaneContents.length - 1] = {
+          role: "user",
+          parts: [{ text: `${enhancedQuestion}\n\n=== RETRIEVED EVIDENCE ===\n${twoLaneSnippet}` }],
+        };
+      }
+      
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: twoLaneContents,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.3,
+        },
+      });
+      
+      rawAnswerText = response.text || "";
+      durationMs = Date.now() - startTime;
+      
+      logLlmResponse({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer",
+        model: modelName,
+        responseText: rawAnswerText,
+        durationMs,
+        extra: { twoLaneUsed: true },
+      });
+
+      // Log usage for cost tracking
+      if (logContext?.actor) {
+        const tokens = extractTokenCounts(response);
+        await logLLMCall(
+          {
+            actor: logContext.actor,
+            sessionId: logContext.sessionId,
+            requestId: logContext.requestId,
+            stage: "simpleAnswer",
+            model: modelName,
+            metadata: { twoLaneUsed: true },
+          },
+          { text: rawAnswerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+        );
+      }
+    } else {
+      // Standard File Search path
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: contents,
+        config: {
+          systemInstruction: systemInstruction,
+          tools: [
+            {
+              fileSearch: {
+                fileSearchStoreNames: [storeId],
+              },
+            } as any,
+          ],
+        },
+      });
+
+      rawAnswerText = response.text || "";
+      durationMs = Date.now() - startTime;
+
+      // CRITICAL: Extract retrieval doc count from File Search response
+      const retrievalResult = extractRetrievalDocCount(response);
+      retrievalDocCount = retrievalResult.count;
+      retrievalDocNames = retrievalResult.documentNames;
+      
+      // Grounding info is for LOGGING ONLY - not for notice logic
+      const groundingInfo = extractGroundingInfoForLogging(response);
+
+      logLlmResponse({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer",
+        model: modelName,
+        responseText: rawAnswerText,
+        durationMs,
+      });
+
+      // Log usage for cost tracking
+      if (logContext?.actor) {
+        const tokens = extractTokenCounts(response);
+        await logLLMCall(
+          {
+            actor: logContext.actor,
+            sessionId: logContext.sessionId,
+            requestId: logContext.requestId,
+            stage: "simpleAnswer",
+            model: modelName,
+          },
+          { text: rawAnswerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+        );
+      }
+
+      logFileSearchResponse({
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "simpleAnswer_fileSearch",
+        results: groundingInfo,
+        responseText: rawAnswerText,
+        durationMs,
+      });
+    }
     
     // Use retrievalDocCount for determining if docs were found
     const hasDocResults = retrievalDocCount > 0;
     const userQuestion = routerOutput.rerankedQuestion || question;
     const isRSA = isRSAQuestion(userQuestion);
 
-    // Verification logging: prove that retrievalDocCount is derived from file_search_response
+    // Verification logging
     logDebug("scope_notice_inputs", {
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "simpleAnswer",
       retrievalDocCount,
-      note: "retrievalDocCount is derived ONLY from file_search_response",
+      twoLaneUsed: useTwoLaneResults,
     });
 
     logDebug("simpleAnswer_scope_check", {
@@ -182,39 +323,6 @@ export async function generateSimpleAnswer(
       scopeHint: routerOutput.scopeHint,
       hasDocResults,
       retrievalDocCount,
-    });
-
-    logLlmResponse({
-      requestId: logContext?.requestId,
-      sessionId: logContext?.sessionId,
-      stage: "simpleAnswer",
-      model: modelName,
-      responseText: rawAnswerText,
-      durationMs,
-    });
-
-    // Log usage for cost tracking
-    if (logContext?.actor) {
-      const tokens = extractTokenCounts(response);
-      await logLLMCall(
-        {
-          actor: logContext.actor,
-          sessionId: logContext.sessionId,
-          requestId: logContext.requestId,
-          stage: "simpleAnswer",
-          model: modelName,
-        },
-        { text: rawAnswerText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
-      );
-    }
-
-    logFileSearchResponse({
-      requestId: logContext?.requestId,
-      sessionId: logContext?.sessionId,
-      stage: "simpleAnswer_fileSearch",
-      results: groundingInfo,
-      responseText: rawAnswerText,
-      durationMs,
     });
 
     if (!hasDocResults && isRSA) {
