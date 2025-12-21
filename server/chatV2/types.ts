@@ -36,6 +36,29 @@ export interface RetrievalPlan {
   };
   infoNeeds: string[];
   preferRecent?: boolean;
+  /**
+   * When true, always run parallel state lane retrieval regardless of scopeHint.
+   * Default true - state lane is cheap and often useful.
+   */
+  forceParallelStateRetrieval?: boolean;
+  /**
+   * Optional anchors for state lane queries (can be customized by planner).
+   */
+  stateLaneAnchors?: string[];
+}
+
+/**
+ * Synthesis output from the combined Discriminator + Synthesis prompt.
+ * Used by complex path for structured answer generation.
+ */
+export interface SynthesisOutput {
+  answer_markdown: string;
+  used_statewide: boolean;
+  statewide_reason: string | null;
+  applicability_check: string | null;
+  assumptions: string[];
+  limitations: string[];
+  suggested_followups: string[];
 }
 
 export interface CriticScore {

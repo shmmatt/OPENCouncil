@@ -21,3 +21,14 @@ export type {
   DiversityMetrics,
   QuestionIntent,
 } from "./evidenceGate";
+export {
+  twoLaneRetrieve,
+  extractTwoLaneDocNames,
+  buildTwoLaneSnippetText,
+  classifyTwoLaneDocSource,
+} from "./twoLaneRetrieve";
+export type {
+  TwoLaneRetrieveOptions,
+  TwoLaneRetrievalResult,
+  LaneChunk,
+} from "./twoLaneRetrieve";

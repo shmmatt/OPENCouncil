@@ -115,6 +115,54 @@ export const chatConfig = {
     "process",
     "mixed",
   ],
+
+  // =====================================================
+  // TWO-LANE RETRIEVAL SETTINGS
+  // =====================================================
+
+  /**
+   * Enable parallel local + statewide retrieval.
+   * When true, both lanes run in parallel for most queries.
+   * This ensures RSA/statewide context is retrieved alongside local docs.
+   */
+  ENABLE_PARALLEL_STATE_LANE: true,
+
+  /**
+   * Maximum chunks to retrieve from the local lane before capping.
+   * Local lane focuses on town-specific documents.
+   */
+  LOCAL_LANE_K: 12,
+
+  /**
+   * Maximum chunks to retrieve from the state lane before capping.
+   * State lane focuses on RSA, NHMA, and statewide guidance.
+   */
+  STATE_LANE_K: 8,
+
+  /**
+   * Maximum local chunks to pass to synthesis after retrieval.
+   * Caps prevent prompt bloat.
+   */
+  LOCAL_CONTEXT_CAP: 10,
+
+  /**
+   * Maximum state chunks to pass to synthesis after retrieval.
+   * State context is typically more concise.
+   */
+  STATE_CONTEXT_CAP: 5,
+
+  /**
+   * Maximum merged chunks from both lanes after deduplication.
+   * Target is 15, but can go higher for complex questions.
+   */
+  MERGED_CONTEXT_CAP: 15,
+
+  /**
+   * When true, skip state lane for purely local questions
+   * (e.g., "what time was the meeting called to order").
+   * Default false - state lane is cheap and often useful.
+   */
+  SKIP_STATE_LANE_FOR_TRIVIAL_LOCAL: false,
 };
 
 /**
