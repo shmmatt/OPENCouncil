@@ -95,7 +95,7 @@ export async function generateComplexDraftAnswer(
           retrievedChunks.push({
             source: laneChunk.lane === "local" ? "Local Municipal Documents" : "NH State & NHMA Resources",
             content: laneChunk.content,
-            documentNames: laneChunk.documentName ? [laneChunk.documentName] : [],
+            documentNames: laneChunk.documentNames || [],
           });
         }
         
