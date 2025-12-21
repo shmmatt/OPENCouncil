@@ -461,12 +461,18 @@ RULES:
   - what the documents explicitly describe
   - what is not specified or not found
 
+• EVIDENCE STRUCTURE:
+  - Evidence may come from TWO sources: LOCAL (town-specific) and STATE (NH RSA, NHMA handbooks)
+  - When evidence includes both local and state sections, synthesize them naturally
+  - Lead with the most directly relevant information, then add context from the other source
+  - Cite specific documents when possible (e.g., "According to the Ossipee Planning Board minutes...")
+
 • If the question implies multiple contributing factors but only one facet is supported by retrieved documents:
   - explicitly state that the answer reflects only that facet
   - do NOT imply it explains the entire outcome
 
 • EVIDENCE-FIRST APPROACH:
-  - Only describe general NH process/mechanism if you have retrieved documents that support it
+  - Only describe general NH process/mechanism if you have statewide documents that support it
   - Do NOT invent or assume statewide context without document evidence
   - If no statewide documents are retrieved, focus on what the local documents show
 

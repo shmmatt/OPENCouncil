@@ -69,21 +69,71 @@ export async function generateComplexDraftAnswer(
     };
   }
 
-  const allRetrievalDocNames: string[] = [];
-  const retrievedChunks: RetrievedChunk[] = [];
+  let allRetrievalDocNames: string[] = [];
+  let retrievedChunks: RetrievedChunk[] = [];
+  let usedTwoLane = false;
 
-  const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
+  // ===== TWO-LANE RETRIEVAL INTEGRATION =====
+  // If enabled, run parallel local + state retrieval first
+  if (chatConfig.ENABLE_PARALLEL_STATE_LANE && (retrievalPlan.forceParallelStateRetrieval !== false)) {
+    try {
+      const twoLaneResult = await twoLaneRetrieve({
+        userQuestion: question,
+        rerankedQuestion: question,
+        townPreference: retrievalPlan.filters.townPreference,
+        domains: retrievalPlan.filters.categories,
+        scopeHint: retrievalPlan.filters.townPreference ? "mixed" : "statewide",
+        logContext,
+      });
+      
+      if (twoLaneResult.mergedTopChunks.length > 0) {
+        usedTwoLane = true;
+        allRetrievalDocNames = extractTwoLaneDocNames(twoLaneResult);
+        
+        // Convert two-lane chunks to RetrievedChunk format
+        for (const laneChunk of twoLaneResult.mergedTopChunks) {
+          retrievedChunks.push({
+            source: laneChunk.lane === "local" ? "Local Municipal Documents" : "NH State & NHMA Resources",
+            content: laneChunk.content,
+            documentNames: laneChunk.documentName ? [laneChunk.documentName] : [],
+          });
+        }
+        
+        logDebug("complexAnswer_twoLane_result", {
+          requestId: logContext?.requestId,
+          sessionId: logContext?.sessionId,
+          stage: "complexAnswer_twoLane",
+          localCount: twoLaneResult.debug.localCount,
+          stateCount: twoLaneResult.debug.stateCount,
+          mergedCount: twoLaneResult.debug.mergedCount,
+          durationMs: twoLaneResult.debug.durationMs,
+        });
+      }
+    } catch (twoLaneError) {
+      logDebug("complexAnswer_twoLane_error", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "complexAnswer_twoLane",
+        error: twoLaneError instanceof Error ? twoLaneError.message : String(twoLaneError),
+      });
+      // Fall back to sequential retrieval
+    }
+  }
 
-  logDebug("complex_answer_retrieval_prompts", {
-    requestId: logContext?.requestId,
-    sessionId: logContext?.sessionId,
-    stage: "complexAnswer_prompts",
-    promptCount: retrievalPrompts.length,
-    prompts: retrievalPrompts.map(p => ({ label: p.sourceLabel, queryLength: p.query.length })),
-    additionalChunksCount: additionalChunks.length,
-  });
+  // Fall back to sequential retrieval if two-lane didn't produce results
+  if (!usedTwoLane) {
+    const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
-  for (let i = 0; i < retrievalPrompts.length; i++) {
+    logDebug("complex_answer_retrieval_prompts", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "complexAnswer_prompts",
+      promptCount: retrievalPrompts.length,
+      prompts: retrievalPrompts.map(p => ({ label: p.sourceLabel, queryLength: p.query.length })),
+      additionalChunksCount: additionalChunks.length,
+    });
+
+    for (let i = 0; i < retrievalPrompts.length; i++) {
     const prompt = retrievalPrompts[i];
     const retrievalStage = `complexAnswer_retrieval_${i + 1}`;
     const retrievalSystemPrompt = `You are a document retrieval assistant. Extract relevant information from municipal documents to answer the query. Be thorough and include specific details, quotes, and section references when available. Format as structured excerpts.`;
@@ -201,7 +251,8 @@ export async function generateComplexDraftAnswer(
         error: error instanceof Error ? error : new Error(String(error)),
       });
     }
-  }
+    }
+  } // End !usedTwoLane block
 
   // Merge additional chunks from evidence gate expansion passes
   for (const chunk of additionalChunks) {
@@ -228,6 +279,7 @@ export async function generateComplexDraftAnswer(
     retrievedChunkCount: retrievedChunks.length,
     retrievalDocCount,
     hadAdditionalChunks: additionalChunks.length > 0,
+    usedTwoLaneRetrieval: usedTwoLane,
   });
 
   const snippetsForSynthesis = retrievedChunks.map(c => ({

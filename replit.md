@@ -44,6 +44,25 @@ A centralized model registry (`server/llm/modelRegistry.ts`) manages LLM model s
 - **Environment overrides**: Each stage can be overridden via environment variables (MODEL_ROUTER, MODEL_SIMPLE, etc.)
 - **Fallback wrapper**: `withModelFallback()` provides automatic retry with fallback to degraded model on errors
 
+### Two-Lane Parallel Retrieval (Chat v2)
+The retrieval system uses a two-lane parallel architecture that executes both local (town-specific) and statewide (RSA/NHMA) document searches simultaneously using Promise.all. This addresses the failure mode where town-focused questions miss critical statewide legal context.
+
+**Configuration flags** (in `server/chatV2/chatConfig.ts`):
+- `ENABLE_PARALLEL_STATE_LANE`: Enable/disable two-lane retrieval (default: true)
+- `LOCAL_LANE_K`: Number of local documents to retrieve (default: 12)
+- `STATE_LANE_K`: Number of state documents to retrieve (default: 8)
+- `LOCAL_CONTEXT_CAP`: Max local chunks in merged context (default: 10)
+- `STATE_CONTEXT_CAP`: Max state chunks in merged context (default: 5)
+- `MERGED_CONTEXT_CAP`: Total chunks after merge (default: 15)
+
+**Query enhancement per lane**:
+- Local lane: Adds town name, boards, document type hints (minutes, warrants, ordinances)
+- State lane: Adds anchors like "NH RSA", "NHMA", "administrative rules", "Right-to-Know"
+
+**Deduplication**: After parallel retrieval, results are deduplicated preferring higher-scored chunks. Question pattern detection (hasRSAPattern) determines chunk ordering priority.
+
+**Fallback**: If two-lane retrieval fails or returns no results, falls back to single File Search.
+
 ### Evidence Coverage Gate (Chat v2)
 The complex answer path includes an Evidence Coverage Gate that evaluates retrieval quality after initial document retrieval. If coverage is insufficient for the question type (causal, mechanism, breakdown, process), the gate triggers up to 2 additional retrieval passes with targeted queries. The gate uses diversity metrics (category, board, document coverage) and LLM assessment to determine when expansion is needed.
 
