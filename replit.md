@@ -66,6 +66,29 @@ The retrieval system uses a two-lane parallel architecture that executes both lo
 ### Evidence Coverage Gate (Chat v2)
 The complex answer path includes an Evidence Coverage Gate that evaluates retrieval quality after initial document retrieval. If coverage is insufficient for the question type (causal, mechanism, breakdown, process), the gate triggers up to 2 additional retrieval passes with targeted queries. The gate uses diversity metrics (category, board, document coverage) and LLM assessment to determine when expansion is needed.
 
+**Resynthesis Mode**: When expansion retrieval finds additional chunks, the system enters resynthesis mode. This merges original and expansion chunks via content-hash deduplication instead of fresh retrieval, ensuring synthesized answers incorporate all evidence without redundancy.
+
+### Answer Mode & Character Cap Enforcement (Chat v2)
+The system supports two answer modes:
+- **Standard mode**: Concise answers with caps of 900 chars (simple) / 1800 chars (complex)
+- **Deep mode**: Detailed answers with caps of 1600 chars (simple) / 5200 chars (complex)
+
+**enforceCharCap utility** (`server/chatV2/enforceCharCap.ts`) provides:
+- Sentence-boundary truncation (falls back to word boundaries)
+- Markdown fence protection (never truncates inside code blocks)
+- Truncation footer appended when content is cut
+
+**Premium gating**: `DEEP_ANSWER_ENABLED` flag in `chatConfig.ts` controls availability. When disabled:
+- `validateAnswerMode()` forces all requests to "standard"
+- Frontend toggle is hidden and localStorage hydration is blocked
+- `/api/chat/config` endpoint exposes feature flag for frontend
+
+### Coverage Disclaimer (Chat v2)
+When retrieval quality is below threshold, a "What we couldn't confirm" disclaimer is shown:
+- Standard mode threshold: coverageScore < 0.7
+- Deep mode threshold: coverageScore < 0.85
+The disclaimer lists topics where official document backing was limited.
+
 ### Composed First Answer Pattern (Chat v2)
 For explanatory/causal/mechanism questions, the pipeline detects intent types (causal, mechanism, breakdown, interpretation) using generalized pattern matching. When detected, synthesis prompts are augmented with structured response guidelines encouraging complete explanations with examples. This applies to both simple and complex answer paths.
 
