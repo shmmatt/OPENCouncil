@@ -1,0 +1,122 @@
+You are a Replit Agent working in an existing OpenCouncil repo (Express backend + React frontend).
+
+MISSION
+Make NON-DEEP (standard) answers fast, coherent, and complete WITHOUT any truncation-driven UX and WITHOUT mentioning modes. Deep mode exists only as a user-controlled toggle that produces a longer answer. The app must never upsell or acknowledge mode differences in the answer text.
+
+CURRENT FAILURE (from logs)
+The complex synthesizer generates ~4,943 chars even when answerMode="standard", and then the system truncates to charCap=1800. This wastes time/cost and produces an incomplete chopped answer.
+
+NON-NEGOTIABLE PRODUCT RULES
+1) In standard mode, answers must be:
+   - quick (lower token output; avoid extra sections)
+   - complete (answers the user’s question; includes essential facts; states unknowns only when evidence is missing)
+   - never truncated in normal operation
+2) The answer must NEVER:
+   - mention "deep", "standard", "mode", "toggle", "premium", "upgrade"
+   - include any “shortened/truncated” note
+3) Deep mode can return longer answers, but the content must still be grounded in evidence and respect caps.
+4) Hard truncation is a safety guardrail only; it should be extremely rare. If it happens, do not add any note.
+
+IMPLEMENTATION REQUIREMENTS
+
+A) Replace word-based targets with char-accurate targets + structure
+Define output policies driven by (complexity, deepEnabled):
+
+SIMPLE + standard:
+- Target: 450–750 chars
+- Hard cap: 950 chars
+- Structure: 1 short paragraph + up to 3 bullets (only if helpful)
+
+SIMPLE + deep:
+- Target: 900–1400 chars
+- Hard cap: 1700 chars
+- Structure: short paragraph + 4–6 bullets
+
+COMPLEX + standard (MOST IMPORTANT):
+- Target: 1100–1700 chars
+- Hard cap: 1900 chars
+- Structure MUST be:
+  - 1–2 sentence direct answer (no preamble)
+  - "Key points" bullets: max 6 bullets, each <= 160 chars
+  - "Sources" line/list using existing citation format
+- Forbidden in complex standard:
+  - multiple sections beyond "Key points" and "Sources"
+  - long narrative, “How this works”, background explainer unless absolutely needed for correctness
+
+COMPLEX + deep:
+- Target: 3200–4800 chars
+- Hard cap: 5400 chars
+- Allow richer structure (At a glance / Key numbers / Timeline / What’s next / Sources)
+
+Update the synthesizer system prompts accordingly. Remove any “Target length 400–600 words” or similar.
+
+B) Enforce generation-time limits (token caps)
+Where the LLM call is made (Gemini):
+- Set max_output_tokens based on policy:
+  - simple standard: 220
+  - simple deep: 420
+  - complex standard: 520
+  - complex deep: 1300
+- Keep temperature as is.
+
+If the Gemini SDK wrapper doesn’t support max_output_tokens at the callsite:
+- Implement a length-safe two-pass strategy:
+  Pass 1: attempt normal synthesis with strict char instructions.
+  If output exceeds hard cap by > 5%:
+    Pass 2: rewrite-to-fit step (same model) with:
+      - "Rewrite under X characters"
+      - "Preserve all factual claims and citations"
+      - "Keep required structure"
+Only if pass 2 still exceeds cap, apply hard truncation with NO additional messaging.
+
+C) Make standard mode complete via "coverage-aware packing"
+When evidenceGateEnabled is true:
+- Keep evidence gate, but ensure standard synthesis produces a complete answer even when evidence is partial:
+  - If missing facets exist, include at most 2 "Unknown/Not found in docs" bullets inside Key points.
+  - Do NOT add extra sections; do not ask clarification unless router says requiresClarification=true.
+- Ensure final standard answer always contains:
+  - at least one direct statement addressing the question
+  - at least 3 key points when possible
+  - citations/sources
+
+D) Remove all truncation UX / mode mentions
+- Delete any code that appends upsell copy or “shortened” note.
+- Ensure any UI messaging around length is removed.
+- The answer payload should be plain answer text + sources + followups as currently designed, with no mention of deep/standard.
+
+E) Observability
+Add log fields for every response:
+- policyName (e.g., "complex_standard")
+- charTargetMin/charTargetMax
+- charCap
+- maxOutputTokensUsed (if applicable)
+- generationLengthChars (after pass 1)
+- finalAnswerLengthChars
+- wasRewrittenForLength (boolean)
+- wasTruncated (boolean)
+Track counts so we can verify truncation is near-zero in standard.
+
+F) Acceptance Tests (must run locally)
+Add a small test harness or script (or a manual QA checklist) that:
+1) Executes a complex standard query (e.g., rail trail status) and asserts:
+   - finalAnswerLengthChars <= 1900
+   - wasTruncated == false
+   - answer includes "Key points" and "Sources"
+2) Executes deep mode for same query and asserts:
+   - finalAnswerLengthChars > standard length
+   - finalAnswerLengthChars <= 5400
+3) Confirms answer text contains none of these substrings:
+   ["deep", "standard", "mode", "toggle", "premium", "upgrade", "shortened", "truncated"]
+
+TASK PLAN
+1) Locate prompt builders for complexAnswer_synthesis and simple path (if any) and refactor into a shared "answer policy" module keyed by (complexity, deepEnabled).
+2) Implement token limit configuration at LLM callsite.
+3) Implement rewrite-to-fit fallback.
+4) Remove any truncation/upsell UI or server-side string append logic.
+5) Add logging fields.
+6) Add QA harness/checklist and verify on the rail trail query.
+
+Deliver:
+- Code changes
+- List of files touched
+- Short explanation of the new length-control flow

@@ -177,16 +177,17 @@ export const chatConfig = {
 
   /**
    * Character caps for different paths and modes.
-   * HARD limits - answers are truncated if they exceed these.
+   * These are now defined in answerPolicy.ts - kept here for backward compat.
+   * @deprecated Use getAnswerPolicy() from answerPolicy.ts instead
    */
   CHAR_CAPS: {
     simple: {
-      standard: 900,
-      deep: 1600,
+      standard: 950,
+      deep: 1700,
     },
     complex: {
-      standard: 1800,
-      deep: 5200,
+      standard: 1900,
+      deep: 5400,
     },
   },
 

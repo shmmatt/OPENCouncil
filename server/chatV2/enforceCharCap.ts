@@ -4,7 +4,7 @@
  * Enforces hard character limits on answer text with:
  * - Safe sentence-boundary truncation
  * - Markdown code fence protection
- * - Truncation footer for user feedback
+ * - NO truncation messaging (per product requirements)
  */
 
 export interface CharCapResult {
@@ -14,22 +14,23 @@ export interface CharCapResult {
   finalLength: number;
 }
 
-const TRUNCATION_FOOTER_STANDARD = "\n\n(Answer truncated. Turn on Deep answer for more.)";
-const TRUNCATION_FOOTER_DEEP = "\n\n(Answer truncated due to length limits.)";
 const ELLIPSIS = "...";
 
 /**
  * Enforce a hard character cap on answer text.
  * 
+ * IMPORTANT: Per product requirements, truncation is a safety guardrail only.
+ * No truncation notes, mode mentions, or upsell copy are added.
+ * 
  * @param text - The text to truncate if necessary
  * @param cap - Maximum allowed characters (hard limit)
- * @param isDeepMode - Whether deep answer mode is active (affects footer text)
+ * @param _isDeepMode - Unused, kept for backward compatibility
  * @returns CharCapResult with truncated text and metadata
  */
 export function enforceCharCap(
   text: string,
   cap: number,
-  isDeepMode: boolean = false
+  _isDeepMode: boolean = false
 ): CharCapResult {
   const originalLength = text.length;
 
@@ -42,14 +43,10 @@ export function enforceCharCap(
     };
   }
 
-  const footer = isDeepMode ? TRUNCATION_FOOTER_DEEP : TRUNCATION_FOOTER_STANDARD;
-  const footerLength = footer.length + ELLIPSIS.length;
-  
-  // Calculate effective cap (leave room for ellipsis and footer)
-  const effectiveCap = cap - footerLength;
+  // Leave room for ellipsis only (no footer)
+  const effectiveCap = cap - ELLIPSIS.length;
   
   if (effectiveCap <= 0) {
-    // Cap is too small to even fit the footer
     return {
       text: text.slice(0, cap),
       wasTruncated: true,
@@ -69,8 +66,8 @@ export function enforceCharCap(
   // Ensure we don't break markdown code fences
   truncated = fixBrokenMarkdownFences(truncated);
 
-  // Add ellipsis and footer
-  const finalText = truncated + ELLIPSIS + footer;
+  // Add ellipsis only - NO truncation messaging per product requirements
+  const finalText = truncated + ELLIPSIS;
 
   return {
     text: finalText,
@@ -209,6 +206,7 @@ function fixBrokenMarkdownFences(text: string): string {
 
 /**
  * Character caps configuration by path and mode
+ * Updated to new policy values from answerPolicy.ts
  */
 export interface CharCapConfig {
   simple: {
@@ -223,12 +221,12 @@ export interface CharCapConfig {
 
 export const DEFAULT_CHAR_CAPS: CharCapConfig = {
   simple: {
-    standard: 900,
-    deep: 1600,
+    standard: 950,
+    deep: 1700,
   },
   complex: {
-    standard: 1800,
-    deep: 5200,
+    standard: 1900,
+    deep: 5400,
   },
 };
 

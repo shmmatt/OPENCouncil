@@ -68,15 +68,34 @@ The complex answer path includes an Evidence Coverage Gate that evaluates retrie
 
 **Resynthesis Mode**: When expansion retrieval finds additional chunks, the system enters resynthesis mode. This merges original and expansion chunks via content-hash deduplication instead of fresh retrieval, ensuring synthesized answers incorporate all evidence without redundancy.
 
-### Answer Mode & Character Cap Enforcement (Chat v2)
-The system supports two answer modes:
-- **Standard mode**: Concise answers with caps of 900 chars (simple) / 1800 chars (complex)
-- **Deep mode**: Detailed answers with caps of 1600 chars (simple) / 5200 chars (complex)
+### Answer Policy System (Chat v2)
+A centralized answer policy module (`server/chatV2/answerPolicy.ts`) manages all length and structure requirements for answer generation. Each complexity/mode combination has a defined policy:
 
-**enforceCharCap utility** (`server/chatV2/enforceCharCap.ts`) provides:
+**Policies by complexity × mode**:
+| Policy | Char Target | Hard Cap | Max Tokens | Structure |
+|--------|-------------|----------|------------|-----------|
+| simple_standard | 450-750 | 950 | 220 | 1 paragraph + up to 3 bullets |
+| simple_deep | 900-1400 | 1700 | 420 | 1-2 paragraphs + 4-6 bullets |
+| complex_standard | 1100-1700 | 1900 | 520 | Direct answer + Key points (max 6) + Sources |
+| complex_deep | 3200-4800 | 5400 | 1300 | Rich structure: At a glance, Key numbers, Timeline, What's next, Sources |
+
+**Complex Standard Structure** (most important):
+- 1-2 sentence direct answer (no preamble like "Based on documents...")
+- "Key points" section: max 6 bullets, each ≤160 chars
+- "Sources" section with document citations
+- **Forbidden**: Multiple narrative sections, "At a glance", "How this works", "Timeline" sections
+
+**Observability**: Each answer generation logs `policyMetrics` including:
+- charTargetMin/Max, charCap, maxOutputTokensUsed
+- generationLengthChars, finalAnswerLengthChars
+- wasRewrittenForLength, wasTruncated
+
+**Truncation** (`server/chatV2/enforceCharCap.ts`) provides:
 - Sentence-boundary truncation (falls back to word boundaries)
 - Markdown fence protection (never truncates inside code blocks)
-- Truncation footer appended when content is cut
+- Ellipsis only on truncation - NO mode mentions, upsell copy, or "shortened" notes
+
+**Forbidden Substrings**: Answers must never contain: deep, standard, mode, toggle, premium, upgrade, shortened, truncated
 
 **Premium gating**: `DEEP_ANSWER_ENABLED` flag in `chatConfig.ts` controls availability. When disabled:
 - `validateAnswerMode()` forces all requests to "standard"

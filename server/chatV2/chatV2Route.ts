@@ -394,6 +394,7 @@ export function registerChatV2Routes(app: Express): void {
           sessionHistory: trimmedHistory,
           logContext: logCtx,
           composedAnswerFlags,
+          answerMode,
         });
 
         logDebug("complex_answer_initial_draft", {
@@ -522,6 +523,7 @@ export function registerChatV2Routes(app: Express): void {
                   additionalChunks,
                   composedAnswerFlags,
                   originalChunks, // Triggers resynthesis mode
+                  answerMode,
                 });
 
                 logDebug("resynthesis_complete", {
@@ -1049,6 +1051,7 @@ export function registerChatV2Routes(app: Express): void {
             retrievalPlan,
             sessionHistory: trimmedHistory,
             logContext: logCtx,
+            answerMode: "standard", // File attachment mode uses standard answers
           });
 
           sourceDocumentNames = draftResult.sourceDocumentNames;

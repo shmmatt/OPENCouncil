@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType, SynthesisOutput } from "./types";
+import type { RetrievalPlan, ChatHistoryMessage, PipelineLogContext, DocSourceType, SynthesisOutput, AnswerMode } from "./types";
+import { getAnswerPolicy, getPolicyPromptInstructions, type AnswerPolicy, type AnswerPolicyMetrics } from "./answerPolicy";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { logDebug } from "../utils/logger";
@@ -39,6 +40,10 @@ interface ComplexAnswerOptions {
    * - Deduplicate and synthesize from merged evidence
    */
   originalChunks?: RetrievedChunk[];
+  /**
+   * Answer mode: "standard" (default) or "deep" (longer, more detailed responses)
+   */
+  answerMode?: AnswerMode;
 }
 
 interface ComplexDraftResult {
@@ -49,6 +54,8 @@ interface ComplexDraftResult {
   notices: ChatNotice[];
   retrievedChunks: RetrievedChunk[];
   composedAnswerApplied?: boolean;
+  /** Policy metrics for observability logging */
+  policyMetrics?: Partial<AnswerPolicyMetrics>;
 }
 
 export interface RetrievedChunk {
@@ -60,7 +67,7 @@ export interface RetrievedChunk {
 export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
-  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags, originalChunks } = options;
+  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags, originalChunks, answerMode = "standard" } = options;
   const { model: summaryModel } = getModelForStage('complexSummary');
 
   const storeId = await getOrCreateFileSearchStoreId();
@@ -325,14 +332,35 @@ export async function generateComplexDraftAnswer(
     content: c.content,
   }));
 
-  const { text: draftAnswerText, composedAnswerApplied } = await synthesizeDraftAnswer(
+  const { text: draftAnswerText, composedAnswerApplied, policy } = await synthesizeDraftAnswer(
     question,
     snippetsForSynthesis,
     sessionHistory,
     retrievalPlan,
     logContext,
-    composedAnswerFlags
+    composedAnswerFlags,
+    answerMode
   );
+
+  // Build policy metrics for observability logging
+  const policyMetrics: Partial<AnswerPolicyMetrics> = {
+    policyName: policy.policyName,
+    charTargetMin: policy.charTargetMin,
+    charTargetMax: policy.charTargetMax,
+    charCap: policy.charCap,
+    maxOutputTokensUsed: policy.maxOutputTokens,
+    generationLengthChars: draftAnswerText.length,
+    finalAnswerLengthChars: draftAnswerText.length, // Will be updated after any truncation
+    wasRewrittenForLength: false,
+    wasTruncated: false,
+  };
+
+  logDebug("complex_answer_policy_metrics", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "complexAnswer_policy",
+    ...policyMetrics,
+  });
 
   // Determine docSourceType based on actual retrieved documents (from File Search)
   const townPref = retrievalPlan.filters.townPreference;
@@ -362,6 +390,7 @@ export async function generateComplexDraftAnswer(
     notices: [],
     retrievedChunks,
     composedAnswerApplied,
+    policyMetrics,
   };
 }
 
@@ -548,14 +577,17 @@ async function synthesizeDraftAnswer(
   history: ChatHistoryMessage[],
   plan: RetrievalPlan,
   logContext?: PipelineLogContext,
-  composedAnswerFlags?: ComposedAnswerFlags
-): Promise<{ text: string; composedAnswerApplied: boolean }> {
+  composedAnswerFlags?: ComposedAnswerFlags,
+  answerMode: AnswerMode = "standard"
+): Promise<{ text: string; composedAnswerApplied: boolean; policy: AnswerPolicy }> {
   const { model: synthesisModel } = getModelForStage('complexSynthesis');
+  const policy = getAnswerPolicy("complex", answerMode);
   
   if (snippets.length === 0) {
     return {
       text: "No directly relevant material was found in the OpenCouncil archive for this question. The available documents for this municipality do not address this question directly. You may wish to consult municipal records or counsel for more specific guidance.",
       composedAnswerApplied: false,
+      policy,
     };
   }
 
@@ -572,76 +604,16 @@ async function synthesizeDraftAnswer(
       : "";
 
   const townName = plan.filters.townPreference || "the town";
+  const policyInstructions = getPolicyPromptInstructions(policy);
 
-  const synthesisPrompt = `Based on the following document excerpts, provide a comprehensive answer to the question.
-${historyContext}
-Question: ${question}
+  // Different prompts based on answer mode
+  const synthesisPrompt = answerMode === "standard" 
+    ? buildStandardSynthesisPrompt(question, snippetText, historyContext, townName, policyInstructions)
+    : buildDeepSynthesisPrompt(question, snippetText, historyContext, townName, policyInstructions, plan);
 
-Document Excerpts:
-${snippetText}
-
-Instructions:
-Use this EXACT structure for your answer:
-
-### At a glance
-- 2-4 bullet points summarizing the main answer in plain language
-
-### Key numbers (${townName})
-- A short bullet list of important figures (dollar amounts, percentages, contract values, budget line items)
-- If no specific numbers are available, omit this section
-
-### Details from recent meetings
-- 1-3 short paragraphs that reference specific meetings or documents
-- When mentioning a meeting or document, use phrases like "According to the ${townName} BOS minutes from [date]..." or "In the 2025 ${townName} budget document..."
-
-Additional rules:
-- Keep the entire answer roughly 400-600 words unless the question clearly requires more detailed statutory analysis
-- Explicitly distinguish between what the documents say (facts) and what is unknown or not covered
-- If information is missing, advise consulting town counsel or NHMA
-- ${plan.filters.townPreference ? `Focus on ${plan.filters.townPreference} when specific local information is available` : "Provide statewide guidance when no specific town is mentioned"}
-
-Provide your answer:`;
-
-  const baseSynthesisSystemPrompt = `You are synthesizing a comprehensive answer for OpenCouncil using multiple retrieved sources.
-
-Your goal is to produce a complete, trustworthy explanation that feels sufficient on first read.
-
-Target length: 400–600 words.
-
-STRUCTURE:
-
-### At a glance
-- 3–5 bullets summarizing the outcome and major contributing factors based on retrieved documents.
-- Only include general process context if retrieved documents support it.
-
-### How this works (context)
-- ONLY include this section if you have retrieved statewide/handbook documents that explain the mechanism.
-- If no statewide documents are retrieved, SKIP this section entirely.
-- Do NOT invent or assume general process context without document evidence.
-- When included, cite the specific handbook or statewide document.
-
-### Key numbers and facts
-- Present quantitative details from retrieved documents.
-- Clearly label what entity each number relates to (town, school, county, state).
-
-### Local details and recent actions
-- Describe what local boards, voters, or officials approved or discussed.
-- Cite specific documents and meeting dates.
-- This is the primary section when only local documents are retrieved.
-
-### What is not shown in the available documents
-- Explicitly list relevant components that were not found in the retrieved materials, if any.
-- This prevents misleading completeness.
-- If statewide process context was not retrieved, note that here.
-
-STYLE RULES:
-
-• EVIDENCE-FIRST: Only describe mechanisms/processes that are documented in retrieved sources.
-• Maintain a neutral, civic tone.
-• Do not speculate or invent context.
-• Do not attribute causation without evidence.
-• When statewide context is used, cite the specific document.
-• This information is informational only and not legal advice.`;
+  const baseSynthesisSystemPrompt = answerMode === "standard"
+    ? buildStandardSystemPrompt(policyInstructions)
+    : buildDeepSystemPrompt(policyInstructions);
 
   const { prompt: synthesisSystemPrompt, composedAnswerApplied } = composedAnswerFlags
     ? augmentSystemPromptWithComposedAnswer(baseSynthesisSystemPrompt, composedAnswerFlags, plan.filters.townPreference)
@@ -672,6 +644,7 @@ STYLE RULES:
       config: {
         systemInstruction: synthesisSystemPrompt,
         temperature: 0.3,
+        maxOutputTokens: policy.maxOutputTokens,
       },
     });
 
@@ -702,7 +675,7 @@ STYLE RULES:
       );
     }
 
-    return { text: responseText, composedAnswerApplied };
+    return { text: responseText, composedAnswerApplied, policy };
   } catch (error) {
     if (isQuotaError(error)) {
       const errMessage = error instanceof Error ? error.message : String(error);
@@ -724,8 +697,115 @@ STYLE RULES:
       error: error instanceof Error ? error : new Error(String(error)),
     });
 
-    return { text: "An error occurred while processing the retrieved documents. Please try again in a moment.", composedAnswerApplied: false };
+    return { text: "An error occurred while processing the retrieved documents. Please try again in a moment.", composedAnswerApplied: false, policy };
   }
+}
+
+/**
+ * Build the synthesis prompt for STANDARD mode (complex questions).
+ * Enforces the Key points + Sources structure.
+ */
+function buildStandardSynthesisPrompt(
+  question: string,
+  snippetText: string,
+  historyContext: string,
+  townName: string,
+  policyInstructions: string
+): string {
+  return `Based on the following document excerpts, answer the question concisely.
+${historyContext}
+Question: ${question}
+
+Document Excerpts:
+${snippetText}
+
+${policyInstructions}
+
+REQUIRED FORMAT:
+1. Start with 1-2 sentences directly answering the question (no preamble)
+2. **Key points**
+   - Maximum 6 bullets, each under 160 characters
+   - Focus on the most important facts from the documents
+3. **Sources**
+   - List the document names used
+
+${townName !== "the town" ? `Focus on ${townName} when local information is available.` : ""}
+If information is missing from documents, include max 2 "Unknown/Not found" bullets in Key points.
+
+Provide your answer:`;
+}
+
+/**
+ * Build the synthesis prompt for DEEP mode (complex questions).
+ * Allows richer structure with multiple sections.
+ */
+function buildDeepSynthesisPrompt(
+  question: string,
+  snippetText: string,
+  historyContext: string,
+  townName: string,
+  policyInstructions: string,
+  plan: RetrievalPlan
+): string {
+  return `Based on the following document excerpts, provide a comprehensive answer to the question.
+${historyContext}
+Question: ${question}
+
+Document Excerpts:
+${snippetText}
+
+${policyInstructions}
+
+Use these sections as appropriate:
+- **At a glance** - 3-5 bullet summary of the main answer
+- **Key numbers** - Important figures (amounts, percentages, dates)
+- **Details from documents** - Specific findings with citations
+- **What's not covered** - Information gaps (if relevant)
+- **Sources** - Document citations
+
+${plan.filters.townPreference ? `Focus on ${plan.filters.townPreference} when local information is available.` : "Provide statewide guidance when no specific town is mentioned."}
+If information is missing, advise consulting town counsel or NHMA.
+
+Provide your answer:`;
+}
+
+/**
+ * Build the system prompt for STANDARD mode.
+ * Emphasizes brevity and the Key points structure.
+ */
+function buildStandardSystemPrompt(policyInstructions: string): string {
+  return `You are synthesizing a concise answer for OpenCouncil.
+
+${policyInstructions}
+
+CRITICAL RULES:
+1. Start with a direct answer - NO preambles like "Based on the documents..." or "Let me explain..."
+2. Use ONLY "Key points" and "Sources" sections
+3. Each bullet must be factual and cite the source document
+4. If evidence is missing, state it briefly (max 2 bullets for unknowns)
+5. Stay within character limits - be concise
+6. NEVER mention answer modes, toggles, or length limits in your response
+7. This is informational only, not legal advice`;
+}
+
+/**
+ * Build the system prompt for DEEP mode.
+ * Allows richer explanation with multiple sections.
+ */
+function buildDeepSystemPrompt(policyInstructions: string): string {
+  return `You are synthesizing a comprehensive answer for OpenCouncil using multiple retrieved sources.
+
+${policyInstructions}
+
+Your goal is to produce a complete, trustworthy explanation.
+
+STYLE RULES:
+• EVIDENCE-FIRST: Only describe what is documented in retrieved sources
+• Maintain a neutral, civic tone
+• Do not speculate or invent context
+• When statewide context is used, cite the specific document
+• NEVER mention answer modes, toggles, or length limits in your response
+• This is informational only and not legal advice`;
 }
 
 /**
