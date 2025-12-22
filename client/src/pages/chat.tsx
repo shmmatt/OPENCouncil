@@ -5,8 +5,11 @@ import { queryClient } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, Info, AlertCircle } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -45,6 +48,13 @@ interface V2Metadata {
   sources: SourceCitation[];
   suggestedFollowUps: string[];
   notices?: ChatNotice[];
+  // Coverage data
+  coverageScore?: number;
+  missingFacets?: string[];
+  showCoverageDisclaimer?: boolean;
+  // Answer mode data
+  answerMode?: "standard" | "deep";
+  wasTruncated?: boolean;
 }
 
 function RecentMinutesUpdates({ 
@@ -336,6 +346,8 @@ function MessageBubble({
   const sources = v2Data?.sources || [];
   const suggestedFollowUps = v2Data?.suggestedFollowUps || [];
   const notices = v2Data?.notices || [];
+  const showCoverageDisclaimer = v2Data?.showCoverageDisclaimer || false;
+  const missingFacets = v2Data?.missingFacets || [];
 
   return (
     <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -366,6 +378,25 @@ function MessageBubble({
         {/* V2 Notices (scope, disclaimers, system messages) */}
         {!isUser && notices.length > 0 && (
           <MessageNotices notices={notices} />
+        )}
+        
+        {/* Coverage disclaimer - "What we couldn't confirm" */}
+        {!isUser && showCoverageDisclaimer && missingFacets.length > 0 && (
+          <div className="mt-2 p-3 rounded-md bg-muted/50 border border-border" data-testid="coverage-disclaimer">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  What we couldn't fully confirm
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                  {missingFacets.map((facet, idx) => (
+                    <li key={idx} className="leading-relaxed">{facet}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
         )}
         
         {/* Suggested follow-up questions */}
@@ -490,6 +521,12 @@ function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
   );
 }
 
+// Type for answer mode
+type AnswerMode = "standard" | "deep";
+
+// LocalStorage key for deep answer mode preference
+const DEEP_ANSWER_MODE_KEY = "opencouncil-deep-answer-mode";
+
 export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
@@ -497,10 +534,41 @@ export default function Chat() {
   const [sharedLinkQuestion, setSharedLinkQuestion] = useState<string | null>(null);
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  // Deep Answer mode state - persisted in localStorage (default OFF)
+  const [deepAnswerMode, setDeepAnswerMode] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(DEEP_ANSWER_MODE_KEY);
+      return stored === "true";
+    } catch {
+      return false;
+    }
+  });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
+  
+  // Persist deep answer mode to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(DEEP_ANSWER_MODE_KEY, String(deepAnswerMode));
+    } catch {
+      // localStorage unavailable - silent fail
+    }
+  }, [deepAnswerMode]);
+  
+  // Fetch chat config to check if deep answer feature is enabled
+  const { data: chatConfigData } = useQuery<{ deepAnswerEnabled: boolean }>({
+    queryKey: ["/api/chat/config"],
+  });
+  
+  // Check if deep answer feature is enabled (server-controlled)
+  const deepAnswerFeatureEnabled = chatConfigData?.deepAnswerEnabled ?? false;
+  
+  // Derive answerMode from toggle state (only apply if feature enabled)
+  const answerMode: AnswerMode = (deepAnswerFeatureEnabled && deepAnswerMode) ? "deep" : "standard";
 
   // Detect ?q= URL parameter for shareable links
   useEffect(() => {
@@ -623,7 +691,10 @@ export default function Chat() {
           throw error;
         }
       } else {
-        return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { content });
+        return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { 
+          content, 
+          answerMode 
+        });
       }
     },
     onSuccess: () => {
@@ -898,9 +969,42 @@ export default function Chat() {
                 )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Press Enter to send, Shift+Enter for new line. Attach PDF, DOCX, or TXT files.
-            </p>
+            <div className="flex items-center justify-between mt-2">
+              <p className="text-xs text-muted-foreground">
+                Press Enter to send, Shift+Enter for new line
+              </p>
+              {/* Only show Deep Answer toggle if feature is enabled */}
+              {deepAnswerFeatureEnabled && (
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          id="deep-answer-mode"
+                          checked={deepAnswerMode}
+                          onCheckedChange={setDeepAnswerMode}
+                          disabled={sendMessageMutation.isPending}
+                          data-testid="switch-deep-answer"
+                        />
+                        <Label 
+                          htmlFor="deep-answer-mode" 
+                          className="text-xs text-muted-foreground cursor-pointer select-none"
+                        >
+                          Detailed answers
+                        </Label>
+                        <Info className="w-3 h-3 text-muted-foreground" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-sm">
+                        Get longer, more comprehensive answers with additional context. 
+                        Best for complex policy questions or research.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+            </div>
           </form>
         </div>
       </div>

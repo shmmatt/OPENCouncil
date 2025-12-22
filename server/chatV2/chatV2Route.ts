@@ -12,7 +12,9 @@ import { critiqueAndImproveAnswer } from "./critic";
 import { generateFollowups } from "./generateFollowups";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
-import { shouldRunCritic, chatConfig } from "./chatConfig";
+import { shouldRunCritic, chatConfig, validateAnswerMode, getCharacterCap } from "./chatConfig";
+import { enforceCharCap } from "./enforceCharCap";
+import type { AnswerMode } from "./types";
 import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
 import {
   shouldBypassRouterForFollowup,
@@ -67,13 +69,17 @@ export function registerChatV2Routes(app: Express): void {
     const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
 
     try {
-      const { content, metadata }: ChatV2Request = req.body;
+      const { content, metadata, answerMode: rawAnswerMode }: ChatV2Request = req.body;
+      
+      // Validate and normalize answerMode
+      const answerMode: AnswerMode = validateAnswerMode(rawAnswerMode);
 
       logInfo("chat_v2_request_received", {
         ...logCtx,
         stage: "entry",
         userQuestion: sanitizeUserContent(content, 200),
         userMetadata: metadata,
+        answerMode,
       });
 
       if (!content || !content.trim()) {
@@ -290,6 +296,7 @@ export function registerChatV2Routes(app: Express): void {
       // Evidence coverage gate metrics (only populated for complex path)
       let coverageScore: number | undefined;
       let retrievalPassCount = 1;
+      let missingFacets: string[] = [];
       
       // Composed first answer detection (for both paths)
       const hasAttachment = false; // Will be set in file upload handler
@@ -431,6 +438,7 @@ export function registerChatV2Routes(app: Express): void {
             });
 
             coverageScore = gateOutput.coverageScore;
+            missingFacets = gateOutput.missingFacets.slice(0, 5); // Keep up to 5 facets for display
 
             logDebug("evidence_gate_result", {
               ...logCtx,
@@ -494,13 +502,18 @@ export function registerChatV2Routes(app: Express): void {
 
               // Re-synthesize with expanded evidence if we got additional chunks
               if (additionalChunks.length > 0) {
+                // Store original chunks before resynthesis
+                const originalChunks = draftResult.retrievedChunks;
+                
                 logDebug("resynthesis_start", {
                   ...logCtx,
                   stage: "evidenceGate_resynthesis",
-                  originalChunks: draftResult.retrievedChunks.length,
-                  additionalChunks: additionalChunks.length,
+                  originalChunkCount: originalChunks.length,
+                  additionalChunkCount: additionalChunks.length,
+                  mergedChunkCount: originalChunks.length + additionalChunks.length,
                 });
 
+                // Pass originalChunks to trigger resynthesis mode (skip fresh retrieval, merge evidence)
                 draftResult = await generateComplexDraftAnswer({
                   question: content.trim(),
                   retrievalPlan,
@@ -508,6 +521,7 @@ export function registerChatV2Routes(app: Express): void {
                   logContext: logCtx,
                   additionalChunks,
                   composedAnswerFlags,
+                  originalChunks, // Triggers resynthesis mode
                 });
 
                 logDebug("resynthesis_complete", {
@@ -515,6 +529,7 @@ export function registerChatV2Routes(app: Express): void {
                   stage: "evidenceGate_resynthesis",
                   newDraftLength: draftResult.draftAnswerText.length,
                   totalSourceDocs: draftResult.sourceDocumentNames.length,
+                  expansionEvidenceUsed: true,
                 });
               }
             }
@@ -627,6 +642,31 @@ export function registerChatV2Routes(app: Express): void {
         }
       }
 
+      // ===== CHARACTER CAP ENFORCEMENT =====
+      // Apply hard character limit based on complexity and answer mode
+      const charCap = getCharacterCap(routerOutput.complexity, answerMode);
+      const capResult = enforceCharCap(answerText, charCap, answerMode === "deep");
+      
+      // Track truncation metrics
+      const wasTruncated = capResult.wasTruncated;
+      const originalAnswerLength = capResult.originalLength;
+      const finalAnswerLength = capResult.finalLength;
+      
+      // Use the potentially truncated answer
+      answerText = capResult.text;
+
+      if (wasTruncated) {
+        logDebug("answer_truncated", {
+          ...logCtx,
+          stage: "charCap",
+          answerMode,
+          charCap,
+          originalLength: originalAnswerLength,
+          finalLength: finalAnswerLength,
+          complexity: routerOutput.complexity,
+        });
+      }
+
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
 
       const answerMeta: FinalAnswerMeta = {
@@ -636,12 +676,27 @@ export function registerChatV2Routes(app: Express): void {
         limitationsNote,
       };
 
+      // Determine if we should show "What we couldn't confirm" disclaimer
+      // Threshold is 0.7 for standard mode, 0.85 for deep mode
+      const coverageThreshold = answerMode === "deep" ? 0.85 : 0.7;
+      const showCoverageDisclaimer = 
+        coverageScore !== undefined && 
+        coverageScore < coverageThreshold && 
+        missingFacets.length > 0;
+
       const v2Metadata = {
         v2: true,
         answerMeta,
         sources,
         suggestedFollowUps,
         notices,
+        answerMode,
+        wasTruncated,
+        charCap,
+        // Coverage data for frontend disclaimer
+        coverageScore,
+        missingFacets: showCoverageDisclaimer ? missingFacets : [],
+        showCoverageDisclaimer,
       };
 
       const assistantMessage = await storage.createChatMessage({
@@ -685,6 +740,11 @@ export function registerChatV2Routes(app: Express): void {
         answerLength: answerText.length,
         docSourceType,
         docSourceTown,
+        // Answer mode and character cap metrics
+        answerMode,
+        charCap,
+        wasTruncated,
+        finalAnswerLengthChars: finalAnswerLength,
         // Evidence gate metrics (only for complex path when gate ran)
         ...(coverageScore !== undefined && { coverageScore, retrievalPassCount }),
         // Composed answer metrics

@@ -3,6 +3,13 @@ export type ComplexityLevel = "simple" | "complex";
 export type ScopeHint = "local" | "statewide" | "mixed" | null;
 
 /**
+ * Answer mode controls response length and detail level.
+ * - "standard": Default mode with shorter, more concise answers
+ * - "deep": Extended mode with longer, more detailed answers (premium feature)
+ */
+export type AnswerMode = "standard" | "deep";
+
+/**
  * Explicit document source tracking for scope note selection.
  * This ensures the scope note accurately reflects which documents were used.
  */
@@ -97,6 +104,10 @@ export interface ChatV2Request {
     mimeType: string;
     extractedText: string;
   };
+  /**
+   * Answer mode: "standard" (default) or "deep" (longer, more detailed responses)
+   */
+  answerMode?: AnswerMode;
 }
 
 import type { ChatNotice } from "@shared/chatNotices";

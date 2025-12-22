@@ -7,6 +7,8 @@ export type { RetrievedChunk } from "./complexAnswer";
 export { critiqueAndImproveAnswer } from "./critic";
 export { generateFollowups } from "./generateFollowups";
 export { mapFileSearchDocumentsToCitations, formatCitationsForDisplay } from "./sources";
+export { enforceCharCap, getCharCap, getLengthTargets } from "./enforceCharCap";
+export type { CharCapResult, CharCapConfig, LengthTargets } from "./enforceCharCap";
 export { 
   evaluateEvidenceCoverage, 
   buildRetrievalSummary, 

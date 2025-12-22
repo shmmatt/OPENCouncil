@@ -975,6 +975,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch available towns" });
     }
   });
+  
+  // Get chat configuration (feature flags for frontend)
+  app.get("/api/chat/config", (req, res) => {
+    // Import chatConfig dynamically to avoid circular dependencies
+    const { chatConfig } = require("./chatV2/chatConfig");
+    res.json({
+      deepAnswerEnabled: chatConfig.DEEP_ANSWER_ENABLED,
+    });
+  });
 
   // Set town preference for current actor (authed or anonymous)
   app.post("/api/preferences/town", async (req: IdentityRequest, res) => {

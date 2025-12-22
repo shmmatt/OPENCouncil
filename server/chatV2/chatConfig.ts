@@ -163,6 +163,38 @@ export const chatConfig = {
    * Default false - state lane is cheap and often useful.
    */
   SKIP_STATE_LANE_FOR_TRIVIAL_LOCAL: false,
+
+  // =====================================================
+  // DEEP ANSWER / CHARACTER CAP SETTINGS
+  // =====================================================
+
+  /**
+   * Enable the Deep Answer toggle feature.
+   * When false, the toggle is hidden in UI and answerMode is forced to "standard".
+   * Set to false to disable as a premium feature.
+   */
+  DEEP_ANSWER_ENABLED: true,
+
+  /**
+   * Character caps for different paths and modes.
+   * HARD limits - answers are truncated if they exceed these.
+   */
+  CHAR_CAPS: {
+    simple: {
+      standard: 900,
+      deep: 1600,
+    },
+    complex: {
+      standard: 1800,
+      deep: 5200,
+    },
+  },
+
+  /**
+   * Coverage score thresholds for "What we couldn't confirm" section.
+   */
+  COVERAGE_THRESHOLD_STANDARD: 0.7,
+  COVERAGE_THRESHOLD_DEEP: 0.85,
 };
 
 /**
@@ -184,4 +216,52 @@ export function shouldRunCritic(
   return chatConfig.CRITIC_HIGH_RISK_TERMS.some((term) =>
     lowerQuestion.includes(term.toLowerCase())
   );
+}
+
+/**
+ * Get the character cap for a given complexity and answer mode.
+ */
+export function getCharacterCap(
+  complexity: "simple" | "complex",
+  answerMode: "standard" | "deep"
+): number {
+  return chatConfig.CHAR_CAPS[complexity][answerMode];
+}
+
+/**
+ * Get length targets for prompts (soft targets).
+ */
+export function getLengthTargets(
+  complexity: "simple" | "complex",
+  answerMode: "standard" | "deep"
+): { description: string; charMax: number } {
+  if (complexity === "simple") {
+    if (answerMode === "standard") {
+      return { description: "target 2-4 sentences, max 900 chars", charMax: 900 };
+    } else {
+      return { description: "target 5-8 sentences, max 1600 chars", charMax: 1600 };
+    }
+  } else {
+    if (answerMode === "standard") {
+      return { description: "target ~250-400 words, max 1800 chars", charMax: 1800 };
+    } else {
+      return { description: "target ~600-900 words, max 5200 chars", charMax: 5200 };
+    }
+  }
+}
+
+/**
+ * Validate and normalize answerMode from request.
+ * Returns "standard" if deep answer is disabled or invalid input.
+ */
+export function validateAnswerMode(
+  inputMode: string | undefined
+): "standard" | "deep" {
+  if (!chatConfig.DEEP_ANSWER_ENABLED) {
+    return "standard";
+  }
+  if (inputMode === "deep") {
+    return "deep";
+  }
+  return "standard";
 }

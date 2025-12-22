@@ -31,6 +31,14 @@ interface ComplexAnswerOptions {
   logContext?: PipelineLogContext;
   additionalChunks?: RetrievedChunk[];
   composedAnswerFlags?: ComposedAnswerFlags;
+  /**
+   * Original chunks from initial retrieval pass.
+   * When provided along with additionalChunks, this triggers "resynthesis mode":
+   * - Skip fresh two-lane retrieval
+   * - Merge originalChunks + additionalChunks
+   * - Deduplicate and synthesize from merged evidence
+   */
+  originalChunks?: RetrievedChunk[];
 }
 
 interface ComplexDraftResult {
@@ -52,7 +60,7 @@ export interface RetrievedChunk {
 export async function generateComplexDraftAnswer(
   options: ComplexAnswerOptions
 ): Promise<ComplexDraftResult> {
-  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags } = options;
+  const { question, retrievalPlan, sessionHistory, logContext, additionalChunks = [], composedAnswerFlags, originalChunks } = options;
   const { model: summaryModel } = getModelForStage('complexSummary');
 
   const storeId = await getOrCreateFileSearchStoreId();
@@ -73,9 +81,34 @@ export async function generateComplexDraftAnswer(
   let retrievedChunks: RetrievedChunk[] = [];
   let usedTwoLane = false;
 
+  // ===== RESYNTHESIS MODE =====
+  // When originalChunks are provided, skip fresh retrieval and use merged evidence
+  const isResynthesisMode = originalChunks && originalChunks.length > 0;
+
+  if (isResynthesisMode) {
+    // Merge original + additional chunks with deduplication
+    const mergedChunks = mergeAndDeduplicateChunks(originalChunks, additionalChunks);
+    retrievedChunks = mergedChunks;
+    
+    // Extract all document names from merged chunks
+    for (const chunk of mergedChunks) {
+      allRetrievalDocNames.push(...chunk.documentNames);
+    }
+
+    logDebug("complexAnswer_resynthesis_mode", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "complexAnswer_resynthesis",
+      originalChunkCount: originalChunks.length,
+      additionalChunkCount: additionalChunks.length,
+      mergedChunkCount: mergedChunks.length,
+      totalDocNames: allRetrievalDocNames.length,
+      expansionEvidenceIncluded: additionalChunks.length > 0,
+    });
+  }
   // ===== TWO-LANE RETRIEVAL INTEGRATION =====
-  // If enabled, run parallel local + state retrieval first
-  if (chatConfig.ENABLE_PARALLEL_STATE_LANE && (retrievalPlan.forceParallelStateRetrieval !== false)) {
+  // If enabled and NOT in resynthesis mode, run parallel local + state retrieval first
+  else if (chatConfig.ENABLE_PARALLEL_STATE_LANE && (retrievalPlan.forceParallelStateRetrieval !== false)) {
     try {
       const twoLaneResult = await twoLaneRetrieve({
         userQuestion: question,
@@ -120,8 +153,8 @@ export async function generateComplexDraftAnswer(
     }
   }
 
-  // Fall back to sequential retrieval if two-lane didn't produce results
-  if (!usedTwoLane) {
+  // Fall back to sequential retrieval if two-lane didn't produce results and not in resynthesis mode
+  if (!usedTwoLane && !isResynthesisMode) {
     const retrievalPrompts = buildRetrievalPrompts(question, retrievalPlan);
 
     logDebug("complex_answer_retrieval_prompts", {
@@ -252,12 +285,15 @@ export async function generateComplexDraftAnswer(
       });
     }
     }
-  } // End !usedTwoLane block
+  } // End !usedTwoLane && !isResynthesisMode block
 
-  // Merge additional chunks from evidence gate expansion passes
-  for (const chunk of additionalChunks) {
-    retrievedChunks.push(chunk);
-    allRetrievalDocNames.push(...chunk.documentNames);
+  // In non-resynthesis mode, still merge any additional chunks (legacy compatibility)
+  // In resynthesis mode, chunks were already merged above with deduplication
+  if (!isResynthesisMode && additionalChunks.length > 0) {
+    for (const chunk of additionalChunks) {
+      retrievedChunks.push(chunk);
+      allRetrievalDocNames.push(...chunk.documentNames);
+    }
   }
 
   const uniqueRetrievalDocNames = Array.from(new Set(allRetrievalDocNames));
@@ -280,6 +316,8 @@ export async function generateComplexDraftAnswer(
     retrievalDocCount,
     hadAdditionalChunks: additionalChunks.length > 0,
     usedTwoLaneRetrieval: usedTwoLane,
+    isResynthesisMode: !!isResynthesisMode,
+    expansionEvidenceIncluded: isResynthesisMode && additionalChunks.length > 0,
   });
 
   const snippetsForSynthesis = retrievedChunks.map(c => ({
@@ -751,4 +789,64 @@ function classifyDocumentSources(
 
   // Default - if we have docs but couldn't classify, assume local
   return { type: "local", town: detectedTown };
+}
+
+/**
+ * Merge and deduplicate chunks from original retrieval and expansion passes.
+ * Deduplication strategy:
+ * 1. By document name + content hash (preferred for structured chunks)
+ * 2. By normalized content hash (fallback for unstructured chunks)
+ */
+function mergeAndDeduplicateChunks(
+  originalChunks: RetrievedChunk[],
+  additionalChunks: RetrievedChunk[]
+): RetrievedChunk[] {
+  const seen = new Set<string>();
+  const merged: RetrievedChunk[] = [];
+
+  const getChunkKey = (chunk: RetrievedChunk): string => {
+    // Primary key: document name + content hash
+    if (chunk.documentNames.length > 0) {
+      const docKey = chunk.documentNames.slice().sort().join("|");
+      const contentHash = hashContent(chunk.content);
+      return `doc:${docKey}:${contentHash}`;
+    }
+    // Fallback: content hash only
+    return `content:${hashContent(chunk.content)}`;
+  };
+
+  // Add original chunks first (they take precedence)
+  for (const chunk of originalChunks) {
+    const key = getChunkKey(chunk);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(chunk);
+    }
+  }
+
+  // Add additional chunks, skipping duplicates
+  for (const chunk of additionalChunks) {
+    const key = getChunkKey(chunk);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(chunk);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Create a stable hash of content for deduplication.
+ * Normalizes whitespace to avoid false negatives.
+ */
+function hashContent(content: string): string {
+  // Normalize whitespace and take first 500 chars for efficiency
+  const normalized = content.replace(/\s+/g, " ").trim().slice(0, 500);
+  // Simple hash - sum of char codes mod a large prime
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0;
+  }
+  return hash.toString(36);
 }
