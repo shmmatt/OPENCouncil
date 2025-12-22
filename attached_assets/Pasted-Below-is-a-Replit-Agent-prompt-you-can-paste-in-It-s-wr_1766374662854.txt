@@ -1,0 +1,154 @@
+Below is a Replit Agent prompt you can paste in. It’s written to (1) fix the Evidence Gate expansion bug (you’re re-running two-lane instead of actually using the newly retrieved chunks), (2) enforce a hard character cap reliably, and (3) add a “Deep answer” toggle (default OFF) that changes the target length/cap and can later be paywalled.
+
+You are a Replit Agent working in an existing full-stack repo (Express backend + React frontend) for OpenCouncil.
+
+GOAL
+Fix Evidence Gate expansion so additional retrieval results are actually incorporated into the final synthesis, and implement robust character caps with a user-facing “Deep answer” toggle (default OFF). Deep answers can be treated as a future premium feature, but for now it’s just a toggle.
+
+CONTEXT / CURRENT BUG
+In the logs, Evidence Gate returns shouldExpandRetrieval=true and retrieves extra chunks in expansion passes, but then the pipeline does a fresh two-lane retrieval again and synthesizes from that, effectively ignoring the expansion results or not guaranteeing they are included.
+We need: (a) expansion pass results must be merged into the evidence set used for final synthesis, and (b) the synthesis prompt must be length-aware and capped.
+
+REQUIREMENTS
+1) Evidence Gate expansion must be used
+- When evidenceGate.shouldExpandRetrieval is true:
+  - run the recommended expansion retrieval passes
+  - collect the returned chunks/snippets (and doc IDs if available)
+  - merge them with the original retrieval evidence
+  - re-run synthesis using the MERGED evidence set
+- Do NOT re-run baseline two-lane retrieval as the “resynthesis” step unless expansion returns zero usable chunks.
+- Ensure the merged evidence set is de-duplicated:
+  - de-dupe by (docId/documentName + chunkId) when possible
+  - otherwise de-dupe by stable hash of snippet text (normalized whitespace)
+- Ensure logging reflects reality:
+  - log counts for: originalChunks, additionalChunks, mergedChunks
+  - log whether expansion evidence was included in synthesis input
+
+2) Answer length system + character caps
+Implement a clear length policy driven by a new “answerMode”:
+- answerMode = "standard" (default)
+- answerMode = "deep" (toggle ON)
+
+Character caps (HARD caps; enforce after generation too):
+- simple path:
+  - standard cap: 900 chars
+  - deep cap: 1600 chars
+- complex path:
+  - standard cap: 1800 chars
+  - deep cap: 5200 chars
+
+Also implement “soft targets” inside prompts:
+- simple standard: “target 2–4 sentences, max 900 chars”
+- simple deep: “target 5–8 sentences, max 1600 chars”
+- complex standard: “target ~250–400 words, max 1800 chars”
+- complex deep: “target ~600–900 words, max 5200 chars”
+
+Post-generation enforcement:
+- Create a utility: enforceCharCap(text, cap)
+  - If within cap, return as-is.
+  - If over cap: truncate safely at a sentence boundary if possible.
+  - Always end with “…”
+  - Never cut inside markdown code fences; if truncation would break formatting, strip trailing incomplete fence or convert to plain text.
+- Add a small footer only if truncated:
+  - “(Answer truncated. Turn on Deep answer for more.)”
+  - This footer must fit inside the cap (so subtract its length from the truncation limit).
+
+3) UI toggle (Deep answer)
+Frontend:
+- Add a toggle labeled: “Deep answer”
+- Default OFF
+- Tooltip/subtext: “Longer, more detailed responses.”
+- Place near the chat input controls (next to town selector or send button area).
+- Persist per-user (logged in) and per-anon (localStorage):
+  - Logged in: store in preferences endpoint
+  - Anon: localStorage key "oc_answer_mode" with values "standard"|"deep"
+
+API:
+- Update chat v2 endpoint to accept answerMode from client:
+  - request body includes answerMode
+  - validate + default to "standard"
+- The backend should pass answerMode into:
+  - router decision logging metadata (no need to affect routing)
+  - simpleAnswer prompt builder
+  - complexAnswer synthesis prompt builder
+  - char cap enforcement
+
+Storage/telemetry:
+- Include answerMode in message metadata saved to DB (or stored alongside message record).
+- Add log line fields:
+  - answerMode
+  - charCap
+  - wasTruncated boolean
+  - finalAnswerLengthChars
+
+4) Evidence Gate behavior tuning (fix “coverageScore but still wrong”)
+Right now coverageScore can be low and you expand, but your final answer might still overreach.
+Implement a guardrail:
+- When coverageScore < 0.7 in standard mode:
+  - synthesis must include a short “What we couldn’t confirm” section (2–3 bullets) listing missing facets (from Evidence Gate) BUT only if those facets are directly relevant.
+- In deep mode:
+  - include “What we couldn’t confirm” if coverageScore < 0.85
+- Ensure this section is still subject to char cap.
+
+5) Premium-ready switch (no paywall yet)
+Implement a config flag:
+- DEEP_ANSWER_ENABLED=true (default true)
+If false, hide toggle in UI and force answerMode="standard" on backend.
+
+FILES / IMPLEMENTATION NOTES
+- Identify where the chat v2 pipeline is implemented (likely server routes + a pipeline service).
+- Identify where Evidence Gate runs and where expansion passes are fetched.
+- Fix the resynthesis flow:
+  - Current: evidenceGate -> expansion -> resynthesis_start -> (re-runs twoLane) -> synthesis
+  - Desired:
+    - evidenceGate -> expansion -> mergeEvidence -> synthesis(merged)
+- Extract evidence into a typed structure:
+  - { lane: "local"|"state", documentName, chunkId?, text, score? }
+- Ensure two-lane retrieval can return structured chunks, not just a concatenated snippet string.
+  - If the retrieval system only gives concatenated text, wrap each returned result as a “chunk” item.
+
+FRONTEND WIRING
+- The chat send action should send answerMode in the request.
+- Toggle state should be reflected in the UI immediately.
+- If answer truncation occurs, show a subtle inline UI element:
+  - “Truncated — enable Deep answer”
+  - (This is optional if you already add the footer text.)
+
+ACCEPTANCE CRITERIA
+1) Evidence Gate expansion used:
+- When evidenceGate recommends expansion, logs show additionalChunks > 0 and mergedChunks = original + additional (minus dups).
+- The synthesis input includes additional chunk texts (confirm via debug logging: e.g., log first 120 chars hash list).
+
+2) Caps enforced:
+- No response exceeds configured cap for its path + mode.
+- Truncation ends at a sentence boundary when possible and appends “…”.
+- Footer appears only when truncation occurred.
+
+3) Toggle works:
+- Default OFF.
+- Turning ON yields longer answers (and uses deep caps).
+- State persists across reloads (anon via localStorage; logged in via preferences).
+
+4) Safe “couldn’t confirm” section:
+- Appears only when coverageScore below threshold and does not hallucinate specifics.
+
+TESTING
+- Add minimal unit tests for enforceCharCap (or lightweight test file runnable via node).
+- Add an integration-like test path (manual log assertions are fine):
+  - Force evidenceGate to expand (simulate low coverage)
+  - Verify merged evidence is used
+
+DELIVERABLES
+- Code changes implementing above
+- Brief summary of what you changed and where (file list)
+- Confirm the four acceptance criteria manually
+
+Start by scanning the repo for the chat v2 pipeline, Evidence Gate, and prompt builders, then implement changes.
+
+Two tiny extra notes (based on your logs)
+
+Your “scopeHint” is showing “mixed” during two-lane even when retrievalPlanner says allowStatewideFallback=false / scopeHint=local.
+Not requested here, but keep an eye on that. It can cause the system to “feel” statewide even when you wanted local-only.
+
+You’re generating way above the “Target length: 400–600 words” (you got 4600–6400 chars+).
+Hard caps + prompt targets will fix this, but you’ll also see better compliance if you move the cap instruction to the top of the system prompt and repeat it once at the end.
