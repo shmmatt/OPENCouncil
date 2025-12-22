@@ -535,40 +535,53 @@ export default function Chat() {
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
-  // Deep Answer mode state - persisted in localStorage (default OFF)
-  const [deepAnswerMode, setDeepAnswerMode] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(DEEP_ANSWER_MODE_KEY);
-      return stored === "true";
-    } catch {
-      return false;
-    }
-  });
+  // Deep Answer mode state - always starts false, hydrates from localStorage only after config confirms feature is enabled
+  const [deepAnswerMode, setDeepAnswerMode] = useState<boolean>(false);
+  const [deepModeHydrated, setDeepModeHydrated] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
   
-  // Persist deep answer mode to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(DEEP_ANSWER_MODE_KEY, String(deepAnswerMode));
-    } catch {
-      // localStorage unavailable - silent fail
-    }
-  }, [deepAnswerMode]);
-  
   // Fetch chat config to check if deep answer feature is enabled
-  const { data: chatConfigData } = useQuery<{ deepAnswerEnabled: boolean }>({
+  const { data: chatConfigData, isLoading: configLoading } = useQuery<{ deepAnswerEnabled: boolean }>({
     queryKey: ["/api/chat/config"],
   });
   
   // Check if deep answer feature is enabled (server-controlled)
   const deepAnswerFeatureEnabled = chatConfigData?.deepAnswerEnabled ?? false;
   
-  // Derive answerMode from toggle state (only apply if feature enabled)
-  const answerMode: AnswerMode = (deepAnswerFeatureEnabled && deepAnswerMode) ? "deep" : "standard";
+  // Hydrate deep mode from localStorage ONLY after config confirms feature is enabled
+  useEffect(() => {
+    if (!configLoading && !deepModeHydrated) {
+      if (deepAnswerFeatureEnabled) {
+        try {
+          const stored = localStorage.getItem(DEEP_ANSWER_MODE_KEY);
+          if (stored === "true") {
+            setDeepAnswerMode(true);
+          }
+        } catch {
+          // localStorage unavailable - silent fail
+        }
+      }
+      setDeepModeHydrated(true);
+    }
+  }, [configLoading, deepAnswerFeatureEnabled, deepModeHydrated]);
+  
+  // Persist deep answer mode to localStorage (only when feature is enabled and hydrated)
+  useEffect(() => {
+    if (deepAnswerFeatureEnabled && deepModeHydrated) {
+      try {
+        localStorage.setItem(DEEP_ANSWER_MODE_KEY, String(deepAnswerMode));
+      } catch {
+        // localStorage unavailable - silent fail
+      }
+    }
+  }, [deepAnswerMode, deepAnswerFeatureEnabled, deepModeHydrated]);
+  
+  // Derive answerMode - always "standard" if feature disabled, config loading, or not hydrated
+  const answerMode: AnswerMode = (deepAnswerFeatureEnabled && deepAnswerMode && !configLoading && deepModeHydrated) ? "deep" : "standard";
 
   // Detect ?q= URL parameter for shareable links
   useEffect(() => {

@@ -19,6 +19,7 @@ import { z } from "zod";
 import { registerChatV2Routes } from "./chatV2/chatV2Route";
 import { registerAdminUsageRoutes } from "./routes/adminUsageRoutes";
 import { registerAdminChatAnalyticsRoutes } from "./routes/adminChatAnalyticsRoutes";
+import { chatConfig } from "./chatV2/chatConfig";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -978,8 +979,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Get chat configuration (feature flags for frontend)
   app.get("/api/chat/config", (req, res) => {
-    // Import chatConfig dynamically to avoid circular dependencies
-    const { chatConfig } = require("./chatV2/chatConfig");
     res.json({
       deepAnswerEnabled: chatConfig.DEEP_ANSWER_ENABLED,
     });
