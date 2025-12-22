@@ -33,83 +33,30 @@ The ingestion pipeline includes heuristic detection for meeting minutes based on
 ### Enhanced Town Detection
 A three-tier fallback system extracts and finalizes town information: LLM-extracted, heuristic detection from text, and admin-provided hints. An LLM prompt is enhanced to use hints intelligently and handle NH town naming conventions.
 
-### Scope Preferences (Chat v2)
-The chat pipeline detects question scope (local, statewide, mixed, null) using patterns and LLM output. This informs retrieval behavior, allowing strict town filtering for local questions and statewide document search for broader queries. An RSA fallback provides general knowledge answers when no relevant documents are found for statewide legal questions.
+### Simplified Unified Chat Pipeline (Chat v2)
+The chat pipeline was drastically simplified to fix truncated response issues. The new architecture:
 
-### Model Registry & Dynamic Model Selection (Chat v2)
-A centralized model registry (`server/llm/modelRegistry.ts`) manages LLM model selection across all pipeline stages:
-- **Fast models** (gemini-2.5-flash): Used for control stages (router, retrieval planner, critic, evidence gate, follow-ups)
-- **High-quality models** (gemini-3-flash-preview): Used for synthesis (complex answer) and escalated simple answers
-- **Escalation rules**: Simple answers escalate to high-quality model when `requiresComposedAnswer=true` or `hasUserArtifact=true`
-- **Environment overrides**: Each stage can be overridden via environment variables (MODEL_ROUTER, MODEL_SIMPLE, etc.)
-- **Fallback wrapper**: `withModelFallback()` provides automatic retry with fallback to degraded model on errors
+**Pipeline Flow**:
+1. **Two-lane parallel retrieval** - Local (town-specific) and statewide (RSA/NHMA) document searches run simultaneously via `Promise.all`
+2. **Chunk merging** - Results are deduplicated and merged
+3. **Single synthesis** - One LLM call synthesizes the answer (target 800-1500 characters)
+4. **Follow-up generation** - Simple follow-up questions are suggested
 
-### Two-Lane Parallel Retrieval (Chat v2)
-The retrieval system uses a two-lane parallel architecture that executes both local (town-specific) and statewide (RSA/NHMA) document searches simultaneously using Promise.all. This addresses the failure mode where town-focused questions miss critical statewide legal context.
+**Removed Components**:
+- Router stage (no simple vs complex branching)
+- Evidence coverage gate
+- Critic stage  
+- Answer policy system / character caps
+- Answer mode (deep/standard) feature
 
-**Configuration flags** (in `server/chatV2/chatConfig.ts`):
-- `ENABLE_PARALLEL_STATE_LANE`: Enable/disable two-lane retrieval (default: true)
-- `LOCAL_LANE_K`: Number of local documents to retrieve (default: 12)
-- `STATE_LANE_K`: Number of state documents to retrieve (default: 8)
-- `LOCAL_CONTEXT_CAP`: Max local chunks in merged context (default: 10)
-- `STATE_CONTEXT_CAP`: Max state chunks in merged context (default: 5)
-- `MERGED_CONTEXT_CAP`: Total chunks after merge (default: 15)
+**Key Files**:
+- `server/chatV2/unifiedPipeline.ts` - Main unified pipeline
+- `server/chatV2/twoLaneRetrieve.ts` - Two-lane parallel retrieval logic
+- `server/chatV2/chatV2Route.ts` - Simplified route handler
 
-**Query enhancement per lane**:
-- Local lane: Adds town name, boards, document type hints (minutes, warrants, ordinances)
-- State lane: Adds anchors like "NH RSA", "NHMA", "administrative rules", "Right-to-Know"
-
-**Deduplication**: After parallel retrieval, results are deduplicated preferring higher-scored chunks. Question pattern detection (hasRSAPattern) determines chunk ordering priority.
-
-**Fallback**: If two-lane retrieval fails or returns no results, falls back to single File Search.
-
-### Evidence Coverage Gate (Chat v2)
-The complex answer path includes an Evidence Coverage Gate that evaluates retrieval quality after initial document retrieval. If coverage is insufficient for the question type (causal, mechanism, breakdown, process), the gate triggers up to 2 additional retrieval passes with targeted queries. The gate uses diversity metrics (category, board, document coverage) and LLM assessment to determine when expansion is needed.
-
-**Resynthesis Mode**: When expansion retrieval finds additional chunks, the system enters resynthesis mode. This merges original and expansion chunks via content-hash deduplication instead of fresh retrieval, ensuring synthesized answers incorporate all evidence without redundancy.
-
-### Answer Policy System (Chat v2)
-A centralized answer policy module (`server/chatV2/answerPolicy.ts`) manages all length and structure requirements for answer generation. Each complexity/mode combination has a defined policy:
-
-**Policies by complexity × mode**:
-| Policy | Char Target | Hard Cap | Max Tokens | Structure |
-|--------|-------------|----------|------------|-----------|
-| simple_standard | 450-750 | 950 | 220 | 1 paragraph + up to 3 bullets |
-| simple_deep | 900-1400 | 1700 | 420 | 1-2 paragraphs + 4-6 bullets |
-| complex_standard | 1100-1700 | 1900 | 520 | Direct answer + Key points (max 6) + Sources |
-| complex_deep | 3200-4800 | 5400 | 1300 | Rich structure: At a glance, Key numbers, Timeline, What's next, Sources |
-
-**Complex Standard Structure** (most important):
-- 1-2 sentence direct answer (no preamble like "Based on documents...")
-- "Key points" section: max 6 bullets, each ≤160 chars
-- "Sources" section with document citations
-- **Forbidden**: Multiple narrative sections, "At a glance", "How this works", "Timeline" sections
-
-**Observability**: Each answer generation logs `policyMetrics` including:
-- charTargetMin/Max, charCap, maxOutputTokensUsed
-- generationLengthChars, finalAnswerLengthChars
-- wasRewrittenForLength, wasTruncated
-
-**Truncation** (`server/chatV2/enforceCharCap.ts`) provides:
-- Sentence-boundary truncation (falls back to word boundaries)
-- Markdown fence protection (never truncates inside code blocks)
-- Ellipsis only on truncation - NO mode mentions, upsell copy, or "shortened" notes
-
-**Forbidden Substrings**: Answers must never contain: deep, standard, mode, toggle, premium, upgrade, shortened, truncated
-
-**Premium gating**: `DEEP_ANSWER_ENABLED` flag in `chatConfig.ts` controls availability. When disabled:
-- `validateAnswerMode()` forces all requests to "standard"
-- Frontend toggle is hidden and localStorage hydration is blocked
-- `/api/chat/config` endpoint exposes feature flag for frontend
-
-### Coverage Disclaimer (Chat v2)
-When retrieval quality is below threshold, a "What we couldn't confirm" disclaimer is shown:
-- Standard mode threshold: coverageScore < 0.7
-- Deep mode threshold: coverageScore < 0.85
-The disclaimer lists topics where official document backing was limited.
-
-### Composed First Answer Pattern (Chat v2)
-For explanatory/causal/mechanism questions, the pipeline detects intent types (causal, mechanism, breakdown, interpretation) using generalized pattern matching. When detected, synthesis prompts are augmented with structured response guidelines encouraging complete explanations with examples. This applies to both simple and complex answer paths.
+**Model Registry** (`server/llm/modelRegistry.ts`):
+- Used for synthesis model selection
+- `getModelForStage('complexSynthesis')` returns the model for answer generation
 
 ### Town Preference & Recent Minutes Updates
 The system supports persistent town preferences for anonymous users and chat sessions. A priority cascade resolves town preference for retrieval. API endpoints provide lists of available towns, allow preference updates, and offer public/admin feeds of recently ingested meeting minutes. The chat sidebar includes a town selector and a "Recent Minutes Updates" section.

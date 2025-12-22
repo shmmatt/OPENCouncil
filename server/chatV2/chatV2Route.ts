@@ -2,33 +2,12 @@ import { randomUUID } from "crypto";
 import type { Express, Response, NextFunction } from "express";
 import type { IdentityRequest } from "../auth/types";
 import { storage } from "../storage";
-import { routeQuestion } from "./router";
-import { generateSimpleAnswer } from "./simpleAnswer";
-import { planRetrieval } from "./retrievalPlanner";
-import { generateComplexDraftAnswer, performExpansionRetrieval } from "./complexAnswer";
-import type { RetrievedChunk } from "./complexAnswer";
-import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import { critiqueAndImproveAnswer } from "./critic";
 import { generateFollowups } from "./generateFollowups";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../utils/logger";
-import { shouldRunCritic, chatConfig, validateAnswerMode, getCharacterCap } from "./chatConfig";
-import { enforceCharCap } from "./enforceCharCap";
-import type { AnswerMode } from "./types";
 import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
-import {
-  shouldBypassRouterForFollowup,
-  createBypassedRouterOutput,
-  buildTrimmedHistoryForAnswer,
-  resolveTownPreference,
-} from "./pipelineUtils";
-import { isRSAQuestion } from "./router";
-import {
-  evaluateEvidenceCoverage,
-  buildRetrievalSummary,
-  mergeRetrievalResults,
-} from "./evidenceGate";
-import { computeComposedAnswerFlags, type ComposedAnswerFlags } from "./composedFirstAnswer";
+import { resolveTownPreference, buildTrimmedHistoryForAnswer } from "./pipelineUtils";
+import { runUnifiedChatPipeline } from "./unifiedPipeline";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -40,7 +19,6 @@ import type {
   DocSourceType,
 } from "./types";
 import type { ChatNotice } from "@shared/chatNotices";
-import { logWarn as logWarning } from "../utils/logger";
 import multer from "multer";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -69,17 +47,13 @@ export function registerChatV2Routes(app: Express): void {
     const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
 
     try {
-      const { content, metadata, answerMode: rawAnswerMode }: ChatV2Request = req.body;
-      
-      // Validate and normalize answerMode
-      const answerMode: AnswerMode = validateAnswerMode(rawAnswerMode);
+      const { content, metadata }: ChatV2Request = req.body;
 
       logInfo("chat_v2_request_received", {
         ...logCtx,
         stage: "entry",
         userQuestion: sanitizeUserContent(content, 200),
         userMetadata: metadata,
-        answerMode,
       });
 
       if (!content || !content.trim()) {
@@ -195,8 +169,6 @@ export function registerChatV2Routes(app: Express): void {
           content: m.content,
         }));
 
-      const bypassRouter = shouldBypassRouterForFollowup(chatHistory, content.trim());
-
       // Resolve town preference: explicit > session > actor > fallback (Ossipee)
       const resolvedTown = await resolveTownPreference({
         explicitTown: metadata?.town,
@@ -204,501 +176,61 @@ export function registerChatV2Routes(app: Express): void {
         actor: req.actor,
       });
 
-      // Create enhanced metadata with resolved town
-      const enhancedMetadata = {
-        ...metadata,
-        town: resolvedTown,
-      };
-
       logDebug("chat_v2_pipeline_start", {
         ...logCtx,
         stage: "pipeline_start",
         historyLength: chatHistory.length,
-        bypassRouter,
         resolvedTown,
       });
 
-      const routerOutput = bypassRouter
-        ? createBypassedRouterOutput(chatHistory)
-        : await routeQuestion(
-            content.trim(),
-            chatHistory.slice(-6),
-            enhancedMetadata,
-            logCtx
-          );
-
-      logDebug("router_output", {
-        ...logCtx,
-        stage: "router",
-        complexity: routerOutput.complexity,
-        domains: routerOutput.domains,
-        requiresClarification: routerOutput.requiresClarification,
-        clarificationCount: routerOutput.clarificationQuestions.length,
+      // SIMPLIFIED PIPELINE: Two-lane retrieval + single synthesis
+      const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
+      
+      const pipelineResult = await runUnifiedChatPipeline({
+        question: trimmedContent,
+        sessionHistory: trimmedHistory,
+        townPreference: resolvedTown,
+        logContext: logCtx,
       });
 
-      if (routerOutput.requiresClarification && routerOutput.clarificationQuestions.length > 0) {
-        logInfo("chat_v2_clarification_needed", {
-          ...logCtx,
-          stage: "clarification",
-          questionCount: routerOutput.clarificationQuestions.length,
-        });
-
-        const clarificationText = buildClarificationResponse(routerOutput.clarificationQuestions);
-
-        const clarificationMeta: FinalAnswerMeta = {
-          complexity: routerOutput.complexity,
-          requiresClarification: true,
-          criticScore: { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 },
-        };
-
-        const clarificationV2Metadata = {
-          v2: true,
-          answerMeta: clarificationMeta,
-          sources: [],
-          suggestedFollowUps: [],
-        };
-
-        const assistantMessage = await storage.createChatMessage({
-          sessionId,
-          role: "assistant",
-          content: clarificationText,
-          citations: JSON.stringify(clarificationV2Metadata),
-        });
-
-        const response: ChatV2Response = {
-          message: {
-            id: assistantMessage.id,
-            sessionId,
-            role: "assistant",
-            content: clarificationText,
-            createdAt: assistantMessage.createdAt.toISOString(),
-          },
-          answerMeta: clarificationMeta,
-          sources: [],
-          suggestedFollowUps: [],
-        };
-
-        return res.json(response);
-      }
-
-      let answerText: string;
-      let sourceDocumentNames: string[] = [];
-      let criticScore: CriticScore = { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 };
-      let limitationsNote: string | undefined;
-      let suggestedFollowUps: string[] = [];
-      let criticUsed = false;
-      let notices: ChatNotice[] = [];
-
-      let townPreference: string | undefined;
-      let docSourceType: DocSourceType = "none";
-      let docSourceTown: string | null = null;
+      const answerText = pipelineResult.answerText;
+      const sourceDocumentNames = pipelineResult.sourceDocumentNames;
+      const docSourceType = pipelineResult.docSourceType;
+      const docSourceTown = pipelineResult.docSourceTown;
       
-      // Evidence coverage gate metrics (only populated for complex path)
-      let coverageScore: number | undefined;
-      let retrievalPassCount = 1;
-      let missingFacets: string[] = [];
-      
-      // Composed first answer detection (for both paths)
-      const hasAttachment = false; // Will be set in file upload handler
-      const composedAnswerFlags = computeComposedAnswerFlags(
-        content.trim(),
-        hasAttachment,
-        routerOutput,
-        logCtx
-      );
-      let composedAnswerApplied = false;
+      // Generate follow-up suggestions
+      const suggestedFollowUps = await generateFollowups({
+        userQuestion: trimmedContent,
+        answerText,
+        townPreference: resolvedTown,
+        detectedDomains: [],
+        logContext: logCtx,
+      });
 
-      if (routerOutput.complexity === "simple") {
-        logDebug("chat_v2_simple_path", {
-          ...logCtx,
-          stage: "simple_path_start",
-          domains: routerOutput.domains,
-          bypassRouter,
-        });
+      logDebug("unified_pipeline_complete_with_followups", {
+        ...logCtx,
+        stage: "unified_pipeline",
+        answerLength: answerText.length,
+        sourceCount: sourceDocumentNames.length,
+        followUpCount: suggestedFollowUps.length,
+        durationMs: pipelineResult.durationMs,
+      });
 
-        const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
-
-        const simpleResult = await generateSimpleAnswer({
-          question: content.trim(),
-          routerOutput,
-          sessionHistory: trimmedHistory,
-          userHints: enhancedMetadata,
-          logContext: logCtx,
-          composedAnswerFlags,
-          hasUserArtifact: hasAttachment,
-        });
-
-        answerText = simpleResult.answerText;
-        sourceDocumentNames = simpleResult.sourceDocumentNames;
-        townPreference = resolvedTown;
-        docSourceType = simpleResult.docSourceType;
-        docSourceTown = simpleResult.docSourceTown;
-        notices = simpleResult.notices;
-        composedAnswerApplied = simpleResult.composedAnswerApplied || false;
-
-        logDebug("simple_answer_result", {
-          ...logCtx,
-          stage: "simpleAnswer",
-          sourceCount: sourceDocumentNames.length,
-          sourceDocNames: sourceDocumentNames.slice(0, 5),
-          answerLength: answerText.length,
-        });
-
-        suggestedFollowUps = await generateFollowups({
-          userQuestion: content.trim(),
-          answerText,
-          townPreference,
-          detectedDomains: routerOutput.domains,
-          logContext: logCtx,
-        });
-
-        logDebug("simple_path_followups_generated", {
-          ...logCtx,
-          stage: "generateFollowups",
-          followUpCount: suggestedFollowUps.length,
-        });
-
-      } else {
-        logDebug("chat_v2_complex_path", {
-          ...logCtx,
-          stage: "complex_path_start",
-          domains: routerOutput.domains,
-          evidenceGateEnabled: chatConfig.ENABLE_EVIDENCE_GATE,
-        });
-
-        const retrievalPlan = await planRetrieval({
-          question: content.trim(),
-          routerOutput,
-          userHints: enhancedMetadata,
-          logContext: logCtx,
-        });
-
-        logDebug("retrieval_plan", {
-          ...logCtx,
-          stage: "retrievalPlanner",
-          categories: retrievalPlan.filters.categories,
-          townPreference: retrievalPlan.filters.townPreference,
-          allowStatewideFallback: retrievalPlan.filters.allowStatewideFallback,
-          infoNeedsCount: retrievalPlan.infoNeeds.length,
-          preferRecent: retrievalPlan.preferRecent,
-        });
-
-        const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
-        
-        let additionalChunks: RetrievedChunk[] = [];
-
-        // Initial retrieval and draft generation
-        let draftResult = await generateComplexDraftAnswer({
-          question: content.trim(),
-          retrievalPlan,
-          sessionHistory: trimmedHistory,
-          logContext: logCtx,
-          composedAnswerFlags,
-          answerMode,
-        });
-
-        logDebug("complex_answer_initial_draft", {
-          ...logCtx,
-          stage: "complexAnswer",
-          sourceCount: draftResult.sourceDocumentNames.length,
-          sourceDocNames: draftResult.sourceDocumentNames.slice(0, 5),
-          draftLength: draftResult.draftAnswerText.length,
-          retrievedChunkCount: draftResult.retrievedChunks.length,
-        });
-
-        // Evidence Coverage Gate - evaluate and potentially expand retrieval
-        if (chatConfig.ENABLE_EVIDENCE_GATE && draftResult.retrievedChunks.length > 0) {
-          const storeId = await getOrCreateFileSearchStoreId();
-          
-          if (storeId) {
-            logDebug("evidence_gate_start", {
-              ...logCtx,
-              stage: "evidenceGate",
-              initialChunkCount: draftResult.retrievedChunks.length,
-              initialDocCount: draftResult.sourceDocumentNames.length,
-            });
-
-            const retrievalSummary = buildRetrievalSummary(
-              draftResult.sourceDocumentNames,
-              draftResult.retrievedChunks.map(c => ({ source: c.source, content: c.content }))
-            );
-            
-            // Build conversation context from history
-            const conversationContext = chatHistory.length > 0
-              ? chatHistory.slice(-4).map(m => `${m.role}: ${m.content.slice(0, 200)}`).join("\n")
-              : "";
-            
-            const gateOutput = await evaluateEvidenceCoverage({
-              userQuestion: content.trim(),
-              conversationContext,
-              townPreference: resolvedTown || null,
-              routerOutput,
-              retrievalPlan,
-              retrievalSummary,
-              logContext: logCtx,
-            });
-
-            coverageScore = gateOutput.coverageScore;
-            missingFacets = gateOutput.missingFacets.slice(0, 5); // Keep up to 5 facets for display
-
-            logDebug("evidence_gate_result", {
-              ...logCtx,
-              stage: "evidenceGate",
-              coverageScore: gateOutput.coverageScore,
-              shouldExpandRetrieval: gateOutput.shouldExpandRetrieval,
-              questionIntent: gateOutput.questionIntent,
-              recommendedPassCount: gateOutput.recommendedPasses.length,
-              missingFacets: gateOutput.missingFacets.slice(0, 3),
-            });
-
-            // Execute expansion passes if recommended
-            if (gateOutput.shouldExpandRetrieval && gateOutput.recommendedPasses.length > 0) {
-              const maxExpansionPasses = Math.min(
-                gateOutput.recommendedPasses.length,
-                chatConfig.MAX_COVERAGE_RETRIEVAL_PASSES
-              );
-
-              for (let passIdx = 0; passIdx < maxExpansionPasses; passIdx++) {
-                const pass = gateOutput.recommendedPasses[passIdx];
-                retrievalPassCount++;
-
-                logDebug("expansion_pass_start", {
-                  ...logCtx,
-                  stage: "evidenceGate_expansion",
-                  passNumber: passIdx + 1,
-                  reason: pass.reason,
-                  queryText: pass.queryText,
-                });
-
-                const expansionChunks = await performExpansionRetrieval({
-                  queries: [pass.queryText],
-                  storeId,
-                  logContext: logCtx,
-                  passNumber: passIdx + 1,
-                });
-
-                additionalChunks.push(...expansionChunks);
-
-                logDebug("expansion_pass_complete", {
-                  ...logCtx,
-                  stage: "evidenceGate_expansion",
-                  passNumber: passIdx + 1,
-                  chunksRetrieved: expansionChunks.length,
-                  totalAdditionalChunks: additionalChunks.length,
-                });
-
-                // Check if we've hit the max combined chunks limit
-                const totalChunks = draftResult.retrievedChunks.length + additionalChunks.length;
-                if (totalChunks >= chatConfig.MAX_COMBINED_CHUNKS) {
-                  logDebug("expansion_capped", {
-                    ...logCtx,
-                    stage: "evidenceGate_expansion",
-                    reason: "max_chunks_reached",
-                    totalChunks,
-                    maxAllowed: chatConfig.MAX_COMBINED_CHUNKS,
-                  });
-                  break;
-                }
-              }
-
-              // Re-synthesize with expanded evidence if we got additional chunks
-              if (additionalChunks.length > 0) {
-                // Store original chunks before resynthesis
-                const originalChunks = draftResult.retrievedChunks;
-                
-                logDebug("resynthesis_start", {
-                  ...logCtx,
-                  stage: "evidenceGate_resynthesis",
-                  originalChunkCount: originalChunks.length,
-                  additionalChunkCount: additionalChunks.length,
-                  mergedChunkCount: originalChunks.length + additionalChunks.length,
-                });
-
-                // Pass originalChunks to trigger resynthesis mode (skip fresh retrieval, merge evidence)
-                draftResult = await generateComplexDraftAnswer({
-                  question: content.trim(),
-                  retrievalPlan,
-                  sessionHistory: trimmedHistory,
-                  logContext: logCtx,
-                  additionalChunks,
-                  composedAnswerFlags,
-                  originalChunks, // Triggers resynthesis mode
-                  answerMode,
-                });
-
-                logDebug("resynthesis_complete", {
-                  ...logCtx,
-                  stage: "evidenceGate_resynthesis",
-                  newDraftLength: draftResult.draftAnswerText.length,
-                  totalSourceDocs: draftResult.sourceDocumentNames.length,
-                  expansionEvidenceUsed: true,
-                });
-              }
-            }
-          }
-        }
-
-        sourceDocumentNames = draftResult.sourceDocumentNames;
-        docSourceType = draftResult.docSourceType;
-        docSourceTown = draftResult.docSourceTown;
-        notices = draftResult.notices;
-        composedAnswerApplied = draftResult.composedAnswerApplied || false;
-
-        logDebug("complex_answer_draft", {
-          ...logCtx,
-          stage: "complexAnswer",
-          sourceCount: sourceDocumentNames.length,
-          sourceDocNames: sourceDocumentNames.slice(0, 5),
-          draftLength: draftResult.draftAnswerText.length,
-          coverageScore,
-          retrievalPassCount,
-        });
-
-        const runCritic = shouldRunCritic(draftResult.draftAnswerText.length, content.trim());
-
-        if (runCritic) {
-          const critiqueResult = await critiqueAndImproveAnswer({
-            question: content.trim(),
-            draftAnswerText: draftResult.draftAnswerText,
-            routerOutput,
-            retrievalPlan,
-            logContext: logCtx,
-          });
-
-          answerText = critiqueResult.improvedAnswerText;
-          criticScore = critiqueResult.criticScore;
-          limitationsNote = critiqueResult.limitationsNote;
-          suggestedFollowUps = critiqueResult.suggestedFollowUps;
-          criticUsed = true;
-          // Merge critic notices with draft notices (avoiding duplicates by code)
-          const existingCodes = new Set(notices.map(n => n.code));
-          for (const notice of critiqueResult.notices) {
-            if (!existingCodes.has(notice.code)) {
-              notices.push(notice);
-            }
-          }
-
-          logDebug("critic_result", {
-            ...logCtx,
-            stage: "critic",
-            criticUsed: true,
-            criticScore,
-            limitationsNote: limitationsNote?.slice(0, 100),
-            suggestedFollowUpCount: suggestedFollowUps.length,
-          });
-
-          const needsStatewideFollowup = retrievalPlan.filters.townPreference && suggestedFollowUps.length < 2;
-          if (suggestedFollowUps.length === 0 || needsStatewideFollowup) {
-            const generatedFollowups = await generateFollowups({
-              userQuestion: content.trim(),
-              answerText,
-              townPreference: retrievalPlan.filters.townPreference,
-              detectedDomains: routerOutput.domains,
-              logContext: logCtx,
-            });
-
-            if (suggestedFollowUps.length === 0) {
-              suggestedFollowUps = generatedFollowups;
-            } else {
-              const existingSet = new Set(suggestedFollowUps.map(q => q.toLowerCase()));
-              const newFollowups = generatedFollowups.filter(q => !existingSet.has(q.toLowerCase()));
-              suggestedFollowUps = [...suggestedFollowUps, ...newFollowups].slice(0, 4);
-            }
-
-            logDebug("complex_path_followups_supplemented_after_critic", {
-              ...logCtx,
-              stage: "generateFollowups",
-              reason: needsStatewideFollowup ? "needs_statewide" : "empty_followups",
-              finalFollowUpCount: suggestedFollowUps.length,
-            });
-          }
-        } else {
-          answerText = draftResult.draftAnswerText;
-          
-          logDebug("critic_skipped", {
-            ...logCtx,
-            stage: "critic",
-            criticUsed: false,
-            reason: "gated_by_config",
-            draftLength: draftResult.draftAnswerText.length,
-          });
-
-          suggestedFollowUps = await generateFollowups({
-            userQuestion: content.trim(),
-            answerText,
-            townPreference: retrievalPlan.filters.townPreference,
-            detectedDomains: routerOutput.domains,
-            logContext: logCtx,
-          });
-
-          logDebug("complex_path_followups_generated", {
-            ...logCtx,
-            stage: "generateFollowups",
-            followUpCount: suggestedFollowUps.length,
-          });
-        }
-
-        // Development sanity check for scope/answer mismatches
-        if (process.env.NODE_ENV === "development") {
-          checkScopeAnswerMismatch(answerText, docSourceType, docSourceTown, logCtx);
-        }
-      }
-
-      // ===== CHARACTER CAP ENFORCEMENT =====
-      // Apply hard character limit based on complexity and answer mode
-      const charCap = getCharacterCap(routerOutput.complexity, answerMode);
-      const capResult = enforceCharCap(answerText, charCap, answerMode === "deep");
-      
-      // Track truncation metrics
-      const wasTruncated = capResult.wasTruncated;
-      const originalAnswerLength = capResult.originalLength;
-      const finalAnswerLength = capResult.finalLength;
-      
-      // Use the potentially truncated answer
-      answerText = capResult.text;
-
-      if (wasTruncated) {
-        logDebug("answer_truncated", {
-          ...logCtx,
-          stage: "charCap",
-          answerMode,
-          charCap,
-          originalLength: originalAnswerLength,
-          finalLength: finalAnswerLength,
-          complexity: routerOutput.complexity,
-        });
-      }
-
+      // Map sources to citations
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
 
       const answerMeta: FinalAnswerMeta = {
-        complexity: routerOutput.complexity,
+        complexity: "simple",
         requiresClarification: false,
-        criticScore,
-        limitationsNote,
+        criticScore: { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 },
       };
-
-      // Determine if we should show "What we couldn't confirm" disclaimer
-      // Threshold is 0.7 for standard mode, 0.85 for deep mode
-      const coverageThreshold = answerMode === "deep" ? 0.85 : 0.7;
-      const showCoverageDisclaimer = 
-        coverageScore !== undefined && 
-        coverageScore < coverageThreshold && 
-        missingFacets.length > 0;
 
       const v2Metadata = {
         v2: true,
         answerMeta,
         sources,
         suggestedFollowUps,
-        notices,
-        answerMode,
-        wasTruncated,
-        charCap,
-        // Coverage data for frontend disclaimer
-        coverageScore,
-        missingFacets: showCoverageDisclaimer ? missingFacets : [],
-        showCoverageDisclaimer,
+        notices: [] as ChatNotice[],
       };
 
       const assistantMessage = await storage.createChatMessage({
@@ -709,7 +241,7 @@ export function registerChatV2Routes(app: Express): void {
       });
 
       if (chatHistory.filter((m) => m.role === "user").length === 0) {
-        const title = content.trim().slice(0, 60) + (content.trim().length > 60 ? "..." : "");
+        const title = trimmedContent.slice(0, 60) + (trimmedContent.length > 60 ? "..." : "");
         await storage.updateChatSession(sessionId, { title });
       }
 
@@ -731,31 +263,13 @@ export function registerChatV2Routes(app: Express): void {
       logInfo("chat_v2_response_ready", {
         ...logCtx,
         stage: "exit",
-        complexity: answerMeta.complexity,
-        requiresClarification: answerMeta.requiresClarification,
         sourceCount: sources.length,
-        sourceDocNames: sources.slice(0, 3).map((s) => s.title),
         suggestedFollowUpCount: suggestedFollowUps.length,
-        bypassRouter,
-        criticUsed,
         durationMs: duration,
         answerLength: answerText.length,
         docSourceType,
         docSourceTown,
-        // Answer mode and character cap metrics
-        answerMode,
-        charCap,
-        wasTruncated,
-        finalAnswerLengthChars: finalAnswerLength,
-        // Evidence gate metrics (only for complex path when gate ran)
-        ...(coverageScore !== undefined && { coverageScore, retrievalPassCount }),
-        // Composed answer metrics
-        requiresComposedFirstAnswer: composedAnswerFlags.requiresComposedFirstAnswer,
-        hasUserArtifact: composedAnswerFlags.hasUserArtifact,
-        composedAnswerApplied,
-        ...(composedAnswerFlags.requiresComposedFirstAnswer && {
-          composedIntentType: composedAnswerFlags.detectedIntent,
-        }),
+        retrievedChunkCount: pipelineResult.retrievedChunkCount,
       });
 
       return res.json(response);
@@ -989,113 +503,41 @@ export function registerChatV2Routes(app: Express): void {
           actor: req.actor,
         });
 
-        const enhancedMetadata = {
-          ...metadata,
-          town: resolvedTown,
-        };
-
+        // Build question with attachment context if present
         const questionWithAttachment = attachmentInfo
           ? `${trimmedContent || "Please analyze this document."}\n\n---\nATTACHED DOCUMENT (${attachmentInfo.filename}):\n${attachmentInfo.extractedText.slice(0, 20000)}`
           : trimmedContent;
 
-        const routerOutput = await routeQuestion(
-          questionWithAttachment,
-          chatHistory.slice(-6),
-          enhancedMetadata,
-          logCtx
-        );
-
-        logDebug("upload_router_output", {
-          ...logCtx,
-          stage: "router",
-          complexity: routerOutput.complexity,
-          domains: routerOutput.domains,
-        });
-
-        let answerText: string;
-        let sourceDocumentNames: string[] = [];
-        let criticScore: CriticScore = { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 };
-        let limitationsNote: string | undefined;
-        let suggestedFollowUps: string[] = [];
-        let notices: ChatNotice[] = [];
-        let docSourceType: DocSourceType = "none";
-        let docSourceTown: string | null = null;
-
         const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
 
-        if (routerOutput.complexity === "simple") {
-          const simpleResult = await generateSimpleAnswer({
-            question: questionWithAttachment,
-            routerOutput,
-            sessionHistory: trimmedHistory,
-            userHints: enhancedMetadata,
-            logContext: logCtx,
-            hasUserArtifact: !!attachmentInfo,
-          });
+        // SIMPLIFIED PIPELINE: Two-lane retrieval + single synthesis
+        const pipelineResult = await runUnifiedChatPipeline({
+          question: questionWithAttachment,
+          sessionHistory: trimmedHistory,
+          townPreference: resolvedTown,
+          logContext: logCtx,
+        });
 
-          answerText = simpleResult.answerText;
-          sourceDocumentNames = simpleResult.sourceDocumentNames;
-          docSourceType = simpleResult.docSourceType;
-          docSourceTown = simpleResult.docSourceTown;
-          notices = simpleResult.notices;
-        } else {
-          const retrievalPlan = await planRetrieval({
-            question: questionWithAttachment,
-            routerOutput,
-            userHints: enhancedMetadata,
-            logContext: logCtx,
-          });
+        const answerText = pipelineResult.answerText;
+        const sourceDocumentNames = pipelineResult.sourceDocumentNames;
+        const docSourceType = pipelineResult.docSourceType;
+        const docSourceTown = pipelineResult.docSourceTown;
 
-          const draftResult = await generateComplexDraftAnswer({
-            question: questionWithAttachment,
-            retrievalPlan,
-            sessionHistory: trimmedHistory,
-            logContext: logCtx,
-            answerMode: "standard", // File attachment mode uses standard answers
-          });
-
-          sourceDocumentNames = draftResult.sourceDocumentNames;
-          docSourceType = draftResult.docSourceType;
-          docSourceTown = draftResult.docSourceTown;
-          notices = draftResult.notices;
-
-          const runCritic = shouldRunCritic(draftResult.draftAnswerText.length, questionWithAttachment);
-
-          if (runCritic) {
-            const critiqueResult = await critiqueAndImproveAnswer({
-              question: questionWithAttachment,
-              draftAnswerText: draftResult.draftAnswerText,
-              routerOutput,
-              retrievalPlan,
-              logContext: logCtx,
-            });
-
-            answerText = critiqueResult.improvedAnswerText;
-            criticScore = critiqueResult.criticScore;
-            limitationsNote = critiqueResult.limitationsNote;
-            suggestedFollowUps = critiqueResult.suggestedFollowUps;
-          } else {
-            answerText = draftResult.draftAnswerText;
-          }
-        }
-
-        if (suggestedFollowUps.length === 0) {
-          suggestedFollowUps = await generateFollowups({
-            userQuestion: trimmedContent || "Analyze this document",
-            answerText,
-            townPreference: resolvedTown,
-            detectedDomains: routerOutput.domains,
-            logContext: logCtx,
-          });
-        }
+        // Generate follow-up suggestions
+        const suggestedFollowUps = await generateFollowups({
+          userQuestion: trimmedContent || "Analyze this document",
+          answerText,
+          townPreference: resolvedTown,
+          detectedDomains: [],
+          logContext: logCtx,
+        });
 
         const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
 
         const answerMeta: FinalAnswerMeta = {
-          complexity: routerOutput.complexity,
+          complexity: "simple",
           requiresClarification: false,
-          criticScore,
-          limitationsNote,
+          criticScore: { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 },
         };
 
         const v2Metadata = {
@@ -1103,7 +545,7 @@ export function registerChatV2Routes(app: Express): void {
           answerMeta,
           sources,
           suggestedFollowUps,
-          notices,
+          notices: [] as ChatNotice[],
         };
 
         const assistantMessage = await storage.createChatMessage({
@@ -1136,10 +578,11 @@ export function registerChatV2Routes(app: Express): void {
         logInfo("chat_v2_upload_response_ready", {
           ...logCtx,
           stage: "exit",
-          complexity: answerMeta.complexity,
           sourceCount: sources.length,
           durationMs: duration,
           hasAttachment: !!attachmentInfo,
+          docSourceType,
+          docSourceTown,
         });
 
         return res.json(response);
@@ -1163,15 +606,6 @@ export function registerChatV2Routes(app: Express): void {
       }
     }
   );
-}
-
-function buildClarificationResponse(questions: string[]): string {
-  if (questions.length === 1) {
-    return questions[0];
-  }
-
-  const questionList = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
-  return `${questionList}`;
 }
 
 interface CachedV2Data {
