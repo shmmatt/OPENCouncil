@@ -184,7 +184,7 @@ Please provide a helpful answer based on these documents. Cite your sources.`;
       config: {
         systemInstruction: systemPrompt,
         temperature: 0.3,
-        maxOutputTokens: 800,
+        maxOutputTokens: 3000,
       },
     });
 
