@@ -5,11 +5,9 @@ import { queryClient } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, Info, AlertCircle } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -52,8 +50,6 @@ interface V2Metadata {
   coverageScore?: number;
   missingFacets?: string[];
   showCoverageDisclaimer?: boolean;
-  // Answer mode data
-  answerMode?: "standard" | "deep";
   wasTruncated?: boolean;
 }
 
@@ -521,12 +517,6 @@ function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
   );
 }
 
-// Type for answer mode
-type AnswerMode = "standard" | "deep";
-
-// LocalStorage key for deep answer mode preference
-const DEEP_ANSWER_MODE_KEY = "opencouncil-deep-answer-mode";
-
 export default function Chat() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
@@ -535,53 +525,10 @@ export default function Chat() {
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
-  // Deep Answer mode state - always starts false, hydrates from localStorage only after config confirms feature is enabled
-  const [deepAnswerMode, setDeepAnswerMode] = useState<boolean>(false);
-  const [deepModeHydrated, setDeepModeHydrated] = useState(false);
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
-  
-  // Fetch chat config to check if deep answer feature is enabled
-  const { data: chatConfigData, isLoading: configLoading } = useQuery<{ deepAnswerEnabled: boolean }>({
-    queryKey: ["/api/chat/config"],
-  });
-  
-  // Check if deep answer feature is enabled (server-controlled)
-  const deepAnswerFeatureEnabled = chatConfigData?.deepAnswerEnabled ?? false;
-  
-  // Hydrate deep mode from localStorage ONLY after config confirms feature is enabled
-  useEffect(() => {
-    if (!configLoading && !deepModeHydrated) {
-      if (deepAnswerFeatureEnabled) {
-        try {
-          const stored = localStorage.getItem(DEEP_ANSWER_MODE_KEY);
-          if (stored === "true") {
-            setDeepAnswerMode(true);
-          }
-        } catch {
-          // localStorage unavailable - silent fail
-        }
-      }
-      setDeepModeHydrated(true);
-    }
-  }, [configLoading, deepAnswerFeatureEnabled, deepModeHydrated]);
-  
-  // Persist deep answer mode to localStorage (only when feature is enabled and hydrated)
-  useEffect(() => {
-    if (deepAnswerFeatureEnabled && deepModeHydrated) {
-      try {
-        localStorage.setItem(DEEP_ANSWER_MODE_KEY, String(deepAnswerMode));
-      } catch {
-        // localStorage unavailable - silent fail
-      }
-    }
-  }, [deepAnswerMode, deepAnswerFeatureEnabled, deepModeHydrated]);
-  
-  // Derive answerMode - always "standard" if feature disabled, config loading, or not hydrated
-  const answerMode: AnswerMode = (deepAnswerFeatureEnabled && deepAnswerMode && !configLoading && deepModeHydrated) ? "deep" : "standard";
 
   // Detect ?q= URL parameter for shareable links
   useEffect(() => {
@@ -705,8 +652,7 @@ export default function Chat() {
         }
       } else {
         return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { 
-          content, 
-          answerMode 
+          content 
         });
       }
     },
@@ -982,42 +928,9 @@ export default function Chat() {
                 )}
               </Button>
             </div>
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-muted-foreground">
-                Press Enter to send, Shift+Enter for new line
-              </p>
-              {/* Only show Deep Answer toggle if feature is enabled */}
-              {deepAnswerFeatureEnabled && (
-                <div className="flex items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5">
-                        <Switch
-                          id="deep-answer-mode"
-                          checked={deepAnswerMode}
-                          onCheckedChange={setDeepAnswerMode}
-                          disabled={sendMessageMutation.isPending}
-                          data-testid="switch-deep-answer"
-                        />
-                        <Label 
-                          htmlFor="deep-answer-mode" 
-                          className="text-xs text-muted-foreground cursor-pointer select-none"
-                        >
-                          Detailed answers
-                        </Label>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs">
-                      <p className="text-sm">
-                        Get longer, more comprehensive answers with additional context. 
-                        Best for complex policy questions or research.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              )}
-            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Press Enter to send, Shift+Enter for new line
+            </p>
           </form>
         </div>
       </div>
