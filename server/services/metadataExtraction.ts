@@ -404,10 +404,34 @@ ${previewText.slice(0, 10000)}`;
 
     const responseText = response.text || "";
     
-    const cleanedText = responseText
+    // First, try to extract JSON object from the response
+    // This handles cases where the LLM returns HTML, markdown, or other wrapper content
+    let cleanedText = responseText
       .replace(/```json\n?/g, "")
       .replace(/```\n?/g, "")
       .trim();
+    
+    // If the response starts with HTML tags, try to extract JSON from it
+    if (cleanedText.startsWith("<") || cleanedText.includes("<html") || cleanedText.includes("<ht")) {
+      console.warn("LLM returned HTML-like content, attempting to extract JSON:", cleanedText.slice(0, 200));
+      // Try to find a JSON object in the response
+      const jsonMatch = cleanedText.match(/\{[\s\S]*?\}(?=\s*$|\s*<)/);
+      if (jsonMatch) {
+        cleanedText = jsonMatch[0];
+      } else {
+        // Strip all HTML tags and try again
+        cleanedText = cleanedText.replace(/<[^>]*>/g, "").trim();
+      }
+    }
+    
+    // Try to find JSON object boundaries if there's extra content
+    if (!cleanedText.startsWith("{")) {
+      const jsonStart = cleanedText.indexOf("{");
+      const jsonEnd = cleanedText.lastIndexOf("}");
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        cleanedText = cleanedText.slice(jsonStart, jsonEnd + 1);
+      }
+    }
     
     try {
       const parsed = JSON.parse(cleanedText);
@@ -451,7 +475,9 @@ ${previewText.slice(0, 10000)}`;
         rawDateText: typeof parsed.rawDateText === "string" ? parsed.rawDateText : null,
       };
     } catch (parseError) {
-      console.error("Failed to parse LLM response:", cleanedText);
+      console.error("Failed to parse LLM response. Error:", parseError);
+      console.error("Raw response text (first 500 chars):", responseText.slice(0, 500));
+      console.error("Cleaned text (first 500 chars):", cleanedText.slice(0, 500));
       // Even on parse failure, apply hints if available
       const fallback = inferMetadataFromFilename(filename);
       fallback.town = finalizeTown(fallback.town, {
