@@ -225,6 +225,13 @@ export default function AdminIngestion() {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [jobEdits, setJobEdits] = useState<Record<string, JobMetadataEdits>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  
+  // Batch processing state
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; processing: boolean }>({
+    current: 0,
+    total: 0,
+    processing: false,
+  });
 
   const { data: jobs, isLoading: jobsLoading, refetch: refetchJobs } = useQuery<IngestionJobWithBlob[]>({
     queryKey: ["/api/admin/ingestion/jobs", activeTab],
@@ -292,37 +299,19 @@ export default function AdminIngestion() {
     });
   }, [jobs]);
 
-  const analyzeMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const token = localStorage.getItem("adminToken");
-      const response = await fetch("/api/admin/ingestion/analyze", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Analysis failed");
+  // Helper to safely parse JSON error responses (handles HTML gateway errors)
+  const safeParseJsonError = async (response: Response, defaultMessage: string): Promise<string> => {
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      return error.message || defaultMessage;
+    } catch {
+      if (text.includes("<html") || text.startsWith("<")) {
+        return `Server error (${response.status}). Try again or upload fewer files.`;
       }
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setFiles([]);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
-      toast({
-        title: "Analysis complete",
-        description: `${data.jobs?.length || 0} file(s) analyzed and ready for review`,
-      });
-      setActiveTab("needs_review");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Analysis failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+      return text.slice(0, 200) || defaultMessage;
+    }
+  };
 
   const approveAndIndexMutation = useMutation({
     mutationFn: async ({ jobId, metadata }: { jobId: string; metadata: JobMetadataEdits }) => {
@@ -351,8 +340,8 @@ export default function AdminIngestion() {
       });
       
       if (!approveResponse.ok) {
-        const error = await approveResponse.json();
-        throw new Error(error.message || "Approval failed");
+        const errorMessage = await safeParseJsonError(approveResponse, "Approval failed");
+        throw new Error(errorMessage);
       }
       
       const indexResponse = await fetch(`/api/admin/ingestion/jobs/${jobId}/index`, {
@@ -361,8 +350,8 @@ export default function AdminIngestion() {
       });
       
       if (!indexResponse.ok) {
-        const error = await indexResponse.json();
-        throw new Error(error.message || "Indexing failed");
+        const errorMessage = await safeParseJsonError(indexResponse, "Indexing failed");
+        throw new Error(errorMessage);
       }
       
       return indexResponse.json();
@@ -416,8 +405,8 @@ export default function AdminIngestion() {
           });
           
           if (!approveResponse.ok) {
-            const error = await approveResponse.json();
-            results.push({ jobId, success: false, error: error.message });
+            const errorMessage = await safeParseJsonError(approveResponse, "Approval failed");
+            results.push({ jobId, success: false, error: errorMessage });
             continue;
           }
           
@@ -427,8 +416,8 @@ export default function AdminIngestion() {
           });
           
           if (!indexResponse.ok) {
-            const error = await indexResponse.json();
-            results.push({ jobId, success: false, error: error.message });
+            const errorMessage = await safeParseJsonError(indexResponse, "Indexing failed");
+            results.push({ jobId, success: false, error: errorMessage });
             continue;
           }
           
@@ -489,8 +478,8 @@ export default function AdminIngestion() {
           });
           
           if (!response.ok) {
-            const error = await response.json();
-            results.push({ jobId, success: false, error: error.message });
+            const errorMessage = await safeParseJsonError(response, "Rejection failed");
+            results.push({ jobId, success: false, error: errorMessage });
             continue;
           }
           
@@ -543,8 +532,8 @@ export default function AdminIngestion() {
         body: JSON.stringify({ reason }),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Rejection failed");
+        const errorMessage = await safeParseJsonError(response, "Rejection failed");
+        throw new Error(errorMessage);
       }
       return response.json();
     },
@@ -570,23 +559,89 @@ export default function AdminIngestion() {
     }
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (files.length === 0) return;
     
-    const formData = new FormData();
-    files.forEach((file) => {
-      formData.append("files", file);
-    });
+    const BATCH_SIZE = 5; // Process 5 files at a time to avoid timeouts
+    const totalBatches = Math.ceil(files.length / BATCH_SIZE);
     
-    // Add metadata hints if provided
+    // Build metadata hints once
     const hints: { defaultTown?: string; defaultBoard?: string } = {};
     if (defaultTown.trim()) hints.defaultTown = defaultTown.trim();
     if (defaultBoard.trim()) hints.defaultBoard = defaultBoard.trim();
-    if (Object.keys(hints).length > 0) {
-      formData.append("metadataHints", JSON.stringify(hints));
+    const hintsJson = Object.keys(hints).length > 0 ? JSON.stringify(hints) : null;
+    
+    setBatchProgress({ current: 0, total: files.length, processing: true });
+    
+    let successCount = 0;
+    const failedFiles: File[] = []; // Track failed files for retry
+    const token = localStorage.getItem("adminToken");
+    
+    for (let i = 0; i < totalBatches; i++) {
+      const start = i * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, files.length);
+      const batchFiles = files.slice(start, end);
+      
+      const formData = new FormData();
+      batchFiles.forEach((file) => {
+        formData.append("files", file);
+      });
+      if (hintsJson) {
+        formData.append("metadataHints", hintsJson);
+      }
+      
+      try {
+        const response = await fetch("/api/admin/ingestion/analyze", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          const errorMessage = await safeParseJsonError(response, "Batch failed");
+          console.error(`Batch ${i + 1} failed:`, errorMessage);
+          // Add all files from this batch to failed list
+          failedFiles.push(...batchFiles);
+        } else {
+          const data = await response.json();
+          successCount += data.jobs?.length || batchFiles.length;
+        }
+      } catch (err) {
+        console.error(`Batch ${i + 1} error:`, err);
+        // Add all files from this batch to failed list
+        failedFiles.push(...batchFiles);
+      }
+      
+      setBatchProgress({ current: end, total: files.length, processing: true });
     }
     
-    analyzeMutation.mutate(formData);
+    setBatchProgress({ current: 0, total: 0, processing: false });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
+    
+    if (failedFiles.length > 0 && successCount > 0) {
+      // Partial success - keep only failed files for retry
+      setFiles(failedFiles);
+      toast({
+        title: "Partial success",
+        description: `${successCount} file(s) analyzed. ${failedFiles.length} failed - kept for retry.`,
+        variant: "destructive",
+      });
+    } else if (failedFiles.length > 0) {
+      // All failed - keep all files for retry
+      toast({
+        title: "Analysis failed",
+        description: `All ${failedFiles.length} file(s) failed. Kept for retry.`,
+        variant: "destructive",
+      });
+    } else {
+      // Complete success - clear all files
+      setFiles([]);
+      toast({
+        title: "Analysis complete",
+        description: `${successCount} file(s) analyzed and ready for review`,
+      });
+    }
+    setActiveTab("needs_review");
   };
 
   const toggleJobSelection = (jobId: string) => {
@@ -813,16 +868,16 @@ export default function AdminIngestion() {
               </div>
             )}
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col items-start gap-2">
             <Button
               onClick={handleAnalyze}
-              disabled={files.length === 0 || analyzeMutation.isPending}
+              disabled={files.length === 0 || batchProgress.processing}
               data-testid="button-analyze"
             >
-              {analyzeMutation.isPending ? (
+              {batchProgress.processing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing...
+                  Analyzing... ({batchProgress.current}/{batchProgress.total})
                 </>
               ) : (
                 <>
@@ -831,6 +886,19 @@ export default function AdminIngestion() {
                 </>
               )}
             </Button>
+            {batchProgress.processing && (
+              <div className="w-full">
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Processing in batches of 5 files to avoid timeouts...
+                </p>
+              </div>
+            )}
           </CardFooter>
         </Card>
 
