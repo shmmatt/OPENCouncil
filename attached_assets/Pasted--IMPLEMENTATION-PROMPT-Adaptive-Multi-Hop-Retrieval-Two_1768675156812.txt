@@ -1,0 +1,205 @@
+# IMPLEMENTATION PROMPT — Adaptive Multi-Hop Retrieval (Two-Lane) + Session Sources (No Modes)
+
+## Files
+Primary: `server/chatV2/twoLaneRetrieve.ts`
+Likely touch: `server/chatV2/chatConfig.ts`, possibly the route/handler that stores chat session state.
+
+## Goal
+Upgrade the existing Two-Lane retrieval (Local Lane + State Lane) so the assistant can:
+1) Maintain topic continuity (already partially done via situation-aware rerank)
+2) Automatically “read” user-provided long text (articles, pasted minutes) by storing it as session sources
+3) Automatically expand queries and retrieve relevant ordinances/minutes/RSAs when the initial retrieval is weak or drifting
+4) Avoid brittle triggers like “based on an article”
+5) Never degrade into “No relevant documents were found…” when the user provided relevant text in the chat
+
+This is default behavior (no new user toggles).
+
+---
+
+## Existing System Summary (keep it)
+- two lanes: Local (town-specific docs) + State (RSA/NHMA/etc.)
+- both run in parallel
+- merge & rank with dedupe and situation-aware boost
+- caps: LOCAL_LANE_K=12, STATE_LANE_K=8, merged cap 15
+
+We will keep the architecture. Add an escalation loop + sessionSources.
+
+---
+
+## Part A — Add Session Sources (Ephemeral Docs)
+
+### Requirements
+When the user message contains a long paste (article, minutes excerpt, etc.), store it in the chat session as a `sessionSource`.
+
+Add to session state (wherever you keep chat session / conversation context):
+- `sessionSources: Array<{ id, type, title?, text, createdAt }>`
+Keep only last 3 sources to avoid bloat.
+
+Detection heuristic:
+- message length >= 800 chars OR
+- contains many paragraph breaks OR
+- matches patterns like date/byline/headline (“Jan”, “Updated”, “Reporter”, etc.)
+
+Store it before calling `twoLaneRetrieve`.
+
+### Use in Retrieval
+Session sources are NOT “archive documents”; they won’t be found by Gemini File Search.
+Instead:
+- They are fed into the *extraction / query expansion* step (Part C)
+- They are included in the final context for generation if relevant (outside this file if you prefer)
+
+---
+
+## Part B — Add Retrieval Confidence + Drift Scoring
+
+In `twoLaneRetrieve.ts`, after each lane retrieval and after merging:
+
+Compute:
+1) `retrievalConfidence` (0..1)
+   - based on count of chunks above a similarity threshold OR presence of strong keyword hits
+   - if Gemini results include scores, use them; otherwise approximate by:
+     - chunk text contains query key terms
+     - chunk contains town name / board names / key entities
+2) `topicAlignment` (0..1)
+   - compare chunk text against `activeSituation.entities` (you already have situation-aware rerank; reuse that entity list)
+   - alignment = % of top chunks containing >=1 entity
+
+Also compute:
+3) `driftDetected` boolean
+   - true if top chunks contain strongly off-topic entities (e.g. “Brown”, “RV”, “cesspool”) AND do not contain situation entities
+   - implement as:
+     - `if offTopicHits >= 2 && situationHits == 0 -> driftDetected`
+
+Do NOT hard-filter by these. They only decide whether to escalate.
+
+---
+
+## Part C — Add Adaptive Multi-Hop Query Expansion (Second Pass)
+
+### Escalation Trigger (no brittle user phrasing)
+If ANY of:
+- merged results length is low (e.g. < 4 chunks) OR
+- retrievalConfidence < threshold (e.g. 0.35) OR
+- topicAlignment < threshold (e.g. 0.30) OR
+- driftDetected = true OR
+- user query contains high-stakes legal keywords:
+  ["liability","negligence","illegal","RSA","lawsuit","ADA","compliance","damages","immunity","permit","building code","select board"]
+
+Then run a second pass:
+- Extract an “issue map” from:
+  - user question
+  - activeSituation title/entities (if any)
+  - most recent sessionSource text (if exists)
+
+### Issue Map Output
+A small object:
+- entities: string[]
+- actions: string[]
+- legal_topics: string[]  (ADA, building permits, certificates of occupancy, municipal liability, negligence, etc.)
+- boards: string[] (Select Board, Planning Board, etc.)
+- dates: string[] (optional)
+
+Implementation approach:
+- Use a lightweight LLM call (Gemini) OR a deterministic parser:
+  - If you already have a “situation extraction” utility, reuse it.
+  - Keep it tiny: 1 short model call that returns JSON.
+
+### Generate Expanded Queries
+Create 6–10 queries, split across lanes:
+Local lane query templates (town-specific):
+- `${town} ${entity} minutes`
+- `${town} select board vote ${entity}`
+- `${town} permit ${legal_topic}`
+- `${town} policy ${legal_topic}`
+- `${town} ${park_name} boardwalk`
+- `${town} building inspector authority permit`
+
+State lane query templates:
+- `${legal_topic} New Hampshire RSA`
+- `municipal liability negligence New Hampshire`
+- `ADA public facilities guidance New Hampshire`
+- `governmental immunity RSA New Hampshire` (don’t guess RSA numbers; search broadly)
+
+Important:
+- These are appended to your existing `buildLocalLaneQuery` / `buildStateLaneQuery` anchors rather than replacing them.
+
+### Execute Second Pass
+Run both lanes again, but with:
+- slightly larger lane K (e.g. +4 each) for this second pass only
+- merge with first-pass chunks (dedupe by doc id/title as you do now)
+- rerank with your situation-aware boost
+
+### Key Constraint
+Topic anchoring remains a *prior*, not a filter:
+- never drop all chunks because “none match situation”
+- allow some general state-level results even if local is empty
+- but prevent off-topic substitution by deprioritizing drift chunks and requiring any off-topic chunk to be below top N unless it matches legal_topics
+
+---
+
+## Part D — Merge & Rank Adjustments (Prevent Wrong Case Substitution)
+
+Update `mergeAndRankChunks()` so that:
+1) A chunk must match at least one of:
+   - activeSituation entity, OR
+   - extracted legal_topic keywords, OR
+   - user question keywords
+to be eligible for top N.
+
+This is not a hard filter for the entire set, only for the top N selection:
+- if nothing matches, fall back to normal ranking (rare)
+- this prevents “Brown case” from taking over when it shares only generic words like “liability”
+
+2) Add a “drift penalty”:
+- if chunk contains known off-topic anchors (Brown/RV/cesspool) and does not contain situation entities or legal_topics, subtract a penalty so it won’t win.
+
+---
+
+## Part E — No More Misleading “No relevant documents…” When Session Sources Exist
+
+`twoLaneRetrieve.ts` should return metadata that tells the caller:
+- `archiveChunksFound: boolean`
+- `usedSecondPass: boolean`
+- `retrievalConfidence`, `topicAlignment`, `driftDetected`
+
+In the chat handler:
+- If archiveChunksFound is false but sessionSources exist:
+  - DO NOT show “No relevant documents found in archive…”
+  - Instead: answer from sessionSource + general legal framework, and optionally say:
+    “I didn’t find matching items in the archive for this specific situation, but based on the text you provided…”
+
+This keeps the UX honest and helpful.
+
+---
+
+## Config Changes (chatConfig.ts)
+Add thresholds:
+- `RETRIEVAL_CONFIDENCE_THRESHOLD = 0.35`
+- `TOPIC_ALIGNMENT_THRESHOLD = 0.30`
+- `SECOND_PASS_LOCAL_LANE_K = LOCAL_LANE_K + 4`
+- `SECOND_PASS_STATE_LANE_K = STATE_LANE_K + 4`
+
+---
+
+## Tests
+Add tests that reproduce the boardwalk scenario:
+
+1) Pasted article in sessionSources, minimal archive:
+- Ask: “What actions taken by the select board led to potential liability?”
+Expected:
+- second pass triggers
+- retrieval returns either state-level ADA / municipal liability + whatever local exists
+- no drift to Brown
+- no “No relevant documents…” boilerplate if session source exists
+
+2) Drift regression:
+- ensure “Brown/RV/cesspool” chunks are penalized and don’t rank top when situation entities are different.
+
+---
+
+## Definition of Done
+- Default behavior feels natural: user doesn’t need special phrasing.
+- On weak first-pass retrieval, the system escalates automatically.
+- Boardwalk question does not drift to Brown.
+- If archive has no matches but user pasted text, assistant still answers coherently without the “no docs” dead-end.
+- Two-lane structure remains intact and performance impact is limited (second pass only when needed).
