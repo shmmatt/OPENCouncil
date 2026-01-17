@@ -68,6 +68,27 @@ Users can attach documents (PDF, DOCX, TXT up to 25MB) to chat messages for AI a
 3. Stores attachment metadata (filename, mimeType, extractedText) in the chat_messages table
 4. Provides UI affordances including an attach button (paperclip icon), selected file display, and error handling for unsupported file types
 
+### Situation Anchoring & Topic Continuity
+The chat system includes guardrails to maintain topic continuity across follow-up questions, preventing the AI from drifting to unrelated but high-signal documents (e.g., switching from a boardwalk ADA vote to an enforcement case).
+
+**Key Components**:
+- `server/chatV2/situationExtractor.ts` - Heuristic-based entity extraction and situation tracking
+- `server/chatV2/driftDetector.ts` - Post-generation drift detection using semantic coverage
+- `server/chatV2/chatConfig.ts` - Configuration options for tuning the feature
+
+**How It Works**:
+1. **Situation Extraction**: When users ask about specific situations (events, properties, cases), entities are extracted and stored in `chatSessions.situationContext`
+2. **Topic-Prior Re-ranking**: Retrieved chunks are scored for topic relevance and re-ranked to prefer on-topic content
+3. **Strict System Prompt**: Synthesis prompt includes topic continuity rules preventing unrelated case substitution
+4. **Drift Detection**: Post-generation check identifies off-topic entities; if drift is detected, answer is regenerated with stronger anchoring
+
+**Configuration Options** (in `chatConfig.ts`):
+- `ENABLE_SITUATION_ANCHORING` - Enable/disable the feature (default: true)
+- `SITUATION_MATCH_WEIGHT` - Weight for topic relevance in re-ranking (default: 0.3)
+- `MIN_ON_TOPIC_CHUNK_RATIO` - Minimum ratio of on-topic chunks (default: 0.4)
+- `ENABLE_DRIFT_DETECTION` - Enable post-generation drift check (default: true)
+- `MAX_DRIFT_REGENERATION_ATTEMPTS` - Max regeneration attempts (default: 1)
+
 ### Build & Deployment
 The application uses Vite for frontend development and esbuild for backend bundling. It is designed for single-server deployment, serving static files and the API, with external managed PostgreSQL and environment variable-based configuration.
 
