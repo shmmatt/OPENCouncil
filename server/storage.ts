@@ -41,6 +41,7 @@ import type {
   MinutesUpdateItem,
   ActorIdentifier,
   SituationContext,
+  SessionSource,
 } from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -141,6 +142,11 @@ export interface IStorage {
   // Situation context operations (topic continuity)
   setSessionSituationContext(sessionId: string, context: SituationContext): Promise<void>;
   getSessionSituationContext(sessionId: string): Promise<SituationContext | null>;
+
+  // Session sources operations (ephemeral user-provided content)
+  addSessionSource(sessionId: string, source: SessionSource): Promise<void>;
+  getSessionSources(sessionId: string): Promise<SessionSource[]>;
+  clearSessionSources(sessionId: string): Promise<void>;
 
   // Recent minutes updates
   getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]>;
@@ -704,6 +710,38 @@ export class DatabaseStorage implements IStorage {
       .from(schema.chatSessions)
       .where(eq(schema.chatSessions.id, sessionId));
     return session?.situationContext || null;
+  }
+
+  async addSessionSource(sessionId: string, source: SessionSource): Promise<void> {
+    const [session] = await db
+      .select({ sessionSources: schema.chatSessions.sessionSources })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.id, sessionId));
+    
+    const existingSources = session?.sessionSources || [];
+    const maxSources = 3;
+    
+    const updatedSources = [...existingSources, source].slice(-maxSources);
+    
+    await db
+      .update(schema.chatSessions)
+      .set({ sessionSources: updatedSources, updatedAt: new Date() })
+      .where(eq(schema.chatSessions.id, sessionId));
+  }
+
+  async getSessionSources(sessionId: string): Promise<SessionSource[]> {
+    const [session] = await db
+      .select({ sessionSources: schema.chatSessions.sessionSources })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.id, sessionId));
+    return session?.sessionSources || [];
+  }
+
+  async clearSessionSources(sessionId: string): Promise<void> {
+    await db
+      .update(schema.chatSessions)
+      .set({ sessionSources: [], updatedAt: new Date() })
+      .where(eq(schema.chatSessions.id, sessionId));
   }
 
   // Recent minutes updates - canonical query using logicalDocuments + documentVersions

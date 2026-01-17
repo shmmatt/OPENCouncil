@@ -130,6 +130,15 @@ export interface SituationContext {
   lastUpdatedAt: string;
 }
 
+// Session Source: Ephemeral user-provided content (articles, pasted minutes, etc.)
+export interface SessionSource {
+  id: string;
+  type: "article" | "minutes" | "document" | "paste";
+  title?: string;
+  text: string;
+  createdAt: string;
+}
+
 // Chat Sessions: Updated with user/anon tracking
 export const chatSessions = pgTable("chat_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -138,6 +147,7 @@ export const chatSessions = pgTable("chat_sessions", {
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
   townPreference: text("town_preference"), // Session-level town preference override
   situationContext: jsonb("situation_context").$type<SituationContext>(), // Current topic/situation for anchoring
+  sessionSources: jsonb("session_sources").$type<SessionSource[]>(), // Ephemeral user-provided content
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
