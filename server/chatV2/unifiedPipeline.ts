@@ -129,6 +129,33 @@ export async function runUnifiedChatPipeline(
 }
 
 /**
+ * Build legal framework instructions when legal salience is high
+ */
+function buildLegalFrameworkInstructions(legalSalience: number): string {
+  if (legalSalience < 0.5) {
+    return "";
+  }
+  
+  return `
+
+=== LEGAL FRAMEWORK GUIDANCE ===
+This question involves legality, liability, compliance, or enforcement topics. You MUST:
+
+1. Include a short section titled "Applicable legal framework (NH + federal)" that:
+   - Explains relevant state/federal legal standards using STATE lane chunks
+   - Cites specific RSA sections, regulations, or NHMA guidance where available
+
+2. Clearly distinguish between:
+   - General legal standards and requirements (from statewide sources)
+   - Local facts, decisions, and opinions (from municipal documents)
+
+3. When discussing liability or compliance:
+   - Reference governing statutes or regulations
+   - Note any immunity or exception provisions
+   - Avoid substituting local opinions for objective legal standards`;
+}
+
+/**
  * Build situation anchoring instructions for the system prompt
  */
 function buildSituationAnchoringInstructions(situationContext: SituationContext | null | undefined): string {
@@ -220,6 +247,9 @@ async function synthesizeUnifiedAnswer(
   
   // Build situation anchoring instructions
   const situationInstructions = buildSituationAnchoringInstructions(situationContext);
+  
+  // Build legal framework instructions based on salience from retrieval
+  const legalFrameworkInstructions = buildLegalFrameworkInstructions(retrievalResult.legalSalience);
 
   const systemPrompt = `You are an assistant for New Hampshire municipal officials. Answer questions using the provided document excerpts.
 
@@ -229,7 +259,7 @@ Guidelines:
 - Be accurate and helpful
 - If the documents don't fully answer the question, acknowledge limitations
 - Keep answers focused and practical
-- Target around 800-1500 characters for most answers${situationInstructions}`;
+- Target around 800-1500 characters for most answers${situationInstructions}${legalFrameworkInstructions}`;
 
   const userPrompt = `${historyContext}
 QUESTION: ${question}
@@ -251,6 +281,7 @@ Please provide a helpful answer based on these documents. Cite your sources.`;
       chunkCount: totalChunks,
       historyLength: history.length,
       townPreference,
+      legalSalience: retrievalResult.legalSalience,
     },
   });
 

@@ -52,6 +52,90 @@ export interface RetrievalQualityScore {
 }
 
 /**
+ * Keywords that indicate legal/liability/compliance context
+ */
+const LEGAL_SALIENCE_KEYWORDS = [
+  "liability",
+  "negligence",
+  "lawsuit",
+  "illegal",
+  "RSA",
+  "ADA",
+  "compliance",
+  "damages",
+  "immunity",
+  "permit",
+  "building code",
+  "DOJ",
+  "Public Integrity",
+  "Right to Know",
+  "injunction",
+  "federal",
+  "civil action",
+  "violation",
+  "enforcement",
+  "legal",
+  "statute",
+  "ordinance violation",
+  "certificate of occupancy",
+  "governmental immunity",
+  "municipal liability",
+];
+
+/**
+ * Patterns that indicate the user is asking for legal/liability context
+ */
+const LEGAL_SALIENCE_PATTERNS = [
+  /\bcan\s+they\b/i,
+  /\bis\s+this\s+allowed\b/i,
+  /\bwhat\s+law\b/i,
+  /\bwhat\s+happens\s+if\b/i,
+  /\bis\s+it\s+legal\b/i,
+  /\bis\s+this\s+legal\b/i,
+  /\bare\s+they\s+liable\b/i,
+  /\bam\s+i\s+liable\b/i,
+  /\bwho\s+is\s+liable\b/i,
+  /\bwhat\s+are\s+the\s+requirements\b/i,
+  /\bwhat\s+does\s+the\s+law\s+say\b/i,
+  /\bwhat\s+does\s+RSA\b/i,
+  /\bunder\s+what\s+authority\b/i,
+  /\bwhat\s+legal\b/i,
+];
+
+/**
+ * Compute legal salience score for a text (0..1)
+ * Higher scores indicate the question involves legal/liability/compliance topics
+ */
+export function computeLegalSalience(text: string): number {
+  const lowerText = text.toLowerCase();
+  
+  // Count keyword matches
+  let keywordMatches = 0;
+  for (const keyword of LEGAL_SALIENCE_KEYWORDS) {
+    if (lowerText.includes(keyword.toLowerCase())) {
+      keywordMatches++;
+    }
+  }
+  
+  // Check pattern matches
+  let patternMatches = 0;
+  for (const pattern of LEGAL_SALIENCE_PATTERNS) {
+    if (pattern.test(text)) {
+      patternMatches++;
+    }
+  }
+  
+  // Compute salience score
+  // - Each keyword match contributes 0.1, capped at 0.6
+  // - Each pattern match contributes 0.15, capped at 0.45
+  // - Combined max is 1.0
+  const keywordScore = Math.min(keywordMatches * 0.1, 0.6);
+  const patternScore = Math.min(patternMatches * 0.15, 0.45);
+  
+  return Math.min(keywordScore + patternScore, 1.0);
+}
+
+/**
  * A retrieved chunk with lane labeling for citation purposes
  */
 export interface LaneChunk {
@@ -93,10 +177,13 @@ export interface TwoLaneRetrievalResult {
   topicAlignment: number;
   driftDetected: boolean;
   issueMap: IssueMap | null;
+  legalSalience: number;
   debug: {
     localCount: number;
     stateCount: number;
     mergedCount: number;
+    mergedLocalCount: number;
+    mergedStateCount: number;
     topLocalDocs: string[];
     topStateDocs: string[];
     localQueryUsed: string;
@@ -105,6 +192,7 @@ export interface TwoLaneRetrievalResult {
     secondPassStateQuery?: string;
     durationMs: number;
     escalationReason?: string;
+    legalSalience?: number;
   };
 }
 
@@ -624,73 +712,132 @@ function dedupeChunks(chunks: LaneChunk[]): LaneChunk[] {
 
 /**
  * Merge and rank chunks from both lanes with situation-aware re-ranking
+ * and legal salience-based state chunk guarantees
  */
 function mergeAndRankChunks(
   localChunks: LaneChunk[],
   stateChunks: LaneChunk[],
   questionHasRSAPattern: boolean,
-  situationContext?: SituationContext | null
+  situationContext: SituationContext | null | undefined,
+  legalSalience: number,
+  dynamicStateCap: number
 ): LaneChunk[] {
   const localCap = chatConfig.LOCAL_CONTEXT_CAP || 10;
-  const stateCap = chatConfig.STATE_CONTEXT_CAP || 5;
+  const stateCap = dynamicStateCap;
   const mergedCap = chatConfig.MERGED_CONTEXT_CAP || 15;
   
   const cappedLocal = localChunks.slice(0, localCap);
   const cappedState = stateChunks.slice(0, stateCap);
   
-  let merged: LaneChunk[];
+  // Apply legal salience boost to state chunks
+  const stateLaneBonus = legalSalience * 0.12;
+  const boostedStateChunks = cappedState.map(chunk => ({
+    ...chunk,
+    score: (chunk.score || 0.5) + stateLaneBonus,
+  }));
   
+  // Initial merge order based on RSA pattern
+  let merged: LaneChunk[];
   if (questionHasRSAPattern) {
-    merged = [...cappedState, ...cappedLocal];
+    merged = [...boostedStateChunks, ...cappedLocal];
   } else {
-    merged = [...cappedLocal, ...cappedState];
+    merged = [...cappedLocal, ...boostedStateChunks];
   }
   
   const deduped = dedupeChunks(merged);
   
-  if (!chatConfig.ENABLE_SITUATION_ANCHORING || !situationContext) {
-    return deduped.slice(0, mergedCap);
-  }
+  // Separate local and state candidates after deduplication
+  const localCandidates = deduped.filter(c => c.lane === "local");
+  const stateCandidates = deduped.filter(c => c.lane === "state");
   
-  const situationWeight = chatConfig.SITUATION_MATCH_WEIGHT || 0.3;
-  const minOnTopicRatio = chatConfig.MIN_ON_TOPIC_CHUNK_RATIO || 0.4;
+  // Determine minimum state chunks to guarantee when legal salience is high
+  // minState = 3 if salience >= 0.5 and at least 3 state chunks exist
+  const minStateRequired = legalSalience >= 0.5 
+    ? Math.min(3, stateCandidates.length) 
+    : 0;
   
-  const scoredChunks = deduped.map(chunk => {
-    const baseScore = chunk.score || 0.5;
-    const situationMatchScore = computeSituationMatchScore(
-      chunk.title + " " + chunk.content,
-      situationContext
-    );
-    const finalScore = baseScore + (situationWeight * situationMatchScore);
+  // Apply situation anchoring scoring if enabled
+  if (chatConfig.ENABLE_SITUATION_ANCHORING && situationContext) {
+    const situationWeight = chatConfig.SITUATION_MATCH_WEIGHT || 0.3;
+    const minOnTopicRatio = chatConfig.MIN_ON_TOPIC_CHUNK_RATIO || 0.4;
     
-    return {
-      ...chunk,
-      score: finalScore,
-      situationMatchScore,
-    };
-  });
-  
-  scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  
-  const onTopicChunks = scoredChunks.filter(c => (c.situationMatchScore || 0) > 0.2);
-  const offTopicChunks = scoredChunks.filter(c => (c.situationMatchScore || 0) <= 0.2);
-  
-  if (onTopicChunks.length === 0) {
-    return scoredChunks.slice(0, mergedCap);
+    const scoredChunks = deduped.map(chunk => {
+      const baseScore = chunk.score || 0.5;
+      const situationMatchScore = computeSituationMatchScore(
+        chunk.title + " " + chunk.content,
+        situationContext
+      );
+      const finalScore = baseScore + (situationWeight * situationMatchScore);
+      
+      return {
+        ...chunk,
+        score: finalScore,
+        situationMatchScore,
+      };
+    });
+    
+    scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
+    
+    // Bucketed selection with legal salience guarantee
+    const scoredLocalCandidates = scoredChunks.filter(c => c.lane === "local");
+    const scoredStateCandidates = scoredChunks.filter(c => c.lane === "state");
+    
+    // Guarantee minimum state chunks first
+    const guaranteedState = scoredStateCandidates.slice(0, minStateRequired);
+    let remainingSlots = mergedCap - guaranteedState.length;
+    
+    // Apply on-topic ratio to remaining slots
+    const onTopicChunks = scoredChunks.filter(c => 
+      (c.situationMatchScore || 0) > 0.2 && 
+      !guaranteedState.some(gs => gs.docId === c.docId)
+    );
+    const offTopicChunks = scoredChunks.filter(c => 
+      (c.situationMatchScore || 0) <= 0.2 &&
+      !guaranteedState.some(gs => gs.docId === c.docId)
+    );
+    
+    if (onTopicChunks.length > 0) {
+      const minOnTopicCount = Math.ceil(remainingSlots * minOnTopicRatio);
+      const guaranteedOnTopic = onTopicChunks.slice(0, Math.min(minOnTopicCount, onTopicChunks.length));
+      remainingSlots = remainingSlots - guaranteedOnTopic.length;
+      
+      const remainingOnTopic = onTopicChunks.slice(guaranteedOnTopic.length);
+      const remaining = [...remainingOnTopic, ...offTopicChunks]
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .slice(0, remainingSlots);
+      
+      const finalChunks = [...guaranteedState, ...guaranteedOnTopic, ...remaining];
+      return finalChunks.map(({ situationMatchScore, ...chunk }) => chunk);
+    } else {
+      // No on-topic chunks, fill remaining slots by score
+      const remaining = scoredChunks
+        .filter(c => !guaranteedState.some(gs => gs.docId === c.docId))
+        .slice(0, remainingSlots);
+      
+      const finalChunks = [...guaranteedState, ...remaining];
+      return finalChunks.map(({ situationMatchScore, ...chunk }) => chunk);
+    }
   }
   
-  const minOnTopicCount = Math.ceil(mergedCap * minOnTopicRatio);
-  const guaranteedOnTopic = onTopicChunks.slice(0, Math.min(minOnTopicCount, onTopicChunks.length));
-  const remainingSlots = mergedCap - guaranteedOnTopic.length;
+  // No situation context - apply bucketed selection with legal salience guarantee
+  if (minStateRequired > 0) {
+    // Guarantee minimum state chunks
+    const guaranteedState = stateCandidates
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, minStateRequired);
+    
+    const remainingSlots = mergedCap - guaranteedState.length;
+    
+    // Fill remaining slots from all candidates by score
+    const allSorted = deduped
+      .filter(c => !guaranteedState.some(gs => gs.docId === c.docId))
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, remainingSlots);
+    
+    return [...guaranteedState, ...allSorted];
+  }
   
-  const remainingOnTopic = onTopicChunks.slice(guaranteedOnTopic.length);
-  const remaining = [...remainingOnTopic, ...offTopicChunks]
-    .sort((a, b) => (b.score || 0) - (a.score || 0))
-    .slice(0, remainingSlots);
-  
-  const finalChunks = [...guaranteedOnTopic, ...remaining];
-  
-  return finalChunks.map(({ situationMatchScore, ...chunk }) => chunk);
+  return deduped.slice(0, mergedCap);
 }
 
 /**
@@ -752,10 +899,13 @@ export async function twoLaneRetrieve(
     topicAlignment: 0,
     driftDetected: false,
     issueMap: null,
+    legalSalience: 0,
     debug: {
       localCount: 0,
       stateCount: 0,
       mergedCount: 0,
+      mergedLocalCount: 0,
+      mergedStateCount: 0,
       topLocalDocs: [],
       topStateDocs: [],
       localQueryUsed: "",
@@ -803,6 +953,19 @@ export async function twoLaneRetrieve(
   const localQuery = buildLocalLaneQuery(rerankedQuestion, townPreference, boards, categories);
   const stateQuery = buildStateLaneQuery(rerankedQuestion);
   
+  // Compute legal salience from user question + situation title
+  const salienceText = userQuestion + (situationContext?.title || "");
+  const legalSalience = computeLegalSalience(salienceText);
+  
+  // Dynamic K/caps based on legal salience
+  // When salience is high (>= 0.5), increase state lane retrieval
+  const localK = chatConfig.LOCAL_LANE_K || 12;
+  const baseStateK = chatConfig.STATE_LANE_K || 8;
+  const stateK = legalSalience >= 0.5 ? Math.min(baseStateK + 4, 14) : baseStateK;
+  
+  const baseStateCap = chatConfig.STATE_CONTEXT_CAP || 5;
+  const dynamicStateCap = legalSalience >= 0.5 ? Math.min(baseStateCap + 2, 8) : baseStateCap;
+  
   logDebug("two_lane_start", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -812,10 +975,10 @@ export async function twoLaneRetrieve(
     scopeHint,
     townPreference,
     hasSessionSources: (sessionSources || []).length > 0,
+    legalSalience,
+    stateK,
+    dynamicStateCap,
   });
-  
-  const localK = chatConfig.LOCAL_LANE_K || 12;
-  const stateK = chatConfig.STATE_LANE_K || 8;
   
   const [localResult, stateResult] = await Promise.all([
     executeLaneRetrieval({
@@ -839,7 +1002,9 @@ export async function twoLaneRetrieve(
     localResult.chunks,
     stateResult.chunks,
     questionHasRSA,
-    situationContext
+    situationContext,
+    legalSalience,
+    dynamicStateCap
   );
   
   const qualityScore = evaluateRetrievalQuality(mergedChunks, issueMap, userQuestion);
@@ -898,7 +1063,9 @@ export async function twoLaneRetrieve(
       combinedLocal,
       combinedState,
       questionHasRSA,
-      situationContext
+      situationContext,
+      legalSalience,
+      dynamicStateCap
     );
     
     usedSecondPass = true;
@@ -927,6 +1094,10 @@ export async function twoLaneRetrieve(
   const durationMs = Date.now() - startTime;
   const archiveChunksFound = localResult.chunks.length > 0 || stateResult.chunks.length > 0;
   
+  // Count merged chunks by lane
+  const mergedLocalCount = mergedChunks.filter(c => c.lane === "local").length;
+  const mergedStateCount = mergedChunks.filter(c => c.lane === "state").length;
+  
   logDebug("two_lane_complete", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -934,12 +1105,15 @@ export async function twoLaneRetrieve(
     localCount: localResult.chunks.length,
     stateCount: stateResult.chunks.length,
     mergedCount: mergedChunks.length,
+    mergedLocalCount,
+    mergedStateCount,
     durationMs,
     questionHasRSA,
     usedSecondPass,
     archiveChunksFound,
     retrievalConfidence: qualityScore.confidence,
     topicAlignment: qualityScore.topicAlignment,
+    legalSalience,
   });
   
   return {
@@ -952,10 +1126,13 @@ export async function twoLaneRetrieve(
     topicAlignment: qualityScore.topicAlignment,
     driftDetected: qualityScore.driftDetected,
     issueMap,
+    legalSalience,
     debug: {
       localCount: localResult.chunks.length,
       stateCount: stateResult.chunks.length,
       mergedCount: mergedChunks.length,
+      mergedLocalCount,
+      mergedStateCount,
       topLocalDocs: localResult.documentNames.slice(0, 5),
       topStateDocs: stateResult.documentNames.slice(0, 5),
       localQueryUsed: localQuery,
@@ -964,6 +1141,7 @@ export async function twoLaneRetrieve(
       secondPassStateQuery,
       durationMs,
       escalationReason: qualityScore.escalationReason || undefined,
+      legalSalience,
     },
   };
 }
