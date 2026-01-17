@@ -10,8 +10,9 @@ import { resolveTownPreference, buildTrimmedHistoryForAnswer } from "./pipelineU
 import { runUnifiedChatPipeline } from "./unifiedPipeline";
 import { extractSituationHeuristic } from "./situationExtractor";
 import { detectDrift, shouldRegenerate } from "./driftDetector";
+import { detectSessionSource } from "./sessionSourceDetector";
 import { chatConfig } from "./chatConfig";
-import type { SituationContext } from "@shared/schema";
+import type { SituationContext, SessionSource } from "@shared/schema";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -187,12 +188,35 @@ export function registerChatV2Routes(app: Express): void {
         resolvedTown,
       });
 
+      // SESSION SOURCE DETECTION: Detect and store long pastes (articles, minutes, etc.)
+      let sessionSources: SessionSource[] = [];
+      
+      if (chatConfig.ENABLE_SESSION_SOURCES) {
+        const sessionSourceResult = detectSessionSource(trimmedContent);
+        
+        if (sessionSourceResult.isSessionSource && sessionSourceResult.source) {
+          await storage.addSessionSource(sessionId, sessionSourceResult.source);
+          
+          logDebug("session_source_detected", {
+            ...logCtx,
+            stage: "session_source_detection",
+            sourceId: sessionSourceResult.source.id,
+            sourceType: sessionSourceResult.source.type,
+            sourceTitle: sessionSourceResult.source.title,
+            textLength: sessionSourceResult.source.text.length,
+            reason: sessionSourceResult.reason,
+          });
+        }
+        
+        sessionSources = await storage.getSessionSources(sessionId);
+      }
+
       // SITUATION ANCHORING: Extract and update situation context
       let situationContext: SituationContext | null = null;
+      const hasUserArtifact = sessionSources.length > 0;
       
       if (chatConfig.ENABLE_SITUATION_ANCHORING) {
         const existingContext = await storage.getSessionSituationContext(sessionId);
-        const hasUserArtifact = false;
         
         const extractionResult = extractSituationHeuristic(
           trimmedContent,
@@ -232,6 +256,7 @@ export function registerChatV2Routes(app: Express): void {
         sessionHistory: trimmedHistory,
         townPreference: resolvedTown,
         situationContext,
+        sessionSources,
         logContext: logCtx,
       });
 
@@ -255,6 +280,7 @@ export function registerChatV2Routes(app: Express): void {
             sessionHistory: trimmedHistory,
             townPreference: resolvedTown,
             situationContext,
+            sessionSources,
             logContext: logCtx,
           });
           
