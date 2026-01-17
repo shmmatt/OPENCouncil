@@ -1,0 +1,154 @@
+You can get 80% of what you want with two small, composable changes to twoLaneRetrieve.ts + one small prompt change. No new modes, no big orchestration layer, no brittle triggers.
+
+1) Add “Legal Salience” scoring and use it to bias state lane
+
+What to do
+
+Create a tiny function that detects when the user is asking for objective legal context.
+
+Signals (cheap, deterministic):
+
+keywords in user message (and optionally situation title/session source title):
+["liability","negligence","lawsuit","illegal","RSA","ADA","compliance","damages","immunity","permit","building code","DOJ","Public Integrity","Right to Know"]
+
+OR question patterns like “can they”, “is this allowed”, “what law”, “what happens if”
+
+
+Return legalSalience: 0..1.
+
+How to use it (minimal patch)
+
+In twoLaneRetrieve():
+
+increase STATE_LANE_K and STATE_CONTEXT_CAP when salience is high
+
+increase state chunk boost weight in mergeAndRankChunks() when salience is high
+
+
+Example behavior:
+
+normal question → Local 12 / State 8 (current)
+
+legal salience high → Local 12 / State 12 (or State 10) + merged cap still 15
+
+
+You’re not adding more complexity—just dynamic config.
+
+
+---
+
+2) Guarantee “at least N state chunks if available” in the final merged context
+
+Right now your merge likely just takes top-ranked chunks overall. That can accidentally crowd out state law.
+
+Minimal fix
+
+After you merge + score chunks, do a bucketed pick:
+
+pick up to localCap
+
+pick up to stateCap
+
+then fill remaining slots by score from either lane
+
+
+And when legal salience is high:
+
+set minState = 3 (or 4) if there are that many state candidates above a very low bar.
+
+
+This isn’t a “hard lock.” It’s “don’t accidentally ship an all-local answer when the user asked for legal context.”
+
+
+---
+
+3) Add one short “objective legal frame” instruction to the generator prompt
+
+Even with better state chunks, the model will sometimes summarize local opinions unless you tell it to use the state lane normatively.
+
+Add a short instruction block (no new mode):
+
+> If the user’s question involves legality/liability/compliance/enforcement, include a short section explaining the relevant state/federal legal framework using STATE lane chunks, and clearly distinguish (a) facts from local sources and (b) general legal standards.
+
+
+
+This yields the “external objective perspective” feel.
+
+
+---
+
+Minimal implementation plan (Replit Agent prompt)
+
+Paste this:
+
+Implement “Legal Salience” biasing in `server/chatV2/twoLaneRetrieve.ts` with minimal changes.
+
+## 1) Add legal salience detection
+Add helper `computeLegalSalience(text: string): number`:
+- keyword count + pattern matching
+- returns 0..1
+- keywords include: liability, negligence, lawsuit, illegal, RSA, ADA, compliance, damages, immunity, permit, building code, DOJ, Public Integrity, Right to Know, injunct*, federal, civil action
+
+## 2) Make lane K/caps dynamic
+In `twoLaneRetrieve()`:
+- const salience = computeLegalSalience(userMessage + activeSituationTitle)
+- if salience >= 0.5:
+  - stateK = min(STATE_LANE_K + 4, 14)
+  - stateCap = min(STATE_CONTEXT_CAP + 2, 8)
+  - mergedCap unchanged
+Else use defaults.
+
+## 3) Ensure minimum state coverage in final context when salience high
+In `mergeAndRankChunks()`:
+- after scoring and deduping, keep two arrays: localCandidates, stateCandidates
+- Select final chunks with a bucketed picker:
+  - if salience >= 0.5:
+    - minState = 3 (only if at least 3 exist above a low relevance bar)
+  - Pick:
+    - take top minState from stateCandidates
+    - then fill remaining slots by overall score, but enforce lane caps
+- Keep existing dedupe and situation-aware boost.
+
+## 4) Boost state chunks slightly when salience high
+When computing score:
+- score += (salience * stateLaneBonus) for state chunks (small bonus like 0.05–0.15 of score scale)
+
+## 5) Add metadata return
+Return salience and counts (stateCount/localCount) for debugging.
+
+## 6) Prompt tweak (wherever system prompt is constructed)
+If salience >= 0.5 add an instruction:
+- “Include an ‘Applicable legal framework (NH + federal)’ section grounded in STATE lane chunks, clearly separating general legal standards from local facts/opinions.”
+
+## Tests
+- Given a “boardwalk liability ADA negligence” query, ensure at least 3 state chunks are included when available.
+- Ensure non-legal queries don’t bloat state lane.
+
+
+---
+
+Why this stays simple
+
+No new modes
+
+No extra multi-hop calls
+
+Only:
+
+1. a salience score
+
+
+2. dynamic K/caps
+
+
+3. a bucketed merge
+
+
+4. a tiny prompt hint
+
+
+
+
+This will materially improve “objective legal context” while keeping your existing two-lane system intact.
+
+If you paste the actual mergeAndRankChunks() signature + how chunks are represented (score fields, lane tags), I can rewrite the bucketed selection logic precisely for your code style.
