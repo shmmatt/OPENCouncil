@@ -20,7 +20,9 @@ import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging"
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { getModelForStage } from "../llm/modelRegistry";
 import { chatConfig } from "./chatConfig";
+import { computeSituationMatchScore } from "./situationExtractor";
 import type { PipelineLogContext, ScopeHint } from "./types";
+import type { SituationContext } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -48,6 +50,7 @@ export interface TwoLaneRetrieveOptions {
   preferRecent?: boolean;
   boards?: string[];
   scopeHint?: ScopeHint;
+  situationContext?: SituationContext | null;
   logContext?: PipelineLogContext;
 }
 
@@ -250,12 +253,13 @@ function dedupeChunks(chunks: LaneChunk[]): LaneChunk[] {
 }
 
 /**
- * Merge and rank chunks from both lanes
+ * Merge and rank chunks from both lanes with situation-aware re-ranking
  */
 function mergeAndRankChunks(
   localChunks: LaneChunk[],
   stateChunks: LaneChunk[],
-  questionHasRSAPattern: boolean
+  questionHasRSAPattern: boolean,
+  situationContext?: SituationContext | null
 ): LaneChunk[] {
   const localCap = chatConfig.LOCAL_CONTEXT_CAP || 10;
   const stateCap = chatConfig.STATE_CONTEXT_CAP || 5;
@@ -274,7 +278,49 @@ function mergeAndRankChunks(
   
   const deduped = dedupeChunks(merged);
   
-  return deduped.slice(0, mergedCap);
+  if (!chatConfig.ENABLE_SITUATION_ANCHORING || !situationContext) {
+    return deduped.slice(0, mergedCap);
+  }
+  
+  const situationWeight = chatConfig.SITUATION_MATCH_WEIGHT || 0.3;
+  const minOnTopicRatio = chatConfig.MIN_ON_TOPIC_CHUNK_RATIO || 0.4;
+  
+  const scoredChunks = deduped.map(chunk => {
+    const baseScore = chunk.score || 0.5;
+    const situationMatchScore = computeSituationMatchScore(
+      chunk.title + " " + chunk.content,
+      situationContext
+    );
+    const finalScore = baseScore + (situationWeight * situationMatchScore);
+    
+    return {
+      ...chunk,
+      score: finalScore,
+      situationMatchScore,
+    };
+  });
+  
+  scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
+  
+  const onTopicChunks = scoredChunks.filter(c => (c.situationMatchScore || 0) > 0.2);
+  const offTopicChunks = scoredChunks.filter(c => (c.situationMatchScore || 0) <= 0.2);
+  
+  if (onTopicChunks.length === 0) {
+    return scoredChunks.slice(0, mergedCap);
+  }
+  
+  const minOnTopicCount = Math.ceil(mergedCap * minOnTopicRatio);
+  const guaranteedOnTopic = onTopicChunks.slice(0, Math.min(minOnTopicCount, onTopicChunks.length));
+  const remainingSlots = mergedCap - guaranteedOnTopic.length;
+  
+  const remainingOnTopic = onTopicChunks.slice(guaranteedOnTopic.length);
+  const remaining = [...remainingOnTopic, ...offTopicChunks]
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, remainingSlots);
+  
+  const finalChunks = [...guaranteedOnTopic, ...remaining];
+  
+  return finalChunks.map(({ situationMatchScore, ...chunk }) => chunk);
 }
 
 /**
@@ -316,6 +362,7 @@ export async function twoLaneRetrieve(
     preferRecent,
     boards,
     scopeHint,
+    situationContext,
     logContext,
   } = options;
   
@@ -410,8 +457,19 @@ export async function twoLaneRetrieve(
   const mergedChunks = mergeAndRankChunks(
     localResult.chunks,
     stateResult.chunks,
-    questionHasRSA
+    questionHasRSA,
+    situationContext
   );
+  
+  if (situationContext && chatConfig.ENABLE_SITUATION_ANCHORING) {
+    logDebug("two_lane_situation_applied", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "twoLaneRetrieve",
+      situationTitle: situationContext.title,
+      entityCount: situationContext.entities.length,
+    });
+  }
   
   const durationMs = Date.now() - startTime;
   

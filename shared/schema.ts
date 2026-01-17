@@ -121,6 +121,15 @@ export const anonymousUsers = pgTable("anonymous_users", {
   defaultTown: text("default_town"), // Town preference for anonymous users
 });
 
+// Situation Context: Tracks the current topic/situation for topic continuity
+export interface SituationContext {
+  title: string;
+  entities: string[];
+  timeRange?: { start?: string; end?: string };
+  sourceRefs?: string[];
+  lastUpdatedAt: string;
+}
+
 // Chat Sessions: Updated with user/anon tracking
 export const chatSessions = pgTable("chat_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -128,6 +137,7 @@ export const chatSessions = pgTable("chat_sessions", {
   userId: varchar("user_id").references(() => users.id),
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
   townPreference: text("town_preference"), // Session-level town preference override
+  situationContext: jsonb("situation_context").$type<SituationContext>(), // Current topic/situation for anchoring
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

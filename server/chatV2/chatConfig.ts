@@ -196,6 +196,50 @@ export const chatConfig = {
    */
   COVERAGE_THRESHOLD_STANDARD: 0.7,
   COVERAGE_THRESHOLD_DEEP: 0.85,
+
+  // =====================================================
+  // SITUATION ANCHORING / TOPIC CONTINUITY SETTINGS
+  // =====================================================
+
+  /**
+   * Enable situation anchoring to maintain topic continuity.
+   * When true, the assistant will track the current situation and
+   * prefer on-topic chunks during retrieval.
+   */
+  ENABLE_SITUATION_ANCHORING: true,
+
+  /**
+   * Use LLM for situation extraction (more accurate but slower).
+   * When false, uses fast heuristic-based extraction only.
+   */
+  ENABLE_LLM_SITUATION_EXTRACTION: false,
+
+  /**
+   * Weight multiplier for situation-matching chunks during re-ranking.
+   * Higher values make on-topic chunks more likely to appear in context.
+   * Range: 0.0 (disabled) to 1.0 (strong preference)
+   */
+  SITUATION_MATCH_WEIGHT: 0.3,
+
+  /**
+   * Minimum percentage of on-topic chunks to include in context.
+   * If situation context exists and matching chunks are available,
+   * at least this percentage will be from on-topic sources.
+   * Range: 0.0 to 1.0
+   */
+  MIN_ON_TOPIC_CHUNK_RATIO: 0.4,
+
+  /**
+   * Enable post-generation drift detection.
+   * When true, checks if the answer drifted to unrelated topics
+   * and attempts to regenerate with stricter anchoring.
+   */
+  ENABLE_DRIFT_DETECTION: true,
+
+  /**
+   * Maximum regeneration attempts when drift is detected.
+   */
+  MAX_DRIFT_REGENERATION_ATTEMPTS: 1,
 };
 
 /**

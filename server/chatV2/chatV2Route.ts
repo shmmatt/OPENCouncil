@@ -8,6 +8,10 @@ import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../ut
 import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
 import { resolveTownPreference, buildTrimmedHistoryForAnswer } from "./pipelineUtils";
 import { runUnifiedChatPipeline } from "./unifiedPipeline";
+import { extractSituationHeuristic } from "./situationExtractor";
+import { detectDrift, shouldRegenerate } from "./driftDetector";
+import { chatConfig } from "./chatConfig";
+import type { SituationContext } from "@shared/schema";
 import type {
   ChatV2Request,
   ChatV2Response,
@@ -183,17 +187,98 @@ export function registerChatV2Routes(app: Express): void {
         resolvedTown,
       });
 
-      // SIMPLIFIED PIPELINE: Two-lane retrieval + single synthesis
+      // SITUATION ANCHORING: Extract and update situation context
+      let situationContext: SituationContext | null = null;
+      
+      if (chatConfig.ENABLE_SITUATION_ANCHORING) {
+        const existingContext = await storage.getSessionSituationContext(sessionId);
+        const hasUserArtifact = false;
+        
+        const extractionResult = extractSituationHeuristic(
+          trimmedContent,
+          existingContext,
+          hasUserArtifact
+        );
+        
+        if (extractionResult.shouldUpdate && extractionResult.newContext) {
+          situationContext = extractionResult.newContext;
+          await storage.setSessionSituationContext(sessionId, situationContext);
+          
+          logDebug("situation_context_updated", {
+            ...logCtx,
+            stage: "situation_extraction",
+            newTitle: situationContext.title,
+            entityCount: situationContext.entities.length,
+            confidence: extractionResult.confidence,
+            reason: extractionResult.reason,
+          });
+        } else if (existingContext) {
+          situationContext = existingContext;
+          
+          logDebug("situation_context_maintained", {
+            ...logCtx,
+            stage: "situation_extraction",
+            title: existingContext.title,
+            reason: extractionResult.reason,
+          });
+        }
+      }
+
+      // SIMPLIFIED PIPELINE: Two-lane retrieval + single synthesis with situation context
       const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
       
-      const pipelineResult = await runUnifiedChatPipeline({
+      let pipelineResult = await runUnifiedChatPipeline({
         question: trimmedContent,
         sessionHistory: trimmedHistory,
         townPreference: resolvedTown,
+        situationContext,
         logContext: logCtx,
       });
 
-      const answerText = pipelineResult.answerText;
+      let answerText = pipelineResult.answerText;
+      
+      // DRIFT DETECTION: Check for topic drift and regenerate if needed
+      if (chatConfig.ENABLE_DRIFT_DETECTION && situationContext) {
+        const driftResult = detectDrift(answerText, situationContext, logCtx);
+        
+        if (shouldRegenerate(driftResult) && chatConfig.MAX_DRIFT_REGENERATION_ATTEMPTS > 0) {
+          logDebug("drift_detected_regenerating", {
+            ...logCtx,
+            stage: "drift_detection",
+            driftedEntities: driftResult.driftedToEntities,
+            severity: driftResult.severity,
+          });
+          
+          // Regenerate with stricter instructions
+          const regeneratedResult = await runUnifiedChatPipeline({
+            question: `${driftResult.regenerationHint}\n\nOriginal question: ${trimmedContent}`,
+            sessionHistory: trimmedHistory,
+            townPreference: resolvedTown,
+            situationContext,
+            logContext: logCtx,
+          });
+          
+          // Use regenerated answer if it's not worse
+          const newDriftResult = detectDrift(regeneratedResult.answerText, situationContext, logCtx);
+          if (!newDriftResult.hasDrift || newDriftResult.severity === "none") {
+            answerText = regeneratedResult.answerText;
+            pipelineResult = regeneratedResult;
+            
+            logDebug("drift_regeneration_successful", {
+              ...logCtx,
+              stage: "drift_detection",
+              originalDrift: driftResult.driftedToEntities,
+              newAnswerLength: answerText.length,
+            });
+          } else {
+            logDebug("drift_regeneration_still_drifted", {
+              ...logCtx,
+              stage: "drift_detection",
+              message: "Regenerated answer still has drift, using original",
+            });
+          }
+        }
+      }
       const sourceDocumentNames = pipelineResult.sourceDocumentNames;
       const docSourceType = pipelineResult.docSourceType;
       const docSourceTown = pipelineResult.docSourceTown;
@@ -672,7 +757,7 @@ function checkScopeAnswerMismatch(
     const hasLocalReferences = localPatterns.some(pattern => pattern.test(answer));
 
     if (hasLocalReferences) {
-      logWarning("scope_answer_mismatch_detected", {
+      logWarn("scope_answer_mismatch_detected", {
         requestId: logCtx.requestId,
         sessionId: logCtx.sessionId,
         stage: "sanity_check",

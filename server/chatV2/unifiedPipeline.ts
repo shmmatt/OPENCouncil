@@ -16,7 +16,9 @@ import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging"
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { getModelForStage } from "../llm/modelRegistry";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { chatConfig } from "./chatConfig";
 import type { PipelineLogContext, ChatHistoryMessage, DocSourceType } from "./types";
+import type { SituationContext } from "@shared/schema";
 import { twoLaneRetrieve, extractTwoLaneDocNames, buildTwoLaneSnippetText, classifyTwoLaneDocSource, type LaneChunk, type TwoLaneRetrievalResult } from "./twoLaneRetrieve";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -25,6 +27,7 @@ export interface UnifiedPipelineOptions {
   question: string;
   sessionHistory: ChatHistoryMessage[];
   townPreference?: string | null;
+  situationContext?: SituationContext | null;
   logContext?: PipelineLogContext;
 }
 
@@ -43,7 +46,7 @@ export interface UnifiedPipelineResult {
 export async function runUnifiedChatPipeline(
   options: UnifiedPipelineOptions
 ): Promise<UnifiedPipelineResult> {
-  const { question, sessionHistory, townPreference, logContext } = options;
+  const { question, sessionHistory, townPreference, situationContext, logContext } = options;
   const startTime = Date.now();
 
   logDebug("unified_pipeline_start", {
@@ -53,13 +56,16 @@ export async function runUnifiedChatPipeline(
     questionLength: question.length,
     townPreference,
     historyLength: sessionHistory.length,
+    hasSituationContext: !!situationContext,
+    situationTitle: situationContext?.title,
   });
 
-  // Step 1: Two-lane parallel retrieval
+  // Step 1: Two-lane parallel retrieval with situation context
   const retrievalResult = await twoLaneRetrieve({
     userQuestion: question,
     rerankedQuestion: question,
     townPreference,
+    situationContext,
     logContext,
   });
 
@@ -76,12 +82,13 @@ export async function runUnifiedChatPipeline(
     retrievalDurationMs: retrievalResult.debug.durationMs,
   });
 
-  // Step 2: Synthesize answer from merged chunks
+  // Step 2: Synthesize answer from merged chunks with situation anchoring
   const answerText = await synthesizeUnifiedAnswer(
     question,
     retrievalResult,
     sessionHistory,
     townPreference,
+    situationContext,
     logContext
   );
 
@@ -113,13 +120,51 @@ export async function runUnifiedChatPipeline(
 }
 
 /**
- * Simple synthesis prompt - direct and concise
+ * Build situation anchoring instructions for the system prompt
+ */
+function buildSituationAnchoringInstructions(situationContext: SituationContext | null | undefined): string {
+  if (!chatConfig.ENABLE_SITUATION_ANCHORING || !situationContext) {
+    return "";
+  }
+  
+  const entitiesList = situationContext.entities.slice(0, 6).join(", ");
+  
+  return `
+
+=== STRICT TOPIC CONTINUITY RULES ===
+CURRENT SITUATION: "${situationContext.title}"
+KEY ENTITIES: ${entitiesList}
+
+You MUST follow these topic continuity rules:
+
+1. ANCHORING REQUIREMENT: Your answer MUST be about "${situationContext.title}". Start your response by explicitly referring to the current situation.
+
+2. NO TOPIC SUBSTITUTION: Even if you find documents about other cases, properties, or matters that seem relevant, do NOT use them as your primary answer. The user is asking about "${situationContext.title}" - not other matters.
+
+3. ANALOGY RULE: You may ONLY reference other cases/properties/matters if you:
+   a) Have already answered within the current situation context, AND
+   b) Explicitly label the reference as separate (e.g., "As a separate example, in an unrelated matter involving [X]...")
+   
+4. CONTEXTUAL REFUSAL: If the retrieved documents don't contain information about "${situationContext.title}", acknowledge this gap directly. Say something like: "The available documents don't contain specific information about [topic] in relation to ${situationContext.title}."
+
+5. ENTITY PRIORITY: Prioritize information containing these entities: ${entitiesList}
+
+VIOLATION EXAMPLE (DO NOT DO THIS):
+- User asks about ADA compliance for Constitution Park boardwalk
+- Documents contain info about Brown property enforcement
+- BAD: "The Brown property case shows that..." (substituted unrelated case)
+- GOOD: "Regarding the Constitution Park boardwalk ADA requirements, the documents show..." (anchored to situation)`;
+}
+
+/**
+ * Simple synthesis prompt - direct and concise with situation anchoring
  */
 async function synthesizeUnifiedAnswer(
   question: string,
   retrievalResult: TwoLaneRetrievalResult,
   history: ChatHistoryMessage[],
   townPreference: string | null | undefined,
+  situationContext: SituationContext | null | undefined,
   logContext?: PipelineLogContext
 ): Promise<string> {
   const { model: synthesisModel } = getModelForStage('complexSynthesis');
@@ -141,6 +186,9 @@ async function synthesizeUnifiedAnswer(
     : "";
 
   const townName = townPreference || "the municipality";
+  
+  // Build situation anchoring instructions
+  const situationInstructions = buildSituationAnchoringInstructions(situationContext);
 
   const systemPrompt = `You are an assistant for New Hampshire municipal officials. Answer questions using the provided document excerpts.
 
@@ -150,7 +198,7 @@ Guidelines:
 - Be accurate and helpful
 - If the documents don't fully answer the question, acknowledge limitations
 - Keep answers focused and practical
-- Target around 800-1500 characters for most answers`;
+- Target around 800-1500 characters for most answers${situationInstructions}`;
 
   const userPrompt = `${historyContext}
 QUESTION: ${question}

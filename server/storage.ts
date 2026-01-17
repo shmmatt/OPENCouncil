@@ -40,6 +40,7 @@ import type {
   InsertChatAnalytics,
   MinutesUpdateItem,
   ActorIdentifier,
+  SituationContext,
 } from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -136,6 +137,10 @@ export interface IStorage {
   getActorDefaultTown(actor: ActorIdentifier): Promise<string | null>;
   setSessionTownPreference(sessionId: string, town: string): Promise<void>;
   getSessionTownPreference(sessionId: string): Promise<string | null>;
+
+  // Situation context operations (topic continuity)
+  setSessionSituationContext(sessionId: string, context: SituationContext): Promise<void>;
+  getSessionSituationContext(sessionId: string): Promise<SituationContext | null>;
 
   // Recent minutes updates
   getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]>;
@@ -684,6 +689,21 @@ export class DatabaseStorage implements IStorage {
       .from(schema.chatSessions)
       .where(eq(schema.chatSessions.id, sessionId));
     return session?.townPreference || null;
+  }
+
+  async setSessionSituationContext(sessionId: string, context: SituationContext): Promise<void> {
+    await db
+      .update(schema.chatSessions)
+      .set({ situationContext: context, updatedAt: new Date() })
+      .where(eq(schema.chatSessions.id, sessionId));
+  }
+
+  async getSessionSituationContext(sessionId: string): Promise<SituationContext | null> {
+    const [session] = await db
+      .select({ situationContext: schema.chatSessions.situationContext })
+      .from(schema.chatSessions)
+      .where(eq(schema.chatSessions.id, sessionId));
+    return session?.situationContext || null;
   }
 
   // Recent minutes updates - canonical query using logicalDocuments + documentVersions
