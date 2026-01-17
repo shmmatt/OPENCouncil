@@ -144,7 +144,7 @@ export interface IStorage {
   getSessionSituationContext(sessionId: string): Promise<SituationContext | null>;
 
   // Session sources operations (ephemeral user-provided content)
-  addSessionSource(sessionId: string, source: SessionSource): Promise<void>;
+  addSessionSource(sessionId: string, source: SessionSource, maxSources?: number): Promise<void>;
   getSessionSources(sessionId: string): Promise<SessionSource[]>;
   clearSessionSources(sessionId: string): Promise<void>;
 
@@ -712,14 +712,13 @@ export class DatabaseStorage implements IStorage {
     return session?.situationContext || null;
   }
 
-  async addSessionSource(sessionId: string, source: SessionSource): Promise<void> {
+  async addSessionSource(sessionId: string, source: SessionSource, maxSources: number = 3): Promise<void> {
     const [session] = await db
       .select({ sessionSources: schema.chatSessions.sessionSources })
       .from(schema.chatSessions)
       .where(eq(schema.chatSessions.id, sessionId));
     
     const existingSources = session?.sessionSources || [];
-    const maxSources = 3;
     
     const updatedSources = [...existingSources, source].slice(-maxSources);
     
