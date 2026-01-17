@@ -89,6 +89,22 @@ The chat system includes guardrails to maintain topic continuity across follow-u
 - `ENABLE_DRIFT_DETECTION` - Enable post-generation drift check (default: true)
 - `MAX_DRIFT_REGENERATION_ATTEMPTS` - Max regeneration attempts (default: 1)
 
+### Legal Salience Biasing
+The two-lane retrieval system includes legal salience detection to improve answers for legal/liability/compliance questions.
+
+**How It Works**:
+1. **Salience Detection**: `computeLegalSalience()` analyzes the user question for legal keywords (liability, ADA, RSA, compliance, etc.) and patterns ("can they", "is this allowed", "what law")
+2. **Dynamic Lane Tuning**: When salience >= 0.5:
+   - State lane K increases by 4 (from 8 to 12)
+   - State context cap increases by 2 (from 5 to 7)
+   - State chunks receive a small score boost (0.12 * salience)
+3. **Guaranteed State Coverage**: Ensures at least 3 state chunks in merged results when salience is high
+4. **Prompt Enhancement**: Adds legal framework instructions requesting the AI to include an "Applicable legal framework (NH + federal)" section
+
+**Key Files**:
+- `server/chatV2/twoLaneRetrieve.ts` - Contains `computeLegalSalience()` and dynamic retrieval logic
+- `server/chatV2/unifiedPipeline.ts` - Contains `buildLegalFrameworkInstructions()` for prompt enhancement
+
 ### Build & Deployment
 The application uses Vite for frontend development and esbuild for backend bundling. It is designed for single-server deployment, serving static files and the API, with external managed PostgreSQL and environment variable-based configuration.
 
