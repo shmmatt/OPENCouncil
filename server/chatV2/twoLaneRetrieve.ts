@@ -22,9 +22,34 @@ import { getModelForStage } from "../llm/modelRegistry";
 import { chatConfig } from "./chatConfig";
 import { computeSituationMatchScore } from "./situationExtractor";
 import type { PipelineLogContext, ScopeHint } from "./types";
-import type { SituationContext } from "@shared/schema";
+import type { SituationContext, SessionSource } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+/**
+ * Issue map extracted from query + situation + session sources
+ * Used for topic alignment scoring and query expansion
+ */
+export interface IssueMap {
+  entities: string[];
+  actions: string[];
+  legalTopics: string[];
+  boards: string[];
+  propertyRef?: string;
+  dateRefs: string[];
+}
+
+/**
+ * Result from confidence/alignment scoring
+ */
+export interface RetrievalQualityScore {
+  confidence: number;
+  topicAlignment: number;
+  driftDetected: boolean;
+  driftedToEntities: string[];
+  needsEscalation: boolean;
+  escalationReason: string | null;
+}
 
 /**
  * A retrieved chunk with lane labeling for citation purposes
@@ -51,6 +76,7 @@ export interface TwoLaneRetrieveOptions {
   boards?: string[];
   scopeHint?: ScopeHint;
   situationContext?: SituationContext | null;
+  sessionSources?: SessionSource[];
   logContext?: PipelineLogContext;
 }
 
@@ -61,6 +87,12 @@ export interface TwoLaneRetrievalResult {
   localChunks: LaneChunk[];
   stateChunks: LaneChunk[];
   mergedTopChunks: LaneChunk[];
+  archiveChunksFound: boolean;
+  usedSecondPass: boolean;
+  retrievalConfidence: number;
+  topicAlignment: number;
+  driftDetected: boolean;
+  issueMap: IssueMap | null;
   debug: {
     localCount: number;
     stateCount: number;
@@ -69,7 +101,10 @@ export interface TwoLaneRetrievalResult {
     topStateDocs: string[];
     localQueryUsed: string;
     stateQueryUsed: string;
+    secondPassLocalQuery?: string;
+    secondPassStateQuery?: string;
     durationMs: number;
+    escalationReason?: string;
   };
 }
 
@@ -99,6 +134,341 @@ const LOCAL_DOC_TYPE_HINTS = [
   "selectboard",
   "planning board",
 ];
+
+/**
+ * Board name patterns for extraction
+ */
+const BOARD_PATTERNS = [
+  /\b(selectboard|selectmen|board\s+of\s+selectmen)\b/i,
+  /\b(planning\s+board)\b/i,
+  /\b(zoning\s+board|ZBA)\b/i,
+  /\b(conservation\s+commission)\b/i,
+  /\b(budget\s+committee)\b/i,
+  /\b(school\s+board)\b/i,
+  /\b(library\s+trustees?)\b/i,
+  /\b(town\s+meeting)\b/i,
+];
+
+/**
+ * Legal topic patterns for RSA/law extraction
+ */
+const LEGAL_TOPIC_PATTERNS = [
+  { pattern: /\bRSA\s+\d+[:\-]\d+/gi, topic: "RSA statute" },
+  { pattern: /\bRight[\s-]to[\s-]Know/gi, topic: "Right-to-Know law" },
+  { pattern: /\bpublic\s+hearing/gi, topic: "public hearing requirements" },
+  { pattern: /\bdefault\s+budget/gi, topic: "default budget" },
+  { pattern: /\bwarrant\s+article/gi, topic: "warrant articles" },
+  { pattern: /\bnotice\s+requirement/gi, topic: "notice requirements" },
+  { pattern: /\bopen\s+meeting/gi, topic: "open meeting law" },
+  { pattern: /\brecusal/gi, topic: "recusal/conflict of interest" },
+  { pattern: /\bvote|voting/gi, topic: "voting procedures" },
+  { pattern: /\bsit\s*-?\s*lien/gi, topic: "sit-lien" },
+  { pattern: /\bvariance/gi, topic: "zoning variance" },
+  { pattern: /\bsubdivision/gi, topic: "subdivision" },
+  { pattern: /\bexemption/gi, topic: "tax exemption" },
+];
+
+/**
+ * Extract issue map from question + situation + session sources
+ * This identifies key entities, actions, legal topics, and boards
+ */
+export function extractIssueMap(
+  question: string,
+  situationContext?: SituationContext | null,
+  sessionSources?: SessionSource[]
+): IssueMap {
+  const combinedText = [
+    question,
+    situationContext?.title || "",
+    ...(situationContext?.entities || []),
+    ...(sessionSources || []).map(s => s.text.slice(0, 2000)),
+  ].join(" ");
+
+  const entities: string[] = [];
+  const actions: string[] = [];
+  const legalTopics: string[] = [];
+  const boards: string[] = [];
+  const dateRefs: string[] = [];
+  let propertyRef: string | undefined;
+
+  if (situationContext?.entities) {
+    entities.push(...situationContext.entities);
+  }
+
+  const propertyPatterns = [
+    /\b(\d+)\s+([\w\s]+(?:road|street|lane|drive|avenue|way|place|court|circle|boulevard))\b/gi,
+    /\bmap\s+\d+\s+lot\s+\d+/gi,
+    /\btax\s+map\s+\d+/gi,
+  ];
+  for (const pattern of propertyPatterns) {
+    const match = combinedText.match(pattern);
+    if (match && !propertyRef) {
+      propertyRef = match[0];
+    }
+  }
+
+  for (const bp of BOARD_PATTERNS) {
+    const match = combinedText.match(bp);
+    if (match) {
+      boards.push(match[0].toLowerCase());
+    }
+  }
+
+  for (const lt of LEGAL_TOPIC_PATTERNS) {
+    if (lt.pattern.test(combinedText)) {
+      legalTopics.push(lt.topic);
+    }
+  }
+
+  const actionPatterns = [
+    /\b(approved|denied|tabled|continued|voted|granted|rejected)\b/gi,
+    /\b(appeal|amend|reconsider|rehearing)\b/gi,
+    /\b(apply|submit|request)\b/gi,
+  ];
+  for (const ap of actionPatterns) {
+    const matches = combinedText.match(ap);
+    if (matches) {
+      actions.push(...matches.map(m => m.toLowerCase()));
+    }
+  }
+
+  const datePatterns = [
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s*\d{4}\b/gi,
+    /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g,
+  ];
+  for (const dp of datePatterns) {
+    const matches = combinedText.match(dp);
+    if (matches) {
+      dateRefs.push(...matches.slice(0, 3));
+    }
+  }
+
+  return {
+    entities: Array.from(new Set(entities)).slice(0, 10),
+    actions: Array.from(new Set(actions)).slice(0, 5),
+    legalTopics: Array.from(new Set(legalTopics)).slice(0, 5),
+    boards: Array.from(new Set(boards)).slice(0, 4),
+    propertyRef,
+    dateRefs: Array.from(new Set(dateRefs)).slice(0, 3),
+  };
+}
+
+/**
+ * Compute retrieval confidence based on chunk scores and count
+ * Returns 0-1 where 1 = high confidence
+ */
+export function computeRetrievalConfidence(
+  chunks: LaneChunk[],
+  issueMap: IssueMap
+): number {
+  if (chunks.length === 0) return 0;
+
+  const avgScore = chunks.reduce((sum, c) => sum + (c.score || 0.3), 0) / chunks.length;
+  
+  const countFactor = Math.min(chunks.length / 5, 1.0);
+  
+  const hasKeyEntity = issueMap.entities.length > 0 
+    ? chunks.some(c => 
+        issueMap.entities.some(e => 
+          c.content.toLowerCase().includes(e.toLowerCase()) ||
+          c.title.toLowerCase().includes(e.toLowerCase())
+        )
+      )
+    : true;
+  
+  const entityBonus = hasKeyEntity ? 0.1 : 0;
+  
+  return Math.min(1.0, (avgScore * 0.6) + (countFactor * 0.3) + entityBonus);
+}
+
+/**
+ * Compute topic alignment between chunks and the issue map
+ * Returns 0-1 where 1 = highly aligned
+ */
+export function computeTopicAlignment(
+  chunks: LaneChunk[],
+  issueMap: IssueMap
+): number {
+  if (chunks.length === 0) return 0;
+  if (issueMap.entities.length === 0 && issueMap.legalTopics.length === 0) return 1.0;
+
+  const alignmentScores = chunks.map(chunk => {
+    const text = (chunk.title + " " + chunk.content).toLowerCase();
+    
+    let entityHits = 0;
+    for (const entity of issueMap.entities) {
+      if (text.includes(entity.toLowerCase())) {
+        entityHits++;
+      }
+    }
+    const entityScore = issueMap.entities.length > 0 
+      ? entityHits / issueMap.entities.length 
+      : 0.5;
+
+    let topicHits = 0;
+    for (const topic of issueMap.legalTopics) {
+      if (text.includes(topic.toLowerCase())) {
+        topicHits++;
+      }
+    }
+    const topicScore = issueMap.legalTopics.length > 0 
+      ? topicHits / issueMap.legalTopics.length 
+      : 0.5;
+
+    let boardHits = 0;
+    for (const board of issueMap.boards) {
+      if (text.includes(board.toLowerCase())) {
+        boardHits++;
+      }
+    }
+    const boardScore = issueMap.boards.length > 0 
+      ? boardHits / issueMap.boards.length 
+      : 0.5;
+
+    return (entityScore * 0.5) + (topicScore * 0.3) + (boardScore * 0.2);
+  });
+
+  return alignmentScores.reduce((sum, s) => sum + s, 0) / alignmentScores.length;
+}
+
+/**
+ * Detect drift in retrieved chunks (chunks about wrong entity/case)
+ */
+export function detectDriftInRetrieval(
+  chunks: LaneChunk[],
+  issueMap: IssueMap
+): { hasDrift: boolean; driftedToEntities: string[] } {
+  if (chunks.length === 0 || issueMap.entities.length === 0) {
+    return { hasDrift: false, driftedToEntities: [] };
+  }
+
+  const expectedEntities = new Set(issueMap.entities.map(e => e.toLowerCase()));
+  const foreignEntityCounts = new Map<string, number>();
+
+  const genericEntityPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:property|case|appeal|application|variance|subdivision)\b/g;
+
+  for (const chunk of chunks) {
+    const text = chunk.title + " " + chunk.content;
+    let match;
+    while ((match = genericEntityPattern.exec(text)) !== null) {
+      const entity = match[1].toLowerCase();
+      if (!expectedEntities.has(entity) && entity.length > 3) {
+        foreignEntityCounts.set(entity, (foreignEntityCounts.get(entity) || 0) + 1);
+      }
+    }
+  }
+
+  const driftedEntities = Array.from(foreignEntityCounts.entries())
+    .filter(([_, count]) => count >= 2)
+    .map(([entity]) => entity);
+
+  const hasDrift = driftedEntities.length > 0 && 
+    driftedEntities.some(de => {
+      const deCount = foreignEntityCounts.get(de) || 0;
+      return deCount >= Math.ceil(chunks.length * 0.3);
+    });
+
+  return {
+    hasDrift,
+    driftedToEntities: driftedEntities,
+  };
+}
+
+/**
+ * Check if any high-stakes keywords are present in the question
+ */
+function hasHighStakesKeywords(question: string): boolean {
+  return chatConfig.HIGH_STAKES_LEGAL_KEYWORDS.some((kw: string) => 
+    question.toLowerCase().includes(kw.toLowerCase())
+  );
+}
+
+/**
+ * Evaluate whether retrieval quality requires escalation (second pass)
+ */
+export function evaluateRetrievalQuality(
+  chunks: LaneChunk[],
+  issueMap: IssueMap,
+  question: string
+): RetrievalQualityScore {
+  const confidence = computeRetrievalConfidence(chunks, issueMap);
+  const topicAlignment = computeTopicAlignment(chunks, issueMap);
+  const driftResult = detectDriftInRetrieval(chunks, issueMap);
+
+  const belowConfidenceThreshold = confidence < chatConfig.RETRIEVAL_CONFIDENCE_THRESHOLD;
+  const belowAlignmentThreshold = topicAlignment < chatConfig.TOPIC_ALIGNMENT_THRESHOLD;
+  const isHighStakes = hasHighStakesKeywords(question);
+
+  let needsEscalation = false;
+  let escalationReason: string | null = null;
+
+  if (belowConfidenceThreshold) {
+    needsEscalation = true;
+    escalationReason = `Low confidence: ${confidence.toFixed(2)} < ${chatConfig.RETRIEVAL_CONFIDENCE_THRESHOLD}`;
+  } else if (belowAlignmentThreshold) {
+    needsEscalation = true;
+    escalationReason = `Low topic alignment: ${topicAlignment.toFixed(2)} < ${chatConfig.TOPIC_ALIGNMENT_THRESHOLD}`;
+  } else if (driftResult.hasDrift) {
+    needsEscalation = true;
+    escalationReason = `Drift detected to: ${driftResult.driftedToEntities.join(", ")}`;
+  } else if (isHighStakes && confidence < 0.5) {
+    needsEscalation = true;
+    escalationReason = `High-stakes question with moderate confidence: ${confidence.toFixed(2)}`;
+  }
+
+  return {
+    confidence,
+    topicAlignment,
+    driftDetected: driftResult.hasDrift,
+    driftedToEntities: driftResult.driftedToEntities,
+    needsEscalation,
+    escalationReason,
+  };
+}
+
+/**
+ * Generate expanded queries for second-pass retrieval
+ */
+export function generateExpandedQueries(
+  originalQuestion: string,
+  issueMap: IssueMap,
+  lane: "local" | "state",
+  townPreference?: string | null
+): string {
+  const entityStr = issueMap.entities.slice(0, 3).join(", ");
+  const boardStr = issueMap.boards.slice(0, 2).join(", ");
+  const topicStr = issueMap.legalTopics.slice(0, 2).join(", ");
+
+  if (lane === "local") {
+    let query = originalQuestion;
+    if (entityStr) {
+      query += ` MUST include: ${entityStr}`;
+    }
+    if (boardStr) {
+      query += ` Board: ${boardStr}`;
+    }
+    if (issueMap.propertyRef) {
+      query += ` Property: ${issueMap.propertyRef}`;
+    }
+    if (townPreference) {
+      query += ` (Town of ${townPreference})`;
+    }
+    if (issueMap.dateRefs.length > 0) {
+      query += ` Date: ${issueMap.dateRefs[0]}`;
+    }
+    return query;
+  } else {
+    let query = originalQuestion;
+    if (topicStr) {
+      query += ` Legal topics: ${topicStr}`;
+    }
+    query += ` [Context: NH RSA, municipal law, NHMA guidance]`;
+    if (issueMap.legalTopics.includes("Right-to-Know law")) {
+      query += ` RSA 91-A`;
+    }
+    return query;
+  }
+}
 
 /**
  * Build the local lane query with town-biased context
@@ -349,6 +719,9 @@ function hasRSAPattern(question: string): boolean {
  * 
  * Executes local and statewide retrieval in parallel, then merges and dedupes results.
  * For most queries, this provides both town-specific facts and statewide context upfront.
+ * 
+ * Adaptive multi-hop retrieval: If first pass has low confidence/alignment or drift,
+ * automatically generates expanded queries and runs a second pass.
  */
 export async function twoLaneRetrieve(
   options: TwoLaneRetrieveOptions
@@ -363,10 +736,33 @@ export async function twoLaneRetrieve(
     boards,
     scopeHint,
     situationContext,
+    sessionSources,
     logContext,
   } = options;
   
   const startTime = Date.now();
+  
+  const emptyResult: TwoLaneRetrievalResult = {
+    localChunks: [],
+    stateChunks: [],
+    mergedTopChunks: [],
+    archiveChunksFound: false,
+    usedSecondPass: false,
+    retrievalConfidence: 0,
+    topicAlignment: 0,
+    driftDetected: false,
+    issueMap: null,
+    debug: {
+      localCount: 0,
+      stateCount: 0,
+      mergedCount: 0,
+      topLocalDocs: [],
+      topStateDocs: [],
+      localQueryUsed: "",
+      stateQueryUsed: "",
+      durationMs: 0,
+    },
+  };
   
   if (!chatConfig.ENABLE_PARALLEL_STATE_LANE) {
     logDebug("two_lane_disabled", {
@@ -376,21 +772,7 @@ export async function twoLaneRetrieve(
       reason: "ENABLE_PARALLEL_STATE_LANE is false",
     });
     
-    return {
-      localChunks: [],
-      stateChunks: [],
-      mergedTopChunks: [],
-      debug: {
-        localCount: 0,
-        stateCount: 0,
-        mergedCount: 0,
-        topLocalDocs: [],
-        topStateDocs: [],
-        localQueryUsed: "",
-        stateQueryUsed: "",
-        durationMs: 0,
-      },
-    };
+    return emptyResult;
   }
   
   const storeId = await getOrCreateFileSearchStoreId();
@@ -403,22 +785,20 @@ export async function twoLaneRetrieve(
       reason: "No file search store available",
     });
     
-    return {
-      localChunks: [],
-      stateChunks: [],
-      mergedTopChunks: [],
-      debug: {
-        localCount: 0,
-        stateCount: 0,
-        mergedCount: 0,
-        topLocalDocs: [],
-        topStateDocs: [],
-        localQueryUsed: "",
-        stateQueryUsed: "",
-        durationMs: Date.now() - startTime,
-      },
-    };
+    return { ...emptyResult, debug: { ...emptyResult.debug, durationMs: Date.now() - startTime } };
   }
+  
+  const issueMap = extractIssueMap(userQuestion, situationContext, sessionSources);
+  
+  logDebug("two_lane_issue_map_extracted", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "twoLaneRetrieve",
+    entityCount: issueMap.entities.length,
+    legalTopicCount: issueMap.legalTopics.length,
+    boardCount: issueMap.boards.length,
+    propertyRef: issueMap.propertyRef,
+  });
   
   const localQuery = buildLocalLaneQuery(rerankedQuestion, townPreference, boards, categories);
   const stateQuery = buildStateLaneQuery(rerankedQuestion);
@@ -431,6 +811,7 @@ export async function twoLaneRetrieve(
     stateQuery: stateQuery.slice(0, 200),
     scopeHint,
     townPreference,
+    hasSessionSources: (sessionSources || []).length > 0,
   });
   
   const localK = chatConfig.LOCAL_LANE_K || 12;
@@ -454,12 +835,84 @@ export async function twoLaneRetrieve(
   ]);
   
   const questionHasRSA = hasRSAPattern(userQuestion);
-  const mergedChunks = mergeAndRankChunks(
+  let mergedChunks = mergeAndRankChunks(
     localResult.chunks,
     stateResult.chunks,
     questionHasRSA,
     situationContext
   );
+  
+  const qualityScore = evaluateRetrievalQuality(mergedChunks, issueMap, userQuestion);
+  
+  logDebug("two_lane_quality_evaluation", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "twoLaneRetrieve",
+    confidence: qualityScore.confidence,
+    topicAlignment: qualityScore.topicAlignment,
+    driftDetected: qualityScore.driftDetected,
+    driftedToEntities: qualityScore.driftedToEntities,
+    needsEscalation: qualityScore.needsEscalation,
+    escalationReason: qualityScore.escalationReason,
+  });
+  
+  let usedSecondPass = false;
+  let secondPassLocalQuery: string | undefined;
+  let secondPassStateQuery: string | undefined;
+  
+  if (qualityScore.needsEscalation && chatConfig.ENABLE_SECOND_PASS_RETRIEVAL) {
+    logDebug("two_lane_second_pass_triggered", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "twoLaneRetrieve",
+      reason: qualityScore.escalationReason,
+    });
+    
+    secondPassLocalQuery = generateExpandedQueries(userQuestion, issueMap, "local", townPreference);
+    secondPassStateQuery = generateExpandedQueries(userQuestion, issueMap, "state", townPreference);
+    
+    const secondPassLocalK = chatConfig.SECOND_PASS_LOCAL_LANE_K || 8;
+    const secondPassStateK = chatConfig.SECOND_PASS_STATE_LANE_K || 6;
+    
+    const [secondLocalResult, secondStateResult] = await Promise.all([
+      executeLaneRetrieval({
+        query: secondPassLocalQuery,
+        storeId,
+        lane: "local",
+        maxResults: secondPassLocalK,
+        logContext,
+      }),
+      executeLaneRetrieval({
+        query: secondPassStateQuery,
+        storeId,
+        lane: "state",
+        maxResults: secondPassStateK,
+        logContext,
+      }),
+    ]);
+    
+    const combinedLocal = [...localResult.chunks, ...secondLocalResult.chunks];
+    const combinedState = [...stateResult.chunks, ...secondStateResult.chunks];
+    
+    mergedChunks = mergeAndRankChunks(
+      combinedLocal,
+      combinedState,
+      questionHasRSA,
+      situationContext
+    );
+    
+    usedSecondPass = true;
+    
+    logDebug("two_lane_second_pass_complete", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "twoLaneRetrieve",
+      originalMergedCount: localResult.chunks.length + stateResult.chunks.length,
+      newMergedCount: mergedChunks.length,
+      secondPassLocalCount: secondLocalResult.chunks.length,
+      secondPassStateCount: secondStateResult.chunks.length,
+    });
+  }
   
   if (situationContext && chatConfig.ENABLE_SITUATION_ANCHORING) {
     logDebug("two_lane_situation_applied", {
@@ -472,6 +925,7 @@ export async function twoLaneRetrieve(
   }
   
   const durationMs = Date.now() - startTime;
+  const archiveChunksFound = localResult.chunks.length > 0 || stateResult.chunks.length > 0;
   
   logDebug("two_lane_complete", {
     requestId: logContext?.requestId,
@@ -482,12 +936,22 @@ export async function twoLaneRetrieve(
     mergedCount: mergedChunks.length,
     durationMs,
     questionHasRSA,
+    usedSecondPass,
+    archiveChunksFound,
+    retrievalConfidence: qualityScore.confidence,
+    topicAlignment: qualityScore.topicAlignment,
   });
   
   return {
     localChunks: localResult.chunks,
     stateChunks: stateResult.chunks,
     mergedTopChunks: mergedChunks,
+    archiveChunksFound,
+    usedSecondPass,
+    retrievalConfidence: qualityScore.confidence,
+    topicAlignment: qualityScore.topicAlignment,
+    driftDetected: qualityScore.driftDetected,
+    issueMap,
     debug: {
       localCount: localResult.chunks.length,
       stateCount: stateResult.chunks.length,
@@ -496,7 +960,10 @@ export async function twoLaneRetrieve(
       topStateDocs: stateResult.documentNames.slice(0, 5),
       localQueryUsed: localQuery,
       stateQueryUsed: stateQuery,
+      secondPassLocalQuery,
+      secondPassStateQuery,
       durationMs,
+      escalationReason: qualityScore.escalationReason || undefined,
     },
   };
 }

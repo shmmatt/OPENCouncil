@@ -253,6 +253,12 @@ export const chatConfig = {
   ENABLE_ADAPTIVE_RETRIEVAL: true,
 
   /**
+   * Enable second-pass retrieval when first pass quality is low.
+   * This is the actual gate for triggering a second retrieval attempt.
+   */
+  ENABLE_SECOND_PASS_RETRIEVAL: true,
+
+  /**
    * Minimum retrieval confidence score to skip second pass.
    * Below this threshold, the system will attempt query expansion.
    * Range: 0.0 to 1.0

@@ -18,8 +18,9 @@ import { getModelForStage } from "../llm/modelRegistry";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { chatConfig } from "./chatConfig";
 import type { PipelineLogContext, ChatHistoryMessage, DocSourceType } from "./types";
-import type { SituationContext } from "@shared/schema";
+import type { SituationContext, SessionSource } from "@shared/schema";
 import { twoLaneRetrieve, extractTwoLaneDocNames, buildTwoLaneSnippetText, classifyTwoLaneDocSource, type LaneChunk, type TwoLaneRetrievalResult } from "./twoLaneRetrieve";
+import { getSessionSourceTextForContext } from "./sessionSourceDetector";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -28,6 +29,7 @@ export interface UnifiedPipelineOptions {
   sessionHistory: ChatHistoryMessage[];
   townPreference?: string | null;
   situationContext?: SituationContext | null;
+  sessionSources?: SessionSource[];
   logContext?: PipelineLogContext;
 }
 
@@ -46,7 +48,7 @@ export interface UnifiedPipelineResult {
 export async function runUnifiedChatPipeline(
   options: UnifiedPipelineOptions
 ): Promise<UnifiedPipelineResult> {
-  const { question, sessionHistory, townPreference, situationContext, logContext } = options;
+  const { question, sessionHistory, townPreference, situationContext, sessionSources, logContext } = options;
   const startTime = Date.now();
 
   logDebug("unified_pipeline_start", {
@@ -58,14 +60,16 @@ export async function runUnifiedChatPipeline(
     historyLength: sessionHistory.length,
     hasSituationContext: !!situationContext,
     situationTitle: situationContext?.title,
+    sessionSourceCount: (sessionSources || []).length,
   });
 
-  // Step 1: Two-lane parallel retrieval with situation context
+  // Step 1: Two-lane parallel retrieval with situation context and session sources
   const retrievalResult = await twoLaneRetrieve({
     userQuestion: question,
     rerankedQuestion: question,
     townPreference,
     situationContext,
+    sessionSources,
     logContext,
   });
 
@@ -80,15 +84,20 @@ export async function runUnifiedChatPipeline(
     stateChunkCount: retrievalResult.debug.stateCount,
     mergedChunkCount: mergedChunks.length,
     retrievalDurationMs: retrievalResult.debug.durationMs,
+    usedSecondPass: retrievalResult.usedSecondPass,
+    retrievalConfidence: retrievalResult.retrievalConfidence,
+    archiveChunksFound: retrievalResult.archiveChunksFound,
   });
 
   // Step 2: Synthesize answer from merged chunks with situation anchoring
+  // Pass sessionSources for fallback context when archive docs not found
   const answerText = await synthesizeUnifiedAnswer(
     question,
     retrievalResult,
     sessionHistory,
     townPreference,
     situationContext,
+    sessionSources,
     logContext
   );
 
@@ -158,6 +167,7 @@ VIOLATION EXAMPLE (DO NOT DO THIS):
 
 /**
  * Simple synthesis prompt - direct and concise with situation anchoring
+ * When archive docs are not found but session sources exist, use session sources as context
  */
 async function synthesizeUnifiedAnswer(
   question: string,
@@ -165,17 +175,38 @@ async function synthesizeUnifiedAnswer(
   history: ChatHistoryMessage[],
   townPreference: string | null | undefined,
   situationContext: SituationContext | null | undefined,
+  sessionSources: SessionSource[] | undefined,
   logContext?: PipelineLogContext
 ): Promise<string> {
   const { model: synthesisModel } = getModelForStage('complexSynthesis');
 
   const totalChunks = retrievalResult.mergedTopChunks.length;
-  if (totalChunks === 0) {
+  const hasSessionSources = (sessionSources || []).length > 0;
+  
+  if (totalChunks === 0 && !hasSessionSources) {
     return "No relevant documents were found in the OpenCouncil archive for this question. You may wish to consult municipal records or counsel for more specific guidance.";
   }
 
   // Build snippet text from full retrieval result
-  const snippetText = buildTwoLaneSnippetText(retrievalResult);
+  let snippetText = buildTwoLaneSnippetText(retrievalResult);
+  
+  // If no archive docs found but session sources exist, use session sources as primary context
+  if (totalChunks === 0 && hasSessionSources) {
+    const sessionSourceContext = getSessionSourceTextForContext(sessionSources || []);
+    snippetText = sessionSourceContext;
+    
+    logDebug("synthesis_using_session_source", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "unified_synthesis",
+      reason: "No archive chunks found, using session source as context",
+      sessionSourceLength: sessionSourceContext.length,
+    });
+  } else if (hasSessionSources) {
+    // Append session source context if both archive docs and session sources exist
+    const sessionSourceContext = getSessionSourceTextForContext(sessionSources || [], 8000);
+    snippetText += `\n\n${sessionSourceContext}`;
+  }
 
   // Build conversation context
   const historyContext = history.length > 0
