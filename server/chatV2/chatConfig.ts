@@ -240,6 +240,117 @@ export const chatConfig = {
    * Maximum regeneration attempts when drift is detected.
    */
   MAX_DRIFT_REGENERATION_ATTEMPTS: 1,
+
+  // =====================================================
+  // ADAPTIVE MULTI-HOP RETRIEVAL SETTINGS
+  // =====================================================
+
+  /**
+   * Enable adaptive multi-hop retrieval with automatic query expansion.
+   * When true, the system will escalate to a second retrieval pass
+   * when initial retrieval is weak or drifting.
+   */
+  ENABLE_ADAPTIVE_RETRIEVAL: true,
+
+  /**
+   * Minimum retrieval confidence score to skip second pass.
+   * Below this threshold, the system will attempt query expansion.
+   * Range: 0.0 to 1.0
+   */
+  RETRIEVAL_CONFIDENCE_THRESHOLD: 0.35,
+
+  /**
+   * Minimum topic alignment score to skip second pass.
+   * Below this threshold, chunks may be drifting from the topic.
+   * Range: 0.0 to 1.0
+   */
+  TOPIC_ALIGNMENT_THRESHOLD: 0.30,
+
+  /**
+   * Minimum merged chunk count to skip second pass.
+   * Below this threshold, retrieval is considered weak.
+   */
+  MIN_MERGED_CHUNKS_FOR_SKIP: 4,
+
+  /**
+   * Local lane K value for second pass retrieval.
+   * Slightly larger than first pass for broader coverage.
+   */
+  SECOND_PASS_LOCAL_LANE_K: 16, // LOCAL_LANE_K + 4
+
+  /**
+   * State lane K value for second pass retrieval.
+   * Slightly larger than first pass for broader coverage.
+   */
+  SECOND_PASS_STATE_LANE_K: 12, // STATE_LANE_K + 4
+
+  /**
+   * High-stakes legal keywords that trigger second pass retrieval.
+   * These terms indicate the user needs comprehensive legal context.
+   */
+  HIGH_STAKES_LEGAL_KEYWORDS: [
+    "liability",
+    "negligence",
+    "illegal",
+    "RSA",
+    "lawsuit",
+    "ADA",
+    "compliance",
+    "damages",
+    "immunity",
+    "permit",
+    "building code",
+    "select board",
+    "certificate of occupancy",
+    "municipal liability",
+    "governmental immunity",
+  ],
+
+  /**
+   * Known off-topic anchors that should trigger drift penalty.
+   * These are specific cases/entities that often appear as false positives.
+   */
+  KNOWN_OFF_TOPIC_ANCHORS: [
+    "Brown",
+    "RV",
+    "cesspool",
+    "septic",
+  ],
+
+  /**
+   * Drift penalty to apply to chunks containing off-topic anchors.
+   * This reduces the score of chunks that match off-topic patterns.
+   * Range: 0.0 to 1.0
+   */
+  DRIFT_PENALTY: 0.4,
+
+  // =====================================================
+  // SESSION SOURCES SETTINGS
+  // =====================================================
+
+  /**
+   * Enable session sources for storing user-provided long text.
+   * When true, pasted articles/minutes are stored as ephemeral context.
+   */
+  ENABLE_SESSION_SOURCES: true,
+
+  /**
+   * Maximum number of session sources to keep per session.
+   * Older sources are removed when this limit is exceeded.
+   */
+  MAX_SESSION_SOURCES: 3,
+
+  /**
+   * Minimum character length to detect a long paste.
+   * Messages >= this length are candidates for session source storage.
+   */
+  SESSION_SOURCE_MIN_LENGTH: 800,
+
+  /**
+   * Minimum paragraph count to detect article-like content.
+   * Messages with >= this many paragraphs are candidates for storage.
+   */
+  SESSION_SOURCE_MIN_PARAGRAPHS: 4,
 };
 
 /**
