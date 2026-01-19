@@ -307,6 +307,20 @@ export interface V3DebugInfo {
   auditFlags: string[];
   repairRan: boolean;
   durationMs: number;
+  // New telemetry fields for answer selection
+  selectedAnswerSource?: 'original' | 'repair' | 'repair_normalized' | 'original_normalized';
+  originalScore?: {
+    score: number;
+    isComplete: boolean;
+    wordCount: number;
+  };
+  repairScore?: {
+    score: number;
+    isComplete: boolean;
+    wordCount: number;
+  };
+  finalAnswerCharLen?: number;
+  finalAnswerWordCount?: number;
 }
 
 /**

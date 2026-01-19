@@ -13,7 +13,7 @@ import { logDebug, logInfo } from "../utils/logger";
 import { runPlannerV3 } from "./plannerV3";
 import { twoLaneRetrieveWithPlan, type V3RetrievalResult } from "./twoLaneRetrieve";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
-import { auditAnswer, shouldAttemptRepair } from "./audit";
+import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
 import type {
@@ -140,11 +140,16 @@ export async function runChatV3Pipeline(
   let answerText = synthesisResult.answerText;
   let auditFlags: string[] = [];
   let repairRan = false;
+  let selectedAnswerSource: 'original' | 'repair' | 'repair_normalized' | 'original_normalized' = 'original';
+  let originalScore: AnswerScore | undefined;
+  let repairScore: AnswerScore | undefined;
 
   // =====================================================
   // STAGE 4: AUDIT + REPAIR
   // =====================================================
   if (chatConfigV3.ENABLE_AUDIT) {
+    const stateChunkCount = retrievalResult.stateChunks.length;
+    
     const auditResult = auditAnswer({
       answerText,
       stateChunks: retrievalResult.stateChunks,
@@ -177,36 +182,93 @@ export async function runChatV3Pipeline(
         isRepairAttempt: true,
       });
 
-      const repairAuditResult = auditAnswer({
-        answerText: repairSynthesisResult.answerText,
+      repairRan = true;
+
+      // Use the new scoring system to pick better answer
+      const selection = selectBetterAnswer(
+        synthesisResult.answerText,
+        repairSynthesisResult.answerText,
+        stateChunkCount
+      );
+      
+      originalScore = selection.originalScore;
+      repairScore = selection.repairScore;
+
+      if (selection.selectedSource === 'repair') {
+        answerText = repairSynthesisResult.answerText;
+        selectedAnswerSource = 'repair';
+        
+        // Re-audit the selected answer for flags
+        const repairAuditResult = auditAnswer({
+          answerText,
+          stateChunks: retrievalResult.stateChunks,
+          citationsUsed: repairSynthesisResult.citationsUsed,
+          issueMap,
+          situationContext,
+          logContext,
+        });
+        auditFlags = repairAuditResult.violations.map(v => `${v.type}:${v.severity}`);
+        
+        logDebug("v3_repair_selected", {
+          requestId: logContext?.requestId,
+          sessionId: logContext?.sessionId,
+          stage: "v3_audit",
+          reason: "Repair scored higher or is more complete",
+          originalScore: selection.originalScore.score,
+          repairScore: selection.repairScore.score,
+          originalComplete: selection.originalScore.isComplete,
+          repairComplete: selection.repairScore.isComplete,
+        });
+      } else {
+        logDebug("v3_original_kept", {
+          requestId: logContext?.requestId,
+          sessionId: logContext?.sessionId,
+          stage: "v3_audit",
+          reason: "Original scored higher or repair not better",
+          originalScore: selection.originalScore.score,
+          repairScore: selection.repairScore.score,
+        });
+      }
+
+      // Apply normalization if answer has format violations
+      const currentAuditResult = auditAnswer({
+        answerText,
         stateChunks: retrievalResult.stateChunks,
-        citationsUsed: repairSynthesisResult.citationsUsed,
+        citationsUsed: synthesisResult.citationsUsed,
         issueMap,
         situationContext,
         logContext,
       });
 
-      repairRan = true;
-
-      if (repairAuditResult.violations.filter(v => v.severity === 'error').length <
-          auditResult.violations.filter(v => v.severity === 'error').length) {
-        answerText = repairSynthesisResult.answerText;
-        auditFlags = repairAuditResult.violations.map(v => `${v.type}:${v.severity}`);
+      if (currentAuditResult.violations.some(v => v.type === 'format_violation')) {
+        const normalizedAnswer = normalizeAnswerFormat(answerText);
         
-        logDebug("v3_repair_successful", {
-          requestId: logContext?.requestId,
-          sessionId: logContext?.sessionId,
-          stage: "v3_audit",
-          originalErrors: auditResult.violations.filter(v => v.severity === 'error').length,
-          repairedErrors: repairAuditResult.violations.filter(v => v.severity === 'error').length,
+        // Check if normalization helped
+        const normalizedAudit = auditAnswer({
+          answerText: normalizedAnswer,
+          stateChunks: retrievalResult.stateChunks,
+          citationsUsed: synthesisResult.citationsUsed,
+          issueMap,
+          situationContext,
+          logContext,
         });
-      } else {
-        logDebug("v3_repair_not_better", {
-          requestId: logContext?.requestId,
-          sessionId: logContext?.sessionId,
-          stage: "v3_audit",
-          message: "Repair did not improve violations, using original",
-        });
+        
+        const normalizedFormatViolations = normalizedAudit.violations.filter(v => v.type === 'format_violation').length;
+        const currentFormatViolations = currentAuditResult.violations.filter(v => v.type === 'format_violation').length;
+        
+        if (normalizedFormatViolations < currentFormatViolations) {
+          answerText = normalizedAnswer;
+          selectedAnswerSource = selectedAnswerSource === 'repair' ? 'repair_normalized' : 'original_normalized';
+          auditFlags = normalizedAudit.violations.map(v => `${v.type}:${v.severity}`);
+          
+          logDebug("v3_answer_normalized", {
+            requestId: logContext?.requestId,
+            sessionId: logContext?.sessionId,
+            stage: "v3_audit",
+            originalFormatViolations: currentFormatViolations,
+            normalizedFormatViolations,
+          });
+        }
       }
     }
   }
@@ -242,6 +304,20 @@ export async function runChatV3Pipeline(
     auditFlags,
     repairRan,
     durationMs,
+    // New telemetry fields
+    selectedAnswerSource,
+    originalScore: originalScore ? {
+      score: originalScore.score,
+      isComplete: originalScore.isComplete,
+      wordCount: originalScore.wordCount,
+    } : undefined,
+    repairScore: repairScore ? {
+      score: repairScore.score,
+      isComplete: repairScore.isComplete,
+      wordCount: repairScore.wordCount,
+    } : undefined,
+    finalAnswerCharLen: answerText.length,
+    finalAnswerWordCount: answerText.split(/\s+/).filter(w => w.length > 0).length,
   };
 
   logInfo("v3_pipeline_complete", {

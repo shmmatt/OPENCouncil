@@ -587,6 +587,213 @@ export function shouldAttemptRepair(auditResult: AuditResult, alreadyRepaired: b
 }
 
 // =====================================================
+// ANSWER SCORING FUNCTION
+// =====================================================
+
+const MIN_COMPLETE_WORD_COUNT = 180;
+
+export interface AnswerScore {
+  score: number;
+  isComplete: boolean;
+  headingsFound: number;
+  wordCount: number;
+  hasLawCitations: boolean;
+  hasBannedPhrases: boolean;
+  violationCount: number;
+}
+
+/**
+ * Score an answer for quality and completeness.
+ * Higher score = better answer.
+ * Used to choose between original and repair.
+ */
+export function scoreAnswer(
+  answerText: string,
+  stateChunkCount: number
+): AnswerScore {
+  const formatResult = validateAnswerFormat(answerText, stateChunkCount);
+  const headingsFound = formatResult.headingsPresent.filter(Boolean).length;
+  const wordCount = formatResult.wordCount;
+  const hasLawCitations = formatResult.lawSectionHasStateCitations;
+  const hasBannedPhrases = formatResult.llmTailsFound.length > 0;
+  const violationCount = formatResult.violations.length;
+  
+  // Completeness gate: must have all 5 headings and minimum word count
+  const hasAllHeadings = headingsFound === REQUIRED_HEADINGS.length;
+  const hasMinWords = wordCount >= MIN_COMPLETE_WORD_COUNT;
+  const isComplete = hasAllHeadings && hasMinWords;
+  
+  // Build score
+  let score = 0;
+  
+  // Big bonus for having all headings
+  score += headingsFound * 10; // +50 max for all 5
+  
+  // Bonus for law section having citations when state chunks available
+  if (stateChunkCount > 0 && hasLawCitations) {
+    score += 20;
+  }
+  
+  // Penalty for violations
+  score -= violationCount * 2;
+  
+  // Penalty for banned phrases
+  if (hasBannedPhrases) {
+    score -= 10;
+  }
+  
+  // Penalty for being too short (incomplete)
+  if (wordCount < MIN_COMPLETE_WORD_COUNT) {
+    score -= 30;
+  }
+  
+  // Bonus for good word count (sweet spot 200-500)
+  if (wordCount >= 200 && wordCount <= 500) {
+    score += 15;
+  }
+  
+  return {
+    score,
+    isComplete,
+    headingsFound,
+    wordCount,
+    hasLawCitations,
+    hasBannedPhrases,
+    violationCount,
+  };
+}
+
+/**
+ * Compare two answers and return which one is better.
+ * Returns 'original' or 'repair'
+ */
+export function selectBetterAnswer(
+  originalText: string,
+  repairText: string,
+  stateChunkCount: number
+): {
+  selectedSource: 'original' | 'repair';
+  originalScore: AnswerScore;
+  repairScore: AnswerScore;
+} {
+  const originalScore = scoreAnswer(originalText, stateChunkCount);
+  const repairScore = scoreAnswer(repairText, stateChunkCount);
+  
+  // HARD GATE: If original is incomplete but repair is complete, always prefer repair
+  if (!originalScore.isComplete && repairScore.isComplete) {
+    return { selectedSource: 'repair', originalScore, repairScore };
+  }
+  
+  // If repair is incomplete but original is complete, always prefer original
+  if (!repairScore.isComplete && originalScore.isComplete) {
+    return { selectedSource: 'original', originalScore, repairScore };
+  }
+  
+  // Otherwise, pick the higher score
+  if (repairScore.score > originalScore.score) {
+    return { selectedSource: 'repair', originalScore, repairScore };
+  }
+  
+  return { selectedSource: 'original', originalScore, repairScore };
+}
+
+// =====================================================
+// DETERMINISTIC POST-FORMATTER (NORMALIZE)
+// =====================================================
+
+/**
+ * Normalize answer format to enforce bullet caps and word limits
+ * without requiring another LLM call.
+ */
+export function normalizeAnswerFormat(answerText: string): string {
+  const sections = extractSections(answerText);
+  const normalizedParts: string[] = [];
+  
+  for (const heading of REQUIRED_HEADINGS) {
+    const content = sections[heading];
+    
+    if (!content) {
+      // Add placeholder for missing section
+      normalizedParts.push(`**${heading}**\n- Information not available in sources.`);
+      continue;
+    }
+    
+    if (heading === "Bottom line") {
+      // No bullets for bottom line - just truncate if too long
+      const truncated = truncateToParagraph(content, 60);
+      normalizedParts.push(`**${heading}**\n${truncated}`);
+    } else {
+      // Apply bullet limit for this section
+      const limit = SECTION_BULLET_LIMITS[heading] || 4;
+      const normalizedContent = normalizeSectionBullets(content, limit);
+      normalizedParts.push(`**${heading}**\n${normalizedContent}`);
+    }
+  }
+  
+  let result = normalizedParts.join('\n\n');
+  
+  // Remove any LLM tail phrases
+  for (const pattern of LLM_TAIL_PATTERNS) {
+    result = result.replace(pattern, '');
+  }
+  
+  // Clean up extra whitespace
+  result = result.replace(/\n{3,}/g, '\n\n').trim();
+  
+  return result;
+}
+
+/**
+ * Normalize bullets in a section: trim to limit and cap word count per bullet
+ */
+function normalizeSectionBullets(content: string, maxBullets: number): string {
+  const lines = content.split('\n');
+  const bulletLines: string[] = [];
+  const nonBulletLines: string[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[-•*]\s+/.test(trimmed)) {
+      bulletLines.push(trimmed);
+    } else if (trimmed) {
+      // Convert non-bullet text to bullet if content exists
+      if (nonBulletLines.length < 2) { // Keep some intro text
+        nonBulletLines.push(trimmed);
+      }
+    }
+  }
+  
+  // Take only first maxBullets
+  const keptBullets = bulletLines.slice(0, maxBullets);
+  
+  // Truncate long bullets while preserving citations at end
+  const normalizedBullets = keptBullets.map(bullet => {
+    const words = bullet.split(/\s+/);
+    if (words.length > MAX_BULLET_WORDS) {
+      // Try to preserve citation tokens at end (e.g., [S1], [L2])
+      const lastWord = words[words.length - 1];
+      const hasCitation = /^\[(?:S|L|USER)\d*\]$/.test(lastWord);
+      
+      if (hasCitation && words.length > MAX_BULLET_WORDS + 1) {
+        // Keep citation at end
+        return words.slice(0, MAX_BULLET_WORDS - 1).join(' ') + '... ' + lastWord;
+      }
+      return words.slice(0, MAX_BULLET_WORDS).join(' ') + '...';
+    }
+    return bullet;
+  });
+  
+  // Combine intro text with bullets
+  const parts: string[] = [];
+  if (nonBulletLines.length > 0) {
+    parts.push(nonBulletLines.join(' '));
+  }
+  parts.push(...normalizedBullets);
+  
+  return parts.join('\n');
+}
+
+// =====================================================
 // HARD TRUNCATE FALLBACK
 // =====================================================
 
