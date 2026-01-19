@@ -60,6 +60,12 @@ export async function runChatV3Pipeline(
   const situationRelevance = computeQuestionSituationMatch(userMessage, situationContext || null);
   const effectiveSituationContext = situationRelevance.useSituationContext ? situationContext : null;
 
+  // Also filter history when situation context is gated
+  // This prevents prior Q&A from leaking into unrelated domain questions
+  const historyForSynthesis = situationRelevance.useSituationContext 
+    ? sessionHistory 
+    : []; // Clear history when domain switch detected
+
   logInfo("v3_pipeline_start", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -71,6 +77,7 @@ export async function runChatV3Pipeline(
     situationScore: situationRelevance.score,
     situationReason: situationRelevance.reason,
     sessionSourceCount: (sessionSources || []).length,
+    historyCleared: !situationRelevance.useSituationContext && sessionHistory.length > 0,
   });
 
   // =====================================================
@@ -145,7 +152,7 @@ export async function runChatV3Pipeline(
     localChunks: retrievalResult.localChunks,
     stateChunks: retrievalResult.stateChunks,
     recordStrength,
-    history: sessionHistory,
+    history: historyForSynthesis,
     logContext,
   });
 
@@ -189,7 +196,7 @@ export async function runChatV3Pipeline(
         localChunks: retrievalResult.localChunks,
         stateChunks: retrievalResult.stateChunks,
         recordStrength,
-        history: sessionHistory,
+        history: historyForSynthesis,
         logContext,
         isRepairAttempt: true,
       });

@@ -117,13 +117,21 @@ Major improvements to answer quality, tiering, and retrieval:
 - Topic continuity rules: No speculation, no "assumes it refers to...", no force-fitting prior context
 
 **Situation Relevance Gating** (January 2026):
-- Prevents "sticky context" leakage where prior conversation topics (e.g., boardwalk vote) leak into unrelated questions (e.g., budget committee)
-- `computeQuestionSituationMatch()` in `situationExtractor.ts` scores question-context relevance:
-  - +1 for entity matches, +0.5 for partial matches, +1 for explicit references
-  - -2 penalty for clearly different domains (budget, zoning, personnel, etc.) when no entity overlap
+- Prevents "sticky context" leakage where prior conversation topics leak into unrelated questions
+- **Generalized design** - no hardcoded example terms; works for any municipal governance topics
+- `DOMAIN_CATEGORIES` in `situationExtractor.ts` defines generic domains: budget, zoning, personnel, elections, public_safety, infrastructure, environmental, development
+- `computeQuestionSituationMatch()` scores question-context relevance:
+  - +1 for each situation entity appearing in question
+  - +0.5 for partial word matches on significant words
+  - +0.5 for title keyword overlap
+  - +1 for generic explicit references ("that vote", "the project", "going back to")
+  - +1.5 for dynamic explicit entity references ("the [stored entity]")
+  - -2 penalty when question domain differs from situation domain AND no entity overlap
+- `hasExplicitEntityReference()` dynamically checks for "the/that/this [entity]" patterns
 - Gate threshold: `useSituationContext = (score >= 2)`
-- Logged: `situationGated`, `situationScore`, `situationReason`
-- When gated, planner/retriever/synthesizer see no stored situation context
+- **History filtering**: When gated, conversation history is also cleared (`historyForSynthesis = []`)
+- Logged: `situationGated`, `situationScore`, `situationReason`, `historyCleared`
+- When gated, planner/retriever/synthesizer see no stored situation context AND no conversation history
 
 **Anti-bridging Patterns**:
 - Audit detects "assumes it refers to", "assuming this relates to" patterns

@@ -27,15 +27,19 @@ export interface SituationExtractionResult {
   reason: string;
 }
 
+// Generic entity patterns - NO example-specific terms
+// These patterns match common municipal governance entities
 const ENTITY_PATTERNS = {
   boards: [
-    /\b(select\s*board|selectboard|planning\s*board|zba|zoning\s*board|conservation\s*commission|budget\s*committee|school\s*board)\b/gi,
+    // Municipal boards and commissions (generic patterns)
+    /\b(select\s*board|selectboard|planning\s*board|zba|zoning\s*board|conservation\s*commission|budget\s*committee|school\s*board|trustees|recreation\s*committee|heritage\s*commission|library\s*trustees|cemetery\s*trustees|parks?\s*commission)\b/gi,
   ],
-  projects: [
-    /\b(constitution\s*park|deer\s*run|boardwalk|ada\s*compliance|town\s*hall|library|fire\s*station|highway\s*department)\b/gi,
+  facilities: [
+    // Generic facility types (not specific named projects)
+    /\b(town\s*hall|library|fire\s*station|police\s*station|highway\s*department|transfer\s*station|recreation\s*center|community\s*center|senior\s*center|school|elementary|middle\s*school|high\s*school)\b/gi,
   ],
   events: [
-    /\b(vote|voted|voting|meeting|hearing|warrant|article|motion|approved|denied|tabled)\b/gi,
+    /\b(vote|voted|voting|meeting|hearing|warrant|article|motion|approved|denied|tabled|deliberative\s*session|town\s*meeting)\b/gi,
   ],
   dates: [
     /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s*\d{4}\b/gi,
@@ -43,7 +47,11 @@ const ENTITY_PATTERNS = {
     /\b\d{4}-\d{2}-\d{2}\b/g,
   ],
   legal: [
-    /\b(rsa\s*\d+[-:]\w+|ada|americans?\s*with\s*disabilities|nh\s*law|statute)\b/gi,
+    /\b(rsa\s*\d+[-:]\w+|rsa\s*\d+|nh\s*law|statute|ordinance|regulation)\b/gi,
+  ],
+  propertyTypes: [
+    // Generic property/project type patterns
+    /\b(park|trail|sidewalk|road|bridge|intersection|property|parcel|lot|subdivision|development|construction|renovation|expansion)\b/gi,
   ],
 };
 
@@ -217,24 +225,33 @@ export function extractSituationHeuristic(
 }
 
 function generateSituationTitle(entities: string[], message: string): string {
-  const projectEntities = entities.filter(e => 
-    /park|boardwalk|hall|station|library/i.test(e)
+  // Categorize entities by type using generic patterns
+  const facilityEntities = entities.filter(e => 
+    /park|hall|station|library|center|school|department/i.test(e)
   );
   const boardEntities = entities.filter(e =>
-    /board|commission|committee/i.test(e)
+    /board|commission|committee|trustees/i.test(e)
   );
   const eventEntities = entities.filter(e =>
-    /vote|meeting|hearing|warrant/i.test(e)
+    /vote|meeting|hearing|warrant|session/i.test(e)
+  );
+  const propertyEntities = entities.filter(e =>
+    /property|parcel|lot|subdivision|development|project|trail|road|bridge/i.test(e)
   );
   
   const parts: string[] = [];
   
-  if (projectEntities.length > 0) {
-    parts.push(projectEntities[0]);
+  // Prioritize: facility/property > event > board
+  if (facilityEntities.length > 0) {
+    parts.push(facilityEntities[0]);
+  } else if (propertyEntities.length > 0) {
+    parts.push(propertyEntities[0]);
   }
+  
   if (eventEntities.length > 0) {
     parts.push(eventEntities[0]);
   }
+  
   if (boardEntities.length > 0 && parts.length < 2) {
     parts.push(boardEntities[0]);
   }
@@ -381,14 +398,18 @@ export function computeSituationMatchScore(
 
 /**
  * Determines if stored situation context should be applied to a new question.
- * This prevents "sticky context" where old topics (e.g., boardwalk vote) leak into
- * unrelated questions (e.g., budget committee rules).
+ * This prevents "sticky context" where old topics leak into unrelated questions.
  * 
- * Scoring:
+ * Scoring (generalizable to any situation):
  * +1 for each situation entity appearing in the question
- * +1 for key topic keyword overlap (ADA, boardwalk, etc.)
- * +1 for explicit references ("the article", "that vote", etc.)
- * -2 if question is clearly a different domain (budget, RSA 32, etc.)
+ * +0.5 for partial word matches on significant words
+ * +0.5 for title keyword overlap
+ * +1 for generic explicit references ("that vote", "the project", etc.)
+ * +1.5 for dynamic explicit entity references ("the [stored entity]")
+ * -2 if question is in a clearly different domain AND no entity overlap
+ * 
+ * Domain detection uses DOMAIN_CATEGORIES (budget, zoning, personnel, etc.)
+ * to identify topic switches without hardcoded example terms.
  * 
  * Decision: useSituationContext = (score >= 2)
  */
@@ -398,23 +419,108 @@ export interface SituationRelevanceResult {
   reason: string;
 }
 
-const DIFFERENT_DOMAIN_KEYWORDS = [
-  'budget', 'appropriation', 'warrant article', 'rsa 32', 'budget committee', 
-  'tax rate', 'default budget', 'overlay', 'encumbrance', 'fund balance',
-  'school budget', 'municipal budget', 'sewer budget', 'water budget',
-  'deliberative session', 'town meeting', 'sb2', 'official ballot',
-  'zoning amendment', 'zoning variance', 'special exception',
-  'wetlands', 'shoreland', 'subdivision', 'site plan',
-  'personnel', 'hiring', 'firing', 'compensation', 'benefits',
-  'collective bargaining', 'union', 'grievance',
+// Generic domain categories - used to detect when a question is about a clearly different topic
+// These are broad municipal governance domains, NOT specific examples
+const DOMAIN_CATEGORIES: Record<string, string[]> = {
+  budget: [
+    'budget', 'appropriation', 'tax rate', 'default budget', 'overlay', 
+    'encumbrance', 'fund balance', 'fiscal year', 'revenue', 'expenditure',
+  ],
+  zoning: [
+    'zoning amendment', 'zoning variance', 'special exception', 'setback',
+    'lot coverage', 'building permit', 'conditional use',
+  ],
+  environmental: [
+    'wetlands', 'shoreland', 'stormwater', 'septic', 'groundwater',
+  ],
+  development: [
+    'subdivision', 'site plan', 'lot line adjustment', 'annexation',
+  ],
+  personnel: [
+    'personnel', 'hiring', 'firing', 'compensation', 'benefits',
+    'collective bargaining', 'union', 'grievance', 'employee',
+  ],
+  elections: [
+    'deliberative session', 'official ballot', 'election', 'ballot',
+    'voter registration', 'absentee', 'moderator',
+  ],
+  public_safety: [
+    'police', 'fire department', 'emergency services', 'ambulance',
+  ],
+  infrastructure: [
+    'highway', 'road maintenance', 'bridge', 'culvert', 'drainage',
+    'water system', 'sewer system', 'utility',
+  ],
+};
+
+// Generic explicit reference patterns - these work for ANY stored situation
+// NO example-specific terms (boardwalk, jan 6, constitution park, etc.)
+const GENERIC_EXPLICIT_REFERENCES = [
+  'that vote', 'the vote', 'this vote',
+  'that decision', 'the decision', 'this decision',
+  'that meeting', 'the meeting', 'this meeting',
+  'that case', 'the case', 'this case',
+  'that situation', 'the situation', 'this situation',
+  'that project', 'the project', 'this project',
+  'that issue', 'the issue', 'this issue',
+  'that article', 'the article', 'this article',
+  'that property', 'the property', 'this property',
+  'as mentioned', 'as discussed', 'we were discussing',
+  'going back to', 'regarding the', 'about the earlier',
 ];
 
-const EXPLICIT_SITUATION_REFERENCES = [
-  'the article', 'that article', 'the boardwalk', 'that vote', 'the vote',
-  'that decision', 'the decision', 'that meeting', 'the jan 6', 'january 6',
-  'that case', 'the case', 'that situation', 'the ada issue',
-  'the constitution park', 'that project', 'the project',
-];
+/**
+ * Detects the domain category of a question based on keyword matching.
+ * Returns the domain name if detected, null otherwise.
+ */
+export function detectQuestionDomain(questionLower: string): string | null {
+  for (const [domain, keywords] of Object.entries(DOMAIN_CATEGORIES)) {
+    for (const keyword of keywords) {
+      if (questionLower.includes(keyword)) {
+        return domain;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Detects the domain category of stored situation context based on its entities.
+ * Returns the domain name if detected, null otherwise.
+ */
+function detectSituationDomain(situationContext: SituationContext): string | null {
+  const contextText = [
+    situationContext.title,
+    ...situationContext.entities,
+  ].join(' ').toLowerCase();
+  
+  for (const [domain, keywords] of Object.entries(DOMAIN_CATEGORIES)) {
+    for (const keyword of keywords) {
+      if (contextText.includes(keyword)) {
+        return domain;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks if the question contains a dynamic explicit reference to any stored entity.
+ * E.g., "the [entity]", "that [entity]", "this [entity]"
+ */
+function hasExplicitEntityReference(questionLower: string, situationContext: SituationContext): boolean {
+  const referencePatterns = ['the ', 'that ', 'this ', 'about the ', 'regarding the '];
+  
+  for (const entity of situationContext.entities) {
+    const entityLower = entity.toLowerCase();
+    for (const prefix of referencePatterns) {
+      if (questionLower.includes(prefix + entityLower)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 export function computeQuestionSituationMatch(
   questionText: string,
@@ -431,7 +537,6 @@ export function computeQuestionSituationMatch(
   const questionLower = questionText.toLowerCase();
   let score = 0;
   const matchReasons: string[] = [];
-  const penaltyReasons: string[] = [];
 
   // Check for entity matches (+1 each)
   for (const entity of situationContext.entities) {
@@ -440,7 +545,7 @@ export function computeQuestionSituationMatch(
       score += 1;
       matchReasons.push(`entity:${entity}`);
     } else {
-      // Check for partial word matches (e.g., "boardwalk" in entities, "boardwalk" in question)
+      // Check for partial word matches (significant words only)
       const entityWords = entityLower.split(/\s+/).filter(w => w.length > 3);
       for (const word of entityWords) {
         if (questionLower.includes(word)) {
@@ -452,7 +557,7 @@ export function computeQuestionSituationMatch(
     }
   }
 
-  // Check for title keyword overlap (+1)
+  // Check for title keyword overlap (+0.5 per significant word)
   const titleWords = situationContext.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
   for (const word of titleWords) {
     if (questionLower.includes(word)) {
@@ -461,23 +566,37 @@ export function computeQuestionSituationMatch(
     }
   }
 
-  // Check for explicit situation references (+1)
-  for (const ref of EXPLICIT_SITUATION_REFERENCES) {
+  // Check for generic explicit situation references (+1)
+  for (const ref of GENERIC_EXPLICIT_REFERENCES) {
     if (questionLower.includes(ref)) {
       score += 1;
-      matchReasons.push(`explicit_ref:${ref}`);
+      matchReasons.push(`generic_ref:${ref}`);
       break; // Only count once
     }
   }
 
-  // Check for clearly different domain (-2)
+  // Check for dynamic explicit entity references (+1.5)
+  // E.g., if context has "constitution park", detect "the constitution park" in question
+  if (hasExplicitEntityReference(questionLower, situationContext)) {
+    score += 1.5;
+    matchReasons.push('explicit_entity_ref');
+  }
+
+  // Domain-based penalty: if question is clearly in a different domain AND no entity overlap
+  const questionDomain = detectQuestionDomain(questionLower);
+  const situationDomain = detectSituationDomain(situationContext);
+  
   let isDifferentDomain = false;
-  for (const keyword of DIFFERENT_DOMAIN_KEYWORDS) {
-    if (questionLower.includes(keyword)) {
-      isDifferentDomain = true;
-      penaltyReasons.push(`different_domain:${keyword}`);
-      break;
-    }
+  let domainPenaltyReason = "";
+  
+  if (questionDomain && situationDomain && questionDomain !== situationDomain) {
+    // Both have detected domains and they're different
+    isDifferentDomain = true;
+    domainPenaltyReason = `${questionDomain} vs ${situationDomain}`;
+  } else if (questionDomain && !situationDomain) {
+    // Question has a clear domain but situation doesn't - likely a topic switch
+    isDifferentDomain = true;
+    domainPenaltyReason = `new_domain:${questionDomain}`;
   }
 
   // Apply penalty only if different domain AND no entity matches
@@ -490,10 +609,12 @@ export function computeQuestionSituationMatch(
   let reason = "";
   if (useSituationContext) {
     reason = `Matches: ${matchReasons.slice(0, 3).join(', ')}`;
-  } else if (isDifferentDomain) {
-    reason = `Different domain: ${penaltyReasons.join(', ')}`;
+  } else if (isDifferentDomain && matchReasons.length === 0) {
+    reason = `Different domain (${domainPenaltyReason}), no entity overlap`;
+  } else if (matchReasons.length === 0) {
+    reason = `No overlap with stored context`;
   } else {
-    reason = `Insufficient overlap (score=${score.toFixed(1)})`;
+    reason = `Insufficient overlap (score=${score.toFixed(1)}): ${matchReasons.slice(0, 2).join(', ')}`;
   }
 
   return {
