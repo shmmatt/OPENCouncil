@@ -199,6 +199,8 @@ export interface RecordStrength {
   situationAlignment: number; // 0..1
   legalTopicCoverage: number; // 0..1
   authoritativeStatePresent: boolean;
+  distinctStateDocs?: number; // Unique state documents by title
+  distinctLocalDocs?: number; // Unique local documents by title
 }
 
 /**
@@ -235,10 +237,24 @@ export interface AuditResult {
   violations: AuditViolation[];
   shouldRepair: boolean;
   repairHint?: string;
+  formatValidation?: {
+    wordCount: number;
+    headingsInOrder: boolean;
+    stateCitationCount: number;
+    lawSectionHasStateCitations: boolean;
+    llmTailsFound: string[];
+  };
 }
 
 export interface AuditViolation {
-  type: "uncited_rsa" | "uncited_procedure" | "absolute_legal_claim" | "off_topic_drift";
+  type: 
+    | "uncited_rsa" 
+    | "uncited_procedure" 
+    | "absolute_legal_claim" 
+    | "off_topic_drift"
+    | "format_violation"
+    | "missing_state_citation"
+    | "llm_tail";
   evidence: string;
   severity: "warning" | "error";
 }

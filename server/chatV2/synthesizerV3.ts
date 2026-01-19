@@ -52,7 +52,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
   const { model: modelName } = getModelForStage('complexSynthesis');
   const startTime = Date.now();
 
-  const systemPrompt = buildSynthesisSystemPrompt(recordStrength, issueMap, isRepairAttempt);
+  const systemPrompt = buildSynthesisSystemPrompt(recordStrength, issueMap, isRepairAttempt, stateChunks.length);
   const userPrompt = buildSynthesisUserPrompt(
     userMessage, 
     issueMap, 
@@ -62,6 +62,9 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     history
   );
 
+  // Lower temperature for more consistent, concise output
+  const synthesisTemperature = isRepairAttempt ? 0.15 : 0.2;
+
   logLlmRequest({
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -69,7 +72,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     model: modelName,
     systemPrompt: systemPrompt.slice(0, 500),
     userPrompt: userPrompt.slice(0, 500),
-    temperature: 0.3,
+    temperature: synthesisTemperature,
     extra: {
       tier: recordStrength.tier,
       localChunkCount: localChunks.length,
@@ -84,8 +87,8 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       config: {
         systemInstruction: systemPrompt,
-        temperature: 0.3,
-        maxOutputTokens: 4000,
+        temperature: synthesisTemperature,
+        maxOutputTokens: 2500, // Reduced to encourage conciseness
       },
     });
 
@@ -148,29 +151,51 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
 function buildSynthesisSystemPrompt(
   recordStrength: RecordStrength, 
   issueMap: IssueMap,
-  isRepairAttempt?: boolean
+  isRepairAttempt?: boolean,
+  stateChunkCount?: number
 ): string {
   const tierInstructions = getTierInstructions(recordStrength);
+  const hasStateChunks = (stateChunkCount || 0) > 0;
+  
   const repairNote = isRepairAttempt 
-    ? `\n\n**REPAIR ATTEMPT**: Previous answer had violations. Be EXTRA careful to:
-- Remove or qualify any claim not supported by provided excerpts
-- Do NOT mention statutes/procedures without citations
-- Stay anchored to the current situation`
+    ? `\n\n**REPAIR ATTEMPT**: Previous answer violated format rules. You MUST:
+- Rewrite to comply exactly with format/limits below
+- Shorten all sections to fit within caps
+- Keep citations intact
+- Remove any "next steps" or "consult counsel" language
+- No extra sections beyond the 5 required`
     : '';
 
-  return `You are an assistant for New Hampshire municipal officials. Generate a structured answer based on the provided documents.
+  return `You are an assistant for New Hampshire municipal officials. Generate a concise, structured answer.
 
-## ANSWER STRUCTURE (follow this format):
+## HARD LIMITS (MUST FOLLOW)
+- Max 500 words total (HARD CAP - count carefully)
+- Use headings EXACTLY as specified, in order
+- Bullet limits are STRICT per section
+- No bullet may exceed ~20 words
+- Do NOT repeat the same point across sections
+- Do NOT include "next steps", "consult counsel", "you may wish to", or "I recommend" language
+${hasStateChunks ? '- "What the law generally requires" MUST contain at least 2 [Sx] citations' : ''}
+- NEVER mention a specific RSA number unless cited with [Sx]
 
-1. **Situation anchor** (1-2 sentences connecting to the user's specific situation)
+## ANSWER FORMAT (use these exact headings in this order):
 
-2. **What we know (facts)** — Based on retrieved documents and user-provided text. Cite sources like [L1], [L2] for local, [S1], [S2] for state.
+1. **Bottom line** (1-2 sentences; cite if factual/legal claim)
 
-3. **Applicable legal framework (NH + federal)** — Only if state lane chunks are available. Cite [Sx] sources.
+2. **What happened** (max 5 bullets; timeline facts only; cite [USER] or [Lx])
 
-4. **Risk / likely outcomes** — Hedged language, cite the standards + facts supporting the assessment.
+3. **What the law generally requires** (max 5 bullets; include federal + NH + local if relevant; cite [Sx] for state law)
 
-5. **What would clarify / what to pull next** — List any gaps or documents that would provide more certainty.
+4. **What the Jan 6 vote changes** (max 4 bullets; connect vote → compliance → risk; cite sources)
+
+5. **Unknowns that matter** (max 4 bullets; ONLY uncertainties that materially affect the analysis; cite if possible)
+
+## CITATION RULES
+- [USER] is ONLY allowed in "What happened" section
+- [Lx] citations for local documents (minutes, warrants, ordinances)
+- [Sx] citations for state law (RSA, NHMA guidance, admin rules)
+- "What the law generally requires" MUST use [Sx] citations if state chunks exist
+- If no state chunks exist, keep law section general without specific RSA numbers
 
 ## TIER INSTRUCTIONS (${recordStrength.tier})
 ${tierInstructions}
@@ -190,38 +215,36 @@ ${tierInstructions}
 4. **Avoid absolute legal claims**: Do NOT use "is illegal", "will be liable", "must result in" unless explicitly supported by cited sources.
 
 5. **No topic substitution**: Answer about the situation the user asked about. Don't substitute related cases.
-
-6. **Citation format**: Use [L1], [L2]... for local chunks, [S1], [S2]... for state chunks, [USER] for user-provided text.
 ${repairNote}
 
 ## SITUATION CONTEXT
 ${issueMap.situationTitle ? `Current situation: "${issueMap.situationTitle}"` : 'General question'}
 ${issueMap.legalTopics.length > 0 ? `Legal topics: ${issueMap.legalTopics.join(', ')}` : ''}
-${issueMap.legalSalience >= 0.6 ? 'HIGH legal salience - ensure legal framework section is included' : ''}`;
+${issueMap.legalSalience >= 0.6 ? 'HIGH legal salience - ensure law section is thorough with [Sx] citations' : ''}`;
 }
 
 function getTierInstructions(recordStrength: RecordStrength): string {
   switch (recordStrength.tier) {
     case 'A':
       return `TIER A (Strong sources): 
-- Cite specifics from documents
-- Direct, confident framing where supported
-- Include statutory references when found in state chunks
-- Detailed analysis is appropriate`;
+- Cite specifics from documents with confidence
+- Direct framing where supported by citations
+- Include statutory references from state chunks [Sx]
+- Connect facts to legal standards clearly`;
 
     case 'B':
       return `TIER B (Moderate sources):
-- Cite available specifics
-- Add explicit "gaps/depends" qualifiers
-- Use hedged language for areas without strong support
-- Acknowledge where more documentation would help`;
+- Cite available specifics from documents
+- Add "gaps/depends" qualifiers where coverage is thin
+- Use hedged language for areas without strong [Sx] support
+- Note which legal topics lack citation`;
 
     case 'C':
-      return `TIER C (Weak sources):
-- Summarize user-provided facts primarily
-- Provide GENERAL legal framework only (no specific RSA numbers)
-- Focus on "what to research next"
-- Be explicit about limited archival coverage`;
+      return `TIER C (Limited sources):
+- Summarize user-provided facts primarily [USER]
+- Provide GENERAL legal framework only (no specific RSA numbers without [Sx])
+- Be explicit about limited archival coverage
+- Keep answer brief - focus on what IS known`;
   }
 }
 
@@ -249,16 +272,18 @@ function buildSynthesisUserPrompt(
   }
 
   if (localChunks.length > 0) {
-    parts.push('=== LOCAL DOCUMENTS ===');
+    parts.push('=== LOCAL DOCUMENTS (cite as [L1], [L2], etc.) ===');
     for (const chunk of localChunks) {
-      parts.push(`${chunk.label} [${chunk.authority.toUpperCase()}] ${chunk.title}\n${chunk.content.slice(0, 2000)}\n`);
+      // Citeable format: [L1] Title — excerpt
+      parts.push(`${chunk.label} ${chunk.title} — ${chunk.content.slice(0, 2000)}\n`);
     }
   }
 
   if (stateChunks.length > 0) {
-    parts.push('=== STATE DOCUMENTS ===');
+    parts.push('=== STATE DOCUMENTS (cite as [S1], [S2], etc. for legal framework) ===');
     for (const chunk of stateChunks) {
-      parts.push(`${chunk.label} [${chunk.authority.toUpperCase()}] ${chunk.title}\n${chunk.content.slice(0, 2000)}\n`);
+      // Citeable format: [S1] Title — excerpt
+      parts.push(`${chunk.label} ${chunk.title} — ${chunk.content.slice(0, 2000)}\n`);
     }
   }
 
@@ -294,24 +319,39 @@ export function computeRecordStrength(
   const localCount = localChunks.length;
   const stateCount = stateChunks.length;
   
-  const authoritativeStatePresent = stateChunks.some(
-    c => c.authority === 'rsa' || c.authority === 'nhma'
-  );
+  // Compute distinct state documents by title (deduped)
+  const distinctStateDocs = new Set(stateChunks.map(c => c.title.toLowerCase().trim())).size;
+  const distinctLocalDocs = new Set(localChunks.map(c => c.title.toLowerCase().trim())).size;
+  
+  // Robust authority detection - check both title AND content for RSA patterns
+  const authoritativeStatePresent = detectAuthoritativeState(stateChunks);
 
   const legalTopicCoverage = computeLegalTopicCoverage(stateChunks, issueMap.legalTopics);
+  const legalSalience = issueMap.legalSalience;
 
   let tier: RecordStrength['tier'];
   
-  if (localCount >= 5 && stateCount >= 3 && authoritativeStatePresent && situationAlignment >= 0.6) {
+  // NEW TIER RUBRIC (simpler and more stable)
+  // Tier A: Strong sources with authoritative state coverage
+  if (
+    stateCount >= 4 && 
+    (authoritativeStatePresent || distinctStateDocs >= 2) && 
+    situationAlignment >= 0.30
+  ) {
     tier = 'A';
-  } else if ((localCount >= 3 || stateCount >= 2) && situationAlignment >= 0.4) {
+  } 
+  // Tier B: Moderate sources with some state coverage
+  else if (stateCount >= 2 && situationAlignment >= 0.20) {
     tier = 'B';
-  } else {
+  } 
+  // Tier C: Weak sources
+  else {
     tier = 'C';
   }
 
-  if (issueMap.legalSalience >= 0.7 && stateCount < 2) {
-    tier = 'C';
+  // NEVER drop below Tier B when legalSalience is high and we have some state
+  if (legalSalience >= 0.6 && stateCount >= 2 && tier === 'C') {
+    tier = 'B';
   }
 
   return {
@@ -321,7 +361,49 @@ export function computeRecordStrength(
     situationAlignment,
     legalTopicCoverage,
     authoritativeStatePresent,
+    distinctStateDocs,
+    distinctLocalDocs,
   };
+}
+
+/**
+ * Robust detection of authoritative state sources
+ * Checks both title AND content for RSA patterns and official sources
+ */
+function detectAuthoritativeState(stateChunks: LabeledChunk[]): boolean {
+  const RSA_PATTERN = /\bRSA\s+\d+/i;
+  const NHMA_PATTERN = /\b(NHMA|Municipal\s+Association)\b/i;
+  const OFFICIAL_PATTERNS = [
+    /\bDepartment\b/i,
+    /\bDOJ\b/i,
+    /\bNHDES\b/i,
+    /\bNH\s+Secretary\s+of\s+State\b/i,
+    /\bAttorney\s+General\b/i,
+    /\bAdministrative\s+Rules?\b/i,
+  ];
+
+  for (const chunk of stateChunks) {
+    const combinedText = (chunk.title + ' ' + chunk.content);
+    
+    // Check for RSA pattern in title or content
+    if (RSA_PATTERN.test(combinedText)) {
+      return true;
+    }
+    
+    // Check for NHMA
+    if (NHMA_PATTERN.test(combinedText)) {
+      return true;
+    }
+    
+    // Check for official government sources
+    for (const pattern of OFFICIAL_PATTERNS) {
+      if (pattern.test(chunk.title)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
 }
 
 function computeLegalTopicCoverage(stateChunks: LabeledChunk[], legalTopics: string[]): number {

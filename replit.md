@@ -105,6 +105,48 @@ The two-lane retrieval system includes legal salience detection to improve answe
 - `server/chatV2/twoLaneRetrieve.ts` - Contains `computeLegalSalience()` and dynamic retrieval logic
 - `server/chatV2/unifiedPipeline.ts` - Contains `buildLegalFrameworkInstructions()` for prompt enhancement
 
+### V3 Pipeline Quality Improvements (January 2026)
+Major improvements to answer quality, tiering, and retrieval:
+
+**Synthesizer Format Spec**:
+- New 5-section format: Bottom line → What happened → What the law generally requires → What the Jan 6 vote changes → Unknowns that matter
+- Hard caps: 500 words max, bullet limits (5/5/4/4), no bullet > 20 words
+- Temperature reduced to 0.2 for conciseness
+- Citation discipline: `[USER]` only in "What happened", `[Sx]` required in law section when state chunks exist
+- Removed "What to pull next" shopping list behavior
+
+**Format Validation & Repair**:
+- `validateAnswerFormat()` in `audit.ts` checks word count, heading order, bullet counts, citation requirements
+- Rejects LLM tail phrases ("next steps", "consult counsel", "you may wish to")
+- `hardTruncateAnswer()` fallback for failed repairs
+- `getTierCFallback()` for minimal valid answers when repair fails
+
+**Tiering Improvements**:
+- New tier rubric using `distinctStateDocs` and `authoritativeStatePresent`
+- Tier A: stateCount >= 4 AND (authoritativeState OR distinctDocs >= 2) AND alignment >= 0.30
+- Tier B: stateCount >= 2 AND alignment >= 0.20
+- Never drop below Tier B when legalSalience >= 0.6 and stateCount >= 2
+
+**Authority Detection**:
+- Robust RSA pattern matching in both title AND content: `/\bRSA\s+\d+/i`
+- NHMA detection in combined text
+- Official source patterns: DOJ, NHDES, Secretary of State, Attorney General
+
+**Early Exit Logic**:
+- For legal questions (legalSalience >= 0.6), require better state coverage before early exit
+- Must have: distinctStateDocs >= 2 OR authoritativeStatePresent
+- Plus: stateCount >= minState (4) AND legalTopicCoverage >= 0.5
+- Non-legal questions use basic chunk count threshold
+
+**State Lane Deduplication**:
+- `dedupeChunksByDocument()` normalizes titles for strict deduplication
+- `distinctStateDocs` count used for tiering and early exit decisions
+- Prevents duplicate document inflation of coverage metrics
+
+**Debug Fields**:
+- Synthesis: wordCount, headingsInOrder, stateCitationCount, lawSectionHasStateCitations, llmTailsFound
+- Retrieval: distinctStateDocs, distinctLocalDocs, earlyExitReason, legalSalience, authoritativeStatePresent
+
 ### Build & Deployment
 The application uses Vite for frontend development and esbuild for backend bundling. It is designed for single-server deployment, serving static files and the API, with external managed PostgreSQL and environment variable-based configuration.
 

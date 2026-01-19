@@ -711,6 +711,83 @@ function dedupeChunks(chunks: LaneChunk[]): LaneChunk[] {
 }
 
 /**
+ * Deduplicate chunks by document name/title (stricter version)
+ * Used for counting distinct documents before early exit decision
+ */
+function dedupeChunksByDocument(chunks: LaneChunk[]): LaneChunk[] {
+  const seen = new Map<string, LaneChunk>();
+  
+  for (const chunk of chunks) {
+    // Normalize title for comparison
+    const normalizedTitle = chunk.title.toLowerCase().trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\w\s]/g, '');
+    
+    const existing = seen.get(normalizedTitle);
+    
+    if (!existing || (chunk.score || 0) > (existing.score || 0)) {
+      seen.set(normalizedTitle, chunk);
+    }
+  }
+  
+  return Array.from(seen.values());
+}
+
+/**
+ * Detect authoritative state content by checking for RSA patterns and official sources
+ */
+function detectAuthoritativeStateContent(stateChunks: LaneChunk[]): boolean {
+  const RSA_PATTERN = /\bRSA\s+\d+/i;
+  const NHMA_PATTERN = /\b(NHMA|Municipal\s+Association)\b/i;
+  const OFFICIAL_PATTERNS = [
+    /\bDepartment\b/i,
+    /\bDOJ\b/i,
+    /\bNHDES\b/i,
+    /\bNH\s+Secretary\s+of\s+State\b/i,
+    /\bAttorney\s+General\b/i,
+  ];
+
+  for (const chunk of stateChunks) {
+    const combinedText = (chunk.title + ' ' + chunk.content);
+    
+    if (RSA_PATTERN.test(combinedText)) {
+      return true;
+    }
+    
+    if (NHMA_PATTERN.test(combinedText)) {
+      return true;
+    }
+    
+    for (const pattern of OFFICIAL_PATTERNS) {
+      if (pattern.test(chunk.title)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Quick computation of legal topic coverage for early exit decisions
+ */
+function computeQuickTopicCoverage(stateChunks: LaneChunk[], legalTopics: string[]): number {
+  if (legalTopics.length === 0) return 1.0;
+  if (stateChunks.length === 0) return 0;
+
+  const chunkText = stateChunks.map(c => (c.title + ' ' + c.content).toLowerCase()).join(' ');
+  let covered = 0;
+
+  for (const topic of legalTopics) {
+    if (chunkText.includes(topic.toLowerCase())) {
+      covered++;
+    }
+  }
+
+  return covered / legalTopics.length;
+}
+
+/**
  * Merge and rank chunks from both lanes with situation-aware re-ranking
  * and legal salience-based state chunk guarantees
  */
@@ -1165,13 +1242,17 @@ export interface V3RetrievalResult {
   situationAlignment: number;
   legalTopicCoverage: number;
   authoritativeStatePresent: boolean;
+  distinctStateDocs: number;
+  distinctLocalDocs: number;
   debug: {
     localQueriesUsed: string[];
     stateQueriesUsed: string[];
     localRetrievedTotal: number;
     stateRetrievedTotal: number;
     earlyExitTriggered: boolean;
+    earlyExitReason?: string;
     durationMs: number;
+    legalSalience?: number;
   };
 }
 
@@ -1251,19 +1332,67 @@ export async function twoLaneRetrieveWithPlan(
     }
   }
 
-  const dedupedLocalFirst = dedupeChunks(allLocalChunks);
-  const dedupedStateFirst = dedupeChunks(allStateChunks);
+  // Dedupe by document name/title before counting
+  const dedupedLocalFirst = dedupeChunksByDocument(allLocalChunks);
+  const dedupedStateFirst = dedupeChunksByDocument(allStateChunks);
+  
+  // Count distinct documents for coverage assessment
+  const distinctStateDocs = new Set(dedupedStateFirst.map(c => c.title.toLowerCase().trim())).size;
+  const distinctLocalDocs = new Set(dedupedLocalFirst.map(c => c.title.toLowerCase().trim())).size;
+  
+  // Check for authoritative state content in first batch
+  const authoritativeStatePresent = detectAuthoritativeStateContent(dedupedStateFirst);
+  
   const totalGoodChunks = dedupedLocalFirst.length + dedupedStateFirst.length;
-
-  if (chatConfigV3.ENABLE_EARLY_EXIT && totalGoodChunks >= chatConfigV3.EARLY_EXIT_MIN_CHUNKS) {
+  
+  // Compute legal salience from issue map
+  const legalSalience = issueMap.legalSalience || 0;
+  
+  // NEW EARLY EXIT LOGIC: 
+  // For legal questions (legalSalience >= 0.6), require better state coverage before exit
+  const meetsBasicThreshold = totalGoodChunks >= chatConfigV3.EARLY_EXIT_MIN_CHUNKS;
+  const minStateForLegal = 4;
+  const minLegalTopicCoverage = 0.5;
+  
+  // Compute quick legal topic coverage for exit decision
+  const quickLegalTopicCoverage = computeQuickTopicCoverage(dedupedStateFirst, issueMap.legalTopics);
+  
+  let canEarlyExit = false;
+  let earlyExitReason = '';
+  
+  if (chatConfigV3.ENABLE_EARLY_EXIT && meetsBasicThreshold) {
+    if (legalSalience >= 0.6) {
+      // For legal questions, require state coverage + authority
+      const hasStateCoverage = 
+        (distinctStateDocs >= 2 || authoritativeStatePresent) &&
+        dedupedStateFirst.length >= minStateForLegal &&
+        quickLegalTopicCoverage >= minLegalTopicCoverage;
+      
+      if (hasStateCoverage) {
+        canEarlyExit = true;
+        earlyExitReason = `Legal question with good state coverage: ${distinctStateDocs} distinct docs, authority=${authoritativeStatePresent}`;
+      } else {
+        earlyExitReason = `Legal question needs more state coverage: ${distinctStateDocs} distinct docs, ${dedupedStateFirst.length} chunks, coverage=${quickLegalTopicCoverage.toFixed(2)}`;
+      }
+    } else {
+      // For non-legal questions, basic chunk count is sufficient
+      canEarlyExit = true;
+      earlyExitReason = `Non-legal question with sufficient chunks: ${totalGoodChunks}`;
+    }
+  }
+  
+  if (canEarlyExit) {
     earlyExitTriggered = true;
     logDebug("v3_retrieval_early_exit", {
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "v3_retrieval",
-      reason: `Sufficient chunks found: ${totalGoodChunks}`,
+      reason: earlyExitReason,
       localCount: dedupedLocalFirst.length,
       stateCount: dedupedStateFirst.length,
+      distinctStateDocs,
+      authoritativeStatePresent,
+      legalSalience,
     });
   } else {
     const remainingLocalQueries = localQueries.slice(2);
@@ -1293,8 +1422,9 @@ export async function twoLaneRetrieveWithPlan(
     }
   }
 
-  const dedupedLocal = dedupeChunks(allLocalChunks);
-  const dedupedState = dedupeChunks(allStateChunks);
+  // Use document-level deduplication for final selection
+  const dedupedLocal = dedupeChunksByDocument(allLocalChunks);
+  const dedupedState = dedupeChunksByDocument(allStateChunks);
 
   const rankedLocal = rankChunksWithSituationContext(dedupedLocal, situationContext);
   const rankedState = rankChunksWithSituationContext(dedupedState, situationContext);
@@ -1305,12 +1435,13 @@ export async function twoLaneRetrieveWithPlan(
   const selectedState = selectWithMinimum(rankedState, plan.state.cap, minState, issueMap.legalTopics);
   const selectedLocal = selectWithMinimum(rankedLocal, plan.local.cap, minLocalFacts, []);
 
+  // Use robust authority classification that checks content
   const labeledLocalChunks: LabeledChunk[] = selectedLocal.map((chunk, idx) => ({
     label: `[L${idx + 1}]`,
     title: chunk.title,
     content: chunk.content,
     lane: "local" as const,
-    authority: classifyAuthority(chunk.title, "local"),
+    authority: classifyAuthorityRobust(chunk.title, chunk.content, "local"),
   }));
 
   const labeledStateChunks: LabeledChunk[] = selectedState.map((chunk, idx) => ({
@@ -1318,7 +1449,7 @@ export async function twoLaneRetrieveWithPlan(
     title: chunk.title,
     content: chunk.content,
     lane: "state" as const,
-    authority: classifyAuthority(chunk.title, "state"),
+    authority: classifyAuthorityRobust(chunk.title, chunk.content, "state"),
   }));
 
   const situationAlignment = computeAverageSituationAlignment(
@@ -1326,14 +1457,17 @@ export async function twoLaneRetrieveWithPlan(
     situationContext
   );
 
-  const legalTopicCoverage = computeLegalTopicCoverageFromChunks(
+  const legalTopicCoverageFinal = computeLegalTopicCoverageFromChunks(
     labeledStateChunks,
     issueMap.legalTopics
   );
 
-  const authoritativeStatePresent = labeledStateChunks.some(
-    c => c.authority === 'rsa' || c.authority === 'nhma'
-  );
+  // Use robust authority detection that checks content
+  const authoritativeStatePresentFinal = detectAuthoritativeStateContent(selectedState);
+
+  // Count distinct documents in final selection
+  const finalDistinctStateDocs = new Set(labeledStateChunks.map(c => c.title.toLowerCase().trim())).size;
+  const finalDistinctLocalDocs = new Set(labeledLocalChunks.map(c => c.title.toLowerCase().trim())).size;
 
   const allDocumentNames = Array.from(new Set([
     ...selectedLocal.flatMap(c => c.documentNames),
@@ -1350,10 +1484,14 @@ export async function twoLaneRetrieveWithPlan(
     stateQueriesUsed: stateQueriesUsed.length,
     localSelected: labeledLocalChunks.length,
     stateSelected: labeledStateChunks.length,
+    distinctStateDocs: finalDistinctStateDocs,
+    distinctLocalDocs: finalDistinctLocalDocs,
     situationAlignment,
-    legalTopicCoverage,
-    authoritativeStatePresent,
+    legalTopicCoverage: legalTopicCoverageFinal,
+    authoritativeStatePresent: authoritativeStatePresentFinal,
     earlyExitTriggered,
+    earlyExitReason,
+    legalSalience,
     durationMs,
   });
 
@@ -1364,15 +1502,19 @@ export async function twoLaneRetrieveWithPlan(
     localCount: labeledLocalChunks.length,
     stateCount: labeledStateChunks.length,
     situationAlignment,
-    legalTopicCoverage,
-    authoritativeStatePresent,
+    legalTopicCoverage: legalTopicCoverageFinal,
+    authoritativeStatePresent: authoritativeStatePresentFinal,
+    distinctStateDocs: finalDistinctStateDocs,
+    distinctLocalDocs: finalDistinctLocalDocs,
     debug: {
       localQueriesUsed,
       stateQueriesUsed,
       localRetrievedTotal,
       stateRetrievedTotal,
       earlyExitTriggered,
+      earlyExitReason: earlyExitReason || undefined,
       durationMs,
+      legalSalience,
     },
   };
 }
@@ -1442,6 +1584,35 @@ function classifyAuthority(title: string, lane: "local" | "state"): ChunkAuthori
     return "official";
   }
 
+  if (lowerTitle.includes("minutes") || lowerTitle.includes("meeting")) {
+    return "minutes";
+  }
+  if (lowerTitle.includes("news") || lowerTitle.includes("article") || lowerTitle.includes("reporter")) {
+    return "news";
+  }
+  return "official";
+}
+
+/**
+ * Robust authority classification that checks both title AND content
+ */
+function classifyAuthorityRobust(title: string, content: string, lane: "local" | "state"): ChunkAuthority {
+  const combinedText = (title + ' ' + content).toLowerCase();
+  const lowerTitle = title.toLowerCase();
+
+  if (lane === "state") {
+    // Check for RSA in title or content
+    if (/\brsa\s+\d+/i.test(combinedText)) {
+      return "rsa";
+    }
+    // Check for NHMA
+    if (/\bnhma\b/i.test(combinedText) || lowerTitle.includes("municipal association")) {
+      return "nhma";
+    }
+    return "official";
+  }
+
+  // Local lane classification
   if (lowerTitle.includes("minutes") || lowerTitle.includes("meeting")) {
     return "minutes";
   }
