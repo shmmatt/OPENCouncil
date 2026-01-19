@@ -1,0 +1,134 @@
+Got it. The fix here is: stop using “templates that read like templates.” You still need internal structure for reliability/audit, but you don’t need to render it as headings + bullets.
+
+The approach
+
+1. Keep AnswerMode routing (QUICK_PROCESS / EXPLAINER / RISK_DISPUTE) so the system knows how to think.
+
+
+2. Switch the render layer to “civic memo prose”:
+
+1–3 short paragraphs
+
+minimal list usage (only when the user explicitly asks for a checklist)
+
+citations stay, but inline and subtle: “…[L1]”
+
+
+
+3. Add a “style guard” so it doesn’t fall back into LLM filler (“next steps,” “consult counsel,” “unknowns that matter,” etc.).
+
+
+
+
+---
+
+What this would look like (lot merger)
+
+Instead of headings/bullets:
+
+A voluntary lot merger in Ossipee is handled through the Planning Board using the town’s “Application for Merger of Lots.” If the parcels are contiguous under the town’s definition, the applicant submits the form along with supporting property documentation (deeds, assessment cards, tax map, proof taxes are paid, etc.). The town also requires notice to any mortgage holder and written consent before the merger can be approved and recorded. After approval, a Notice of Merger is recorded with the Registry of Deeds and filed with the town. [L1]
+
+At the state level, the legal backdrop is RSA 674:39-a, which authorizes voluntary lot mergers through the local planning board process and sets limits on involuntary mergers. [S1]
+
+That reads like a human wrote it, but is still grounded.
+
+
+---
+
+Prompt to Replit Agent: prose-first rendering (no “ChatGPT template vibe”)
+
+# REPLIT AGENT — Prose-First Answer Rendering (Minimal Headings/Bullets)
+
+## Objective
+Answers should read like a concise civic memo: short, direct paragraphs.
+Avoid the “heading + bullets” ChatGPT feel, especially for simple questions.
+
+We will keep AnswerMode routing internally, but render outputs as prose.
+
+---
+
+## 1) Add a renderStyle flag
+PlannerV3 must output:
+- answerMode: QUICK_PROCESS | EXPLAINER | RISK_DISPUTE
+- renderStyle: "PROSE" (default), "LIST" only if user explicitly asks for a checklist/table.
+
+Heuristic:
+- If user says: “list”, “checklist”, “steps”, “bullet”, “in a table” -> renderStyle=LIST
+- Else renderStyle=PROSE
+
+---
+
+## 2) Replace current templates with PROSE templates
+
+### QUICK_PROCESS + PROSE
+Hard rules:
+- 120–220 words
+- 1–2 short paragraphs
+- NO headings
+- NO bullet lists unless renderStyle=LIST
+- Must include: what to file + where + key requirement constraints
+- Include 1 local citation and 0–1 state citation if relevant
+
+### EXPLAINER + PROSE
+Hard rules:
+- 180–320 words
+- 2–3 paragraphs
+- Minimal citations
+- Define terms briefly, then explain how it works in NH and locally
+
+### RISK_DISPUTE + PROSE
+Hard rules:
+- 250–450 words
+- 3–5 short paragraphs
+- Paragraph 1: situation + why it matters
+- Paragraph 2–3: what sources say happened (facts with citations)
+- Paragraph 4: what the governing rules generally require (must cite state if present)
+- Paragraph 5 (optional): realistic outcomes/risks, only supported by sources
+- NO “unknowns that matter”, NO “next steps”, NO “consult counsel” language
+
+---
+
+## 3) Add explicit anti-chatgpt style constraints
+In synthesizer system prompt, add:
+
+- Do not use section headers unless renderStyle=LIST.
+- Do not use “Bottom line,” “What we know,” “Unknowns that matter,” or similar.
+- Do not include “next steps,” “you may wish to,” “consult counsel,” “I recommend.”
+- Avoid meta language: “based on the provided documents…” unless the user asks.
+- Prefer plain statements with citations at sentence ends.
+
+---
+
+## 4) Keep auditability internally
+Even in PROSE mode:
+- Must include citations [Lx]/[Sx] for any factual/legal claim.
+- If state sources are weak/irrelevant, say nothing about state law.
+- If only local sources exist, answer using local only.
+
+---
+
+## Acceptance tests
+A) “process and requirements for a lot merger”
+- 1–2 paragraphs, no headings, no bullets, includes local requirements + RSA mention if present.
+
+B) “can select board override building inspector”
+- 3–5 paragraphs, no headings, includes BCBA/appeal concept only if cited.
+
+C) Random budget committee question after boardwalk chat
+- no leakage of boardwalk language; no “vote changes” phrasing unless question is about a vote.
+
+Deliver code updates + logs for answerMode/renderStyle chosen.
+
+
+---
+
+One extra move that helps a lot
+
+If you want it to feel even less “assistant-y,” add a “civic tone” constraint:
+
+“Write like a town administrator explaining this to a resident in an email: calm, neutral, short sentences.”
+
+
+That tends to produce human prose without the “AI voice.”
+
+If you want, paste the current synthesizer system prompt and I’ll rewrite it in-place to match this style while keeping your audit requirements.
