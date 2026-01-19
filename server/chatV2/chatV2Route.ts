@@ -8,10 +8,12 @@ import { logInfo, logDebug, logError, logWarn, sanitizeUserContent } from "../ut
 import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/geminiErrors";
 import { resolveTownPreference, buildTrimmedHistoryForAnswer } from "./pipelineUtils";
 import { runUnifiedChatPipeline } from "./unifiedPipeline";
+import { runChatV3Pipeline } from "./chatOrchestratorV3";
 import { extractSituationHeuristic } from "./situationExtractor";
 import { detectDrift, shouldRegenerate } from "./driftDetector";
 import { detectSessionSource } from "./sessionSourceDetector";
 import { chatConfig } from "./chatConfig";
+import { chatConfigV3 } from "./chatConfigV3";
 import type { SituationContext, SessionSource } from "@shared/schema";
 import type {
   ChatV2Request,
@@ -248,66 +250,105 @@ export function registerChatV2Routes(app: Express): void {
         }
       }
 
-      // SIMPLIFIED PIPELINE: Two-lane retrieval + single synthesis with situation context
+      // Run pipeline: V3 (Plan → Retrieve → Synthesize → Audit) or V2 fallback
       const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
       
-      let pipelineResult = await runUnifiedChatPipeline({
-        question: trimmedContent,
-        sessionHistory: trimmedHistory,
-        townPreference: resolvedTown,
-        situationContext,
-        sessionSources,
-        logContext: logCtx,
-      });
+      let answerText: string;
+      let sourceDocumentNames: string[];
+      let docSourceType: DocSourceType;
+      let docSourceTown: string | null;
+      let retrievedChunkCount: number;
+      let pipelineDurationMs: number;
 
-      let answerText = pipelineResult.answerText;
-      
-      // DRIFT DETECTION: Check for topic drift and regenerate if needed
-      if (chatConfig.ENABLE_DRIFT_DETECTION && situationContext) {
-        const driftResult = detectDrift(answerText, situationContext, logCtx);
+      if (chatConfigV3.ENABLE_V3_PIPELINE) {
+        // V3 PIPELINE: Plan → Retrieve → Synthesize → Audit
+        const v3Result = await runChatV3Pipeline({
+          userMessage: trimmedContent,
+          sessionHistory: trimmedHistory,
+          townPreference: resolvedTown,
+          situationContext,
+          sessionSources,
+          logContext: logCtx,
+        });
+
+        answerText = v3Result.answerText;
+        sourceDocumentNames = v3Result.sourceDocumentNames;
+        docSourceType = v3Result.docSourceType;
+        docSourceTown = v3Result.docSourceTown;
+        retrievedChunkCount = v3Result.retrievedChunkCount;
+        pipelineDurationMs = v3Result.durationMs;
+
+        logDebug("v3_pipeline_used", {
+          ...logCtx,
+          stage: "pipeline_selection",
+          tier: v3Result.recordStrength.tier,
+          localCount: v3Result.recordStrength.localCount,
+          stateCount: v3Result.recordStrength.stateCount,
+          auditFlagCount: v3Result.debug.auditFlags.length,
+          repairRan: v3Result.debug.repairRan,
+        });
+      } else {
+        // V2 FALLBACK: Two-lane retrieval + single synthesis
+        let pipelineResult = await runUnifiedChatPipeline({
+          question: trimmedContent,
+          sessionHistory: trimmedHistory,
+          townPreference: resolvedTown,
+          situationContext,
+          sessionSources,
+          logContext: logCtx,
+        });
+
+        answerText = pipelineResult.answerText;
         
-        if (shouldRegenerate(driftResult) && chatConfig.MAX_DRIFT_REGENERATION_ATTEMPTS > 0) {
-          logDebug("drift_detected_regenerating", {
-            ...logCtx,
-            stage: "drift_detection",
-            driftedEntities: driftResult.driftedToEntities,
-            severity: driftResult.severity,
-          });
+        // DRIFT DETECTION: Check for topic drift and regenerate if needed
+        if (chatConfig.ENABLE_DRIFT_DETECTION && situationContext) {
+          const driftResult = detectDrift(answerText, situationContext, logCtx);
           
-          // Regenerate with stricter instructions
-          const regeneratedResult = await runUnifiedChatPipeline({
-            question: `${driftResult.regenerationHint}\n\nOriginal question: ${trimmedContent}`,
-            sessionHistory: trimmedHistory,
-            townPreference: resolvedTown,
-            situationContext,
-            sessionSources,
-            logContext: logCtx,
-          });
-          
-          // Use regenerated answer if it's not worse
-          const newDriftResult = detectDrift(regeneratedResult.answerText, situationContext, logCtx);
-          if (!newDriftResult.hasDrift || newDriftResult.severity === "none") {
-            answerText = regeneratedResult.answerText;
-            pipelineResult = regeneratedResult;
+          if (shouldRegenerate(driftResult) && chatConfig.MAX_DRIFT_REGENERATION_ATTEMPTS > 0) {
+            logDebug("drift_detected_regenerating", {
+              ...logCtx,
+              stage: "drift_detection",
+              driftedEntities: driftResult.driftedToEntities,
+              severity: driftResult.severity,
+            });
             
-            logDebug("drift_regeneration_successful", {
-              ...logCtx,
-              stage: "drift_detection",
-              originalDrift: driftResult.driftedToEntities,
-              newAnswerLength: answerText.length,
+            // Regenerate with stricter instructions
+            const regeneratedResult = await runUnifiedChatPipeline({
+              question: `${driftResult.regenerationHint}\n\nOriginal question: ${trimmedContent}`,
+              sessionHistory: trimmedHistory,
+              townPreference: resolvedTown,
+              situationContext,
+              sessionSources,
+              logContext: logCtx,
             });
-          } else {
-            logDebug("drift_regeneration_still_drifted", {
-              ...logCtx,
-              stage: "drift_detection",
-              message: "Regenerated answer still has drift, using original",
-            });
+            
+            // Use regenerated answer if it's not worse
+            const newDriftResult = detectDrift(regeneratedResult.answerText, situationContext, logCtx);
+            if (!newDriftResult.hasDrift || newDriftResult.severity === "none") {
+              answerText = regeneratedResult.answerText;
+              pipelineResult = regeneratedResult;
+              
+              logDebug("drift_regeneration_successful", {
+                ...logCtx,
+                stage: "drift_detection",
+                originalDrift: driftResult.driftedToEntities,
+                newAnswerLength: answerText.length,
+              });
+            } else {
+              logDebug("drift_regeneration_still_drifted", {
+                ...logCtx,
+                stage: "drift_detection",
+                message: "Regenerated answer still has drift, using original",
+              });
+            }
           }
         }
+        sourceDocumentNames = pipelineResult.sourceDocumentNames;
+        docSourceType = pipelineResult.docSourceType;
+        docSourceTown = pipelineResult.docSourceTown;
+        retrievedChunkCount = pipelineResult.retrievedChunkCount;
+        pipelineDurationMs = pipelineResult.durationMs;
       }
-      const sourceDocumentNames = pipelineResult.sourceDocumentNames;
-      const docSourceType = pipelineResult.docSourceType;
-      const docSourceTown = pipelineResult.docSourceTown;
       
       // Generate follow-up suggestions
       const suggestedFollowUps = await generateFollowups({
@@ -318,13 +359,14 @@ export function registerChatV2Routes(app: Express): void {
         logContext: logCtx,
       });
 
-      logDebug("unified_pipeline_complete_with_followups", {
+      logDebug("pipeline_complete_with_followups", {
         ...logCtx,
-        stage: "unified_pipeline",
+        stage: chatConfigV3.ENABLE_V3_PIPELINE ? "v3_pipeline" : "unified_pipeline",
         answerLength: answerText.length,
         sourceCount: sourceDocumentNames.length,
         followUpCount: suggestedFollowUps.length,
-        durationMs: pipelineResult.durationMs,
+        retrievedChunkCount,
+        durationMs: pipelineDurationMs,
       });
 
       // Map sources to citations
@@ -380,7 +422,7 @@ export function registerChatV2Routes(app: Express): void {
         answerLength: answerText.length,
         docSourceType,
         docSourceTown,
-        retrievedChunkCount: pipelineResult.retrievedChunkCount,
+        retrievedChunkCount,
       });
 
       return res.json(response);

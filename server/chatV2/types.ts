@@ -141,3 +141,168 @@ export interface PipelineLogContext {
   sessionId: string;
   actor?: ActorContext;
 }
+
+// =====================================================
+// CHAT V3 PIPELINE TYPES
+// =====================================================
+
+/**
+ * IssueMap: Structured extraction of the user's question/situation
+ * Used by Stage 1 (Planner) to guide retrieval and synthesis
+ */
+export interface IssueMap {
+  town?: string;
+  situationTitle?: string;
+  entities: string[];
+  actions: string[];
+  legalTopics: string[];
+  boards: string[];
+  timeHints: string[];
+  requestedOutput?: "explain" | "steps" | "cite_laws" | "risk" | "process";
+  legalSalience: number; // 0..1
+  plannerConfidence: number; // 0..1
+}
+
+/**
+ * Lane-specific retrieval plan for multi-query retrieval
+ */
+export interface LanePlan {
+  queries: string[];
+  k: number;
+  cap: number;
+}
+
+/**
+ * V3 Retrieval Plan with multi-query support per lane
+ */
+export interface RetrievalPlanV3 {
+  local: LanePlan;
+  state: LanePlan;
+  mustInclude: {
+    minState?: number;
+    minLocalFacts?: number;
+  };
+  priority: "law-first" | "facts-first" | "process-first";
+  reason: string; // for debug
+}
+
+/**
+ * Record strength tier system for synthesis confidence control
+ * - Tier A: Rich sources, cite specifics, direct framing
+ * - Tier B: Some sources, add "gaps/depends" language
+ * - Tier C: Weak sources, general framework only, no statute numbers
+ */
+export interface RecordStrength {
+  tier: "A" | "B" | "C";
+  localCount: number;
+  stateCount: number;
+  situationAlignment: number; // 0..1
+  legalTopicCoverage: number; // 0..1
+  authoritativeStatePresent: boolean;
+}
+
+/**
+ * Authority classification for chunk sources
+ */
+export type ChunkAuthority = "rsa" | "nhma" | "official" | "minutes" | "news" | "other";
+
+/**
+ * Enhanced chunk metadata for v3 pipeline
+ */
+export interface ChunkMetadataV3 {
+  lane: "local" | "state";
+  authority: ChunkAuthority;
+  topicTags: string[];
+  situationMatchScore?: number;
+  sourceId: string;
+  sourceTitle: string;
+}
+
+/**
+ * V3 Pipeline planner output combining IssueMap and RetrievalPlan
+ */
+export interface PlannerOutput {
+  issueMap: IssueMap;
+  retrievalPlan: RetrievalPlanV3;
+  validationWarnings: string[];
+}
+
+/**
+ * Audit result from post-generation checking
+ */
+export interface AuditResult {
+  passed: boolean;
+  violations: AuditViolation[];
+  shouldRepair: boolean;
+  repairHint?: string;
+}
+
+export interface AuditViolation {
+  type: "uncited_rsa" | "uncited_procedure" | "absolute_legal_claim" | "off_topic_drift";
+  evidence: string;
+  severity: "warning" | "error";
+}
+
+/**
+ * V3 Synthesis input combining all sources
+ */
+export interface SynthesisInputV3 {
+  userMessage: string;
+  issueMap: IssueMap;
+  sessionSourceText?: string;
+  localChunks: LabeledChunk[];
+  stateChunks: LabeledChunk[];
+  recordStrength: RecordStrength;
+  history: ChatHistoryMessage[];
+}
+
+/**
+ * Labeled chunk for citation tracking in synthesis
+ */
+export interface LabeledChunk {
+  label: string; // e.g., "[L1]" or "[S2]"
+  title: string;
+  content: string;
+  lane: "local" | "state";
+  authority: ChunkAuthority;
+}
+
+/**
+ * V3 Orchestrator debug output for observability
+ */
+export interface V3DebugInfo {
+  issueMapSummary: {
+    entities: string[];
+    legalTopics: string[];
+    legalSalience: number;
+    plannerConfidence: number;
+  };
+  planQueries: {
+    local: string[];
+    state: string[];
+  };
+  retrievalCounts: {
+    localRetrieved: number;
+    localSelected: number;
+    stateRetrieved: number;
+    stateSelected: number;
+  };
+  recordStrengthTier: "A" | "B" | "C";
+  auditFlags: string[];
+  repairRan: boolean;
+  durationMs: number;
+}
+
+/**
+ * V3 Pipeline result
+ */
+export interface V3PipelineResult {
+  answerText: string;
+  sourceDocumentNames: string[];
+  docSourceType: DocSourceType;
+  docSourceTown: string | null;
+  retrievedChunkCount: number;
+  recordStrength: RecordStrength;
+  debug: V3DebugInfo;
+  durationMs: number;
+}

@@ -1146,6 +1146,347 @@ export async function twoLaneRetrieve(
   };
 }
 
+// =====================================================
+// V3 MULTI-QUERY RETRIEVAL
+// =====================================================
+
+import { chatConfigV3 } from "./chatConfigV3";
+import type { RetrievalPlanV3, LabeledChunk, ChunkAuthority, IssueMap as IssueMapV3 } from "./types";
+
+/**
+ * V3 Multi-Query Retrieval Result
+ */
+export interface V3RetrievalResult {
+  localChunks: LabeledChunk[];
+  stateChunks: LabeledChunk[];
+  allDocumentNames: string[];
+  localCount: number;
+  stateCount: number;
+  situationAlignment: number;
+  legalTopicCoverage: number;
+  authoritativeStatePresent: boolean;
+  debug: {
+    localQueriesUsed: string[];
+    stateQueriesUsed: string[];
+    localRetrievedTotal: number;
+    stateRetrievedTotal: number;
+    earlyExitTriggered: boolean;
+    durationMs: number;
+  };
+}
+
+/**
+ * Execute multi-query retrieval using V3 plan
+ * Runs multiple queries per lane in parallel with early-exit optimization
+ */
+export async function twoLaneRetrieveWithPlan(
+  plan: RetrievalPlanV3,
+  issueMap: IssueMapV3,
+  options: {
+    townPreference?: string | null;
+    situationContext?: SituationContext | null;
+    logContext?: PipelineLogContext;
+  }
+): Promise<V3RetrievalResult> {
+  const { townPreference, situationContext, logContext } = options;
+  const startTime = Date.now();
+
+  const storeId = await getOrCreateFileSearchStoreId();
+
+  let localQueriesUsed: string[] = [];
+  let stateQueriesUsed: string[] = [];
+  let localRetrievedTotal = 0;
+  let stateRetrievedTotal = 0;
+  let earlyExitTriggered = false;
+
+  const allLocalChunks: LaneChunk[] = [];
+  const allStateChunks: LaneChunk[] = [];
+
+  const localQueries = plan.local.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
+  const stateQueries = plan.state.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
+
+  const executeLocalQuery = async (query: string, idx: number) => {
+    const result = await executeLaneRetrieval({
+      query,
+      storeId,
+      lane: "local",
+      maxResults: plan.local.k,
+      logContext,
+    });
+    return { query, idx, result };
+  };
+
+  const executeStateQuery = async (query: string, idx: number) => {
+    const result = await executeLaneRetrieval({
+      query,
+      storeId,
+      lane: "state",
+      maxResults: plan.state.k,
+      logContext,
+    });
+    return { query, idx, result };
+  };
+
+  const firstBatchLocal = localQueries.slice(0, 2);
+  const firstBatchState = stateQueries.slice(0, 2);
+
+  const firstBatchPromises = [
+    ...firstBatchLocal.map((q, i) => executeLocalQuery(q, i)),
+    ...firstBatchState.map((q, i) => executeStateQuery(q, i)),
+  ];
+
+  const firstBatchResults = await Promise.all(firstBatchPromises);
+
+  for (const result of firstBatchResults) {
+    if (result.result.chunks.length > 0) {
+      if (result.result.chunks[0].lane === "local") {
+        allLocalChunks.push(...result.result.chunks);
+        localQueriesUsed.push(result.query);
+        localRetrievedTotal += result.result.chunks.length;
+      } else {
+        allStateChunks.push(...result.result.chunks);
+        stateQueriesUsed.push(result.query);
+        stateRetrievedTotal += result.result.chunks.length;
+      }
+    }
+  }
+
+  const dedupedLocalFirst = dedupeChunks(allLocalChunks);
+  const dedupedStateFirst = dedupeChunks(allStateChunks);
+  const totalGoodChunks = dedupedLocalFirst.length + dedupedStateFirst.length;
+
+  if (chatConfigV3.ENABLE_EARLY_EXIT && totalGoodChunks >= chatConfigV3.EARLY_EXIT_MIN_CHUNKS) {
+    earlyExitTriggered = true;
+    logDebug("v3_retrieval_early_exit", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "v3_retrieval",
+      reason: `Sufficient chunks found: ${totalGoodChunks}`,
+      localCount: dedupedLocalFirst.length,
+      stateCount: dedupedStateFirst.length,
+    });
+  } else {
+    const remainingLocalQueries = localQueries.slice(2);
+    const remainingStateQueries = stateQueries.slice(2);
+
+    if (remainingLocalQueries.length > 0 || remainingStateQueries.length > 0) {
+      const remainingPromises = [
+        ...remainingLocalQueries.map((q, i) => executeLocalQuery(q, i + 2)),
+        ...remainingStateQueries.map((q, i) => executeStateQuery(q, i + 2)),
+      ];
+
+      const remainingResults = await Promise.all(remainingPromises);
+
+      for (const result of remainingResults) {
+        if (result.result.chunks.length > 0) {
+          if (result.result.chunks[0].lane === "local") {
+            allLocalChunks.push(...result.result.chunks);
+            localQueriesUsed.push(result.query);
+            localRetrievedTotal += result.result.chunks.length;
+          } else {
+            allStateChunks.push(...result.result.chunks);
+            stateQueriesUsed.push(result.query);
+            stateRetrievedTotal += result.result.chunks.length;
+          }
+        }
+      }
+    }
+  }
+
+  const dedupedLocal = dedupeChunks(allLocalChunks);
+  const dedupedState = dedupeChunks(allStateChunks);
+
+  const rankedLocal = rankChunksWithSituationContext(dedupedLocal, situationContext);
+  const rankedState = rankChunksWithSituationContext(dedupedState, situationContext);
+
+  const minState = plan.mustInclude.minState || 0;
+  const minLocalFacts = plan.mustInclude.minLocalFacts || 0;
+
+  const selectedState = selectWithMinimum(rankedState, plan.state.cap, minState, issueMap.legalTopics);
+  const selectedLocal = selectWithMinimum(rankedLocal, plan.local.cap, minLocalFacts, []);
+
+  const labeledLocalChunks: LabeledChunk[] = selectedLocal.map((chunk, idx) => ({
+    label: `[L${idx + 1}]`,
+    title: chunk.title,
+    content: chunk.content,
+    lane: "local" as const,
+    authority: classifyAuthority(chunk.title, "local"),
+  }));
+
+  const labeledStateChunks: LabeledChunk[] = selectedState.map((chunk, idx) => ({
+    label: `[S${idx + 1}]`,
+    title: chunk.title,
+    content: chunk.content,
+    lane: "state" as const,
+    authority: classifyAuthority(chunk.title, "state"),
+  }));
+
+  const situationAlignment = computeAverageSituationAlignment(
+    [...selectedLocal, ...selectedState],
+    situationContext
+  );
+
+  const legalTopicCoverage = computeLegalTopicCoverageFromChunks(
+    labeledStateChunks,
+    issueMap.legalTopics
+  );
+
+  const authoritativeStatePresent = labeledStateChunks.some(
+    c => c.authority === 'rsa' || c.authority === 'nhma'
+  );
+
+  const allDocumentNames = Array.from(new Set([
+    ...selectedLocal.flatMap(c => c.documentNames),
+    ...selectedState.flatMap(c => c.documentNames),
+  ]));
+
+  const durationMs = Date.now() - startTime;
+
+  logDebug("v3_retrieval_complete", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "v3_retrieval",
+    localQueriesUsed: localQueriesUsed.length,
+    stateQueriesUsed: stateQueriesUsed.length,
+    localSelected: labeledLocalChunks.length,
+    stateSelected: labeledStateChunks.length,
+    situationAlignment,
+    legalTopicCoverage,
+    authoritativeStatePresent,
+    earlyExitTriggered,
+    durationMs,
+  });
+
+  return {
+    localChunks: labeledLocalChunks,
+    stateChunks: labeledStateChunks,
+    allDocumentNames,
+    localCount: labeledLocalChunks.length,
+    stateCount: labeledStateChunks.length,
+    situationAlignment,
+    legalTopicCoverage,
+    authoritativeStatePresent,
+    debug: {
+      localQueriesUsed,
+      stateQueriesUsed,
+      localRetrievedTotal,
+      stateRetrievedTotal,
+      earlyExitTriggered,
+      durationMs,
+    },
+  };
+}
+
+function rankChunksWithSituationContext(
+  chunks: LaneChunk[],
+  situationContext: SituationContext | null | undefined
+): LaneChunk[] {
+  if (!situationContext) {
+    return chunks.sort((a, b) => (b.score || 0) - (a.score || 0));
+  }
+
+  const scored = chunks.map(chunk => {
+    const baseScore = chunk.score || 0.5;
+    const situationMatch = computeSituationMatchScore(
+      chunk.title + " " + chunk.content,
+      situationContext
+    );
+    return {
+      ...chunk,
+      score: baseScore + (situationMatch * 0.3),
+    };
+  });
+
+  return scored.sort((a, b) => (b.score || 0) - (a.score || 0));
+}
+
+function selectWithMinimum(
+  rankedChunks: LaneChunk[],
+  cap: number,
+  minimum: number,
+  relevanceKeywords: string[]
+): LaneChunk[] {
+  if (rankedChunks.length === 0) return [];
+
+  if (minimum <= 0) {
+    return rankedChunks.slice(0, cap);
+  }
+
+  const guaranteedCount = Math.min(minimum, rankedChunks.length);
+  
+  if (relevanceKeywords.length > 0) {
+    const relevant = rankedChunks.filter(chunk => {
+      const lowerContent = (chunk.title + " " + chunk.content).toLowerCase();
+      return relevanceKeywords.some(kw => lowerContent.includes(kw.toLowerCase())) ||
+             chatConfigV3.STATE_RELEVANCE_BAR_KEYWORDS.some(kw => lowerContent.includes(kw.toLowerCase()));
+    });
+
+    if (relevant.length >= guaranteedCount) {
+      return relevant.slice(0, cap);
+    }
+  }
+
+  return rankedChunks.slice(0, cap);
+}
+
+function classifyAuthority(title: string, lane: "local" | "state"): ChunkAuthority {
+  const lowerTitle = title.toLowerCase();
+
+  if (lane === "state") {
+    if (lowerTitle.includes("rsa") || /\brsa\s+\d/.test(lowerTitle)) {
+      return "rsa";
+    }
+    if (lowerTitle.includes("nhma") || lowerTitle.includes("municipal association")) {
+      return "nhma";
+    }
+    return "official";
+  }
+
+  if (lowerTitle.includes("minutes") || lowerTitle.includes("meeting")) {
+    return "minutes";
+  }
+  if (lowerTitle.includes("news") || lowerTitle.includes("article") || lowerTitle.includes("reporter")) {
+    return "news";
+  }
+  return "official";
+}
+
+function computeAverageSituationAlignment(
+  chunks: LaneChunk[],
+  situationContext: SituationContext | null | undefined
+): number {
+  if (!situationContext || chunks.length === 0) return 0;
+
+  let totalScore = 0;
+  for (const chunk of chunks) {
+    totalScore += computeSituationMatchScore(
+      chunk.title + " " + chunk.content,
+      situationContext
+    );
+  }
+
+  return totalScore / chunks.length;
+}
+
+function computeLegalTopicCoverageFromChunks(
+  stateChunks: LabeledChunk[],
+  legalTopics: string[]
+): number {
+  if (legalTopics.length === 0) return 1.0;
+  if (stateChunks.length === 0) return 0;
+
+  const chunkText = stateChunks.map(c => c.content.toLowerCase()).join(' ');
+  let covered = 0;
+
+  for (const topic of legalTopics) {
+    if (chunkText.includes(topic.toLowerCase())) {
+      covered++;
+    }
+  }
+
+  return covered / legalTopics.length;
+}
+
 /**
  * Extract combined document names from two-lane result
  */
