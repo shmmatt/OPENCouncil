@@ -1,0 +1,192 @@
+```md
+# REPLIT AGENT PROMPT — Fix Synth Output Quality (Concise Format, No “LLM Next Steps”), Improve Tiering + Early Exit, Enforce State Citations
+
+## Goal
+The new v3 pipeline is working, but answers are:
+- too wordy / dumpy
+- “structured” only nominally (too many bullets)
+- include LLM-ish “what to pull next / next steps” endings
+- sometimes fail to cite state chunks properly even when state chunks exist
+- early-exit stops state retrieval too soon for legal-salient questions
+- Tiering is misclassifying (Tier C even with state chunks)
+
+Implement the following targeted improvements to progress toward “complete,” without re-architecting the whole pipeline again.
+
+---
+
+## 1) Rewrite Synthesizer Format Spec (Hard Limits + Better Sections)
+
+### Replace the synthesizer system prompt format with this exact structure and constraints:
+
+**Hard rules**
+- Max 500 words total (hard cap)
+- Use headings EXACTLY as specified, in order
+- Bullet limits are strict
+- No bullet > ~20 words
+- Do not repeat the same point across sections
+- Do NOT include “next steps,” “consult counsel,” or “you may wish to…” unless Tier C AND sources truly missing
+- If state chunks exist: “What the law generally requires” must contain ≥2 `[Sx]` citations
+- Never mention a specific RSA number or named process step unless cited by `[Sx]`
+
+**Answer format**
+1) **Bottom line** (1–2 sentences; cite if factual/legal)
+2) **What happened** (max 5 bullets; timeline facts; cite `[USER]`/`[Lx]`)
+3) **What the law generally requires** (max 5 bullets; include federal + NH + local; cite `[Sx]`)
+4) **What the Jan 6 vote changes** (max 4 bullets; connect vote → compliance → risk; cite)
+5) **Unknowns that matter** (max 4 bullets; ONLY uncertainties that materially affect analysis; cite if possible)
+
+### Implementation notes
+- In `synthesizer.ts`, build the prompt so `[USER]` is only used for session sources, and `[Lx]/[Sx]` for archive chunks.
+- Provide chunks in a citeable format:
+  - `[L1] Title — excerpt`
+  - `[S1] Title — excerpt`
+  - `[USER] <title> — excerpt`
+- Lower synthesis temperature to 0.15–0.2.
+
+---
+
+## 2) Remove/Disable “What to pull next” as Default Behavior
+We do NOT want a shopping list at the end.
+
+### Rule
+- Do not include “What would clarify / what to pull next” in default answers.
+- The only allowed “uncertainty” section is “Unknowns that matter” (max 4 bullets).
+- Only include upload/ingest suggestions if:
+  - Tier C AND the user explicitly asked “what should I upload” or “what else do you need”.
+
+---
+
+## 3) Add Post-Format Validator + Repair (Mechanical)
+After synthesis, run a validator that checks:
+
+### Must-pass checks
+- Word count <= 500
+- All headings present and in correct order
+- Bullet counts within limits (5/5/4/4)
+- No bullet too long
+- If `stateChunkCount > 0`: section “What the law generally requires” contains ≥2 citations matching `\[S\d+\]`
+- If state chunks exist and RSA is mentioned: ensure at least one `[Sx]` is present in the same sentence/line (best-effort heuristic)
+- Reject common “LLM tails”:
+  - phrases like “next steps”, “consult counsel”, “you may wish to”, “I recommend”
+  - unless Tier C + missing sources condition is met
+
+### Repair policy
+If validator fails:
+- run ONE repair generation with a stricter system message:
+  - “Rewrite to comply exactly with format/limits. Shorten. Keep citations. No extra sections.”
+If still failing:
+- hard truncate by section (remove extra bullets) and/or fall back to Tier C minimal answer.
+
+Update `audit.ts` / `audit_v3_complete` to set `shouldRepair=true` for these format/citation violations.
+
+---
+
+## 4) Fix Tiering (Stop Misclassifying as Tier C)
+In `recordStrength.ts` (or wherever tier is computed), revise tier logic.
+
+### Problem observed
+Tier C was selected even with `stateSelected=5`, causing hedgy/rambling behavior and allowing “pull next” vibes.
+
+### New tier rubric (simple and stable)
+Compute:
+- `distinctStateDocs` (unique document titles/ids)
+- `distinctLocalDocs`
+- `authoritativeStatePresent` (see section 5)
+- `situationAlignment` (existing)
+- `legalSalience` (existing)
+
+Tier rules:
+- Tier A if:
+  - `stateSelected >= 4` AND (`authoritativeStatePresent` OR `distinctStateDocs >= 2`) AND `situationAlignment >= 0.30`
+- Tier B if:
+  - `stateSelected >= 2` AND `situationAlignment >= 0.20`
+- Tier C otherwise
+
+Also: If `legalSalience >= 0.6` and `stateSelected >= 2`, never drop below Tier B.
+
+---
+
+## 5) Fix “authoritativeStatePresent” Detection (It’s Misfiring)
+Observed: `authoritativeStatePresent=false` even when state chunk text includes “RSA 155-A”.
+
+Implement a robust heuristic:
+- `authority="rsa"` if chunk text OR title contains regex `\bRSA\s+\d+`
+- `authority="nhma"` if title/source contains “NHMA”
+- `authority="official"` if title/source contains “Department”, “DOJ”, “NHDES”, “NH Secretary of State”, etc.
+
+Set `authoritativeStatePresent=true` if any state chunk has `authority in ["rsa","nhma","official"]`.
+
+---
+
+## 6) Improve Early Exit Logic for Legal Questions (Count != Coverage)
+Observed:
+- planner had 6 state queries
+- retrieval used only 2 state queries
+- early exit triggered because total chunks hit cap, despite low coverage and low authority.
+
+### Change early-exit condition
+Only allow early-exit when:
+- `selectedCount >= MERGED_CONTEXT_CAP`
+AND
+- if `legalSalience >= 0.6`:
+  - `distinctStateDocs >= 2` OR `authoritativeStatePresent`
+  - `stateSelected >= minState` (minState=4)
+  - `legalTopicCoverage >= 0.5` (or your tuned threshold)
+
+If these aren’t met, continue running additional **state** queries (even if local is “full”), until:
+- you hit state query budget, or
+- the above coverage thresholds are met.
+
+---
+
+## 7) Deduplicate State Lane by Document BEFORE Counting/Coverage
+Observed: state responses sometimes return multiple results from the same document (`documentName` repeated).
+
+Implement lane-level dedupe:
+- `uniqueDocs = unique by documentName/title`
+- Use `distinctStateDocs` for:
+  - early-exit checks
+  - tiering
+  - coverage computations
+
+If dedupe collapses state to < minState candidates, keep running more state queries.
+
+---
+
+## 8) Synthesis Citation Discipline (Force State Use When Available)
+In the synthesis prompt:
+- `[USER]` is allowed ONLY in “What happened”
+- “What the law generally requires” must cite `[Sx]` if state chunks exist
+- Add a post-check: if state exists but no `[Sx]` in that section → repair
+
+Also:
+- ban naming specific RSAs unless cited by `[Sx]`
+- if no state chunks exist, law section must remain general and avoid RSA numbers.
+
+---
+
+## 9) Deliverables
+1) Update `synthesizer.ts` prompt + temperature + chunk formatting
+2) Implement `validateAnswerFormat()` and integrate into audit/repair flow
+3) Update tier computation using new rubric + never Tier C when legalSalience high and some state exists
+4) Fix authority detection
+5) Adjust early-exit gating to require coverage/authority for legal questions
+6) Deduplicate state lane by document before counting/coverage
+7) Add dev-only debug fields:
+   - word count, heading check, section citations counts
+   - distinctStateDocs, authoritativeStatePresent, earlyExitReason
+
+---
+
+## Acceptance Criteria (Use the Boardwalk Chat as Regression Test)
+Given the user-pasted boardwalk article:
+- Answer is <= 500 words
+- Uses exact headings and bullet caps
+- No “what to pull next” shopping list
+- “What the law generally requires” includes ≥2 `[Sx]` citations
+- No uncited RSA numbers
+- Retrieval does not early-exit until state has at least 2 distinct docs or authority is present (for legal salience)
+- Tier is B or A (not C) when stateSelected >= 2
+
+Proceed to implement now.
+```
