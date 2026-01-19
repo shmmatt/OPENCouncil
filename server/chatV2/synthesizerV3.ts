@@ -182,20 +182,32 @@ ${hasStateChunks ? '- "What the law generally requires" MUST contain at least 2 
 
 1. **Bottom line** (1-2 sentences; cite if factual/legal claim)
 
-2. **What happened** (max 5 bullets; timeline facts only; cite [USER] or [Lx])
+2. **What we know (from sources)** (max 5 bullets; timeline facts only; cite [USER] or [Lx])
 
 3. **What the law generally requires** (max 5 bullets; include federal + NH + local if relevant; cite [Sx] for state law)
 
-4. **What the Jan 6 vote changes** (max 4 bullets; connect vote → compliance → risk; cite sources)
+4. **What changes / what the decision affects** OR **How this typically works in NH** (max 4 bullets; see dynamic title rules)
 
 5. **Unknowns that matter** (max 4 bullets; ONLY uncertainties that materially affect the analysis; cite if possible)
 
+## SECTION 4 TITLE RULES (DYNAMIC)
+- If the facts contain an explicit action, vote, decision, appeal, or enforcement step: use title "**What changes / what the decision affects**"
+- If no explicit action/decision exists (general rules question): use title "**How this typically works in NH**"
+- NEVER include a specific date (like "Jan 6") in any heading
+
 ## CITATION RULES
-- [USER] is ONLY allowed in "What happened" section
+- [USER] is ONLY allowed in "What we know (from sources)" section
 - [Lx] citations for local documents (minutes, warrants, ordinances)
 - [Sx] citations for state law (RSA, NHMA guidance, admin rules)
 - "What the law generally requires" MUST use [Sx] citations if state chunks exist
 - If no state chunks exist, keep law section general without specific RSA numbers
+
+## TOPIC CONTINUITY RULES (CRITICAL)
+- Answer ONLY the current question. Do NOT reference prior situations unless explicitly relevant.
+- If a section cannot be supported by retrieved sources, omit it rather than speculate.
+- NEVER write "this assumes it refers to...", "assuming this relates to...", or similar bridging language.
+- Do NOT substitute related cases or prior conversation topics for the current question.
+- Do NOT mention prior votes, decisions, or situations from earlier in conversation unless the user explicitly asks about them.
 
 ## TIER INSTRUCTIONS (${recordStrength.tier})
 ${tierInstructions}

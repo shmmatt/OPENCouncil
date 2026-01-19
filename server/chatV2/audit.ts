@@ -23,19 +23,29 @@ import type { SituationContext } from "@shared/schema";
 // FORMAT VALIDATION CONSTANTS
 // =====================================================
 
+// Required headings with dynamic section 4 (matches either variant)
 const REQUIRED_HEADINGS = [
   "Bottom line",
-  "What happened",
+  "What we know", // Also matches "What we know (from sources)"
   "What the law generally requires",
-  "What the Jan 6 vote changes",
+  "What changes", // Also matches "What changes / what the decision affects" or "How this typically works"
   "Unknowns that matter",
 ];
 
+// Alternative heading patterns for flexible matching
+const HEADING_PATTERNS: Record<string, RegExp> = {
+  "Bottom line": /\*\*Bottom line\*\*/i,
+  "What we know": /\*\*What (we know|happened)(\s*\([^)]*\))?\*\*/i,
+  "What the law generally requires": /\*\*What the law generally requires\*\*/i,
+  "What changes": /\*\*(What changes|What the.*?(vote|decision)\s+(changes|affects)|How this typically works)\b/i,
+  "Unknowns that matter": /\*\*Unknowns that matter\*\*/i,
+};
+
 const SECTION_BULLET_LIMITS: Record<string, number> = {
   "Bottom line": 0, // No bullets, just sentences
-  "What happened": 5,
+  "What we know": 5,
   "What the law generally requires": 5,
-  "What the Jan 6 vote changes": 4,
+  "What changes": 4,
   "Unknowns that matter": 4,
 };
 
@@ -53,6 +63,12 @@ const LLM_TAIL_PATTERNS = [
   /\bfurther\s+research\b/i,
   /\bseek\s+legal\s+advice\b/i,
   /\bconsider\s+consulting\b/i,
+  // Anti-bridging patterns - prevent force-fitting prior context
+  /\bassumes?\s+(this|it)\s+refers?\s+to\b/i,
+  /\bassuming\s+(this|it)\s+(relates?|refers?)\s+to\b/i,
+  /\bthis\s+(likely\s+)?refers?\s+to\s+the\b/i,
+  /\bpresumably\s+(about|related\s+to)\b/i,
+  /\bthe\s+analysis\s+assumes\b/i,
 ];
 
 export interface FormatValidationResult {
@@ -104,21 +120,26 @@ export function validateAnswerFormat(
     });
   }
 
-  // 2. Check headings presence and order (using same flexible patterns as extractSections)
+  // 2. Check headings presence and order (using flexible HEADING_PATTERNS)
   const headingPositions: number[] = [];
   const headingsPresent: boolean[] = [];
   
   for (const heading of REQUIRED_HEADINGS) {
-    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Use the flexible HEADING_PATTERNS if available
+    const flexPattern = HEADING_PATTERNS[heading];
     
-    // Use same flexible patterns as extractSections
-    const patterns = [
-      new RegExp(`\\*\\*${escapedHeading}\\*\\*[:\\s]*`, 'i'),
-      new RegExp(`\\d+\\.\\s*\\*\\*${escapedHeading}\\*\\*[:\\s]*`, 'i'),
-      new RegExp(`\\d+\\.\\s*${escapedHeading}[:\\s]+`, 'i'),
+    const patterns: RegExp[] = [];
+    if (flexPattern) {
+      patterns.push(flexPattern);
+    }
+    
+    // Add numbered variants
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(
+      new RegExp(`\\d+\\.\\s*\\*\\*${escapedHeading}[^*]*\\*\\*[:\\s]*`, 'i'),
       new RegExp(`^${escapedHeading}[:\\s]+`, 'im'),
       new RegExp(`^#+\\s*${escapedHeading}[:\\s]*`, 'im'),
-    ];
+    );
     
     let matchFound: RegExpMatchArray | null = null;
     for (const pattern of patterns) {
@@ -285,6 +306,7 @@ export function validateAnswerFormat(
 
 /**
  * Extract sections from answer text by heading
+ * Uses flexible patterns to handle both old and new heading formats
  */
 function extractSections(answerText: string): Record<string, string> {
   const sections: Record<string, string> = {};
@@ -293,21 +315,26 @@ function extractSections(answerText: string): Record<string, string> {
   const headingMatches: { name: string; start: number; end: number }[] = [];
   
   for (const heading of REQUIRED_HEADINGS) {
-    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Use the flexible HEADING_PATTERNS if available, otherwise use escaped heading
+    const flexPattern = HEADING_PATTERNS[heading];
     
-    // More flexible patterns to handle various formatting variations
-    const patterns = [
-      // Standard markdown: **Bottom line**
-      new RegExp(`\\*\\*${escapedHeading}\\*\\*[:\\s]*`, 'i'),
+    // Build an array of patterns to try - the flexible pattern first
+    const patterns: RegExp[] = [];
+    
+    if (flexPattern) {
+      patterns.push(flexPattern);
+    }
+    
+    // Also add numbered variants
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(
       // Numbered with bold: 1. **Bottom line**
-      new RegExp(`\\d+\\.\\s*\\*\\*${escapedHeading}\\*\\*[:\\s]*`, 'i'),
-      // Numbered without bold: 1. Bottom line:
-      new RegExp(`\\d+\\.\\s*${escapedHeading}[:\\s]+`, 'i'),
+      new RegExp(`\\d+\\.\\s*\\*\\*${escapedHeading}[^*]*\\*\\*[:\\s]*`, 'i'),
       // Just the heading with colon: Bottom line:
       new RegExp(`^${escapedHeading}[:\\s]+`, 'im'),
-      // Heading-style markdown: # Bottom line or ## Bottom line
+      // Heading-style markdown: # Bottom line
       new RegExp(`^#+\\s*${escapedHeading}[:\\s]*`, 'im'),
-    ];
+    );
     
     for (const pattern of patterns) {
       const match = answerText.match(pattern);

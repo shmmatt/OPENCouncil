@@ -378,3 +378,127 @@ export function computeSituationMatchScore(
   
   return totalWeight > 0 ? matchCount / totalWeight : 0;
 }
+
+/**
+ * Determines if stored situation context should be applied to a new question.
+ * This prevents "sticky context" where old topics (e.g., boardwalk vote) leak into
+ * unrelated questions (e.g., budget committee rules).
+ * 
+ * Scoring:
+ * +1 for each situation entity appearing in the question
+ * +1 for key topic keyword overlap (ADA, boardwalk, etc.)
+ * +1 for explicit references ("the article", "that vote", etc.)
+ * -2 if question is clearly a different domain (budget, RSA 32, etc.)
+ * 
+ * Decision: useSituationContext = (score >= 2)
+ */
+export interface SituationRelevanceResult {
+  useSituationContext: boolean;
+  score: number;
+  reason: string;
+}
+
+const DIFFERENT_DOMAIN_KEYWORDS = [
+  'budget', 'appropriation', 'warrant article', 'rsa 32', 'budget committee', 
+  'tax rate', 'default budget', 'overlay', 'encumbrance', 'fund balance',
+  'school budget', 'municipal budget', 'sewer budget', 'water budget',
+  'deliberative session', 'town meeting', 'sb2', 'official ballot',
+  'zoning amendment', 'zoning variance', 'special exception',
+  'wetlands', 'shoreland', 'subdivision', 'site plan',
+  'personnel', 'hiring', 'firing', 'compensation', 'benefits',
+  'collective bargaining', 'union', 'grievance',
+];
+
+const EXPLICIT_SITUATION_REFERENCES = [
+  'the article', 'that article', 'the boardwalk', 'that vote', 'the vote',
+  'that decision', 'the decision', 'that meeting', 'the jan 6', 'january 6',
+  'that case', 'the case', 'that situation', 'the ada issue',
+  'the constitution park', 'that project', 'the project',
+];
+
+export function computeQuestionSituationMatch(
+  questionText: string,
+  situationContext: SituationContext | null
+): SituationRelevanceResult {
+  if (!situationContext || situationContext.entities.length === 0) {
+    return {
+      useSituationContext: false,
+      score: 0,
+      reason: "No situation context established",
+    };
+  }
+
+  const questionLower = questionText.toLowerCase();
+  let score = 0;
+  const matchReasons: string[] = [];
+  const penaltyReasons: string[] = [];
+
+  // Check for entity matches (+1 each)
+  for (const entity of situationContext.entities) {
+    const entityLower = entity.toLowerCase();
+    if (questionLower.includes(entityLower)) {
+      score += 1;
+      matchReasons.push(`entity:${entity}`);
+    } else {
+      // Check for partial word matches (e.g., "boardwalk" in entities, "boardwalk" in question)
+      const entityWords = entityLower.split(/\s+/).filter(w => w.length > 3);
+      for (const word of entityWords) {
+        if (questionLower.includes(word)) {
+          score += 0.5;
+          matchReasons.push(`partial:${word}`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Check for title keyword overlap (+1)
+  const titleWords = situationContext.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  for (const word of titleWords) {
+    if (questionLower.includes(word)) {
+      score += 0.5;
+      matchReasons.push(`title:${word}`);
+    }
+  }
+
+  // Check for explicit situation references (+1)
+  for (const ref of EXPLICIT_SITUATION_REFERENCES) {
+    if (questionLower.includes(ref)) {
+      score += 1;
+      matchReasons.push(`explicit_ref:${ref}`);
+      break; // Only count once
+    }
+  }
+
+  // Check for clearly different domain (-2)
+  let isDifferentDomain = false;
+  for (const keyword of DIFFERENT_DOMAIN_KEYWORDS) {
+    if (questionLower.includes(keyword)) {
+      isDifferentDomain = true;
+      penaltyReasons.push(`different_domain:${keyword}`);
+      break;
+    }
+  }
+
+  // Apply penalty only if different domain AND no entity matches
+  if (isDifferentDomain && matchReasons.length === 0) {
+    score -= 2;
+  }
+
+  const useSituationContext = score >= 2;
+  
+  let reason = "";
+  if (useSituationContext) {
+    reason = `Matches: ${matchReasons.slice(0, 3).join(', ')}`;
+  } else if (isDifferentDomain) {
+    reason = `Different domain: ${penaltyReasons.join(', ')}`;
+  } else {
+    reason = `Insufficient overlap (score=${score.toFixed(1)})`;
+  }
+
+  return {
+    useSituationContext,
+    score,
+    reason,
+  };
+}

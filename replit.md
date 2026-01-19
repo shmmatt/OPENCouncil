@@ -109,11 +109,25 @@ The two-lane retrieval system includes legal salience detection to improve answe
 Major improvements to answer quality, tiering, and retrieval:
 
 **Synthesizer Format Spec**:
-- New 5-section format: Bottom line → What happened → What the law generally requires → What the Jan 6 vote changes → Unknowns that matter
+- New 5-section format: Bottom line → What we know (from sources) → What the law generally requires → What changes / what the decision affects (or "How this typically works in NH") → Unknowns that matter
+- Dynamic section 4 title: Uses "What changes..." when facts contain explicit action/vote/decision, otherwise "How this typically works in NH"
 - Hard caps: 500 words max, bullet limits (5/5/4/4), no bullet > 20 words
 - Temperature reduced to 0.2 for conciseness
-- Citation discipline: `[USER]` only in "What happened", `[Sx]` required in law section when state chunks exist
-- Removed "What to pull next" shopping list behavior
+- Citation discipline: `[USER]` only in "What we know", `[Sx]` required in law section when state chunks exist
+- Topic continuity rules: No speculation, no "assumes it refers to...", no force-fitting prior context
+
+**Situation Relevance Gating** (January 2026):
+- Prevents "sticky context" leakage where prior conversation topics (e.g., boardwalk vote) leak into unrelated questions (e.g., budget committee)
+- `computeQuestionSituationMatch()` in `situationExtractor.ts` scores question-context relevance:
+  - +1 for entity matches, +0.5 for partial matches, +1 for explicit references
+  - -2 penalty for clearly different domains (budget, zoning, personnel, etc.) when no entity overlap
+- Gate threshold: `useSituationContext = (score >= 2)`
+- Logged: `situationGated`, `situationScore`, `situationReason`
+- When gated, planner/retriever/synthesizer see no stored situation context
+
+**Anti-bridging Patterns**:
+- Audit detects "assumes it refers to", "assuming this relates to" patterns
+- Rejection triggers repair generation for cleaner answers
 
 **Format Validation & Repair**:
 - `validateAnswerFormat()` in `audit.ts` checks word count, heading order, bullet counts, citation requirements

@@ -16,6 +16,7 @@ import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
+import { computeQuestionSituationMatch } from "./situationExtractor";
 import type {
   IssueMap,
   RecordStrength,
@@ -51,6 +52,14 @@ export async function runChatV3Pipeline(
 
   const startTime = Date.now();
 
+  // =====================================================
+  // STAGE 0: SITUATION RELEVANCE GATE
+  // =====================================================
+  // Determine if stored situation context should be applied to this question
+  // This prevents "sticky context" leakage (e.g., boardwalk vote appearing in budget questions)
+  const situationRelevance = computeQuestionSituationMatch(userMessage, situationContext || null);
+  const effectiveSituationContext = situationRelevance.useSituationContext ? situationContext : null;
+
   logInfo("v3_pipeline_start", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
@@ -58,6 +67,9 @@ export async function runChatV3Pipeline(
     messageLength: userMessage.length,
     townPreference,
     hasSituationContext: !!situationContext,
+    situationGated: !situationRelevance.useSituationContext,
+    situationScore: situationRelevance.score,
+    situationReason: situationRelevance.reason,
     sessionSourceCount: (sessionSources || []).length,
   });
 
@@ -67,7 +79,7 @@ export async function runChatV3Pipeline(
   const plannerResult = await runPlannerV3({
     userMessage,
     sessionSources,
-    situationContext,
+    situationContext: effectiveSituationContext, // Only pass if relevant
     townHint: townPreference || undefined,
     logContext,
   });
@@ -95,7 +107,7 @@ export async function runChatV3Pipeline(
     issueMap,
     {
       townPreference,
-      situationContext,
+      situationContext: effectiveSituationContext, // Only pass if relevant
       logContext,
     }
   );
@@ -155,7 +167,7 @@ export async function runChatV3Pipeline(
       stateChunks: retrievalResult.stateChunks,
       citationsUsed: synthesisResult.citationsUsed,
       issueMap,
-      situationContext,
+      situationContext: effectiveSituationContext,
       logContext,
     });
 
@@ -204,7 +216,7 @@ export async function runChatV3Pipeline(
           stateChunks: retrievalResult.stateChunks,
           citationsUsed: repairSynthesisResult.citationsUsed,
           issueMap,
-          situationContext,
+          situationContext: effectiveSituationContext,
           logContext,
         });
         auditFlags = repairAuditResult.violations.map(v => `${v.type}:${v.severity}`);
@@ -236,7 +248,7 @@ export async function runChatV3Pipeline(
         stateChunks: retrievalResult.stateChunks,
         citationsUsed: synthesisResult.citationsUsed,
         issueMap,
-        situationContext,
+        situationContext: effectiveSituationContext,
         logContext,
       });
 
@@ -249,7 +261,7 @@ export async function runChatV3Pipeline(
           stateChunks: retrievalResult.stateChunks,
           citationsUsed: synthesisResult.citationsUsed,
           issueMap,
-          situationContext,
+          situationContext: effectiveSituationContext,
           logContext,
         });
         
