@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { authenticateAdmin, generateToken } from "./middleware/auth";
 import { requireRole } from "./auth/middleware";
 import type { IdentityRequest } from "./auth/types";
-import { uploadDocumentToFileStore, askQuestionWithFileSearch } from "./gemini-client";
+import { uploadDocumentToFileStore, askQuestionWithFileSearch, reindexOcrDocument } from "./gemini-client";
 import { extractPreviewText, suggestMetadataFromContent } from "./bulk-upload-helper";
 import { processFile, formatDuplicateWarning } from "./services/fileProcessing";
 import { suggestMetadataFromPreview, validateMetadata, isValidNHTown } from "./services/metadataExtraction";
@@ -678,6 +678,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error resetting stuck OCR jobs:", error);
       res.status(500).json({ message: "Failed to reset stuck jobs" });
+    }
+  });
+
+  // Batch re-index OCR-completed documents that haven't been indexed yet
+  app.post("/api/admin/ocr/reindex-completed", authenticateAdmin, async (req, res) => {
+    try {
+      const docsToReindex = await storage.getOcrCompletedNeedingReindex();
+      
+      if (docsToReindex.length === 0) {
+        return res.json({
+          success: true,
+          message: "No OCR-completed documents need re-indexing.",
+          reindexed: 0,
+          failed: 0,
+        });
+      }
+
+      let reindexed = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const doc of docsToReindex) {
+        try {
+          if (!doc.fileBlob.ocrText) {
+            errors.push(`${doc.fileBlob.originalFilename}: No OCR text available`);
+            failed++;
+            continue;
+          }
+
+          const metadata: DocumentMetadata = {
+            category: doc.metadata.category || 'other',
+            town: doc.metadata.town,
+            board: doc.metadata.board,
+            year: doc.metadata.year,
+            notes: doc.metadata.notes,
+            isMinutes: doc.metadata.isMinutes,
+            meetingDate: doc.metadata.meetingDate,
+            meetingType: doc.metadata.meetingType,
+            rawDateText: doc.metadata.rawDateText || null,
+          };
+
+          await reindexOcrDocument(doc.fileBlob.ocrText, doc.fileBlob.originalFilename, metadata);
+          await storage.markOcrReindexed(doc.fileBlob.id);
+          reindexed++;
+          console.log(`[Batch Reindex] Successfully re-indexed: ${doc.fileBlob.originalFilename}`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`${doc.fileBlob.originalFilename}: ${errorMessage}`);
+          failed++;
+          console.error(`[Batch Reindex] Failed: ${doc.fileBlob.originalFilename}:`, errorMessage);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Re-indexed ${reindexed} documents. ${failed} failed.`,
+        reindexed,
+        failed,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Error batch re-indexing OCR documents:", error);
+      res.status(500).json({ message: "Failed to batch re-index OCR documents" });
     }
   });
 

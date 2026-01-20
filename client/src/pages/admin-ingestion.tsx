@@ -44,7 +44,8 @@ import {
   Link2,
   Plus,
   BarChart3,
-  ScanLine
+  ScanLine,
+  Search
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 import { NH_TOWNS } from "@shared/schema";
@@ -364,6 +365,34 @@ export default function AdminIngestion() {
     onError: (error: Error) => {
       toast({
         title: "Reset Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const reindexOcrMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/reindex-completed", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to re-index OCR documents");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Re-indexing Complete",
+        description: data.message,
+      });
+      refetchOcrStats();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Re-indexing Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -908,6 +937,22 @@ export default function AdminIngestion() {
                   <RefreshCw className="w-4 h-4 mr-2" />
                 )}
                 Reset Stuck ({ocrStats.processing})
+              </Button>
+            )}
+            {ocrStats && ocrStats.completed > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => reindexOcrMutation.mutate()}
+                disabled={reindexOcrMutation.isPending}
+                data-testid="button-reindex-ocr"
+              >
+                {reindexOcrMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4 mr-2" />
+                )}
+                Re-index OCR
               </Button>
             )}
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">
