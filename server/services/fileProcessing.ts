@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { shouldQueueOcr, getInitialOcrStatus } from "../config/ocr";
 
 let pdfParseModule: ((buffer: Buffer, options?: any) => Promise<{ text: string }>) | null = null;
 let mammothModule: { extractRawText: (options: { path: string }) => Promise<{ value: string }> } | null = null;
@@ -112,6 +113,9 @@ export interface FileProcessingResult {
   previewText: string;
   sizeBytes: number;
   mimeType: string;
+  extractedTextCharCount: number;
+  needsOcr: boolean;
+  ocrStatus: 'none' | 'queued' | 'blocked';
 }
 
 export async function processFile(
@@ -126,12 +130,22 @@ export async function processFile(
   const sizeBytes = fileBuffer.length;
   const mimeType = getMimeType(filename);
   
+  const ocrResult = shouldQueueOcr(previewText, mimeType);
+  const extractedTextCharCount = ocrResult.charCount;
+  const needsOcr = ocrResult.queue;
+  const ocrStatus = getInitialOcrStatus(needsOcr);
+  
+  console.log(`[FileProcessing] ${filename}: ${ocrResult.reason}`);
+  
   return {
     rawHash,
     previewHash,
     previewText,
     sizeBytes,
     mimeType,
+    extractedTextCharCount,
+    needsOcr,
+    ocrStatus,
   };
 }
 

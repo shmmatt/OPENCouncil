@@ -11,6 +11,7 @@ import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { ensureAdminExists } from "./init-admin";
 import { attachAnonymousIdentity, attachUserIdentity, authRouter } from "./auth";
+import { startOcrWorker } from "./workers/ocrWorker";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -89,6 +90,9 @@ export default async function runApp(
 
   // Initialize admin account from environment variables
   await ensureAdminExists();
+  
+  // Start the OCR background worker
+  startOcrWorker();
 
   // importantly run the final setup after setting up all the other routes so
   // the catch-all route doesn't interfere with the other routes

@@ -92,6 +92,25 @@ function getStatusBadge(status: string) {
   }
 }
 
+function getOcrStatusBadge(ocrStatus: string, needsOcr: boolean) {
+  if (!needsOcr) return null;
+  
+  switch (ocrStatus) {
+    case "queued":
+      return <Badge variant="outline" className="text-orange-600 border-orange-600"><Clock className="w-3 h-3 mr-1" />OCR Queued</Badge>;
+    case "processing":
+      return <Badge variant="outline" className="text-blue-600 border-blue-600"><Loader2 className="w-3 h-3 mr-1 animate-spin" />OCR Processing</Badge>;
+    case "completed":
+      return <Badge variant="outline" className="text-green-600 border-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />OCR Complete</Badge>;
+    case "failed":
+      return <Badge variant="outline" className="text-red-600 border-red-600"><XCircle className="w-3 h-3 mr-1" />OCR Failed</Badge>;
+    case "blocked":
+      return <Badge variant="outline" className="text-gray-600 border-gray-600"><AlertTriangle className="w-3 h-3 mr-1" />OCR Blocked</Badge>;
+    default:
+      return <Badge variant="outline" className="text-orange-600 border-orange-600"><AlertTriangle className="w-3 h-3 mr-1" />Needs OCR</Badge>;
+  }
+}
+
 function JobDetailsPopover({ job }: { job: IngestionJobWithBlob }) {
   const getDuplicateWarningDisplay = (warning: string | null) => {
     if (!warning) return null;
@@ -146,13 +165,28 @@ function JobDetailsPopover({ job }: { job: IngestionJobWithBlob }) {
           
           {job.fileBlob.previewText && (
             <div>
-              <h4 className="font-medium mb-1">Preview Text</h4>
+              <h4 className="font-medium mb-1">Preview Text ({(job.fileBlob as any).extractedTextCharCount || job.fileBlob.previewText.length} chars)</h4>
               <ScrollArea className="h-32 w-full rounded border p-2">
                 <pre className="text-xs whitespace-pre-wrap font-mono">
                   {job.fileBlob.previewText.slice(0, 1000)}
                   {job.fileBlob.previewText.length > 1000 && "..."}
                 </pre>
               </ScrollArea>
+            </div>
+          )}
+          
+          {(job.fileBlob as any).needsOcr && (
+            <div>
+              <h4 className="font-medium mb-1">OCR Status</h4>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <div>Status: {(job.fileBlob as any).ocrStatus}</div>
+                {(job.fileBlob as any).ocrTextCharCount > 0 && (
+                  <div>OCR Text: {(job.fileBlob as any).ocrTextCharCount} chars extracted</div>
+                )}
+                {(job.fileBlob as any).ocrFailureReason && (
+                  <div className="text-red-600">Error: {(job.fileBlob as any).ocrFailureReason}</div>
+                )}
+              </div>
             </div>
           )}
           
@@ -1203,7 +1237,12 @@ export default function AdminIngestion() {
                                 <TableCell>
                                   {getDuplicateWarningBadge(job.duplicateWarning)}
                                 </TableCell>
-                                <TableCell>{getStatusBadge(job.status)}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col gap-1">
+                                    {getStatusBadge(job.status)}
+                                    {getOcrStatusBadge((job.fileBlob as any).ocrStatus, (job.fileBlob as any).needsOcr)}
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-1">
                                     <JobDetailsPopover job={job} />

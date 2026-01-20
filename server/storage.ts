@@ -81,6 +81,13 @@ export interface IStorage {
   getFileBlobByRawHash(rawHash: string): Promise<FileBlob | undefined>;
   getFileBlobByPreviewHash(previewHash: string): Promise<FileBlob | undefined>;
   findDuplicateBlobs(rawHash: string, previewHash?: string): Promise<{ exact: FileBlob | null; preview: FileBlob | null }>;
+  updateFileBlob(id: string, data: Partial<InsertFileBlob>): Promise<void>;
+  
+  // OCR operations
+  getFileBlobsNeedingOcr(): Promise<FileBlob[]>;
+  claimNextOcrJob(): Promise<FileBlob | null>;
+  updateOcrStatus(id: string, status: string, data?: { ocrText?: string; ocrTextCharCount?: number; ocrFailureReason?: string }): Promise<void>;
+  queueFileBlobForOcr(id: string): Promise<void>;
 
   // v2 Pipeline: LogicalDocument operations
   createLogicalDocument(doc: InsertLogicalDocument): Promise<LogicalDocument>;
@@ -314,6 +321,96 @@ export class DatabaseStorage implements IStorage {
       exact: exactMatch || null,
       preview: previewMatch || null,
     };
+  }
+
+  async updateFileBlob(id: string, data: Partial<InsertFileBlob>): Promise<void> {
+    await db
+      .update(schema.fileBlobs)
+      .set(data)
+      .where(eq(schema.fileBlobs.id, id));
+  }
+
+  // OCR operations
+  async getFileBlobsNeedingOcr(): Promise<FileBlob[]> {
+    return await db
+      .select()
+      .from(schema.fileBlobs)
+      .where(eq(schema.fileBlobs.needsOcr, true));
+  }
+
+  async claimNextOcrJob(): Promise<FileBlob | null> {
+    const result = await db.execute(sql`
+      UPDATE file_blobs 
+      SET ocr_status = 'processing', ocr_started_at = NOW()
+      WHERE id = (
+        SELECT id FROM file_blobs 
+        WHERE ocr_status = 'queued' 
+        ORDER BY ocr_queued_at ASC NULLS LAST
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+    
+    if (result.rows && result.rows.length > 0) {
+      const row = result.rows[0] as any;
+      return {
+        id: row.id,
+        rawHash: row.raw_hash,
+        previewHash: row.preview_hash,
+        sizeBytes: row.size_bytes,
+        mimeType: row.mime_type,
+        originalFilename: row.original_filename,
+        storagePath: row.storage_path,
+        previewText: row.preview_text,
+        extractedTextCharCount: row.extracted_text_char_count,
+        needsOcr: row.needs_ocr,
+        ocrStatus: row.ocr_status,
+        ocrFailureReason: row.ocr_failure_reason,
+        ocrText: row.ocr_text,
+        ocrTextCharCount: row.ocr_text_char_count,
+        ocrQueuedAt: row.ocr_queued_at,
+        ocrStartedAt: row.ocr_started_at,
+        ocrCompletedAt: row.ocr_completed_at,
+        createdAt: row.created_at,
+      };
+    }
+    return null;
+  }
+
+  async updateOcrStatus(id: string, status: string, data?: { ocrText?: string; ocrTextCharCount?: number; ocrFailureReason?: string }): Promise<void> {
+    const updateData: any = { ocrStatus: status };
+    
+    if (status === 'completed' || status === 'failed') {
+      updateData.ocrCompletedAt = new Date();
+    }
+    
+    if (data?.ocrText !== undefined) {
+      updateData.ocrText = data.ocrText;
+    }
+    if (data?.ocrTextCharCount !== undefined) {
+      updateData.ocrTextCharCount = data.ocrTextCharCount;
+    }
+    if (data?.ocrFailureReason !== undefined) {
+      updateData.ocrFailureReason = data.ocrFailureReason;
+    }
+    
+    await db
+      .update(schema.fileBlobs)
+      .set(updateData)
+      .where(eq(schema.fileBlobs.id, id));
+  }
+
+  async queueFileBlobForOcr(id: string): Promise<void> {
+    await db
+      .update(schema.fileBlobs)
+      .set({
+        needsOcr: true,
+        ocrStatus: 'queued',
+        ocrQueuedAt: new Date(),
+        ocrFailureReason: null,
+      })
+      .where(eq(schema.fileBlobs.id, id));
   }
 
   // v2 Pipeline: LogicalDocument operations

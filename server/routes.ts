@@ -461,7 +461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             }
 
-            // Create FileBlob record
+            // Create FileBlob record with OCR fields
             const fileBlob = await storage.createFileBlob({
               rawHash: fileResult.rawHash,
               previewHash: fileResult.previewHash,
@@ -470,6 +470,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               originalFilename: file.originalname,
               storagePath: file.path,
               previewText: fileResult.previewText.slice(0, 15000),
+              extractedTextCharCount: fileResult.extractedTextCharCount,
+              needsOcr: fileResult.needsOcr,
+              ocrStatus: fileResult.ocrStatus,
+              ocrQueuedAt: fileResult.needsOcr && fileResult.ocrStatus === 'queued' ? new Date() : null,
             });
 
             // Get LLM metadata suggestions with hints
@@ -558,6 +562,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching ingestion jobs:", error);
       res.status(500).json({ message: "Failed to fetch ingestion jobs" });
+    }
+  });
+
+  // Get file blobs that need OCR (for admin monitoring)
+  app.get("/api/admin/ocr/queue", authenticateAdmin, async (req, res) => {
+    try {
+      const blobs = await storage.getFileBlobsNeedingOcr();
+      res.json(blobs);
+    } catch (error) {
+      console.error("Error fetching OCR queue:", error);
+      res.status(500).json({ message: "Failed to fetch OCR queue" });
+    }
+  });
+
+  // Queue a specific file blob for OCR (admin action)
+  app.post("/api/admin/ocr/queue/:blobId", authenticateAdmin, async (req, res) => {
+    try {
+      const { blobId } = req.params;
+      
+      const blob = await storage.getFileBlobById(blobId);
+      if (!blob) {
+        return res.status(404).json({ message: "File blob not found" });
+      }
+      
+      if (blob.ocrStatus === 'queued' || blob.ocrStatus === 'processing') {
+        return res.status(400).json({ message: `OCR already ${blob.ocrStatus}` });
+      }
+      
+      await storage.queueFileBlobForOcr(blobId);
+      
+      const updated = await storage.getFileBlobById(blobId);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error queueing OCR:", error);
+      res.status(500).json({ message: "Failed to queue OCR" });
+    }
+  });
+
+  // Get OCR status for a specific file blob
+  app.get("/api/admin/ocr/status/:blobId", authenticateAdmin, async (req, res) => {
+    try {
+      const { blobId } = req.params;
+      
+      const blob = await storage.getFileBlobById(blobId);
+      if (!blob) {
+        return res.status(404).json({ message: "File blob not found" });
+      }
+      
+      res.json({
+        id: blob.id,
+        originalFilename: blob.originalFilename,
+        needsOcr: blob.needsOcr,
+        ocrStatus: blob.ocrStatus,
+        extractedTextCharCount: blob.extractedTextCharCount,
+        ocrTextCharCount: blob.ocrTextCharCount,
+        ocrFailureReason: blob.ocrFailureReason,
+        ocrQueuedAt: blob.ocrQueuedAt,
+        ocrStartedAt: blob.ocrStartedAt,
+        ocrCompletedAt: blob.ocrCompletedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching OCR status:", error);
+      res.status(500).json({ message: "Failed to fetch OCR status" });
     }
   });
 

@@ -28,6 +28,10 @@ export const documents = pgTable("documents", {
 
 // v2 Pipeline Tables
 
+// OCR Status enum values
+export const OCR_STATUS_VALUES = ['none', 'queued', 'processing', 'completed', 'failed', 'blocked'] as const;
+export type OcrStatus = typeof OCR_STATUS_VALUES[number];
+
 // FileBlob: Represents a physical file with its hashes for deduplication
 export const fileBlobs = pgTable("file_blobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -38,6 +42,16 @@ export const fileBlobs = pgTable("file_blobs", {
   originalFilename: text("original_filename").notNull(),
   storagePath: text("storage_path").notNull(), // local path or storage key
   previewText: text("preview_text"), // extracted text for LLM analysis
+  // OCR-related fields
+  extractedTextCharCount: integer("extracted_text_char_count").notNull().default(0),
+  needsOcr: boolean("needs_ocr").notNull().default(false),
+  ocrStatus: text("ocr_status").notNull().default("none"), // 'none' | 'queued' | 'processing' | 'completed' | 'failed' | 'blocked'
+  ocrFailureReason: text("ocr_failure_reason"),
+  ocrText: text("ocr_text"),
+  ocrTextCharCount: integer("ocr_text_char_count").notNull().default(0),
+  ocrQueuedAt: timestamp("ocr_queued_at"),
+  ocrStartedAt: timestamp("ocr_started_at"),
+  ocrCompletedAt: timestamp("ocr_completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
