@@ -1,11 +1,16 @@
 /**
  * Answer Policy Module
  * 
- * Centralized output policies for answer generation based on complexity and mode.
+ * Centralized output policies for answer generation based on complexity, mode, and answer type.
  * This module defines character targets, hard caps, token limits, and structure constraints.
+ * 
+ * V3 PROSE-FIRST MODE:
+ * - QUICK_PROCESS: 120-220 words (~700-1300 chars) - 1-2 paragraphs, no headings
+ * - EXPLAINER: 180-320 words (~1000-1900 chars) - 2-3 paragraphs, no headings  
+ * - RISK_DISPUTE: 250-450 words (~1500-2700 chars) - 3-5 paragraphs, no headings
  */
 
-import type { AnswerMode } from "./types";
+import type { AnswerMode, AnswerType, RenderStyle } from "./types";
 
 /**
  * Policy name for logging and debugging
@@ -297,4 +302,105 @@ export const FORBIDDEN_SUBSTRINGS = [
 export function containsForbiddenSubstrings(text: string): string[] {
   const lowerText = text.toLowerCase();
   return FORBIDDEN_SUBSTRINGS.filter(s => lowerText.includes(s));
+}
+
+/**
+ * PROSE-FIRST POLICY
+ * Word/character targets for prose-style answers by answer type.
+ */
+export interface ProsePolicy {
+  answerType: AnswerType;
+  renderStyle: RenderStyle;
+  wordMin: number;
+  wordMax: number;
+  charMin: number;
+  charMax: number;
+  paragraphs: { min: number; max: number };
+  allowHeadings: boolean;
+  allowBullets: boolean;
+}
+
+export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle): ProsePolicy {
+  if (renderStyle === "LIST") {
+    return {
+      answerType,
+      renderStyle,
+      wordMin: 100,
+      wordMax: 400,
+      charMin: 600,
+      charMax: 2400,
+      paragraphs: { min: 1, max: 1 },
+      allowHeadings: false,
+      allowBullets: true,
+    };
+  }
+
+  switch (answerType) {
+    case "QUICK_PROCESS":
+      return {
+        answerType,
+        renderStyle,
+        wordMin: 120,
+        wordMax: 220,
+        charMin: 700,
+        charMax: 1300,
+        paragraphs: { min: 1, max: 2 },
+        allowHeadings: false,
+        allowBullets: false,
+      };
+
+    case "EXPLAINER":
+      return {
+        answerType,
+        renderStyle,
+        wordMin: 180,
+        wordMax: 320,
+        charMin: 1000,
+        charMax: 1900,
+        paragraphs: { min: 2, max: 3 },
+        allowHeadings: false,
+        allowBullets: false,
+      };
+
+    case "RISK_DISPUTE":
+      return {
+        answerType,
+        renderStyle,
+        wordMin: 250,
+        wordMax: 450,
+        charMin: 1500,
+        charMax: 2700,
+        paragraphs: { min: 3, max: 5 },
+        allowHeadings: false,
+        allowBullets: false,
+      };
+  }
+}
+
+/**
+ * FORBIDDEN PROSE PATTERNS
+ * These phrases should never appear in prose-mode answers.
+ */
+export const FORBIDDEN_PROSE_PATTERNS = [
+  "Bottom line",
+  "What we know",
+  "Unknowns that matter",
+  "What changes",
+  "next steps",
+  "you may wish to",
+  "consult counsel",
+  "I recommend",
+  "consider",
+  "based on the provided documents",
+  "the sources indicate",
+  "It's important to note",
+  "It should be noted",
+  "Worth mentioning",
+] as const;
+
+export function containsForbiddenProsePatterns(text: string): string[] {
+  const lowerText = text.toLowerCase();
+  return FORBIDDEN_PROSE_PATTERNS.filter(pattern => 
+    lowerText.includes(pattern.toLowerCase())
+  );
 }

@@ -2,10 +2,10 @@
  * V3 Synthesizer - Stage 3 of the Chat v3 Pipeline
  * 
  * Responsibilities:
- * 1. Generate structured answer with clear sections
+ * 1. Generate prose-first answers (civic memo style)
  * 2. Apply RecordStrength tier behavior (A/B/C confidence levels)
  * 3. Enforce citation requirements (no uncited RSA claims)
- * 4. Distinguish FACT vs STANDARD vs INFERENCE in writing
+ * 4. Anti-ChatGPT style: no headings, no filler, no template language
  */
 
 import { GoogleGenAI } from "@google/genai";
@@ -14,6 +14,7 @@ import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging"
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logDebug } from "../utils/logger";
+import { getProsePolicy, type ProsePolicy } from "./answerPolicy";
 import type {
   SynthesisInputV3,
   RecordStrength,
@@ -21,6 +22,8 @@ import type {
   IssueMap,
   PipelineLogContext,
   ChatHistoryMessage,
+  AnswerType,
+  RenderStyle,
 } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -28,6 +31,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export interface SynthesisV3Options extends SynthesisInputV3 {
   logContext?: PipelineLogContext;
   isRepairAttempt?: boolean;
+  answerType?: AnswerType;
+  renderStyle?: RenderStyle;
 }
 
 export interface SynthesisV3Result {
@@ -47,12 +52,15 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     history,
     logContext,
     isRepairAttempt,
+    answerType = "QUICK_PROCESS",
+    renderStyle = "PROSE",
   } = options;
   
   const { model: modelName } = getModelForStage('complexSynthesis');
   const startTime = Date.now();
 
-  const systemPrompt = buildSynthesisSystemPrompt(recordStrength, issueMap, isRepairAttempt, stateChunks.length);
+  const prosePolicy = getProsePolicy(answerType, renderStyle);
+  const systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length);
   const userPrompt = buildSynthesisUserPrompt(
     userMessage, 
     issueMap, 
@@ -148,91 +156,111 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
   }
 }
 
-function buildSynthesisSystemPrompt(
+function buildProseSystemPrompt(
   recordStrength: RecordStrength, 
   issueMap: IssueMap,
+  answerType: AnswerType,
+  renderStyle: RenderStyle,
+  prosePolicy: ProsePolicy,
   isRepairAttempt?: boolean,
   stateChunkCount?: number
 ): string {
   const tierInstructions = getTierInstructions(recordStrength);
   const hasStateChunks = (stateChunkCount || 0) > 0;
+  const answerTemplate = getAnswerTypeTemplate(answerType, renderStyle, prosePolicy, hasStateChunks);
   
   const repairNote = isRepairAttempt 
-    ? `\n\n**REPAIR ATTEMPT**: Previous answer violated format rules. You MUST:
-- Rewrite to comply exactly with format/limits below
-- Shorten all sections to fit within caps
-- Keep citations intact
-- Remove any "next steps" or "consult counsel" language
-- No extra sections beyond the 5 required`
+    ? `\n\n**REPAIR ATTEMPT**: Previous answer violated prose rules. You MUST:
+- Rewrite as flowing paragraphs (no headings unless LIST mode)
+- Remove any template-style phrases
+- Keep citations but make them inline and subtle
+- Stay within ${prosePolicy.wordMin}-${prosePolicy.wordMax} words`
     : '';
 
-  return `You are an assistant for New Hampshire municipal officials. Generate a concise, structured answer.
+  return `You are a town administrator explaining municipal governance to a resident in an email. Write calmly, neutrally, with short sentences.
 
-## HARD LIMITS (MUST FOLLOW)
-- Max 500 words total (HARD CAP - count carefully)
-- Use headings EXACTLY as specified, in order
-- Bullet limits are STRICT per section
-- No bullet may exceed ~20 words
-- Do NOT repeat the same point across sections
-- Do NOT include "next steps", "consult counsel", "you may wish to", or "I recommend" language
-${hasStateChunks ? '- "What the law generally requires" MUST contain at least 2 [Sx] citations' : ''}
-- NEVER mention a specific RSA number unless cited with [Sx]
+## WORD COUNT (MANDATORY - COUNT CAREFULLY)
+- Target: ${prosePolicy.wordMin}-${prosePolicy.wordMax} words (HARD LIMITS)
+- Paragraphs: ${prosePolicy.paragraphs.min}-${prosePolicy.paragraphs.max}
+${!prosePolicy.allowHeadings ? '- NO section headings allowed' : ''}
+${!prosePolicy.allowBullets ? '- NO bullet lists allowed' : ''}
 
-## ANSWER FORMAT (use these exact headings in this order):
+## PROSE-FIRST RENDERING
+${answerTemplate}
 
-1. **Bottom line** (1-2 sentences; cite if factual/legal claim)
+## ANTI-CHATGPT STYLE CONSTRAINTS (MANDATORY)
+${renderStyle === "PROSE" ? "- Do NOT use section headings, bold headings, or markdown headers" : ""}
+- Do NOT use phrases like: "Bottom line", "What we know", "Unknowns that matter", "What changes"
+- Do NOT use phrases like: "next steps", "you may wish to", "consult counsel", "I recommend", "consider"
+- Do NOT use meta-language like: "based on the provided documents...", "the sources indicate..."
+- Do NOT start sentences with: "It's important to note...", "It should be noted...", "Worth mentioning..."
+- Prefer plain statements with citations at sentence ends: "...as outlined in the ordinance. [L1]"
+- Write like you're explaining this to a neighbor, not generating a report
 
-2. **What we know (from sources)** (max 5 bullets; timeline facts only; cite [USER] or [Lx])
-
-3. **What the law generally requires** (max 5 bullets; include federal + NH + local if relevant; cite [Sx] for state law)
-
-4. **What changes / what the decision affects** OR **How this typically works in NH** (max 4 bullets; see dynamic title rules)
-
-5. **Unknowns that matter** (max 4 bullets; ONLY uncertainties that materially affect the analysis; cite if possible)
-
-## SECTION 4 TITLE RULES (DYNAMIC)
-- If the facts contain an explicit action, vote, decision, appeal, or enforcement step: use title "**What changes / what the decision affects**"
-- If no explicit action/decision exists (general rules question): use title "**How this typically works in NH**"
-- NEVER include a specific date (like "Jan 6") in any heading
+## CIVIC TONE
+- Calm, neutral, professional
+- Short sentences preferred
+- No legalese unless quoting a source
+- Be direct and helpful without being preachy
 
 ## CITATION RULES
-- [USER] is ONLY allowed in "What we know (from sources)" section
-- [Lx] citations for local documents (minutes, warrants, ordinances)
-- [Sx] citations for state law (RSA, NHMA guidance, admin rules)
-- "What the law generally requires" MUST use [Sx] citations if state chunks exist
-- If no state chunks exist, keep law section general without specific RSA numbers
-
-## TOPIC CONTINUITY RULES (CRITICAL)
-- Answer ONLY the current question. Do NOT reference prior situations unless explicitly relevant.
-- If a section cannot be supported by retrieved sources, omit it rather than speculate.
-- NEVER write "this assumes it refers to...", "assuming this relates to...", or similar bridging language.
-- Do NOT substitute related cases or prior conversation topics for the current question.
-- Do NOT mention prior votes, decisions, or situations from earlier in conversation unless the user explicitly asks about them.
+- Cite facts/legal claims inline at sentence end: "...requires a public hearing. [S1]"
+- [Lx] for local documents (minutes, ordinances, etc.)
+- [Sx] for state law (RSA, NHMA guidance)
+- [USER] only when referencing user-provided text
+- If only local sources exist, answer using local only
+- If state sources are weak/irrelevant, do not mention state law
+${hasStateChunks ? '- Include at least 1 state citation [Sx] if relevant to the legal framework' : ''}
 
 ## TIER INSTRUCTIONS (${recordStrength.tier})
 ${tierInstructions}
 
-## HARD RULES (MUST FOLLOW)
-1. **No uncited RSA claims**: NEVER mention specific RSA section numbers (e.g., "RSA 91-A", "RSA 673") unless you have a STATE lane chunk [Sx] that contains that RSA reference.
-
-2. **Weak state lane handling**: If no state chunks exist or they lack specific statutes:
-   - Speak generally: "NH has municipal liability frameworks..." 
-   - Add: "I did not find the specific NH RSA text in the archive excerpts provided."
-
-3. **Claim-type discipline**:
-   - FACT: What happened (from documents) - cite source
-   - STANDARD: Legal requirements (from state law) - cite source
-   - INFERENCE: Your analysis connecting facts to standards - be explicit this is analysis
-
-4. **Avoid absolute legal claims**: Do NOT use "is illegal", "will be liable", "must result in" unless explicitly supported by cited sources.
-
-5. **No topic substitution**: Answer about the situation the user asked about. Don't substitute related cases.
+## HARD RULES
+1. NEVER mention specific RSA numbers unless cited with [Sx]
+2. Do NOT fabricate procedures or requirements
+3. Do NOT substitute related cases or prior conversation topics
+4. Keep answer grounded in retrieved sources only
 ${repairNote}
 
-## SITUATION CONTEXT
-${issueMap.situationTitle ? `Current situation: "${issueMap.situationTitle}"` : 'General question'}
-${issueMap.legalTopics.length > 0 ? `Legal topics: ${issueMap.legalTopics.join(', ')}` : ''}
-${issueMap.legalSalience >= 0.6 ? 'HIGH legal salience - ensure law section is thorough with [Sx] citations' : ''}`;
+## CONTEXT
+${issueMap.situationTitle ? `Situation: "${issueMap.situationTitle}"` : 'General question'}
+${issueMap.legalTopics.length > 0 ? `Topics: ${issueMap.legalTopics.join(', ')}` : ''}`;
+}
+
+function getAnswerTypeTemplate(answerType: AnswerType, renderStyle: RenderStyle, prosePolicy: ProsePolicy, hasStateChunks: boolean): string {
+  if (renderStyle === "LIST") {
+    return `Write answer as a numbered or bulleted list since the user requested list format.
+Include brief intro sentence, then list items, then brief sources line.
+Target ${prosePolicy.wordMin}-${prosePolicy.wordMax} words.`;
+  }
+
+  switch (answerType) {
+    case "QUICK_PROCESS":
+      return `QUICK_PROCESS answer (${prosePolicy.wordMin}-${prosePolicy.wordMax} words):
+- Write ${prosePolicy.paragraphs.min}-${prosePolicy.paragraphs.max} short paragraphs
+- NO headings, NO bullet lists
+- Must include: what to file, where to file, key requirement/constraint
+- Include 1 local citation and 0-1 state citation if relevant
+- Be direct and practical`;
+
+    case "EXPLAINER":
+      return `EXPLAINER answer (${prosePolicy.wordMin}-${prosePolicy.wordMax} words):
+- Write ${prosePolicy.paragraphs.min}-${prosePolicy.paragraphs.max} paragraphs
+- NO headings, NO bullet lists (unless user asked)
+- Define terms briefly, then explain how it works in NH and locally
+- Use minimal citations - just enough to ground claims
+- Focus on helping reader understand the concept`;
+
+    case "RISK_DISPUTE":
+      return `RISK_DISPUTE answer (${prosePolicy.wordMin}-${prosePolicy.wordMax} words):
+- Write ${prosePolicy.paragraphs.min}-${prosePolicy.paragraphs.max} short paragraphs
+- NO headings, NO bullet lists
+- Paragraph 1: situation overview and why it matters
+- Paragraph 2-3: what sources say happened (facts with citations)
+- Paragraph 4: what the governing rules generally require (cite state if present)
+- Paragraph 5 (optional): realistic outcomes/risks, only if supported by sources
+- NO "unknowns that matter", NO "next steps", NO "consult counsel" language`;
+  }
 }
 
 function getTierInstructions(recordStrength: RecordStrength): string {

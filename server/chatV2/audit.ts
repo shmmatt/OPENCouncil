@@ -10,6 +10,7 @@
  */
 
 import { logDebug } from "../utils/logger";
+import { containsForbiddenProsePatterns } from "./answerPolicy";
 import type { 
   AuditResult, 
   AuditViolation, 
@@ -84,6 +85,9 @@ export interface FormatValidationResult {
   violations: AuditViolation[];
 }
 
+import type { RenderStyle, AnswerType } from "./types";
+import { getProsePolicy } from "./answerPolicy";
+
 export interface AuditOptions {
   answerText: string;
   stateChunks: LabeledChunk[];
@@ -92,15 +96,115 @@ export interface AuditOptions {
   situationContext?: SituationContext | null;
   logContext?: PipelineLogContext;
   stateChunkCount?: number;
+  renderStyle?: RenderStyle;
+  answerType?: AnswerType;
 }
 
 
 // =====================================================
-// FORMAT VALIDATION FUNCTION
+// PROSE FORMAT VALIDATION FUNCTION
 // =====================================================
 
 /**
- * Validate answer format against strict requirements
+ * Validate prose-mode answer format against ProsePolicy requirements
+ */
+export function validateProseFormat(
+  answerText: string,
+  answerType: AnswerType,
+  stateChunkCount: number
+): FormatValidationResult {
+  const violations: AuditViolation[] = [];
+  const prosePolicy = getProsePolicy(answerType, "PROSE");
+  
+  const words = answerText.split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  
+  if (wordCount < prosePolicy.wordMin) {
+    violations.push({
+      type: 'format_violation',
+      evidence: `Word count ${wordCount} is below minimum of ${prosePolicy.wordMin} for ${answerType}`,
+      severity: 'warning',
+    });
+  }
+  
+  if (wordCount > prosePolicy.wordMax * 1.2) {
+    violations.push({
+      type: 'format_violation',
+      evidence: `Word count ${wordCount} exceeds maximum of ${prosePolicy.wordMax} for ${answerType}`,
+      severity: 'error',
+    });
+  }
+  
+  if (!prosePolicy.allowHeadings) {
+    const headingPatterns = [
+      /^\*\*[^*]+\*\*\s*$/m,
+      /^#+\s+/m,
+      /^\*\*(?:Bottom line|What we know|What the law|Unknowns|What changes)/im,
+    ];
+    
+    for (const pattern of headingPatterns) {
+      if (pattern.test(answerText)) {
+        violations.push({
+          type: 'format_violation',
+          evidence: 'Prose mode should not contain section headings',
+          severity: 'warning',
+        });
+        break;
+      }
+    }
+  }
+  
+  if (!prosePolicy.allowBullets) {
+    const bulletPattern = /^\s*[-•*]\s+/m;
+    if (bulletPattern.test(answerText)) {
+      violations.push({
+        type: 'format_violation',
+        evidence: 'Prose mode should not contain bullet lists',
+        severity: 'warning',
+      });
+    }
+  }
+  
+  const stateCitationPattern = /\[S\d+\]/g;
+  const allStateCitations = answerText.match(stateCitationPattern) || [];
+  const stateCitationCount = allStateCitations.length;
+  
+  const llmTailsFound: string[] = [];
+  for (const pattern of LLM_TAIL_PATTERNS) {
+    const match = answerText.match(pattern);
+    if (match) {
+      llmTailsFound.push(match[0]);
+    }
+  }
+  
+  if (llmTailsFound.length > 0) {
+    violations.push({
+      type: 'llm_tail',
+      evidence: `LLM tail phrases found: ${llmTailsFound.join(', ')}`,
+      severity: 'warning',
+    });
+  }
+  
+  return {
+    passed: violations.length === 0,
+    wordCount,
+    headingsPresent: [],
+    headingsInOrder: true,
+    bulletCounts: {},
+    bulletViolations: [],
+    stateCitationCount,
+    lawSectionHasStateCitations: stateChunkCount > 0 ? stateCitationCount >= 1 : true,
+    llmTailsFound,
+    violations,
+  };
+}
+
+// =====================================================
+// STRUCTURED FORMAT VALIDATION FUNCTION
+// =====================================================
+
+/**
+ * Validate structured answer format against strict requirements (for LIST mode)
  */
 export function validateAnswerFormat(
   answerText: string,
@@ -387,14 +491,32 @@ const PROCEDURE_CLAIMS = [
 ];
 
 export function auditAnswer(options: AuditOptions): AuditResult {
-  const { answerText, stateChunks, citationsUsed, issueMap, situationContext, logContext, stateChunkCount } = options;
+  const { 
+    answerText, 
+    stateChunks, 
+    citationsUsed, 
+    issueMap, 
+    situationContext, 
+    logContext, 
+    stateChunkCount,
+    renderStyle = "PROSE",
+    answerType = "QUICK_PROCESS"
+  } = options;
   const violations: AuditViolation[] = [];
 
-  // 1. Format validation (new)
-  const formatValidation = validateAnswerFormat(answerText, stateChunkCount || stateChunks.length);
-  violations.push(...formatValidation.violations);
+  let formatValidation: FormatValidationResult;
 
-  // 2. Content violations
+  if (renderStyle === "PROSE") {
+    formatValidation = validateProseFormat(answerText, answerType, stateChunkCount || stateChunks.length);
+    violations.push(...formatValidation.violations);
+    
+    const proseViolations = checkForbiddenProsePatterns(answerText);
+    violations.push(...proseViolations);
+  } else {
+    formatValidation = validateAnswerFormat(answerText, stateChunkCount || stateChunks.length);
+    violations.push(...formatValidation.violations);
+  }
+
   const rsaViolations = checkUncitedRSA(answerText, stateChunks, citationsUsed);
   violations.push(...rsaViolations);
 
@@ -434,6 +556,8 @@ export function auditAnswer(options: AuditOptions): AuditResult {
     violationCount: violations.length,
     errorCount,
     shouldRepair,
+    renderStyle,
+    answerType,
     wordCount: formatValidation.wordCount,
     headingsInOrder: formatValidation.headingsInOrder,
     stateCitationCount: formatValidation.stateCitationCount,
@@ -478,6 +602,21 @@ function checkUncitedRSA(
     }
   }
 
+  return violations;
+}
+
+function checkForbiddenProsePatterns(answerText: string): AuditViolation[] {
+  const violations: AuditViolation[] = [];
+  const forbiddenPatterns = containsForbiddenProsePatterns(answerText);
+  
+  for (const pattern of forbiddenPatterns) {
+    violations.push({
+      type: 'format_violation',
+      evidence: `Forbidden prose pattern found: "${pattern}"`,
+      severity: 'warning',
+    });
+  }
+  
   return violations;
 }
 

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, ScopeHint } from "./types";
+import type { RouterOutput, ChatHistoryMessage, PipelineLogContext, ScopeHint, AnswerType, RenderStyle } from "./types";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
@@ -72,6 +72,74 @@ function combineScopeHints(detected: ScopeHint, llm: ScopeHint): ScopeHint {
   }
   
   return llm || detected || null;
+}
+
+const LIST_TRIGGER_PATTERNS = [
+  /\blist\b/i,
+  /\bchecklist\b/i,
+  /\bsteps?\b/i,
+  /\bbullet/i,
+  /\bin a table\b/i,
+  /\bitemize\b/i,
+  /\bnumber(?:ed)?\s+(?:list|steps)\b/i,
+];
+
+function detectRenderStyle(question: string): RenderStyle {
+  for (const pattern of LIST_TRIGGER_PATTERNS) {
+    if (pattern.test(question)) {
+      return "LIST";
+    }
+  }
+  return "PROSE";
+}
+
+const RISK_PATTERNS = [
+  /\bdispute\b/i,
+  /\bliab(le|ility)\b/i,
+  /\bappeal\b/i,
+  /\bviolat(e|ion)\b/i,
+  /\blegal\s+action\b/i,
+  /\bsue\b|\bsued\b/i,
+  /\boverride\b/i,
+  /\bconflict\b/i,
+  /\bchallenge\b/i,
+  /\brecourse\b/i,
+  /\bgrievance\b/i,
+  /\bcan.*\s+override\b/i,
+  /\bwrongful\b/i,
+  /\bunlawful\b/i,
+  /\billegal\b/i,
+];
+
+const EXPLAINER_PATTERNS = [
+  /\bwhat\s+is\b/i,
+  /\bdefine\b/i,
+  /\bexplain\b/i,
+  /\bhow\s+does\b.*\bwork\b/i,
+  /\bmeaning\s+of\b/i,
+  /\bdifference\s+between\b/i,
+];
+
+export function detectAnswerTypeFromQuestion(question: string): AnswerType {
+  const hasRiskIndicator = RISK_PATTERNS.some(p => p.test(question));
+  if (hasRiskIndicator) {
+    return "RISK_DISPUTE";
+  }
+  
+  const hasExplainerIndicator = EXPLAINER_PATTERNS.some(p => p.test(question));
+  if (hasExplainerIndicator) {
+    return "EXPLAINER";
+  }
+  
+  return "QUICK_PROCESS";
+}
+
+function detectAnswerType(
+  question: string, 
+  complexity: "simple" | "complex",
+  domains: string[]
+): AnswerType {
+  return detectAnswerTypeFromQuestion(question);
 }
 
 const ROUTER_SYSTEM_PROMPT = `You are the routing and classification agent for OpenCouncil, a municipal governance Q&A system.
@@ -211,10 +279,12 @@ Remember: Respond with valid JSON only, no other text.`;
       const llmScopeHint = parsed.scopeHint as ScopeHint;
       
       const finalScopeHint = combineScopeHints(detectedScopeHint, llmScopeHint);
+      const complexity = parsed.complexity === "complex" ? "complex" : "simple";
+      const domains = Array.isArray(parsed.domains) ? parsed.domains : ["misc_other"];
       
       return {
-        complexity: parsed.complexity === "complex" ? "complex" : "simple",
-        domains: Array.isArray(parsed.domains) ? parsed.domains : ["misc_other"],
+        complexity,
+        domains,
         requiresClarification: Boolean(parsed.requiresClarification),
         clarificationQuestions: Array.isArray(parsed.clarificationQuestions)
           ? parsed.clarificationQuestions
@@ -222,6 +292,8 @@ Remember: Respond with valid JSON only, no other text.`;
         rerankedQuestion: parsed.rerankedQuestion || question,
         scopeHint: finalScopeHint,
         requiresComposedAnswer: Boolean(parsed.requiresComposedAnswer),
+        answerType: detectAnswerType(question, complexity, domains),
+        renderStyle: detectRenderStyle(question),
       };
     } catch (parseError) {
       logLlmError({
@@ -267,5 +339,7 @@ function getDefaultRouterOutput(question: string, userHints?: { town?: string })
     rerankedQuestion: question,
     scopeHint: detectScopeHint(question, userHints),
     requiresComposedAnswer: false,
+    answerType: detectAnswerType(question, "simple", ["misc_other"]),
+    renderStyle: detectRenderStyle(question),
   };
 }

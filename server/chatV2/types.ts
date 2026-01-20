@@ -10,6 +10,21 @@ export type ScopeHint = "local" | "statewide" | "mixed" | null;
 export type AnswerMode = "standard" | "deep";
 
 /**
+ * Answer type routing based on question intent.
+ * - "QUICK_PROCESS": Simple process/requirements question (120-220 words)
+ * - "EXPLAINER": Conceptual explanation question (180-320 words)
+ * - "RISK_DISPUTE": Situation with risk/dispute elements (250-450 words)
+ */
+export type AnswerType = "QUICK_PROCESS" | "EXPLAINER" | "RISK_DISPUTE";
+
+/**
+ * Render style controls answer formatting.
+ * - "PROSE": Default - concise civic memo style paragraphs (no headings/bullets)
+ * - "LIST": Only if user explicitly asks for checklist/table/steps
+ */
+export type RenderStyle = "PROSE" | "LIST";
+
+/**
  * Explicit document source tracking for scope note selection.
  * This ensures the scope note accurately reflects which documents were used.
  */
@@ -31,6 +46,8 @@ export interface RouterOutput {
   rerankedQuestion: string;
   scopeHint: ScopeHint;
   requiresComposedAnswer?: boolean;
+  answerType: AnswerType;
+  renderStyle: RenderStyle;
 }
 
 export interface RetrievalPlan {

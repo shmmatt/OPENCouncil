@@ -26,8 +26,46 @@ import type {
   ChatHistoryMessage,
   DocSourceType,
   LabeledChunk,
+  AnswerType,
+  RenderStyle,
 } from "./types";
 import type { SessionSource, SituationContext } from "@shared/schema";
+
+import { detectAnswerTypeFromQuestion } from "./router";
+
+const LIST_TRIGGER_PATTERNS = [
+  /\blist\b/i,
+  /\bchecklist\b/i,
+  /\bsteps?\b/i,
+  /\bbullet/i,
+  /\bin a table\b/i,
+  /\bitemize\b/i,
+  /\bnumber(?:ed)?\s+(?:list|steps)\b/i,
+];
+
+function detectRenderStyle(question: string): RenderStyle {
+  for (const pattern of LIST_TRIGGER_PATTERNS) {
+    if (pattern.test(question)) {
+      return "LIST";
+    }
+  }
+  return "PROSE";
+}
+
+function detectAnswerType(question: string, issueMap: IssueMap): AnswerType {
+  const baseType = detectAnswerTypeFromQuestion(question);
+  
+  if (baseType === "QUICK_PROCESS") {
+    if (issueMap.legalSalience >= 0.7 && issueMap.requestedOutput === "risk") {
+      return "RISK_DISPUTE";
+    }
+    if (issueMap.requestedOutput === "explain") {
+      return "EXPLAINER";
+    }
+  }
+  
+  return baseType;
+}
 
 export interface V3OrchestratorOptions {
   userMessage: string;
@@ -145,6 +183,18 @@ export async function runChatV3Pipeline(
     retrievalResult.situationAlignment
   );
 
+  const answerType = detectAnswerType(userMessage, issueMap);
+  const renderStyle = detectRenderStyle(userMessage);
+
+  logDebug("v3_render_style_detected", {
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+    stage: "v3_synthesizer",
+    answerType,
+    renderStyle,
+    legalSalience: issueMap.legalSalience,
+  });
+
   let synthesisResult = await synthesizeV3({
     userMessage,
     issueMap,
@@ -154,6 +204,8 @@ export async function runChatV3Pipeline(
     recordStrength,
     history: historyForSynthesis,
     logContext,
+    answerType,
+    renderStyle,
   });
 
   let answerText = synthesisResult.answerText;
@@ -176,6 +228,8 @@ export async function runChatV3Pipeline(
       issueMap,
       situationContext: effectiveSituationContext,
       logContext,
+      renderStyle,
+      answerType,
     });
 
     auditFlags = auditResult.violations.map(v => `${v.type}:${v.severity}`);
@@ -199,6 +253,8 @@ export async function runChatV3Pipeline(
         history: historyForSynthesis,
         logContext,
         isRepairAttempt: true,
+        answerType,
+        renderStyle,
       });
 
       repairRan = true;
@@ -225,6 +281,8 @@ export async function runChatV3Pipeline(
           issueMap,
           situationContext: effectiveSituationContext,
           logContext,
+          renderStyle,
+          answerType,
         });
         auditFlags = repairAuditResult.violations.map(v => `${v.type}:${v.severity}`);
         
@@ -257,6 +315,8 @@ export async function runChatV3Pipeline(
         issueMap,
         situationContext: effectiveSituationContext,
         logContext,
+        renderStyle,
+        answerType,
       });
 
       if (currentAuditResult.violations.some(v => v.type === 'format_violation')) {
@@ -270,6 +330,8 @@ export async function runChatV3Pipeline(
           issueMap,
           situationContext: effectiveSituationContext,
           logContext,
+          renderStyle,
+          answerType,
         });
         
         const normalizedFormatViolations = normalizedAudit.violations.filter(v => v.type === 'format_violation').length;
