@@ -385,8 +385,19 @@ export class DatabaseStorage implements IStorage {
       updateData.ocrCompletedAt = new Date();
     }
     
+    if (status === 'completed') {
+      updateData.needsOcr = false;
+    }
+    
     if (data?.ocrText !== undefined) {
       updateData.ocrText = data.ocrText;
+      if (status === 'completed' && data.ocrText) {
+        updateData.previewText = data.ocrText.slice(0, 15000);
+        updateData.previewHash = require('crypto')
+          .createHash('sha256')
+          .update(data.ocrText)
+          .digest('hex');
+      }
     }
     if (data?.ocrTextCharCount !== undefined) {
       updateData.ocrTextCharCount = data.ocrTextCharCount;

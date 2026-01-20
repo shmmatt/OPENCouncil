@@ -181,5 +181,34 @@ The application uses Vite for frontend development and esbuild for backend bundl
 
 ### Key NPM Packages
 *   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.
-*   **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`.
+*   **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`, `tesseract.js`, `pdf-poppler`.
 *   **Development**: `vite`, `tsx`, `esbuild`, `drizzle-kit`, `typescript`.
+
+### OCR Pipeline (January 2026)
+Automatic OCR detection and processing for scanned PDFs:
+
+**Configuration (Environment Variables):**
+- `OCR_ENABLED`: Enable/disable OCR processing (default: `true`)
+- `OCR_PROVIDER`: OCR provider to use (`tesseract` or `none`, default: `tesseract`)
+- `OCR_MIN_CHAR_THRESHOLD`: Minimum character count to skip OCR (default: `1200`)
+
+**How it works:**
+1. When files are uploaded, text extraction is attempted using pdf-parse
+2. If extracted text is below the threshold (likely a scanned PDF), the document is flagged for OCR
+3. A background worker processes queued documents using Tesseract.js
+4. PDF pages are converted to images using pdf-poppler, then OCR'd
+5. Extracted OCR text replaces the preview text for LLM analysis
+
+**Database Columns (file_blobs table):**
+- `extracted_text_char_count`: Character count from initial extraction
+- `needs_ocr`: Boolean flag for documents requiring OCR
+- `ocr_status`: Status (`none`, `queued`, `processing`, `completed`, `failed`, `blocked`)
+- `ocr_text`: Full OCR-extracted text
+- `ocr_text_char_count`: Character count from OCR
+- `ocr_failure_reason`: Error message if OCR fails
+- `ocr_queued_at`, `ocr_started_at`, `ocr_completed_at`: Timestamps
+
+**Admin API Endpoints:**
+- `GET /api/admin/ocr/queue`: List documents needing OCR
+- `POST /api/admin/ocr/queue/:blobId`: Manually queue a document for OCR
+- `GET /api/admin/ocr/status/:blobId`: Get OCR status for a document

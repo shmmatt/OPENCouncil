@@ -6,13 +6,20 @@ import { getOcrConfig } from '../config/ocr';
 import type { FileBlob } from '@shared/schema';
 
 let pdfPoppler: any = null;
+let pdfPopplerAvailable: boolean | null = null;
 
 async function getPdfPoppler(): Promise<any> {
+  if (pdfPopplerAvailable === false) {
+    return null;
+  }
+  
   if (!pdfPoppler) {
     try {
       pdfPoppler = await import('pdf-poppler');
+      pdfPopplerAvailable = true;
     } catch (e) {
-      console.warn('[OCR Worker] pdf-poppler not available, using fallback');
+      console.warn('[OCR Worker] pdf-poppler not available - PDF OCR will be limited');
+      pdfPopplerAvailable = false;
       return null;
     }
   }
@@ -52,7 +59,13 @@ async function performOcrOnImage(imagePath: string): Promise<string> {
 }
 
 async function performOcrOnPdf(pdfPath: string): Promise<string> {
-  const tmpDir = path.join('/tmp', `ocr-${Date.now()}`);
+  const poppler = await getPdfPoppler();
+  
+  if (!poppler) {
+    throw new Error('PDF to image conversion not available. Install pdf-poppler or poppler-utils system package.');
+  }
+  
+  const tmpDir = path.join('/tmp', `ocr-${Date.now()}-${Math.random().toString(36).substring(7)}`);
   
   try {
     await fs.mkdir(tmpDir, { recursive: true });
