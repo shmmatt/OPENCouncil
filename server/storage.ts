@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/neon-serverless";
-import { eq, desc, asc, and, or, gte, sql } from "drizzle-orm";
+import { eq, desc, asc, and, or, gte, sql, isNull } from "drizzle-orm";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
@@ -422,6 +422,81 @@ export class DatabaseStorage implements IStorage {
         ocrFailureReason: null,
       })
       .where(eq(schema.fileBlobs.id, id));
+  }
+
+  async getFileBlobsNeedingBackfill(): Promise<FileBlob[]> {
+    return await db
+      .select()
+      .from(schema.fileBlobs)
+      .where(isNull(schema.fileBlobs.extractedTextCharCount));
+  }
+
+  async getFileBlobsNeedingOcrQueue(threshold: number): Promise<FileBlob[]> {
+    const result = await db.execute(sql`
+      SELECT * FROM file_blobs 
+      WHERE ocr_status = 'none' 
+      AND (extracted_text_char_count IS NULL OR extracted_text_char_count < ${threshold})
+    `);
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      rawHash: row.raw_hash,
+      previewHash: row.preview_hash,
+      sizeBytes: row.size_bytes,
+      mimeType: row.mime_type,
+      originalFilename: row.original_filename,
+      storagePath: row.storage_path,
+      previewText: row.preview_text,
+      extractedTextCharCount: row.extracted_text_char_count,
+      needsOcr: row.needs_ocr,
+      ocrStatus: row.ocr_status,
+      ocrFailureReason: row.ocr_failure_reason,
+      ocrText: row.ocr_text,
+      ocrTextCharCount: row.ocr_text_char_count,
+      ocrQueuedAt: row.ocr_queued_at,
+      ocrStartedAt: row.ocr_started_at,
+      ocrCompletedAt: row.ocr_completed_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async backfillCharCountAndQueueOcr(id: string, charCount: number, threshold: number): Promise<{ queued: boolean }> {
+    const needsOcr = charCount < threshold;
+    const updateData: any = {
+      extractedTextCharCount: charCount,
+    };
+    
+    if (needsOcr) {
+      updateData.needsOcr = true;
+      updateData.ocrStatus = 'queued';
+      updateData.ocrQueuedAt = new Date();
+    }
+    
+    await db
+      .update(schema.fileBlobs)
+      .set(updateData)
+      .where(eq(schema.fileBlobs.id, id));
+    
+    return { queued: needsOcr };
+  }
+
+  async getOcrQueueStats(): Promise<{ total: number; queued: number; processing: number; completed: number; failed: number }> {
+    const result = await db.execute(sql`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE ocr_status = 'queued') as queued,
+        COUNT(*) FILTER (WHERE ocr_status = 'processing') as processing,
+        COUNT(*) FILTER (WHERE ocr_status = 'completed') as completed,
+        COUNT(*) FILTER (WHERE ocr_status = 'failed') as failed
+      FROM file_blobs
+    `);
+    const row = result.rows[0] as any;
+    return {
+      total: parseInt(row.total || '0'),
+      queued: parseInt(row.queued || '0'),
+      processing: parseInt(row.processing || '0'),
+      completed: parseInt(row.completed || '0'),
+      failed: parseInt(row.failed || '0'),
+    };
   }
 
   // v2 Pipeline: LogicalDocument operations

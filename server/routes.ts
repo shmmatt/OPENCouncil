@@ -20,6 +20,7 @@ import { registerChatV2Routes } from "./chatV2/chatV2Route";
 import { registerAdminUsageRoutes } from "./routes/adminUsageRoutes";
 import { registerAdminChatAnalyticsRoutes } from "./routes/adminChatAnalyticsRoutes";
 import { chatConfig } from "./chatV2/chatConfig";
+import { getOcrConfig } from "./config/ocr";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -625,6 +626,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching OCR status:", error);
       res.status(500).json({ message: "Failed to fetch OCR status" });
+    }
+  });
+
+  // Reprocess legacy documents - backfill char counts and queue low-text docs for OCR
+  app.post("/api/admin/ocr/reprocess-legacy", authenticateAdmin, async (req, res) => {
+    try {
+      const config = getOcrConfig();
+      
+      // Get all documents that need OCR queueing (low char count + not yet processed)
+      const blobsNeedingOcr = await storage.getFileBlobsNeedingOcrQueue(config.minCharThreshold);
+      
+      let queued = 0;
+      
+      for (const blob of blobsNeedingOcr) {
+        await storage.queueFileBlobForOcr(blob.id);
+        queued++;
+      }
+      
+      res.json({
+        success: true,
+        message: `Queued ${queued} documents for OCR processing.`,
+        stats: { queued, threshold: config.minCharThreshold }
+      });
+    } catch (error) {
+      console.error("Error reprocessing legacy documents:", error);
+      res.status(500).json({ message: "Failed to reprocess legacy documents" });
+    }
+  });
+
+  // Get OCR queue statistics
+  app.get("/api/admin/ocr/stats", authenticateAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getOcrQueueStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching OCR stats:", error);
+      res.status(500).json({ message: "Failed to fetch OCR stats" });
     }
   });
 

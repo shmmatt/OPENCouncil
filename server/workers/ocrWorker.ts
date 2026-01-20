@@ -1,46 +1,40 @@
 import Tesseract from 'tesseract.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { storage } from '../storage';
 import { getOcrConfig } from '../config/ocr';
 import type { FileBlob } from '@shared/schema';
 
-let pdfPoppler: any = null;
-let pdfPopplerAvailable: boolean | null = null;
+const execAsync = promisify(exec);
 
-async function getPdfPoppler(): Promise<any> {
-  if (pdfPopplerAvailable === false) {
-    return null;
-  }
+let pdftoppmAvailable: boolean | null = null;
+
+async function checkPdftoppm(): Promise<boolean> {
+  if (pdftoppmAvailable !== null) return pdftoppmAvailable;
   
-  if (!pdfPoppler) {
-    try {
-      pdfPoppler = await import('pdf-poppler');
-      pdfPopplerAvailable = true;
-    } catch (e) {
-      console.warn('[OCR Worker] pdf-poppler not available - PDF OCR will be limited');
-      pdfPopplerAvailable = false;
-      return null;
-    }
+  try {
+    await execAsync('which pdftoppm');
+    pdftoppmAvailable = true;
+    console.log('[OCR Worker] pdftoppm is available');
+  } catch {
+    pdftoppmAvailable = false;
+    console.warn('[OCR Worker] pdftoppm not available - PDF OCR will be limited');
   }
-  return pdfPoppler;
+  return pdftoppmAvailable;
 }
 
 async function convertPdfToImages(pdfPath: string, outputDir: string): Promise<string[]> {
-  const poppler = await getPdfPoppler();
+  const available = await checkPdftoppm();
   
-  if (!poppler) {
-    throw new Error('PDF to image conversion not available (pdf-poppler not installed)');
+  if (!available) {
+    throw new Error('pdftoppm not available. Install poppler_utils system package.');
   }
   
-  const opts = {
-    format: 'png',
-    out_dir: outputDir,
-    out_prefix: 'page',
-    page: null,
-  };
+  const outPrefix = path.join(outputDir, 'page');
   
-  await poppler.convert(pdfPath, opts);
+  await execAsync(`pdftoppm -png "${pdfPath}" "${outPrefix}"`);
   
   const files = await fs.readdir(outputDir);
   const imageFiles = files
@@ -59,10 +53,10 @@ async function performOcrOnImage(imagePath: string): Promise<string> {
 }
 
 async function performOcrOnPdf(pdfPath: string): Promise<string> {
-  const poppler = await getPdfPoppler();
+  const available = await checkPdftoppm();
   
-  if (!poppler) {
-    throw new Error('PDF to image conversion not available. Install pdf-poppler or poppler-utils system package.');
+  if (!available) {
+    throw new Error('PDF to image conversion not available. Install poppler_utils system package.');
   }
   
   const tmpDir = path.join('/tmp', `ocr-${Date.now()}-${Math.random().toString(36).substring(7)}`);

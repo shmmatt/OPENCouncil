@@ -43,7 +43,8 @@ import {
   CheckSquare,
   Link2,
   Plus,
-  BarChart3
+  BarChart3,
+  ScanLine
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 import { NH_TOWNS } from "@shared/schema";
@@ -295,6 +296,48 @@ export default function AdminIngestion() {
       });
       if (!response.ok) return [];
       return response.json();
+    },
+  });
+
+  const { data: ocrStats, refetch: refetchOcrStats } = useQuery<{ total: number; queued: number; processing: number; completed: number; failed: number }>({
+    queryKey: ["/api/admin/ocr/stats"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/stats", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return { total: 0, queued: 0, processing: 0, completed: 0, failed: 0 };
+      return response.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const reprocessLegacyMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/reprocess-legacy", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to reprocess legacy documents");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Reprocessing Complete",
+        description: data.message,
+      });
+      refetchOcrStats();
+      refetchJobs();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reprocessing Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -801,7 +844,27 @@ export default function AdminIngestion() {
               <p className="text-sm text-muted-foreground">v2 Document Management</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {ocrStats && (ocrStats.queued > 0 || ocrStats.processing > 0) && (
+              <Badge variant="outline" className="text-blue-600 border-blue-600">
+                <ScanLine className="w-3 h-3 mr-1" />
+                OCR: {ocrStats.queued} queued, {ocrStats.processing} processing
+              </Badge>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => reprocessLegacyMutation.mutate()}
+              disabled={reprocessLegacyMutation.isPending}
+              data-testid="button-reprocess-legacy"
+            >
+              {reprocessLegacyMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <ScanLine className="w-4 h-4 mr-2" />
+              )}
+              Reprocess Legacy Docs
+            </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">
               <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
