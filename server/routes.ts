@@ -682,24 +682,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Batch re-index OCR-completed documents that haven't been indexed yet
+  // Processes documents in batches of 20 per request to avoid timeouts
   app.post("/api/admin/ocr/reindex-completed", authenticateAdmin, async (req, res) => {
     try {
-      const docsToReindex = await storage.getOcrCompletedNeedingReindex();
+      const BATCH_SIZE = 20;
+      const allDocsToReindex = await storage.getOcrCompletedNeedingReindex();
       
-      if (docsToReindex.length === 0) {
+      if (allDocsToReindex.length === 0) {
         return res.json({
           success: true,
           message: "No OCR-completed documents need re-indexing.",
           reindexed: 0,
           failed: 0,
+          remaining: 0,
         });
       }
+
+      const docsToProcess = allDocsToReindex.slice(0, BATCH_SIZE);
+      const remaining = allDocsToReindex.length - docsToProcess.length;
 
       let reindexed = 0;
       let failed = 0;
       const errors: string[] = [];
 
-      for (const doc of docsToReindex) {
+      for (const doc of docsToProcess) {
         try {
           if (!doc.fileBlob.ocrText) {
             errors.push(`${doc.fileBlob.originalFilename}: No OCR text available`);
@@ -733,9 +739,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: `Re-indexed ${reindexed} documents. ${failed} failed.`,
+        message: remaining > 0 
+          ? `Re-indexed ${reindexed} documents. ${failed} failed. ${remaining} remaining.`
+          : `Re-indexed ${reindexed} documents. ${failed} failed.`,
         reindexed,
         failed,
+        remaining,
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error) {

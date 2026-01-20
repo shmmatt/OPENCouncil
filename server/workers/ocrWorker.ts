@@ -135,24 +135,29 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
 
 async function reindexAfterOcr(fileBlobId: string, ocrText: string, filename: string): Promise<void> {
   try {
-    const docsNeedingReindex = await storage.getOcrCompletedNeedingReindex();
-    const docToReindex = docsNeedingReindex.find(d => d.fileBlob.id === fileBlobId);
+    const ingestionData = await storage.getIngestionMetadataForFileBlob(fileBlobId);
     
-    if (!docToReindex) {
-      console.log(`[OCR Worker] No indexed ingestion job found for ${filename}, skipping reindex`);
+    if (!ingestionData) {
+      console.log(`[OCR Worker] No ingestion job found for ${filename}, will be picked up by batch reindex`);
       return;
     }
     
+    if (!ingestionData.isIndexed) {
+      console.log(`[OCR Worker] Ingestion job not yet indexed for ${filename}, will be picked up by batch reindex`);
+      return;
+    }
+    
+    const docMetadata = ingestionData.metadata;
     const metadata: DocumentMetadata = {
-      category: docToReindex.metadata.category || 'other',
-      town: docToReindex.metadata.town,
-      board: docToReindex.metadata.board,
-      year: docToReindex.metadata.year,
-      notes: docToReindex.metadata.notes,
-      isMinutes: docToReindex.metadata.isMinutes,
-      meetingDate: docToReindex.metadata.meetingDate,
-      meetingType: docToReindex.metadata.meetingType,
-      rawDateText: docToReindex.metadata.rawDateText || null,
+      category: docMetadata.category || 'other',
+      town: docMetadata.town,
+      board: docMetadata.board,
+      year: docMetadata.year,
+      notes: docMetadata.notes,
+      isMinutes: docMetadata.isMinutes,
+      meetingDate: docMetadata.meetingDate,
+      meetingType: docMetadata.meetingType,
+      rawDateText: docMetadata.rawDateText || null,
     };
     
     console.log(`[OCR Worker] Reindexing ${filename} into RAG with ${ocrText.length} chars`);

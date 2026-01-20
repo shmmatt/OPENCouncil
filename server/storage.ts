@@ -507,6 +507,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.fileBlobs.id, fileBlobId));
   }
 
+  async getIngestionMetadataForFileBlob(fileBlobId: string): Promise<{ metadata: any; isIndexed: boolean } | null> {
+    const result = await db.execute(sql`
+      SELECT 
+        ij.final_metadata,
+        ij.suggested_metadata,
+        ij.status
+      FROM ingestion_jobs ij
+      WHERE ij.file_blob_id = ${fileBlobId}
+      ORDER BY ij.created_at DESC
+      LIMIT 1
+    `);
+    
+    if (!result.rows || result.rows.length === 0) {
+      return null;
+    }
+    
+    const row = result.rows[0] as any;
+    return {
+      metadata: row.final_metadata || row.suggested_metadata || {},
+      isIndexed: row.status === 'indexed',
+    };
+  }
+
   async getFileBlobsNeedingBackfill(): Promise<FileBlob[]> {
     return await db
       .select()
