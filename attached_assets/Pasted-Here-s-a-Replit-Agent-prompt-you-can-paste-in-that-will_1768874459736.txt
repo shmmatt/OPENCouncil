@@ -1,0 +1,104 @@
+Here’s a Replit Agent prompt you can paste in that will implement: **(1) character-threshold detection**, **(2) automatic “needs OCR” flag**, and **(3) a background OCR processing job**. It’s written for your stack: **Express + TypeScript + Postgres (Neon) + Drizzle**.
+
+```md
+You are a Replit Agent working in an existing monorepo with:
+
+- Backend: Express.js (TypeScript)
+- DB: PostgreSQL (Neon serverless)
+- ORM: Drizzle
+- File ingestion already stores uploaded PDFs and attempts text extraction.
+
+GOAL
+Implement an automatic “OCR required” pipeline step:
+1) After text extraction, compute extracted_text_char_count.
+2) If extracted_text_char_count is below a threshold (configurable), flag the document as needs_ocr=true with status=queued.
+3) Create an OCR worker that processes queued docs and stores ocr_text, ocr_char_count, and status=completed/failed.
+4) Add admin-visible flag + status in the UI (minimal).
+
+CONSTRAINTS
+- Do NOT change existing extraction logic except to add char counts + the OCR-flag decision.
+- Must be idempotent: reprocessing the same document should not enqueue duplicate OCR jobs.
+- Provide a safe default threshold but make it configurable via ENV.
+- Must work even if extracted_text is null/empty.
+- If OCR is not configured (missing env keys), still flag documents but set status=blocked and surface a clear reason.
+- Log structured events for ingestion + OCR.
+
+TECH CHOICES
+- Use a queue/job runner already in the repo if present (pg-boss preferred). If none exists, implement a simple DB-backed queue with a polling worker.
+- OCR implementation:
+  - Prefer Google Cloud Vision / Document AI if already used in repo.
+  - Otherwise use Tesseract via `tesseract.js` or `node-tesseract-ocr`.
+  - For PDFs: convert each page to images first (e.g., `pdf-poppler`, `pdftoppm`, or `sharp` pipeline). Choose the approach that fits the repo/runtime.
+- Keep changes minimal and easy to reason about.
+
+DELIVERABLES
+A) Database changes (Drizzle migrations):
+   - Table `documents` (or equivalent) add columns:
+     - extractedTextCharCount integer not null default 0
+     - needsOcr boolean not null default false
+     - ocrStatus enum: 'none' | 'queued' | 'processing' | 'completed' | 'failed' | 'blocked'
+     - ocrFailureReason text nullable
+     - ocrText text nullable
+     - ocrTextCharCount integer not null default 0
+     - ocrQueuedAt timestamptz nullable
+     - ocrStartedAt timestamptz nullable
+     - ocrCompletedAt timestamptz nullable
+   - If you already have an ingestion/documents table, modify that.
+
+B) Server-side logic:
+   1. `server/config/ocr.ts`:
+      - Reads env vars:
+        - OCR_MIN_CHAR_THRESHOLD (default 1200)
+        - OCR_PROVIDER ('none' | 'tesseract' | 'gcv')
+        - OCR_ENABLED ('true'/'false')
+        - plus provider-specific keys if needed
+      - Exports `shouldQueueOcr(extractedText: string | null): {queue: boolean, charCount: number}`
+   2. In the ingestion pipeline (where extraction result is saved):
+      - set extractedTextCharCount
+      - if below threshold, set needsOcr=true and ocrStatus='queued' (or 'blocked' if OCR_ENABLED=false or provider missing)
+      - enqueue job only if status changed from not-queued -> queued
+   3. Add an API endpoint:
+      - `POST /api/admin/documents/:id/queue-ocr` to manually requeue (admin only)
+      - `GET /api/admin/documents?needsOcr=true` filter support (if listing exists)
+
+C) OCR worker:
+   - `server/workers/ocrWorker.ts`
+   - Polls for documents with ocrStatus='queued'
+   - Claims one at a time using a transaction + “SELECT … FOR UPDATE SKIP LOCKED”
+   - Sets ocrStatus='processing', timestamps
+   - Runs OCR, stores ocrText and ocrTextCharCount
+   - Sets ocrStatus='completed' or 'failed' with ocrFailureReason
+   - Must handle multi-page PDFs
+   - Must limit concurrency to avoid overload (default 1–2)
+
+D) UI (minimal):
+   - Wherever documents are listed in admin, add:
+     - badge: “Needs OCR” if needsOcr
+     - status pill based on ocrStatus
+     - optional button: “Queue OCR” for blocked/failed
+   - Keep styling consistent (Tailwind + shadcn/ui)
+
+E) Tests / verification:
+   - Add at least one unit test for `shouldQueueOcr`
+   - Add a lightweight integration test or script that:
+     - ingests a scanned PDF (or simulates extractedText="")
+     - confirms ocrStatus transitions queued -> processing -> completed/failed
+
+IMPLEMENTATION STEPS
+1) Search the repo for existing tables/models for documents and existing job runner/worker patterns.
+2) Add Drizzle schema updates + migration.
+3) Implement `shouldQueueOcr` and wire it into the ingestion save step.
+4) Implement enqueue + worker.
+5) Add admin endpoint + admin UI badges.
+6) Add tests and a short README snippet.
+
+OUTPUT FORMAT
+- Start with a quick repo map of modified/added files.
+- Then provide the actual code changes (file by file).
+- Include migration SQL + Drizzle changes.
+- Include a short “How to run locally” section.
+
+BEGIN.
+```
+
+If you want it tighter to your existing naming, tell me what your current table/entity is called (`documents`, `sources`, `files`, etc.) and what you’re using for jobs (pg-boss? bullmq? cron?). I can rewrite the prompt to match exactly so the agent doesn’t “invent” structure.
