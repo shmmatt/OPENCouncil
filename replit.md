@@ -60,6 +60,8 @@ The application uses Vite for frontend development and esbuild for backend bundl
 ### OCR Pipeline
 An automatic OCR detection and processing system is implemented for scanned PDFs. If initial text extraction yields low character counts, documents are flagged for OCR. A background worker uses Tesseract.js to process these documents, converting PDF pages to images for OCR, and storing the extracted text for LLM analysis.
 
+**OCR Re-indexing**: After successful OCR extraction, documents are automatically re-indexed into the Gemini File Search RAG system. The worker checks if the ingestion job is indexed before attempting reindex; if not yet indexed, the document will be picked up by the batch reindex endpoint. The `ocr_reindexed_at` column tracks which documents have been re-indexed. A "Re-index OCR" button in the admin UI allows batch re-indexing of completed OCR documents in batches of 20.
+
 ## External Dependencies
 
 ### Third-Party Services
