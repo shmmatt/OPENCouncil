@@ -5,7 +5,8 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { storage } from '../storage';
 import { getOcrConfig } from '../config/ocr';
-import type { FileBlob } from '@shared/schema';
+import { reindexOcrDocument } from '../gemini-client';
+import type { FileBlob, DocumentMetadata } from '@shared/schema';
 
 const execAsync = promisify(exec);
 
@@ -120,6 +121,8 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
     });
     
     console.log(`[OCR Worker] Completed ${fileBlob.originalFilename}: ${ocrTextCharCount} chars extracted`);
+    
+    await reindexAfterOcr(fileBlob.id, ocrText, fileBlob.originalFilename);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[OCR Worker] Failed ${fileBlob.originalFilename}:`, errorMessage);
@@ -127,6 +130,40 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
     await storage.updateOcrStatus(fileBlob.id, 'failed', {
       ocrFailureReason: errorMessage,
     });
+  }
+}
+
+async function reindexAfterOcr(fileBlobId: string, ocrText: string, filename: string): Promise<void> {
+  try {
+    const docsNeedingReindex = await storage.getOcrCompletedNeedingReindex();
+    const docToReindex = docsNeedingReindex.find(d => d.fileBlob.id === fileBlobId);
+    
+    if (!docToReindex) {
+      console.log(`[OCR Worker] No indexed ingestion job found for ${filename}, skipping reindex`);
+      return;
+    }
+    
+    const metadata: DocumentMetadata = {
+      category: docToReindex.metadata.category || 'other',
+      town: docToReindex.metadata.town,
+      board: docToReindex.metadata.board,
+      year: docToReindex.metadata.year,
+      notes: docToReindex.metadata.notes,
+      isMinutes: docToReindex.metadata.isMinutes,
+      meetingDate: docToReindex.metadata.meetingDate,
+      meetingType: docToReindex.metadata.meetingType,
+      rawDateText: docToReindex.metadata.rawDateText || null,
+    };
+    
+    console.log(`[OCR Worker] Reindexing ${filename} into RAG with ${ocrText.length} chars`);
+    
+    await reindexOcrDocument(ocrText, filename, metadata);
+    await storage.markOcrReindexed(fileBlobId);
+    
+    console.log(`[OCR Worker] Successfully reindexed ${filename}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[OCR Worker] Reindex failed for ${filename}:`, errorMessage);
   }
 }
 

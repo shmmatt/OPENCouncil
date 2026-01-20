@@ -91,6 +91,8 @@ export interface IStorage {
   queueFileBlobForOcr(id: string): Promise<void>;
   recoverStaleOcrJobs(staleMinutes?: number): Promise<number>;
   resetStuckProcessingJobs(): Promise<number>;
+  getOcrCompletedNeedingReindex(): Promise<Array<{ fileBlob: FileBlob; metadata: any }>>;
+  markOcrReindexed(fileBlobId: string): Promise<void>;
 
   // v2 Pipeline: LogicalDocument operations
   createLogicalDocument(doc: InsertLogicalDocument): Promise<LogicalDocument>;
@@ -375,6 +377,7 @@ export class DatabaseStorage implements IStorage {
         ocrQueuedAt: row.ocr_queued_at,
         ocrStartedAt: row.ocr_started_at,
         ocrCompletedAt: row.ocr_completed_at,
+        ocrReindexedAt: row.ocr_reindexed_at,
         createdAt: row.created_at,
       };
     }
@@ -456,6 +459,54 @@ export class DatabaseStorage implements IStorage {
     return result.rows?.length || 0;
   }
 
+  async getOcrCompletedNeedingReindex(): Promise<Array<{ fileBlob: FileBlob; metadata: any }>> {
+    const result = await db.execute(sql`
+      SELECT 
+        fb.*,
+        ij.final_metadata,
+        ij.suggested_metadata
+      FROM file_blobs fb
+      JOIN ingestion_jobs ij ON ij.file_blob_id = fb.id
+      WHERE fb.ocr_status = 'completed'
+        AND fb.ocr_reindexed_at IS NULL
+        AND fb.ocr_text IS NOT NULL
+        AND ij.status = 'indexed'
+      ORDER BY fb.ocr_completed_at ASC
+    `);
+    
+    return result.rows.map((row: any) => ({
+      fileBlob: {
+        id: row.id,
+        rawHash: row.raw_hash,
+        previewHash: row.preview_hash,
+        sizeBytes: row.size_bytes,
+        mimeType: row.mime_type,
+        originalFilename: row.original_filename,
+        storagePath: row.storage_path,
+        previewText: row.preview_text,
+        extractedTextCharCount: row.extracted_text_char_count,
+        needsOcr: row.needs_ocr,
+        ocrStatus: row.ocr_status,
+        ocrFailureReason: row.ocr_failure_reason,
+        ocrText: row.ocr_text,
+        ocrTextCharCount: row.ocr_text_char_count,
+        ocrQueuedAt: row.ocr_queued_at,
+        ocrStartedAt: row.ocr_started_at,
+        ocrCompletedAt: row.ocr_completed_at,
+        ocrReindexedAt: row.ocr_reindexed_at,
+        createdAt: row.created_at,
+      },
+      metadata: row.final_metadata || row.suggested_metadata || {},
+    }));
+  }
+
+  async markOcrReindexed(fileBlobId: string): Promise<void> {
+    await db
+      .update(schema.fileBlobs)
+      .set({ ocrReindexedAt: new Date() })
+      .where(eq(schema.fileBlobs.id, fileBlobId));
+  }
+
   async getFileBlobsNeedingBackfill(): Promise<FileBlob[]> {
     return await db
       .select()
@@ -487,6 +538,7 @@ export class DatabaseStorage implements IStorage {
       ocrQueuedAt: row.ocr_queued_at,
       ocrStartedAt: row.ocr_started_at,
       ocrCompletedAt: row.ocr_completed_at,
+      ocrReindexedAt: row.ocr_reindexed_at,
       createdAt: row.created_at,
     }));
   }
