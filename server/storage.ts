@@ -89,6 +89,8 @@ export interface IStorage {
   claimNextOcrJob(): Promise<FileBlob | null>;
   updateOcrStatus(id: string, status: string, data?: { ocrText?: string; ocrTextCharCount?: number; ocrFailureReason?: string }): Promise<void>;
   queueFileBlobForOcr(id: string): Promise<void>;
+  recoverStaleOcrJobs(staleMinutes?: number): Promise<number>;
+  resetStuckProcessingJobs(): Promise<number>;
 
   // v2 Pipeline: LogicalDocument operations
   createLogicalDocument(doc: InsertLogicalDocument): Promise<LogicalDocument>;
@@ -423,6 +425,35 @@ export class DatabaseStorage implements IStorage {
         ocrFailureReason: null,
       })
       .where(eq(schema.fileBlobs.id, id));
+  }
+
+  async recoverStaleOcrJobs(staleMinutes: number = 30): Promise<number> {
+    const staleThreshold = new Date(Date.now() - staleMinutes * 60 * 1000);
+    
+    const result = await db.execute(sql`
+      UPDATE file_blobs 
+      SET ocr_status = 'queued', 
+          ocr_started_at = NULL,
+          ocr_failure_reason = 'Recovered from stale processing state'
+      WHERE ocr_status = 'processing' 
+      AND ocr_started_at < ${staleThreshold}
+      RETURNING id
+    `);
+    
+    return result.rows?.length || 0;
+  }
+
+  async resetStuckProcessingJobs(): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE file_blobs 
+      SET ocr_status = 'queued', 
+          ocr_started_at = NULL,
+          ocr_failure_reason = NULL
+      WHERE ocr_status = 'processing'
+      RETURNING id
+    `);
+    
+    return result.rows?.length || 0;
   }
 
   async getFileBlobsNeedingBackfill(): Promise<FileBlob[]> {

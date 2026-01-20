@@ -132,6 +132,9 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
 
 let workerRunning = false;
 let pollInterval: NodeJS.Timeout | null = null;
+let lastRecoveryCheck = 0;
+const RECOVERY_CHECK_INTERVAL_MS = 5 * 60 * 1000; // Check for stale jobs every 5 minutes
+const STALE_JOB_THRESHOLD_MINUTES = 30; // Jobs processing for more than 30 min are considered stale
 
 export async function startOcrWorker(pollIntervalMs: number = 10000): Promise<void> {
   const config = getOcrConfig();
@@ -154,10 +157,30 @@ export async function startOcrWorker(pollIntervalMs: number = 10000): Promise<vo
   workerRunning = true;
   console.log(`[OCR Worker] Starting with ${config.provider} provider, polling every ${pollIntervalMs}ms`);
   
+  // Recover any stale jobs on startup
+  try {
+    const recovered = await storage.recoverStaleOcrJobs(STALE_JOB_THRESHOLD_MINUTES);
+    if (recovered > 0) {
+      console.log(`[OCR Worker] Recovered ${recovered} stale processing jobs on startup`);
+    }
+  } catch (error) {
+    console.error('[OCR Worker] Error recovering stale jobs on startup:', error);
+  }
+  
   const poll = async () => {
     if (!workerRunning) return;
     
     try {
+      // Periodically check for and recover stale jobs
+      const now = Date.now();
+      if (now - lastRecoveryCheck > RECOVERY_CHECK_INTERVAL_MS) {
+        lastRecoveryCheck = now;
+        const recovered = await storage.recoverStaleOcrJobs(STALE_JOB_THRESHOLD_MINUTES);
+        if (recovered > 0) {
+          console.log(`[OCR Worker] Recovered ${recovered} stale processing jobs`);
+        }
+      }
+      
       const job = await storage.claimNextOcrJob();
       
       if (job) {

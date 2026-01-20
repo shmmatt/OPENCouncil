@@ -666,6 +666,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reset stuck processing jobs back to queued
+  app.post("/api/admin/ocr/reset-stuck", authenticateAdmin, async (req, res) => {
+    try {
+      const resetCount = await storage.resetStuckProcessingJobs();
+      res.json({
+        success: true,
+        message: `Reset ${resetCount} stuck processing jobs back to queued.`,
+        resetCount
+      });
+    } catch (error) {
+      console.error("Error resetting stuck OCR jobs:", error);
+      res.status(500).json({ message: "Failed to reset stuck jobs" });
+    }
+  });
+
   // Get single ingestion job with blob details
   app.get("/api/admin/ingestion/jobs/:jobId", authenticateAdmin, async (req, res) => {
     try {

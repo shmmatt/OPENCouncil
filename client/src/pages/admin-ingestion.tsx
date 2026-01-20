@@ -341,6 +341,35 @@ export default function AdminIngestion() {
     },
   });
 
+  const resetStuckMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/reset-stuck", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to reset stuck jobs");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Reset Complete",
+        description: data.message,
+      });
+      refetchOcrStats();
+      refetchJobs();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reset Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const getJobMetadata = useCallback((job: IngestionJobWithBlob): JobMetadataEdits => {
     if (jobEdits[job.id]) {
       return jobEdits[job.id];
@@ -865,6 +894,22 @@ export default function AdminIngestion() {
               )}
               Reprocess Legacy Docs
             </Button>
+            {ocrStats && ocrStats.processing > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => resetStuckMutation.mutate()}
+                disabled={resetStuckMutation.isPending}
+                data-testid="button-reset-stuck"
+              >
+                {resetStuckMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Reset Stuck ({ocrStats.processing})
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">
               <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
