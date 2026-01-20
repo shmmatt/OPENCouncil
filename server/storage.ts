@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 import { eq, desc, asc, and, or, gte, sql, isNull } from "drizzle-orm";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
+import crypto from "crypto";
 import * as schema from "@shared/schema";
 import type { 
   Admin,
@@ -393,7 +394,7 @@ export class DatabaseStorage implements IStorage {
       updateData.ocrText = data.ocrText;
       if (status === 'completed' && data.ocrText) {
         updateData.previewText = data.ocrText.slice(0, 15000);
-        updateData.previewHash = require('crypto')
+        updateData.previewHash = crypto
           .createHash('sha256')
           .update(data.ocrText)
           .digest('hex');
