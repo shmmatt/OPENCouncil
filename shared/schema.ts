@@ -52,6 +52,7 @@ export const fileBlobs = pgTable("file_blobs", {
   ocrQueuedAt: timestamp("ocr_queued_at"),
   ocrStartedAt: timestamp("ocr_started_at"),
   ocrCompletedAt: timestamp("ocr_completed_at"),
+  ocrReindexedAt: timestamp("ocr_reindexed_at"), // When OCR text was re-indexed into RAG
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

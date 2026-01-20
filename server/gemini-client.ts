@@ -229,6 +229,154 @@ function buildDisplayName(filename: string, metadata: DocumentMetadata): string 
   return `${prefix}${filename}`;
 }
 
+import * as fs from "fs/promises";
+import * as path from "path";
+
+export interface ReindexOcrResult {
+  fileId: string;
+  storeId: string;
+  charCount: number;
+}
+
+export async function reindexOcrDocument(
+  ocrText: string,
+  filename: string,
+  metadata: DocumentMetadata,
+  retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
+): Promise<ReindexOcrResult> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+    try {
+      return await attemptReindexOcrDocument(ocrText, filename, metadata);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < retryConfig.maxRetries && isRetryableError(error)) {
+        const delay = calculateBackoffDelay(attempt, retryConfig);
+        console.warn(
+          `OCR reindex attempt ${attempt + 1}/${retryConfig.maxRetries + 1} failed with retryable error. ` +
+          `Retrying in ${Math.round(delay)}ms...`,
+          { error: lastError.message, filename }
+        );
+        await sleep(delay);
+      } else {
+        console.error(
+          `OCR reindex failed after ${attempt + 1} attempt(s)`,
+          { error: lastError.message, filename, isRetryable: isRetryableError(error) }
+        );
+        break;
+      }
+    }
+  }
+  
+  throw new Error(`Failed to reindex OCR document after ${retryConfig.maxRetries + 1} attempts: ${lastError?.message}`);
+}
+
+async function attemptReindexOcrDocument(
+  ocrText: string,
+  filename: string,
+  metadata: DocumentMetadata
+): Promise<ReindexOcrResult> {
+  let storeId = await getOrCreateFileSearchStoreId();
+  
+  if (!storeId) {
+    const store = await ai.fileSearchStores.create({
+      config: { displayName: "OPENCouncil Municipal Documents" },
+    });
+    storeId = store.name || "";
+    if (storeId) {
+      setFileSearchStoreId(storeId);
+      console.log(`Created File Search store: ${storeId}`);
+    } else {
+      throw new Error("Failed to create File Search store");
+    }
+  }
+
+  const tmpDir = path.join('/tmp', `ocr-reindex-${Date.now()}`);
+  await fs.mkdir(tmpDir, { recursive: true });
+  
+  const baseFilename = filename.replace(/\.[^/.]+$/, '');
+  const txtFilename = `${baseFilename}_ocr.txt`;
+  const txtPath = path.join(tmpDir, txtFilename);
+  
+  try {
+    await fs.writeFile(txtPath, ocrText, 'utf-8');
+    
+    const displayName = buildDisplayName(filename, metadata) + " [OCR]";
+    const customMetadata: Array<{ key: string; stringValue: string }> = [];
+    
+    const finalCategory = metadata.isMinutes ? "meeting_minutes" : metadata.category;
+    
+    customMetadata.push({ key: "category", stringValue: finalCategory });
+    customMetadata.push({ key: "source", stringValue: "ocr" });
+    
+    if (metadata.town) {
+      customMetadata.push({ key: "town", stringValue: metadata.town });
+    }
+    if (metadata.board) {
+      customMetadata.push({ key: "board", stringValue: metadata.board });
+    }
+    if (metadata.year) {
+      customMetadata.push({ key: "year", stringValue: metadata.year });
+    }
+    if (metadata.notes) {
+      customMetadata.push({ key: "notes", stringValue: metadata.notes });
+    }
+    if (metadata.isMinutes !== undefined) {
+      customMetadata.push({ key: "isMinutes", stringValue: String(metadata.isMinutes) });
+    }
+    if (metadata.meetingDate) {
+      customMetadata.push({ key: "meetingDate", stringValue: metadata.meetingDate });
+    }
+    if (metadata.meetingType) {
+      customMetadata.push({ key: "meetingType", stringValue: metadata.meetingType });
+    }
+
+    const operation = await ai.fileSearchStores.uploadToFileSearchStore({
+      file: txtPath,
+      fileSearchStoreName: storeId,
+      config: {
+        displayName: displayName,
+        mimeType: 'text/plain',
+        customMetadata: customMetadata,
+        chunkingConfig: {
+          whiteSpaceConfig: {
+            maxTokensPerChunk: 200,
+            maxOverlapTokens: 20,
+          },
+        },
+      },
+    });
+
+    const opResponse = operation as any;
+    
+    let fileId = opResponse.response?.documentName 
+              || opResponse.documentName
+              || opResponse.response?.files?.[0]?.name;
+    
+    if (!fileId) {
+      console.error("Could not find documentName in OCR reindex response");
+      throw new Error("Failed to extract document ID from Gemini OCR reindex response");
+    }
+    
+    console.log(`[OCR Reindex] Successfully indexed: ${displayName}`);
+    console.log(`[OCR Reindex] File ID: ${fileId}, ${ocrText.length} chars`);
+
+    return {
+      fileId,
+      storeId: storeId,
+      charCount: ocrText.length,
+    };
+  } finally {
+    try {
+      await fs.unlink(txtPath);
+      await fs.rmdir(tmpDir);
+    } catch (e) {
+    }
+  }
+}
+
 interface AskQuestionOptions {
   question: string;
   chatHistory: Array<{ role: string; content: string }>;
