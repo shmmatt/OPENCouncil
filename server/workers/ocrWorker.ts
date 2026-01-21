@@ -102,12 +102,22 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
     }
     
     const filePath = fileBlob.storagePath;
+    const isPdf = fileBlob.mimeType.includes('pdf');
+    const isImage = fileBlob.mimeType.startsWith('image/');
+    
+    if (!isPdf && !isImage) {
+      console.log(`[OCR Worker] Skipping non-OCR-able file type: ${fileBlob.mimeType}`);
+      await storage.updateOcrStatus(fileBlob.id, 'failed', {
+        ocrFailureReason: `File type ${fileBlob.mimeType} cannot be processed with OCR`,
+      });
+      return;
+    }
     
     await fs.access(filePath);
     
     let ocrText: string;
     
-    if (fileBlob.mimeType.includes('pdf')) {
+    if (isPdf) {
       ocrText = await performOcrOnPdf(filePath);
     } else {
       ocrText = await performOcrOnImage(filePath);
