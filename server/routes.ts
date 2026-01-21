@@ -681,6 +681,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Retry OCR for files that failed due to missing files (ENOENT errors)
+  // These files may exist on production but not development
+  app.post("/api/admin/ocr/retry-failed-missing", authenticateAdmin, async (req, res) => {
+    try {
+      const count = await storage.retryOcrFailedMissingFiles();
+      res.json({
+        success: true,
+        message: count > 0 
+          ? `Reset ${count} failed OCR jobs to queued status. They will be processed by the OCR worker.`
+          : "No failed OCR jobs with missing file errors found.",
+        queued: count,
+      });
+    } catch (error) {
+      console.error("Error retrying failed OCR jobs:", error);
+      res.status(500).json({ message: "Failed to retry failed OCR jobs" });
+    }
+  });
+
+  // Get count of OCR jobs that failed due to missing files
+  app.get("/api/admin/ocr/failed-missing-count", authenticateAdmin, async (req, res) => {
+    try {
+      const count = await storage.getOcrFailedMissingFileCount();
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting failed missing count:", error);
+      res.status(500).json({ message: "Failed to get count" });
+    }
+  });
+
   // Batch re-index OCR-completed documents that haven't been indexed yet
   // Processes documents in batches of 20 per request to avoid timeouts
   app.post("/api/admin/ocr/reindex-completed", authenticateAdmin, async (req, res) => {

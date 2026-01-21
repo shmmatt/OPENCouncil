@@ -93,6 +93,8 @@ export interface IStorage {
   resetStuckProcessingJobs(): Promise<number>;
   getOcrCompletedNeedingReindex(): Promise<Array<{ fileBlob: FileBlob; metadata: any }>>;
   markOcrReindexed(fileBlobId: string): Promise<void>;
+  getOcrFailedMissingFileCount(): Promise<number>;
+  retryOcrFailedMissingFiles(): Promise<number>;
 
   // v2 Pipeline: LogicalDocument operations
   createLogicalDocument(doc: InsertLogicalDocument): Promise<LogicalDocument>;
@@ -505,6 +507,29 @@ export class DatabaseStorage implements IStorage {
       .update(schema.fileBlobs)
       .set({ ocrReindexedAt: new Date() })
       .where(eq(schema.fileBlobs.id, fileBlobId));
+  }
+
+  async getOcrFailedMissingFileCount(): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT COUNT(*) as count
+      FROM file_blobs
+      WHERE ocr_status = 'failed'
+        AND ocr_failure_reason LIKE 'ENOENT%'
+    `);
+    return Number(result.rows[0]?.count || 0);
+  }
+
+  async retryOcrFailedMissingFiles(): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE file_blobs
+      SET ocr_status = 'queued',
+          ocr_queued_at = NOW(),
+          ocr_failure_reason = NULL,
+          needs_ocr = true
+      WHERE ocr_status = 'failed'
+        AND ocr_failure_reason LIKE 'ENOENT%'
+    `);
+    return Number(result.rowCount || 0);
   }
 
   async getIngestionMetadataForFileBlob(fileBlobId: string): Promise<{ metadata: any; isIndexed: boolean } | null> {

@@ -399,6 +399,47 @@ export default function AdminIngestion() {
     },
   });
 
+  const { data: failedMissingCount, refetch: refetchFailedMissing } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/ocr/failed-missing-count"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/failed-missing-count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return { count: 0 };
+      return response.json();
+    },
+  });
+
+  const retryFailedMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ocr/retry-failed-missing", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to retry failed OCR jobs");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Retry Queued",
+        description: data.message,
+      });
+      refetchOcrStats();
+      refetchFailedMissing();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Retry Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const getJobMetadata = useCallback((job: IngestionJobWithBlob): JobMetadataEdits => {
     if (jobEdits[job.id]) {
       return jobEdits[job.id];
@@ -953,6 +994,22 @@ export default function AdminIngestion() {
                   <Search className="w-4 h-4 mr-2" />
                 )}
                 Re-index OCR
+              </Button>
+            )}
+            {failedMissingCount && failedMissingCount.count > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => retryFailedMutation.mutate()}
+                disabled={retryFailedMutation.isPending}
+                data-testid="button-retry-failed-ocr"
+              >
+                {retryFailedMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Retry Failed OCR ({failedMissingCount.count})
               </Button>
             )}
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">
