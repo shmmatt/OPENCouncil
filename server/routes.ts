@@ -21,6 +21,7 @@ import { registerAdminUsageRoutes } from "./routes/adminUsageRoutes";
 import { registerAdminChatAnalyticsRoutes } from "./routes/adminChatAnalyticsRoutes";
 import { chatConfig } from "./chatV2/chatConfig";
 import { getOcrConfig } from "./config/ocr";
+import { blobStorage } from "./services/blobStorage";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -439,6 +440,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Process file: compute hashes and extract preview
             const fileResult = await processFile(file.path, file.originalname);
             
+            // Save file to object storage for persistence across deployments
+            let finalStoragePath = file.path;
+            try {
+              const fileBuffer = await fs.readFile(file.path);
+              const storageResult = await blobStorage.saveFile(fileBuffer, file.originalname);
+              finalStoragePath = storageResult.storagePath;
+              // Clean up temp file after successful object storage save
+              await fs.unlink(file.path).catch(() => {});
+            } catch (storageError) {
+              console.warn("Object storage save failed, keeping local file:", storageError);
+            }
+            
             // Check for duplicates
             const duplicates = await storage.findDuplicateBlobs(
               fileResult.rawHash,
@@ -469,7 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               sizeBytes: fileResult.sizeBytes,
               mimeType: fileResult.mimeType,
               originalFilename: file.originalname,
-              storagePath: file.path,
+              storagePath: finalStoragePath,
               previewText: fileResult.previewText.slice(0, 15000),
               extractedTextCharCount: fileResult.extractedTextCharCount,
               needsOcr: fileResult.needsOcr,
@@ -706,6 +719,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ count });
     } catch (error) {
       console.error("Error getting failed missing count:", error);
+      res.status(500).json({ message: "Failed to get count" });
+    }
+  });
+
+  // Migrate local files to object storage
+  app.post("/api/admin/storage/migrate", authenticateAdmin, async (req, res) => {
+    try {
+      const BATCH_SIZE = 20;
+      
+      // Get all file blobs with local storage paths (not object storage)
+      const allBlobs = await storage.getFileBlobsWithLocalPaths();
+      
+      if (allBlobs.length === 0) {
+        return res.json({
+          success: true,
+          message: "No files need migration to object storage.",
+          migrated: 0,
+          failed: 0,
+          remaining: 0,
+        });
+      }
+      
+      const blobsToProcess = allBlobs.slice(0, BATCH_SIZE);
+      const remaining = allBlobs.length - blobsToProcess.length;
+      
+      let migrated = 0;
+      let failed = 0;
+      const errors: string[] = [];
+      
+      for (const blob of blobsToProcess) {
+        try {
+          const result = await blobStorage.migrateToObjectStorage(blob.storagePath, blob.originalFilename);
+          
+          if (result.migrated) {
+            // Update the storage path in the database
+            await storage.updateFileBlob(blob.id, { storagePath: result.newPath });
+            migrated++;
+            console.log(`Migrated ${blob.originalFilename} to ${result.newPath}`);
+          } else {
+            errors.push(`${blob.originalFilename}: Could not migrate (object storage unavailable)`);
+            failed++;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          errors.push(`${blob.originalFilename}: ${errorMessage}`);
+          failed++;
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Migrated ${migrated} files to object storage.${failed > 0 ? ` ${failed} failed.` : ''}${remaining > 0 ? ` ${remaining} files remaining.` : ''}`,
+        migrated,
+        failed,
+        remaining,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error) {
+      console.error("Error migrating files:", error);
+      res.status(500).json({ message: "Failed to migrate files" });
+    }
+  });
+  
+  // Get count of files that need migration
+  app.get("/api/admin/storage/migration-count", authenticateAdmin, async (req, res) => {
+    try {
+      const blobs = await storage.getFileBlobsWithLocalPaths();
+      res.json({ count: blobs.length });
+    } catch (error) {
+      console.error("Error getting migration count:", error);
       res.status(500).json({ message: "Failed to get count" });
     }
   });

@@ -45,7 +45,8 @@ import {
   Plus,
   BarChart3,
   ScanLine,
-  Search
+  Search,
+  Cloud
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 import { NH_TOWNS } from "@shared/schema";
@@ -434,6 +435,46 @@ export default function AdminIngestion() {
     onError: (error: Error) => {
       toast({
         title: "Retry Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: migrationCount, refetch: refetchMigrationCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/storage/migration-count"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/storage/migration-count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return { count: 0 };
+      return response.json();
+    },
+  });
+
+  const migrateMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/storage/migrate", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to migrate files");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Migration Complete",
+        description: data.message,
+      });
+      refetchMigrationCount();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Migration Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -1010,6 +1051,22 @@ export default function AdminIngestion() {
                   <RefreshCw className="w-4 h-4 mr-2" />
                 )}
                 Retry Failed OCR ({failedMissingCount.count})
+              </Button>
+            )}
+            {migrationCount && migrationCount.count > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => migrateMutation.mutate()}
+                disabled={migrateMutation.isPending}
+                data-testid="button-migrate-storage"
+              >
+                {migrateMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Cloud className="w-4 h-4 mr-2" />
+                )}
+                Migrate to Cloud ({migrationCount.count})
               </Button>
             )}
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">

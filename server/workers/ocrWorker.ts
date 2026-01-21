@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { storage } from '../storage';
 import { getOcrConfig } from '../config/ocr';
 import { reindexOcrDocument } from '../gemini-client';
+import { blobStorage } from '../services/blobStorage';
 import type { FileBlob, DocumentMetadata } from '@shared/schema';
 
 const execAsync = promisify(exec);
@@ -96,12 +97,13 @@ async function performOcrOnPdf(pdfPath: string): Promise<string> {
 async function processOcrJob(fileBlob: FileBlob): Promise<void> {
   console.log(`[OCR Worker] Processing ${fileBlob.originalFilename} (${fileBlob.id})`);
   
+  let tempFilePath: string | null = null;
+  
   try {
     if (!fileBlob.storagePath) {
       throw new Error('No storage path for file');
     }
     
-    const filePath = fileBlob.storagePath;
     const isPdf = fileBlob.mimeType.includes('pdf');
     const isImage = fileBlob.mimeType.startsWith('image/');
     
@@ -113,14 +115,22 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
       return;
     }
     
-    await fs.access(filePath);
+    // Read file from storage (handles both object storage and local files)
+    const fileBuffer = await blobStorage.readFile(fileBlob.storagePath);
+    
+    // Create a temp file for OCR processing (pdftoppm needs a file path)
+    const tempDir = path.join('uploads', 'ocr-temp');
+    await fs.mkdir(tempDir, { recursive: true });
+    const ext = path.extname(fileBlob.originalFilename) || '.pdf';
+    tempFilePath = path.join(tempDir, `${fileBlob.id}${ext}`);
+    await fs.writeFile(tempFilePath, fileBuffer);
     
     let ocrText: string;
     
     if (isPdf) {
-      ocrText = await performOcrOnPdf(filePath);
+      ocrText = await performOcrOnPdf(tempFilePath);
     } else {
-      ocrText = await performOcrOnImage(filePath);
+      ocrText = await performOcrOnImage(tempFilePath);
     }
     
     const ocrTextCharCount = ocrText.length;
@@ -140,6 +150,11 @@ async function processOcrJob(fileBlob: FileBlob): Promise<void> {
     await storage.updateOcrStatus(fileBlob.id, 'failed', {
       ocrFailureReason: errorMessage,
     });
+  } finally {
+    // Clean up temp file
+    if (tempFilePath) {
+      await fs.unlink(tempFilePath).catch(() => {});
+    }
   }
 }
 

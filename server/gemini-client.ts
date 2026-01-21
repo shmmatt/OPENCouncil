@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId, setFileSearchStoreId } from "./gemini-store";
+import { blobStorage } from "./services/blobStorage";
+import * as fs from "fs/promises";
+import * as path from "path";
 
 // Initialize Gemini client with API key
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -137,6 +140,40 @@ async function attemptUploadToFileStore(
     }
   }
 
+  // Read file from storage (handles both object storage and local files)
+  let tempFilePath: string | null = null;
+  let actualFilePath = filePath;
+  
+  try {
+    // If it's an object storage path, download to temp file
+    if (blobStorage.isObjectStoragePath(filePath)) {
+      const fileBuffer = await blobStorage.readFile(filePath);
+      const tempDir = path.join('uploads', 'gemini-temp');
+      await fs.mkdir(tempDir, { recursive: true });
+      const ext = path.extname(filename) || '.pdf';
+      tempFilePath = path.join(tempDir, `gemini-${Date.now()}${ext}`);
+      await fs.writeFile(tempFilePath, fileBuffer);
+      actualFilePath = tempFilePath;
+    } else {
+      // For local paths, try blobStorage first (handles both local and object storage fallback)
+      try {
+        const fileBuffer = await blobStorage.readFile(filePath);
+        const tempDir = path.join('uploads', 'gemini-temp');
+        await fs.mkdir(tempDir, { recursive: true });
+        const ext = path.extname(filename) || '.pdf';
+        tempFilePath = path.join(tempDir, `gemini-${Date.now()}${ext}`);
+        await fs.writeFile(tempFilePath, fileBuffer);
+        actualFilePath = tempFilePath;
+      } catch {
+        // File might exist locally, use original path
+        actualFilePath = filePath;
+      }
+    }
+  } catch (error) {
+    console.error("Error preparing file for Gemini upload:", error);
+    throw error;
+  }
+
   const displayName = buildDisplayName(filename, metadata);
   const customMetadata: Array<{ key: string; stringValue: string }> = [];
   
@@ -168,44 +205,51 @@ async function attemptUploadToFileStore(
 
   const mimeType = getMimeType(filename);
 
-  const operation = await ai.fileSearchStores.uploadToFileSearchStore({
-    file: filePath,
-    fileSearchStoreName: storeId,
-    config: {
-      displayName: displayName,
-      mimeType: mimeType,
-      customMetadata: customMetadata,
-      chunkingConfig: {
-        whiteSpaceConfig: {
-          maxTokensPerChunk: 200,
-          maxOverlapTokens: 20,
+  try {
+    const operation = await ai.fileSearchStores.uploadToFileSearchStore({
+      file: actualFilePath,
+      fileSearchStoreName: storeId,
+      config: {
+        displayName: displayName,
+        mimeType: mimeType,
+        customMetadata: customMetadata,
+        chunkingConfig: {
+          whiteSpaceConfig: {
+            maxTokensPerChunk: 200,
+            maxOverlapTokens: 20,
+          },
         },
       },
-    },
-  });
+    });
 
-  console.log("Upload operation response:", JSON.stringify(operation, null, 2));
+    console.log("Upload operation response:", JSON.stringify(operation, null, 2));
 
-  const opResponse = operation as any;
-  
-  let fileId = opResponse.response?.documentName 
-            || opResponse.documentName
-            || opResponse.response?.files?.[0]?.name;
-  
-  if (!fileId) {
-    console.error("Could not find documentName in response");
-    throw new Error("Failed to extract document ID from Gemini upload response");
+    const opResponse = operation as any;
+    
+    let fileId = opResponse.response?.documentName 
+              || opResponse.documentName
+              || opResponse.response?.files?.[0]?.name;
+    
+    if (!fileId) {
+      console.error("Could not find documentName in response");
+      throw new Error("Failed to extract document ID from Gemini upload response");
+    }
+    
+    console.log(`Extracted file ID: ${fileId}`);
+    console.log(`Document uploaded and indexed: ${displayName}`);
+    console.log(`File ID: ${fileId}`);
+    console.log(`Metadata: category=${finalCategory}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}, isMinutes=${metadata.isMinutes || false}, meetingDate=${metadata.meetingDate || 'N/A'}`);
+
+    return {
+      fileId,
+      storeId: storeId,
+    };
+  } finally {
+    // Clean up temp file
+    if (tempFilePath) {
+      await fs.unlink(tempFilePath).catch(() => {});
+    }
   }
-  
-  console.log(`Extracted file ID: ${fileId}`);
-  console.log(`Document uploaded and indexed: ${displayName}`);
-  console.log(`File ID: ${fileId}`);
-  console.log(`Metadata: category=${finalCategory}, town=${metadata.town || 'N/A'}, board=${metadata.board || 'N/A'}, year=${metadata.year || 'N/A'}, isMinutes=${metadata.isMinutes || false}, meetingDate=${metadata.meetingDate || 'N/A'}`);
-
-  return {
-    fileId,
-    storeId: storeId,
-  };
 }
 
 function buildDisplayName(filename: string, metadata: DocumentMetadata): string {

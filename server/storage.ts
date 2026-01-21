@@ -95,6 +95,7 @@ export interface IStorage {
   markOcrReindexed(fileBlobId: string): Promise<void>;
   getOcrFailedMissingFileCount(): Promise<number>;
   retryOcrFailedMissingFiles(): Promise<number>;
+  getFileBlobsWithLocalPaths(): Promise<FileBlob[]>;
 
   // v2 Pipeline: LogicalDocument operations
   createLogicalDocument(doc: InsertLogicalDocument): Promise<LogicalDocument>;
@@ -530,6 +531,23 @@ export class DatabaseStorage implements IStorage {
         AND ocr_failure_reason LIKE 'ENOENT%'
     `);
     return Number(result.rowCount || 0);
+  }
+
+  async getFileBlobsWithLocalPaths(): Promise<FileBlob[]> {
+    // Get file blobs that have local storage paths (not object storage)
+    // Object storage paths start with '/replit-objstore'
+    const result = await db
+      .select()
+      .from(schema.fileBlobs)
+      .where(
+        and(
+          sql`storage_path IS NOT NULL`,
+          sql`storage_path NOT LIKE '/replit-objstore%'`,
+          sql`storage_path NOT LIKE '%replit-objstore%'`
+        )
+      )
+      .orderBy(asc(schema.fileBlobs.createdAt));
+    return result;
   }
 
   async getIngestionMetadataForFileBlob(fileBlobId: string): Promise<{ metadata: any; isIndexed: boolean } | null> {
