@@ -62,6 +62,23 @@ An automatic OCR detection and processing system is implemented for scanned PDFs
 
 **OCR Re-indexing**: After successful OCR extraction, documents are automatically re-indexed into the Gemini File Search RAG system. The worker checks if the ingestion job is indexed before attempting reindex; if not yet indexed, the document will be picked up by the batch reindex endpoint. The `ocr_reindexed_at` column tracks which documents have been re-indexed. A "Re-index OCR" button in the admin UI allows batch re-indexing of completed OCR documents in batches of 20.
 
+### Persistent Object Storage
+Document files are stored in Replit Object Storage to ensure persistence across deployments. The system uses a blob storage abstraction layer (`server/services/blobStorage.ts`) that:
+- Saves new uploads directly to object storage with paths starting with `/replit-objstore`
+- Reads from both object storage (for new files) and local filesystem (for backward compatibility)
+- Provides migration functionality to move existing local files to object storage
+
+**Key Components**:
+- `blobStorage.saveFile()`: Saves files to object storage
+- `blobStorage.readFile()`: Reads from appropriate storage based on path
+- `blobStorage.migrateToObjectStorage()`: Migrates local files to object storage
+
+**Admin Migration**: The admin ingestion page includes a "Migrate to Cloud" button that appears when local files need migration. This button triggers batch migration of existing files to persistent storage.
+
+**Environment Variables**:
+- `PRIVATE_OBJECT_DIR`: Path to private object storage directory (auto-configured by Replit)
+- `PUBLIC_OBJECT_SEARCH_PATHS`: Search paths for public assets
+
 ## External Dependencies
 
 ### Third-Party Services
