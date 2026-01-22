@@ -54,6 +54,21 @@ async function performOcrOnImage(imagePath: string): Promise<string> {
   return result.data.text;
 }
 
+const OCR_CONCURRENCY = 4;
+
+async function processPageBatch(imageFiles: string[], startIdx: number, batchSize: number): Promise<{ index: number; text: string }[]> {
+  const batch = imageFiles.slice(startIdx, startIdx + batchSize);
+  const results = await Promise.all(
+    batch.map(async (imagePath, i) => {
+      const pageNum = startIdx + i + 1;
+      console.log(`[OCR Worker] Processing page ${pageNum}/${imageFiles.length}`);
+      const text = await performOcrOnImage(imagePath);
+      return { index: startIdx + i, text };
+    })
+  );
+  return results;
+}
+
 async function performOcrOnPdf(pdfPath: string): Promise<string> {
   const available = await checkPdftoppm();
   
@@ -72,13 +87,15 @@ async function performOcrOnPdf(pdfPath: string): Promise<string> {
       throw new Error('No pages found in PDF');
     }
     
-    console.log(`[OCR Worker] Processing ${imageFiles.length} pages`);
+    console.log(`[OCR Worker] Processing ${imageFiles.length} pages (${OCR_CONCURRENCY} concurrent)`);
     
-    const texts: string[] = [];
-    for (let i = 0; i < imageFiles.length; i++) {
-      console.log(`[OCR Worker] Processing page ${i + 1}/${imageFiles.length}`);
-      const pageText = await performOcrOnImage(imageFiles[i]);
-      texts.push(pageText);
+    const texts: string[] = new Array(imageFiles.length);
+    
+    for (let i = 0; i < imageFiles.length; i += OCR_CONCURRENCY) {
+      const results = await processPageBatch(imageFiles, i, OCR_CONCURRENCY);
+      for (const { index, text } of results) {
+        texts[index] = text;
+      }
     }
     
     return texts.join('\n\n--- Page Break ---\n\n');
