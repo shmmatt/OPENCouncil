@@ -1,4 +1,3 @@
-import Tesseract from 'tesseract.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -12,6 +11,7 @@ import type { FileBlob, DocumentMetadata } from '@shared/schema';
 const execAsync = promisify(exec);
 
 let pdftoppmAvailable: boolean | null = null;
+let nativeTesseractAvailable: boolean | null = null;
 
 async function checkPdftoppm(): Promise<boolean> {
   if (pdftoppmAvailable !== null) return pdftoppmAvailable;
@@ -25,6 +25,20 @@ async function checkPdftoppm(): Promise<boolean> {
     console.warn('[OCR Worker] pdftoppm not available - PDF OCR will be limited');
   }
   return pdftoppmAvailable;
+}
+
+async function checkNativeTesseract(): Promise<boolean> {
+  if (nativeTesseractAvailable !== null) return nativeTesseractAvailable;
+  
+  try {
+    await execAsync('which tesseract');
+    nativeTesseractAvailable = true;
+    console.log('[OCR Worker] Native tesseract binary is available (faster mode)');
+  } catch {
+    nativeTesseractAvailable = false;
+    console.warn('[OCR Worker] Native tesseract not available, will use tesseract.js (slower)');
+  }
+  return nativeTesseractAvailable;
 }
 
 async function convertPdfToImages(pdfPath: string, outputDir: string): Promise<string[]> {
@@ -47,11 +61,37 @@ async function convertPdfToImages(pdfPath: string, outputDir: string): Promise<s
   return imageFiles;
 }
 
-async function performOcrOnImage(imagePath: string): Promise<string> {
-  const result = await Tesseract.recognize(imagePath, 'eng', {
+async function performOcrOnImageNative(imagePath: string): Promise<string> {
+  const outputBase = imagePath.replace(/\.[^/.]+$/, '_ocr');
+  const outputFile = `${outputBase}.txt`;
+  
+  try {
+    await execAsync(`tesseract "${imagePath}" "${outputBase}" -l eng --psm 3`);
+    const text = await fs.readFile(outputFile, 'utf-8');
+    await fs.unlink(outputFile).catch(() => {});
+    return text;
+  } catch (error: any) {
+    await fs.unlink(outputFile).catch(() => {});
+    throw new Error(`Native tesseract failed: ${error.message}`);
+  }
+}
+
+async function performOcrOnImageFallback(imagePath: string): Promise<string> {
+  const Tesseract = await import('tesseract.js');
+  const result = await Tesseract.default.recognize(imagePath, 'eng', {
     logger: () => {},
   });
   return result.data.text;
+}
+
+async function performOcrOnImage(imagePath: string): Promise<string> {
+  const useNative = await checkNativeTesseract();
+  
+  if (useNative) {
+    return performOcrOnImageNative(imagePath);
+  }
+  
+  return performOcrOnImageFallback(imagePath);
 }
 
 const OCR_CONCURRENCY = 4;
