@@ -7,9 +7,10 @@ channel = "stable-24_05"
 packages = ["poppler_utils", "tesseract"]
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "gce"
 build = ["npm", "run", "build"]
 run = ["npm", "run", "start"]
+publicDir = "dist/public"
 
 [[ports]]
 localPort = 5000
