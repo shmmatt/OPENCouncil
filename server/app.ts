@@ -8,11 +8,15 @@ import express, {
 } from "express";
 import cookieParser from "cookie-parser";
 
+import { validateEnv } from "./config/env";
 import { registerRoutes } from "./routes";
 import { ensureAdminExists } from "./init-admin";
 import { attachAnonymousIdentity, attachUserIdentity, authRouter } from "./auth";
 import { startOcrWorker } from "./workers/ocrWorker";
 import { generalApiLimiter } from "./middleware/rateLimiter";
+
+// Validate environment variables before anything else
+validateEnv();
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
