@@ -1,14 +1,15 @@
 /**
  * Global Logging Utility for Chat Pipeline Observability
  * 
- * This module provides structured logging for the chat v2 pipeline and related services.
- * All logs are formatted as JSON for easy parsing and can be filtered by level.
+ * This module provides structured logging using pino for the chat v2 pipeline
+ * and related services. Logs are JSON-formatted for easy parsing.
  * 
  * Environment Variables:
  * - LOG_LEVEL: Controls minimum log level (debug, info, warn, error). Default: "info"
  * - CHAT_DEBUG_LOGGING: Set to "1" or "true" to enable verbose debug logs. Default: disabled
  * - CHAT_LOG_USER_CONTENT: Set to "1" or "true" to log user question text (privacy concern).
  *   Default: disabled (only logs question length)
+ * - NODE_ENV: When "development", enables pretty-printing of logs
  * 
  * SAFETY CONSTRAINTS:
  * - Never log API keys or secrets
@@ -17,6 +18,8 @@
  * - Truncate LLM prompts/responses to reasonable lengths
  * - User question content is redacted by default (only logs length)
  */
+
+import pino from "pino";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -27,11 +30,6 @@ export interface LogContext {
   [key: string]: any;
 }
 
-const LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
-
-const CURRENT_LOG_LEVEL: LogLevel = 
-  (process.env.LOG_LEVEL as LogLevel) || "info";
-
 const CHAT_DEBUG_ENABLED = 
   process.env.CHAT_DEBUG_LOGGING === "1" || 
   process.env.CHAT_DEBUG_LOGGING === "true";
@@ -40,14 +38,45 @@ const LOG_USER_CONTENT_ENABLED =
   process.env.CHAT_LOG_USER_CONTENT === "1" ||
   process.env.CHAT_LOG_USER_CONTENT === "true";
 
-function shouldLog(level: LogLevel): boolean {
-  const currentIndex = LOG_LEVELS.indexOf(CURRENT_LOG_LEVEL);
-  const levelIndex = LOG_LEVELS.indexOf(level);
-  return levelIndex >= currentIndex;
-}
+// Determine log level
+const configuredLevel = process.env.LOG_LEVEL || "info";
+const effectiveLevel = CHAT_DEBUG_ENABLED ? "debug" : configuredLevel;
+
+// Create the pino logger
+const pinoLogger = pino({
+  level: effectiveLevel,
+  // Use pretty printing in development
+  transport: process.env.NODE_ENV === "development" 
+    ? {
+        target: "pino-pretty",
+        options: {
+          colorize: true,
+          translateTime: "SYS:standard",
+          ignore: "pid,hostname",
+        },
+      }
+    : undefined,
+  // Redact sensitive fields automatically
+  redact: {
+    paths: [
+      "password",
+      "passwordHash", 
+      "apiKey",
+      "token",
+      "authorization",
+      "cookie",
+      "*.password",
+      "*.apiKey",
+      "*.token",
+    ],
+    censor: "[REDACTED]",
+  },
+  // Standard timestamp
+  timestamp: pino.stdTimeFunctions.isoTime,
+});
 
 /**
- * Core logging function. Outputs structured JSON logs to console.
+ * Core logging function. Outputs structured JSON logs.
  * 
  * @param level - Log level (debug, info, warn, error)
  * @param message - Short message identifier (e.g., "chat_v2_request_received")
@@ -58,30 +87,10 @@ export function log(
   message: string,
   context: LogContext = {}
 ): void {
-  if (!shouldLog(level)) return;
-  if (!CHAT_DEBUG_ENABLED && level === "debug") return;
+  // Skip debug logs unless explicitly enabled
+  if (level === "debug" && !CHAT_DEBUG_ENABLED) return;
 
-  const timestamp = new Date().toISOString();
-  
-  const payload = {
-    ts: timestamp,
-    level,
-    message,
-    ...context,
-  };
-
-  const output = JSON.stringify(payload);
-  
-  switch (level) {
-    case "error":
-      console.error(output);
-      break;
-    case "warn":
-      console.warn(output);
-      break;
-    default:
-      console.log(output);
-  }
+  pinoLogger[level](context, message);
 }
 
 export const logDebug = (msg: string, ctx?: LogContext) => 
@@ -95,6 +104,22 @@ export const logWarn = (msg: string, ctx?: LogContext) =>
 
 export const logError = (msg: string, ctx?: LogContext) => 
   log("error", msg, ctx);
+
+/**
+ * Get the underlying pino logger for advanced use cases
+ * (e.g., creating child loggers with bound context)
+ */
+export function getLogger(): pino.Logger {
+  return pinoLogger;
+}
+
+/**
+ * Create a child logger with bound context
+ * Useful for request-scoped logging where requestId should be on every log
+ */
+export function createChildLogger(context: LogContext): pino.Logger {
+  return pinoLogger.child(context);
+}
 
 /**
  * Helper to truncate long strings for logging
@@ -127,7 +152,7 @@ export function sanitizeUserContent(content: string | undefined | null, maxLen =
  * Check if debug logging is currently enabled
  */
 export function isDebugEnabled(): boolean {
-  return CHAT_DEBUG_ENABLED && shouldLog("debug");
+  return CHAT_DEBUG_ENABLED;
 }
 
 /**
@@ -136,3 +161,6 @@ export function isDebugEnabled(): boolean {
 export function isUserContentLoggingEnabled(): boolean {
   return LOG_USER_CONTENT_ENABLED;
 }
+
+// Export the logger for direct use when needed
+export { pinoLogger as logger };
