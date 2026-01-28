@@ -22,6 +22,11 @@ import { registerAdminChatAnalyticsRoutes } from "./routes/adminChatAnalyticsRou
 import { chatConfig } from "./chatV2/chatConfig";
 import { getOcrConfig } from "./config/ocr";
 import { blobStorage } from "./services/blobStorage";
+import { 
+  chatMessageLimiter, 
+  sessionCreationLimiter, 
+  uploadLimiter 
+} from "./middleware/rateLimiter";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1162,7 +1167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/chat/sessions", async (req, res) => {
+  app.post("/api/chat/sessions", sessionCreationLimiter, async (req, res) => {
     try {
       const { title } = req.body;
       const actor = req.actor;
@@ -1200,7 +1205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * The v2 endpoint provides enhanced pipeline with structured logging,
    * source citations, suggested follow-ups, and quality scoring.
    */
-  app.post("/api/chat/sessions/:id/messages", async (req, res) => {
+  app.post("/api/chat/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       const { content } = req.body;

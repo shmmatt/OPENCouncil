@@ -12,6 +12,7 @@ import { registerRoutes } from "./routes";
 import { ensureAdminExists } from "./init-admin";
 import { attachAnonymousIdentity, attachUserIdentity, authRouter } from "./auth";
 import { startOcrWorker } from "./workers/ocrWorker";
+import { generalApiLimiter } from "./middleware/rateLimiter";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -25,6 +26,10 @@ export function log(message: string, source = "express") {
 }
 
 export const app = express();
+
+// Trust proxy for accurate IP detection behind reverse proxies (Replit, Railway, etc.)
+// This is required for rate limiting to work correctly in production
+app.set('trust proxy', 1);
 
 declare module 'http' {
   interface IncomingMessage {

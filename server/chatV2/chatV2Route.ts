@@ -14,6 +14,7 @@ import { detectDrift, shouldRegenerate } from "./driftDetector";
 import { detectSessionSource } from "./sessionSourceDetector";
 import { chatConfig } from "./chatConfig";
 import { chatConfigV3 } from "./chatConfigV3";
+import { chatMessageLimiter } from "../middleware/rateLimiter";
 import type { SituationContext, SessionSource } from "@shared/schema";
 import type {
   ChatV2Request,
@@ -46,7 +47,7 @@ const chatUpload = multer({
 });
 
 export function registerChatV2Routes(app: Express): void {
-  app.post("/api/chat/v2/sessions/:sessionId/messages", async (req: IdentityRequest, res: Response) => {
+  app.post("/api/chat/v2/sessions/:sessionId/messages", chatMessageLimiter, async (req: IdentityRequest, res: Response) => {
     const startTime = Date.now();
     const requestId = randomUUID();
     const { sessionId } = req.params;
