@@ -3,7 +3,9 @@ import { createServer, type Server } from "http";
 import express from "express";
 import multer from "multer";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { storage } from "./storage";
+import { logInfo, logError, logWarn } from "./utils/logger";
 import { authenticateAdmin, generateToken } from "./middleware/auth";
 import { requireRole } from "./auth/middleware";
 import type { IdentityRequest } from "./auth/types";
@@ -392,6 +394,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     (req, res, next) => {
       persistentUpload.array("files", 100)(req, res, (err) => {
         if (err) {
+          logError("upload_batch_failed", {
+            stage: "multer_upload",
+            errorCode: err.code,
+            errorMessage: err.message,
+          });
           if (err.code === 'LIMIT_UNEXPECTED_FILE') {
             return res.status(400).json({ message: "Too many files. Maximum 100 files allowed per batch." });
           }
@@ -402,6 +409,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
     async (req, res) => {
       const uploadedFiles = req.files as Express.Multer.File[];
+      const batchId = crypto.randomUUID().slice(0, 8);
+      
+      logInfo("upload_batch_started", {
+        batchId,
+        fileCount: uploadedFiles?.length || 0,
+        stage: "ingestion_analyze",
+      });
       
       // Parse and validate metadata hints from form data if provided
       let metadataHints: { defaultTown?: string; defaultBoard?: string } | undefined;
@@ -441,7 +455,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const results = [];
 
-        for (const file of uploadedFiles) {
+        let successCount = 0;
+        let failureCount = 0;
+        
+        for (let i = 0; i < uploadedFiles.length; i++) {
+          const file = uploadedFiles[i];
+          const fileIndex = i + 1;
+          
+          logInfo("upload_file_processing", {
+            batchId,
+            fileIndex,
+            totalFiles: uploadedFiles.length,
+            filename: file.originalname,
+            fileSize: file.size,
+            stage: "processing_start",
+          });
+          
           try {
             // Process file: compute hashes and extract preview
             const fileResult = await processFile(file.path, file.originalname);
@@ -455,7 +484,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Clean up temp file after successful object storage save
               await fs.unlink(file.path).catch(() => {});
             } catch (storageError) {
-              console.warn("Object storage save failed, keeping local file:", storageError);
+              logWarn("upload_object_storage_failed", {
+                batchId,
+                filename: file.originalname,
+                errorMessage: storageError instanceof Error ? storageError.message : "Unknown error",
+                stage: "object_storage_save",
+              });
             }
             
             // Check for duplicates
@@ -518,6 +552,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               duplicateWarning,
               statusNote,
             });
+            
+            successCount++;
+            logInfo("upload_file_success", {
+              batchId,
+              fileIndex,
+              filename: file.originalname,
+              jobId: ingestionJob.id,
+              fileBlobId: fileBlob.id,
+              needsOcr: fileResult.needsOcr,
+              hasDuplicateWarning: !!duplicateWarning,
+              stage: "ingestion_job_created",
+            });
 
             results.push({
               jobId: ingestionJob.id,
@@ -527,16 +573,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
               previewExcerpt: fileResult.previewText.slice(0, 500),
             });
           } catch (fileError) {
-            console.error(`Error processing file ${file.originalname}:`, fileError);
+            failureCount++;
+            const errorMessage = fileError instanceof Error ? fileError.message : "Processing failed";
+            logError("upload_file_failed", {
+              batchId,
+              fileIndex,
+              filename: file.originalname,
+              errorMessage,
+              errorStack: fileError instanceof Error ? fileError.stack : undefined,
+              stage: "file_processing",
+            });
+            
             try {
               await fs.unlink(file.path);
             } catch (e) {
-              console.error("Error cleaning up failed file:", e);
+              logWarn("upload_cleanup_failed", {
+                batchId,
+                filename: file.originalname,
+                stage: "cleanup",
+              });
             }
             results.push({
               jobId: null,
               filename: file.originalname,
-              error: fileError instanceof Error ? fileError.message : "Processing failed",
+              error: errorMessage,
               suggestedMetadata: {
                 category: "misc_other",
                 town: "",
@@ -548,16 +608,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
         }
+        
+        logInfo("upload_batch_completed", {
+          batchId,
+          totalFiles: uploadedFiles.length,
+          successCount,
+          failureCount,
+          stage: "batch_complete",
+        });
 
         res.json({ jobs: results });
       } catch (error) {
-        console.error("Error in ingestion analyze:", error);
+        logError("upload_batch_error", {
+          batchId,
+          fileCount: uploadedFiles?.length || 0,
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          errorStack: error instanceof Error ? error.stack : undefined,
+          stage: "batch_fatal_error",
+        });
         
         for (const file of uploadedFiles) {
           try {
             await fs.unlink(file.path);
           } catch (e) {
-            console.error("Error cleaning up file:", e);
+            logWarn("upload_cleanup_failed", {
+              batchId,
+              filename: file.originalname,
+              stage: "error_cleanup",
+            });
           }
         }
         
