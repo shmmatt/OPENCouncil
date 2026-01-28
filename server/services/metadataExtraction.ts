@@ -313,6 +313,83 @@ export function parseDateToISO(dateText: string): string | null {
   return null;
 }
 
+/**
+ * Check if heuristics are confident enough to skip LLM call
+ */
+function canSkipLlm(
+  minutesHints: MinutesHeuristics,
+  metadataHints: MetadataHints | undefined,
+  filename: string
+): boolean {
+  // Need at least a town (from heuristics or admin hint)
+  const hasTown = !!(minutesHints.possibleTown || metadataHints?.defaultTown);
+  if (!hasTown) return false;
+  
+  // For meeting minutes with high confidence + town + board + date, skip LLM
+  if (minutesHints.likelyMinutes && minutesHints.confidence === "high") {
+    const hasBoard = !!(minutesHints.possibleBoard || metadataHints?.defaultBoard);
+    const hasDate = !!minutesHints.possibleDateText;
+    if (hasBoard && hasDate) {
+      console.log(`[MetadataExtraction] Skipping LLM for ${filename} - high confidence heuristics`);
+      return true;
+    }
+  }
+  
+  // For non-minutes, if we can infer category from filename and have town, skip
+  const filenameCategory = inferMetadataFromFilename(filename);
+  if (filenameCategory.category !== "misc_other" && hasTown) {
+    // Categories that are obvious from filename
+    const obviousCategories = ["budget", "zoning", "town_report", "warrant_article", "ordinance", "cip", "elections"];
+    if (obviousCategories.includes(filenameCategory.category)) {
+      console.log(`[MetadataExtraction] Skipping LLM for ${filename} - obvious category from filename`);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Build metadata from heuristics only (no LLM call)
+ */
+function buildMetadataFromHeuristics(
+  filename: string,
+  minutesHints: MinutesHeuristics,
+  metadataHints: MetadataHints | undefined
+): SuggestedMetadata {
+  const filenameMeta = inferMetadataFromFilename(filename);
+  
+  // Determine category
+  let category = filenameMeta.category;
+  if (minutesHints.likelyMinutes) {
+    category = "meeting_minutes";
+  }
+  
+  // Finalize town
+  const town = minutesHints.possibleTown || metadataHints?.defaultTown || "";
+  
+  // Finalize board
+  const board = minutesHints.possibleBoard || metadataHints?.defaultBoard || filenameMeta.board || "";
+  
+  // Parse date if available
+  let meetingDate: string | null = null;
+  if (minutesHints.possibleDateText) {
+    meetingDate = parseDateToISO(minutesHints.possibleDateText);
+  }
+  
+  return {
+    category: category as typeof ALLOWED_CATEGORIES[number],
+    town,
+    board,
+    year: filenameMeta.year,
+    notes: "",
+    isMinutes: minutesHints.likelyMinutes,
+    meetingDate,
+    meetingType: null, // Could enhance heuristics to detect this
+    rawDateText: minutesHints.possibleDateText || null,
+  };
+}
+
 export async function suggestMetadataFromPreview(
   filename: string,
   previewText: string,
@@ -322,6 +399,11 @@ export async function suggestMetadataFromPreview(
   
   // Run heuristic pre-pass for minutes detection
   const minutesHints = detectMinutesHeuristics(filename, previewText);
+  
+  // Fast path: skip LLM if heuristics are confident enough
+  if (canSkipLlm(minutesHints, metadataHints, filename)) {
+    return buildMetadataFromHeuristics(filename, minutesHints, metadataHints);
+  }
   
   // Build hints section for the LLM prompt
   const hintsSection = [];

@@ -27,6 +27,7 @@ import {
   sessionCreationLimiter, 
   uploadLimiter 
 } from "./middleware/rateLimiter";
+import { parallelUpload, type UploadJob } from "./services/parallelUpload";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1069,6 +1070,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: errorMessage,
         status: "index_failed",
         retryable: true,
+      });
+    }
+  });
+
+  // Batch index multiple approved jobs to File Search (parallel upload)
+  app.post("/api/admin/ingestion/jobs/batch-index", authenticateAdmin, async (req, res) => {
+    try {
+      const { jobIds, concurrency = 3 } = req.body;
+      
+      if (!jobIds || !Array.isArray(jobIds) || jobIds.length === 0) {
+        return res.status(400).json({ message: "jobIds array is required" });
+      }
+      
+      if (jobIds.length > 50) {
+        return res.status(400).json({ message: "Maximum 50 jobs per batch" });
+      }
+      
+      // Load all jobs and validate
+      const jobs = await Promise.all(
+        jobIds.map(id => storage.getIngestionJobWithBlob(id))
+      );
+      
+      const validJobs: Array<{ job: typeof jobs[0], index: number }> = [];
+      const errors: Array<{ jobId: string; error: string }> = [];
+      
+      jobs.forEach((job, index) => {
+        const jobId = jobIds[index];
+        
+        if (!job) {
+          errors.push({ jobId, error: "Job not found" });
+          return;
+        }
+        
+        if (job.status !== "approved" && job.status !== "index_failed") {
+          errors.push({ jobId, error: `Job must be approved or index_failed. Current: ${job.status}` });
+          return;
+        }
+        
+        if (!job.documentId) {
+          errors.push({ jobId, error: "Job must have a linked document" });
+          return;
+        }
+        
+        if (!job.finalMetadata) {
+          errors.push({ jobId, error: "Job must have final metadata" });
+          return;
+        }
+        
+        validJobs.push({ job, index });
+      });
+      
+      if (validJobs.length === 0) {
+        return res.status(400).json({ 
+          message: "No valid jobs to index",
+          errors,
+        });
+      }
+      
+      // Build upload jobs
+      const uploadJobs: UploadJob[] = validJobs.map(({ job }) => ({
+        id: job!.id,
+        filePath: job!.fileBlob.storagePath,
+        filename: job!.fileBlob.originalFilename,
+        metadata: job!.finalMetadata as DocumentMetadata,
+      }));
+      
+      // Parallel upload to Gemini
+      const uploadResults = await parallelUpload(uploadJobs, Math.min(concurrency, 5));
+      
+      // Process results and update database
+      const indexed: Array<{ jobId: string; documentId: string; versionId: string }> = [];
+      const failed: Array<{ jobId: string; error: string }> = [...errors];
+      
+      for (let i = 0; i < uploadResults.length; i++) {
+        const result = uploadResults[i];
+        const { job } = validJobs[i];
+        
+        if (!result.success) {
+          failed.push({ jobId: result.id, error: result.error || "Upload failed" });
+          
+          try {
+            await storage.updateIngestionJob(result.id, {
+              status: "index_failed",
+              statusNote: `Batch indexing failed: ${result.error}`,
+            });
+          } catch (e) {
+            console.error("Failed to update job status:", e);
+          }
+          continue;
+        }
+        
+        try {
+          const finalMetadata = job!.finalMetadata as DocumentMetadata;
+          const previousVersion = await storage.getCurrentVersionForDocument(job!.documentId!);
+          
+          let meetingDateObj: Date | null = null;
+          if (finalMetadata.meetingDate) {
+            const parsed = new Date(finalMetadata.meetingDate);
+            if (!isNaN(parsed.getTime())) {
+              meetingDateObj = parsed;
+            }
+          }
+          
+          const version = await storage.createDocumentVersion({
+            documentId: job!.documentId!,
+            fileBlobId: job!.fileBlobId,
+            year: finalMetadata.year || null,
+            notes: finalMetadata.notes || null,
+            fileSearchStoreName: result.storeId!,
+            fileSearchDocumentName: result.fileId!,
+            isCurrent: true,
+            supersedesVersionId: previousVersion?.id || null,
+            meetingDate: meetingDateObj,
+            isMinutes: finalMetadata.isMinutes || false,
+          });
+          
+          await storage.setCurrentVersion(job!.documentId!, version.id);
+          
+          await storage.updateIngestionJob(job!.id, {
+            status: "indexed",
+            documentVersionId: version.id,
+            statusNote: null,
+          });
+          
+          await storage.createDocument({
+            filename: job!.fileBlob.storagePath.split('/').pop() || job!.fileBlob.originalFilename,
+            originalName: job!.fileBlob.originalFilename,
+            fileSearchFileId: result.fileId!,
+            fileSearchStoreId: result.storeId!,
+            category: finalMetadata.category,
+            town: finalMetadata.town || null,
+            board: finalMetadata.board || null,
+            year: finalMetadata.year ? parseInt(finalMetadata.year) : null,
+            notes: finalMetadata.notes || null,
+          });
+          
+          indexed.push({
+            jobId: job!.id,
+            documentId: job!.documentId!,
+            versionId: version.id,
+          });
+        } catch (dbError) {
+          const errorMessage = dbError instanceof Error ? dbError.message : "Database error";
+          failed.push({ jobId: job!.id, error: errorMessage });
+          
+          try {
+            await storage.updateIngestionJob(job!.id, {
+              status: "index_failed",
+              statusNote: `Database update failed: ${errorMessage}`,
+            });
+          } catch (e) {
+            console.error("Failed to update job status:", e);
+          }
+        }
+      }
+      
+      res.json({
+        success: true,
+        total: jobIds.length,
+        indexed: indexed.length,
+        failed: failed.length,
+        results: { indexed, failed },
+      });
+    } catch (error) {
+      console.error("Error in batch index:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Batch index failed" 
       });
     }
   });
