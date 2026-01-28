@@ -770,6 +770,51 @@ export default function AdminIngestion() {
     },
   });
 
+  // Batch index mutation for parallel upload to Gemini
+  const batchIndexMutation = useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const token = localStorage.getItem("adminToken");
+      const response = await fetch("/api/admin/ingestion/jobs/batch-index", {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ jobIds, concurrency: 3 }),
+      });
+      if (!response.ok) {
+        const errorMessage = await safeParseJsonError(response, "Batch index failed");
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ingestion/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/v2/documents"] });
+      
+      if (data.failed === 0) {
+        toast({
+          title: "Batch index complete",
+          description: `Successfully indexed ${data.indexed} document(s)`,
+        });
+      } else {
+        toast({
+          title: "Batch index partially complete",
+          description: `${data.indexed} indexed, ${data.failed} failed`,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Batch index failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
@@ -1291,6 +1336,28 @@ export default function AdminIngestion() {
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === "approved" && jobs && jobs.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                    <FolderUp className="w-4 h-4" />
+                    <span>{jobs.length} approved document(s) ready to index</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => batchIndexMutation.mutate(jobs.map(j => j.id))}
+                    disabled={batchIndexMutation.isPending}
+                    data-testid="button-batch-index"
+                  >
+                    {batchIndexMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-2" />
+                    )}
+                    Index All ({jobs.length}) — Parallel Upload
+                  </Button>
                 </div>
               )}
 
