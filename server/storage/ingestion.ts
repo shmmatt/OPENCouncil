@@ -88,3 +88,31 @@ export async function updateIngestionJob(id: string, data: Partial<InsertIngesti
 export async function deleteIngestionJob(id: string): Promise<void> {
   await db.delete(schema.ingestionJobs).where(eq(schema.ingestionJobs.id, id));
 }
+
+/**
+ * Get ingestion metadata for a file blob by fileBlobId.
+ * Used by OCR worker to reindex documents after OCR completion.
+ */
+export async function getIngestionMetadataForFileBlob(fileBlobId: string): Promise<{
+  jobId: string;
+  isIndexed: boolean;
+  metadata: Record<string, unknown>;
+} | null> {
+  const [result] = await db
+    .select()
+    .from(schema.ingestionJobs)
+    .where(eq(schema.ingestionJobs.fileBlobId, fileBlobId));
+  
+  if (!result) {
+    return null;
+  }
+  
+  const isIndexed = result.status === 'indexed';
+  const metadata = (result.finalMetadata || result.suggestedMetadata || {}) as Record<string, unknown>;
+  
+  return {
+    jobId: result.id,
+    isIndexed,
+    metadata,
+  };
+}
