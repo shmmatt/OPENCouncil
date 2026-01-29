@@ -1660,6 +1660,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ============================================================
+  // S3 TO GEMINI SYNC ROUTES
+  // ============================================================
+  
+  // Get sync status for a town
+  app.get("/api/admin/s3-sync/status", authenticateAdmin, async (req, res) => {
+    try {
+      const town = req.query.town as string;
+      
+      if (!town) {
+        return res.status(400).json({ message: "town parameter is required" });
+      }
+      
+      const { getSyncStatus } = await import("./services/s3GeminiSync");
+      const status = await getSyncStatus(town);
+      
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting sync status:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to get sync status" 
+      });
+    }
+  });
+  
+  // Trigger sync for a town
+  app.post("/api/admin/s3-sync/run", authenticateAdmin, async (req, res) => {
+    try {
+      const { town, limit = 50, dryRun = false } = req.body;
+      
+      if (!town) {
+        return res.status(400).json({ message: "town is required in request body" });
+      }
+      
+      const { syncTown } = await import("./services/s3GeminiSync");
+      const result = await syncTown(town, { limit, dryRun });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error running sync:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to run sync" 
+      });
+    }
+  });
+  
+  // List S3 files for a town (for debugging/preview)
+  app.get("/api/admin/s3-sync/files", authenticateAdmin, async (req, res) => {
+    try {
+      const town = req.query.town as string;
+      const limit = parseInt(req.query.limit as string) || 100;
+      
+      if (!town) {
+        return res.status(400).json({ message: "town parameter is required" });
+      }
+      
+      const { listS3Town, extractMetadataFromPath } = await import("./services/s3GeminiSync");
+      const files = await listS3Town(town);
+      
+      // Return first N files with extracted metadata
+      const filesWithMetadata = files.slice(0, limit).map(f => ({
+        ...f,
+        metadata: extractMetadataFromPath(f.key),
+      }));
+      
+      res.json({
+        total: files.length,
+        files: filesWithMetadata,
+      });
+    } catch (error) {
+      console.error("Error listing S3 files:", error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : "Failed to list S3 files" 
+      });
+    }
+  });
+
   // Register v2 Chat Pipeline Routes
   registerChatV2Routes(app);
 

@@ -242,6 +242,23 @@ export const chatAnalytics = pgTable("chat_analytics", {
   analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
 });
 
+// S3 to Gemini File Search Sync: Tracks files synced from S3 to Gemini stores
+export const s3GeminiSync = pgTable("s3_gemini_sync", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  s3Key: text("s3_key").notNull().unique(), // S3 object key (e.g., conway/minutes/Board/2024/file.pdf)
+  geminiStoreId: text("gemini_store_id").notNull(), // Gemini File Search store name
+  geminiDocumentId: text("gemini_document_id"), // Gemini document ID after upload
+  town: text("town").notNull(), // Extracted town from S3 path
+  category: text("category"), // Extracted category (minutes, budget, etc.)
+  board: text("board"), // Extracted board name
+  year: text("year"), // Extracted year
+  sizeBytes: integer("size_bytes"), // File size in bytes
+  status: text("status").notNull().default("pending"), // 'pending' | 'synced' | 'failed'
+  errorMessage: text("error_message"), // Error message if sync failed
+  syncedAt: timestamp("synced_at"), // When the file was successfully synced
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Document metadata schema for validation
 export const ALLOWED_CATEGORIES = [
   "budget", "zoning", "meeting_minutes", "town_report", "warrant_article",
@@ -361,6 +378,11 @@ export const insertChatAnalyticsSchema = createInsertSchema(chatAnalytics).omit(
   analyzedAt: true,
 });
 
+export const insertS3GeminiSyncSchema = createInsertSchema(s3GeminiSync).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
@@ -407,6 +429,12 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 
 export type ChatAnalytics = typeof chatAnalytics.$inferSelect;
 export type InsertChatAnalytics = z.infer<typeof insertChatAnalyticsSchema>;
+
+export type S3GeminiSync = typeof s3GeminiSync.$inferSelect;
+export type InsertS3GeminiSync = z.infer<typeof insertS3GeminiSyncSchema>;
+
+// S3 Sync status types
+export type S3SyncStatus = 'pending' | 'synced' | 'failed';
 
 // Actor types for identity tracking
 export type ActorType = 'user' | 'anon';
