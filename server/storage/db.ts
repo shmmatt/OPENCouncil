@@ -23,4 +23,4 @@ export const db = drizzle({ client: pool, schema });
 export { schema };
 
 // Re-export commonly used drizzle operators
-export { eq, desc, asc, and, or, gte, sql, isNull, inArray, lt } from "drizzle-orm";
+export { eq, desc, asc, and, or, gte, sql, isNull, isNotNull, ne, inArray, lt } from "drizzle-orm";

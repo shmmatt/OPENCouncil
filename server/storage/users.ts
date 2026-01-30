@@ -2,7 +2,7 @@
  * User and identity storage operations
  */
 
-import { db, schema, eq, and } from "./db";
+import { db, schema, eq, and, isNotNull, ne } from "./db";
 import type { 
   User, 
   InsertUser,
@@ -145,10 +145,13 @@ export async function getAvailableTowns(): Promise<string[]> {
   const results = await db
     .selectDistinct({ town: schema.logicalDocuments.town })
     .from(schema.logicalDocuments)
-    .where(schema.logicalDocuments.town);
+    .where(and(
+      isNotNull(schema.logicalDocuments.town),
+      ne(schema.logicalDocuments.town, 'statewide')
+    ));
 
   return results
     .map(r => r.town)
-    .filter((t): t is string => t !== null && t !== 'statewide')
+    .filter((t): t is string => t !== null)
     .sort();
 }
