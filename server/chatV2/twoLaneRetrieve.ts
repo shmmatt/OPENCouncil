@@ -14,6 +14,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
+import { getStoreIdForTown } from "../services/storeResolver";
 import { logDebug, logError } from "../utils/logger";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
@@ -1002,7 +1003,11 @@ export async function twoLaneRetrieve(
     return emptyResult;
   }
   
-  const storeId = await getOrCreateFileSearchStoreId(townPreference || undefined);
+  let storeId = await getStoreIdForTown(townPreference || "");
+  if (!storeId) {
+      storeId = await getOrCreateFileSearchStoreId();
+  }
+  console.log(`[DEBUG] Retrieval Store ID for ${townPreference}: ${storeId}`);
   
   if (!storeId) {
     logError("two_lane_no_store", {
@@ -1272,7 +1277,11 @@ export async function twoLaneRetrieveWithPlan(
   const { townPreference, situationContext, logContext } = options;
   const startTime = Date.now();
 
-  const storeId = await getOrCreateFileSearchStoreId(townPreference || undefined);
+  let storeId = await getStoreIdForTown(townPreference || "");
+  if (!storeId) {
+      storeId = await getOrCreateFileSearchStoreId();
+  }
+  console.log(`[DEBUG] Retrieval Store ID for ${townPreference}: ${storeId}`);
 
   let localQueriesUsed: string[] = [];
   let stateQueriesUsed: string[] = [];
@@ -1656,63 +1665,4 @@ function computeLegalTopicCoverageFromChunks(
   }
 
   return covered / legalTopics.length;
-}
-
-/**
- * Extract combined document names from two-lane result
- */
-export function extractTwoLaneDocNames(result: TwoLaneRetrievalResult): string[] {
-  const allNames: string[] = [];
-  
-  for (const chunk of result.localChunks) {
-    allNames.push(...chunk.documentNames);
-  }
-  
-  for (const chunk of result.stateChunks) {
-    allNames.push(...chunk.documentNames);
-  }
-  
-  return Array.from(new Set(allNames));
-}
-
-/**
- * Build combined snippet text from two-lane result for synthesis
- */
-export function buildTwoLaneSnippetText(result: TwoLaneRetrievalResult): string {
-  const sections: string[] = [];
-  
-  if (result.localChunks.length > 0 && result.localChunks[0].content) {
-    sections.push(`=== LOCAL LANE (Town Documents) ===\n${result.localChunks[0].content}`);
-  }
-  
-  if (result.stateChunks.length > 0 && result.stateChunks[0].content) {
-    sections.push(`=== STATE LANE (NH RSA / Statewide Guidance) ===\n${result.stateChunks[0].content}`);
-  }
-  
-  return sections.join("\n\n");
-}
-
-/**
- * Determine doc source type from two-lane results
- */
-export function classifyTwoLaneDocSource(
-  result: TwoLaneRetrievalResult,
-  townHint?: string
-): { type: "none" | "local" | "statewide" | "mixed"; town: string | null } {
-  const hasLocal = result.localChunks.length > 0;
-  const hasState = result.stateChunks.length > 0;
-  
-  if (!hasLocal && !hasState) {
-    return { type: "none", town: null };
-  }
-  
-  if (hasLocal && hasState) {
-    return { type: "mixed", town: townHint || null };
-  }
-  
-  if (hasLocal) {
-    return { type: "local", town: townHint || null };
-  }
-  
-  return { type: "statewide", town: null };
 }
