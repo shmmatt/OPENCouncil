@@ -63,10 +63,26 @@ export async function extractPreviewText(
         const pdfParse = await getPdfParser();
         const dataBuffer = await fs.readFile(filePath);
         const pdfData = await pdfParse(dataBuffer, {
-          max: 5,
+          max: 10, // Limit pages for preview speed
         });
         return pdfData.text.slice(0, maxLength);
       } catch (pdfError) {
+        // Fallback: Try rudimentary text extraction via 'pdftotext' if available
+        // This avoids the 'pdf-parse' AbortException bug blocking everything
+        try {
+            const { exec } = await import('child_process');
+            const { promisify } = await import('util');
+            const execAsync = promisify(exec);
+            
+            // Check if pdftotext exists (part of poppler-utils, which we installed)
+            const { stdout } = await execAsync(`pdftotext -l 5 "${filePath}" -`);
+            if (stdout && stdout.length > 50) {
+                return stdout.slice(0, maxLength);
+            }
+        } catch (e) {
+            // Ignore fallback failure
+        }
+        
         console.warn(`PDF text extraction failed for ${filename}, proceeding without preview:`, pdfError);
         return "";
       }

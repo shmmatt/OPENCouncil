@@ -84,10 +84,7 @@ export interface ExtractedMetadata {
 
 /**
  * Extract metadata from S3 key path.
- * 
- * Expected patterns:
- *   town/minutes/Board_Name/YYYY/filename.pdf
- *   town/category/filename.pdf
+ * Supports both structured paths and flat/messy scraper paths.
  */
 export function extractMetadataFromPath(s3Key: string): ExtractedMetadata {
   const parts = s3Key.split("/").filter(Boolean);
@@ -97,34 +94,102 @@ export function extractMetadataFromPath(s3Key: string): ExtractedMetadata {
   }
   
   const town = parts[0].toLowerCase();
-  const category = parts[1].toLowerCase();
   const filename = parts[parts.length - 1];
   
-  const result: ExtractedMetadata = {
-    town,
-    category,
-    filename,
-    isMinutes: category === "minutes",
-  };
+  // Defaults
+  let category = "document";
+  let board: string | undefined;
+  let year: string | undefined;
   
-  // Extract board and year from minutes paths
-  if (category === "minutes" && parts.length >= 4) {
-    result.board = parts[2].replace(/_/g, " ");
-    
-    // Check if there's a year folder
+  // --- Strategy 1: Structured Path (town/category/board/year/file) ---
+  // If we have a deep structure (>= 4 parts) and the category looks valid
+  if (parts.length >= 4 && ["minutes", "agendas", "budgets"].includes(parts[1].toLowerCase())) {
+    category = parts[1].toLowerCase();
+    board = parts[2].replace(/_/g, " ");
     const possibleYear = parts[3];
     if (/^\d{4}/.test(possibleYear)) {
-      result.year = possibleYear.substring(0, 4);
+      year = possibleYear.substring(0, 4);
+    }
+  } 
+  // --- Strategy 2: Flat/Messy Path (Scraper Output) ---
+  else {
+    // Attempt to extract from filename
+    
+    // 1. Year detection (YYYY)
+    const yearMatch = filename.match(/(19|20)\d{2}/);
+    if (yearMatch) {
+      year = yearMatch[0];
+    }
+    
+    // 2. Board detection
+    board = detectBoardFromFilename(filename);
+    
+    // 3. Category detection
+    category = detectCategoryFromFilename(filename);
+  }
+
+  // --- Common Logic ---
+  
+  // Try to extract meeting date from filename (stronger signal than folder year)
+  // Matches: MM-DD-YY, MM-DD-YYYY, YYYY-MM-DD
+  const dateMatch = filename.match(/(\d{1,2}[-_]\d{1,2}[-_]\d{2,4})|(\d{4}[-_]\d{1,2}[-_]\d{1,2})/);
+  let meetingDate: string | undefined;
+  
+  if (dateMatch) {
+    meetingDate = normalizeDateString(dateMatch[0]);
+    // If we found a full date, update the year to match the date
+    if (meetingDate) {
+      year = meetingDate.split("-")[0];
     }
   }
+
+  return {
+    town,
+    category,
+    board,
+    year,
+    isMinutes: category === "minutes",
+    meetingDate,
+    filename,
+  };
+}
+
+function detectBoardFromFilename(filename: string): string | undefined {
+  const lower = filename.toLowerCase().replace(/[_-]/g, " ");
   
-  // Try to extract meeting date from filename
-  const dateMatch = filename.match(/(\d{1,2}[-_]\d{1,2}[-_]\d{2,4})|(\d{4}[-_]\d{1,2}[-_]\d{1,2})/);
-  if (dateMatch) {
-    result.meetingDate = normalizeDateString(dateMatch[0]);
+  const boards: Record<string, string[]> = {
+    "Board of Selectmen": ["selectmen", "bos", "select board"],
+    "Planning Board": ["planning"],
+    "Zoning Board": ["zoning", "zba"],
+    "School Board": ["school board", "school dist"],
+    "Budget Committee": ["budget comm", "budget cmte"],
+    "Conservation Commission": ["conservation"],
+    "Library Trustees": ["library"],
+    "Trustees of Trust Funds": ["trustee of trust", "trustees of trust"],
+    "Fire Precinct": ["fire precinct", "fire comm"],
+  };
+
+  for (const [formalName, keywords] of Object.entries(boards)) {
+    if (keywords.some(k => lower.includes(k))) {
+      return formalName;
+    }
   }
+  return undefined;
+}
+
+function detectCategoryFromFilename(filename: string): string {
+  const lower = filename.toLowerCase();
   
-  return result;
+  if (lower.includes("minute") || lower.includes("min_")) return "minutes";
+  if (lower.includes("agenda")) return "agendas";
+  if (lower.includes("budget") || lower.includes("expenditure") || lower.includes("revenue")) return "financials";
+  if (lower.includes("report") || lower.includes("audit")) return "reports";
+  if (lower.includes("ordinance") || lower.includes("regulation") || lower.includes("policy")) return "ordinances";
+  if (lower.includes("permit") || lower.includes("application")) return "permits";
+  if (lower.includes("warrant")) return "warrants";
+  if (lower.includes("tax")) return "tax_records";
+  
+  return "document"; // fallback
 }
 
 function normalizeDateString(dateStr: string): string {
@@ -338,12 +403,9 @@ export async function syncS3ToGemini(options: SyncOptions = {}): Promise<SyncRes
   
   if (dryRun) {
     console.log(`[S3Sync] DRY RUN - would upload:`);
-    for (const file of files.slice(0, 20)) {
+    for (const file of files) {
       const meta = extractMetadataFromPath(file.key);
       console.log(`  ${file.key} → ${meta.town}/${meta.category}/${meta.board || ""}/${meta.year || ""}`);
-    }
-    if (files.length > 20) {
-      console.log(`  ... and ${files.length - 20} more`);
     }
     return { total: files.length, uploaded: 0, skipped: 0, failed: 0, errors: [] };
   }

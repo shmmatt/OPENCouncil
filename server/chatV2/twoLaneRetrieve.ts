@@ -1002,7 +1002,7 @@ export async function twoLaneRetrieve(
     return emptyResult;
   }
   
-  const storeId = await getOrCreateFileSearchStoreId();
+  const storeId = await getOrCreateFileSearchStoreId(townPreference || undefined);
   
   if (!storeId) {
     logError("two_lane_no_store", {
@@ -1272,7 +1272,7 @@ export async function twoLaneRetrieveWithPlan(
   const { townPreference, situationContext, logContext } = options;
   const startTime = Date.now();
 
-  const storeId = await getOrCreateFileSearchStoreId();
+  const storeId = await getOrCreateFileSearchStoreId(townPreference || undefined);
 
   let localQueriesUsed: string[] = [];
   let stateQueriesUsed: string[] = [];
