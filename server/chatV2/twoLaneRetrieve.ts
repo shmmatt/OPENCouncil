@@ -25,8 +25,6 @@ import { computeSituationMatchScore } from "./situationExtractor";
 import type { PipelineLogContext, ScopeHint } from "./types";
 import type { SituationContext, SessionSource } from "@shared/schema";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-
 /**
  * Issue map extracted from query + situation + session sources
  * Used for topic alignment scoring and query expansion
@@ -631,6 +629,7 @@ async function executeLaneRetrieval(options: {
   });
   
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
     const response = await ai.models.generateContent({
       model: retrievalModel,
       contents: [{ role: "user", parts: [{ text: query }] }],
@@ -663,7 +662,7 @@ async function executeLaneRetrieval(options: {
     const chunks: LaneChunk[] = retrievalResult.documentNames.slice(0, maxResults).map((docName, idx) => ({
       docId: `${lane}_${idx}_${docName.slice(0, 20)}`,
       title: docName,
-      content: rawContent,
+      content: rawContent.slice(0, 2000),
       lane,
       score: 1 - (idx * 0.05),
       documentNames: [docName],
@@ -916,6 +915,58 @@ function mergeAndRankChunks(
   }
   
   return deduped.slice(0, mergedCap);
+}
+
+/**
+ * Builds the snippet text from the merged chunks for the synthesis prompt.
+ */
+export function buildTwoLaneSnippetText(
+  retrievalResult: TwoLaneRetrievalResult
+): string {
+  const chunks = retrievalResult.mergedTopChunks;
+  if (chunks.length === 0) return "No documents found.";
+
+  return chunks.map((chunk, index) => {
+    // Truncate content to 2000 characters to prevent token overflow
+    const truncatedContent = chunk.content.slice(0, 2000); 
+    
+    // Using concatenation to avoid build issues.
+    return '[Source ' + (index + 1) + ' (' + chunk.lane + '): ' + chunk.title + ']\\n' + truncatedContent;
+  }).join('\\n\\n');
+}
+
+/**
+ * Classifies the source of the retrieved documents (local or state).
+ */
+export function classifyTwoLaneDocSource(
+  retrievalResult: TwoLaneRetrievalResult,
+  townPreference: string | undefined
+): { type: DocSourceType; town: string | null } {
+  const localChunks = retrievalResult.localChunks.length;
+  const stateChunks = retrievalResult.stateChunks.length;
+  
+  if (localChunks > 0 && stateChunks > 0) {
+    return { type: "mixed", town: townPreference || null };
+  } else if (localChunks > 0) {
+    return { type: "local", town: townPreference || null };
+  } else if (stateChunks > 0) {
+    return { type: "state", town: null };
+  }
+  
+  return { type: "none", town: null };
+}
+
+/**
+ * Extracts distinct document names from both local and state retrieval results.
+ */
+export function extractTwoLaneDocNames(
+  retrievalResult: TwoLaneRetrievalResult
+): string[] {
+  const allNames = [
+    ...retrievalResult.localChunks.flatMap(c => c.documentNames),
+    ...retrievalResult.stateChunks.flatMap(c => c.documentNames),
+  ];
+  return Array.from(new Set(allNames));
 }
 
 /**
