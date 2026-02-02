@@ -31,7 +31,7 @@ import {
 } from "./middleware/rateLimiter";
 import { parallelUpload, type UploadJob } from "./services/parallelUpload";
 
-// import debugChatRoutes from "./routes/debugChatRoutes";
+import debugChatRoutes from "./routes/debugChatRoutes";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -68,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await fs.mkdir("uploads/blobs", { recursive: true }).catch(() => {});
 
   // Mount Debug Routes (Secure!)
-  // app.use("/api/admin/debug", authenticateAdmin, debugChatRoutes);
+  app.use("/api/admin/debug", authenticateAdmin, debugChatRoutes);
 
   // Admin login with bcrypt authentication
   app.post("/api/admin/login", async (req, res) => {

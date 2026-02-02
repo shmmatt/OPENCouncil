@@ -1,0 +1,35 @@
+Starting S3 sync with options: { town: 'conway', dryRun: true }
+[S3Sync] Starting sync...
+[S3Sync] Options: town=conway, dryRun=true, concurrency=3
+[S3Sync] Found 924 PDF files
+[S3Sync] DRY RUN - would upload:
+  conway/03-40638_conway-invitation-for-bids.pdf → conway/document//
+  conway/1-application-for-web-051325.pdf → conway/permits//
+  conway/11-20-2024-construction-permit-application.pdf → conway/permits//2024
+  conway/11-20-2024-driveway-permit-application.pdf → conway/permits//2024
+  conway/11-20-2024-spring-road-ban-travel-permit-application.pdf → conway/permits//2024
+  conway/2003-master-plan.pdf → conway/document//2003
+  conway/2007-employment-verification.pdf → conway/document//2007
+  conway/2009-audit.pdf → conway/reports//2009
+  conway/201.pdf → conway/document//
+  conway/2010-harship-letter-template.pdf → conway/document//2010
+  conway/2010audit.pdf → conway/reports//2010
+  conway/2011audit.pdf → conway/reports//2011
+  conway/2012auditreport.pdf → conway/reports//2012
+  conway/2013audit.pdf → conway/reports//2013
+  conway/2016-town-of-conway-report-final-1.pdf-1.pdf → conway/reports//2016
+  conway/2018-town-of-conway-report-final.pdf.pdf → conway/reports//2018
+  conway/2019-audit-report-final.pdf → conway/reports//2019
+  conway/2019-conway-tax-rates-final.pdf → conway/tax_records//2019
+  conway/2019-conway-town-report.pdf → conway/reports//2019
+  conway/202.pdf → conway/document//
+  ... and 904 more
+
+=== Sync Complete ===
+{
+  "total": 924,
+  "uploaded": 0,
+  "skipped": 0,
+  "failed": 0,
+  "errors": []
+}

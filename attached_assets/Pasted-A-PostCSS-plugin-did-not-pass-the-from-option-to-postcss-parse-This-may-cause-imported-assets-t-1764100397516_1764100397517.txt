@@ -1,0 +1,126 @@
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+7:37:24 PM [express] GET /api/chat/sessions 304 in 34ms :: [{"id":"04384459-7d5f-46c6-b5ad-1d73ebf5a…
+7:37:24 PM [express] GET /api/chat/sessions/04384459-7d5f-46c6-b5ad-1d73ebf5ac68 304 in 55ms :: [{"i…
+7:37:47 PM [express] POST /api/admin/login 200 in 210ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp…
+7:37:47 PM [express] GET /api/admin/documents 304 in 31ms :: [{"id":"228091b3-52b2-4bb0-b0b0-356dc86…
+Error extracting text from municipal-data-2025.pdf: TypeError: pdfParse is not a function
+    at extractPreviewText (/home/runner/workspace/server/bulk-upload-helper.ts:31:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:204:33)
+Error extracting text from 2025-volunteer-manual.pdf: TypeError: pdfParse is not a function
+    at extractPreviewText (/home/runner/workspace/server/bulk-upload-helper.ts:31:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:204:33)
+Error extracting text from assessing-reference-manual.pdf: TypeError: pdfParse is not a function
+    at extractPreviewText (/home/runner/workspace/server/bulk-upload-helper.ts:31:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:204:33)
+Error extracting text from technical-assistance-brochure-dra.pdf: TypeError: pdfParse is not a function
+    at extractPreviewText (/home/runner/workspace/server/bulk-upload-helper.ts:31:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:204:33)
+Error extracting text from 2024-ZBA-Handbook-FINAL.pdf: TypeError: pdfParse is not a function
+    at extractPreviewText (/home/runner/workspace/server/bulk-upload-helper.ts:31:29)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:204:33)
+7:38:59 PM [express] POST /api/admin/bulk-upload/analyze 200 in 29975ms :: {"files":[{"tempId":"0f07…
+Upload operation response: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/upload/operations/b949d002be496868c720210f556-ar3780xzpjkd",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/b949d002be496868c720210f556-ar3780xzpjkd"
+  }
+}
+Extracted file ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/b949d002be496868c720210f556-ar3780xzpjkd
+Document uploaded and indexed: [statewide - misc other - 2025] municipal-data-2025.pdf
+File ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/b949d002be496868c720210f556-ar3780xzpjkd
+Metadata: category=misc_other, town=statewide, board=N/A, year=2025
+Upload operation response: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/upload/operations/29044019fba3602a0aab6d7040a-ruiq27e3ejm9",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/29044019fba3602a0aab6d7040a-ruiq27e3ejm9"
+  }
+}
+Extracted file ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/29044019fba3602a0aab6d7040a-ruiq27e3ejm9
+Document uploaded and indexed: [statewide - misc other - 2025] 2025-volunteer-manual.pdf
+File ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/29044019fba3602a0aab6d7040a-ruiq27e3ejm9
+Metadata: category=misc_other, town=statewide, board=N/A, year=2025
+Upload operation response: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/upload/operations/e72694d2dedbac2535b254b7966-kwrtb2pim2fn",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/e72694d2dedbac2535b254b7966-kwrtb2pim2fn"
+  }
+}
+Extracted file ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/e72694d2dedbac2535b254b7966-kwrtb2pim2fn
+Document uploaded and indexed: [statewide - Assessing Department - policy] assessing-reference-manual.pdf
+File ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/e72694d2dedbac2535b254b7966-kwrtb2pim2fn
+Metadata: category=policy, town=statewide, board=Assessing Department, year=N/A
+Upload operation response: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/upload/operations/62516d2892a3e456c3850fe6f61-sxuc8qmh8inw",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/62516d2892a3e456c3850fe6f61-sxuc8qmh8inw"
+  }
+}
+Extracted file ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/62516d2892a3e456c3850fe6f61-sxuc8qmh8inw
+Document uploaded and indexed: [statewide - Department of Revenue Administration - misc other] technical-assistance-brochure-dra.pdf
+File ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/62516d2892a3e456c3850fe6f61-sxuc8qmh8inw
+Metadata: category=misc_other, town=statewide, board=Department of Revenue Administration, year=N/A
+Upload operation response: {
+  "name": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/upload/operations/03a47d755f237933ddbf8155112-r19h21y2tott",
+  "response": {
+    "parent": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk",
+    "documentName": "fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/03a47d755f237933ddbf8155112-r19h21y2tott"
+  }
+}
+Extracted file ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/03a47d755f237933ddbf8155112-r19h21y2tott
+Document uploaded and indexed: [statewide - Zoning Board of Adjustment - zba docs - 2024] 2024-ZBA-Handbook-FINAL.pdf
+File ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk/documents/03a47d755f237933ddbf8155112-r19h21y2tott
+Metadata: category=zba_docs, town=statewide, board=Zoning Board of Adjustment, year=2024
+7:40:06 PM [express] POST /api/admin/bulk-upload/finalize 200 in 24915ms :: {"success":true,"uploade…
+7:40:15 PM [express] GET /api/admin/documents 200 in 25ms :: [{"id":"228091b3-52b2-4bb0-b0b0-356dc86…
+7:41:23 PM [express] GET /api/chat/sessions 304 in 104ms :: [{"id":"04384459-7d5f-46c6-b5ad-1d73ebf5…
+7:41:23 PM [express] GET /api/chat/sessions/04384459-7d5f-46c6-b5ad-1d73ebf5ac68 304 in 44ms :: [{"i…
+7:41:30 PM [express] POST /api/chat/sessions 200 in 31ms :: {"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:41:30 PM [express] GET /api/chat/sessions 200 in 24ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:41:31 PM [express] GET /api/chat/sessions/04384459-7d5f-46c6-b5ad-1d73ebf5ac68 304 in 44ms :: [{"i…
+7:41:34 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 23ms :: []
+7:41:50 PM [express] POST /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4/messages 200 in 44…
+7:41:50 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 23ms :: [{"i…
+7:41:50 PM [express] GET /api/chat/sessions 304 in 24ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:41:50 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 304 in 24ms :: [{"i…
+7:42:29 PM [express] POST /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4/messages 200 in 45…
+7:42:29 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 24ms :: [{"i…
+7:42:29 PM [express] GET /api/chat/sessions 304 in 25ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:42:30 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 304 in 23ms :: [{"i…
+7:43:11 PM [express] POST /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4/messages 200 in 16…
+7:43:11 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 42ms :: [{"i…
+7:43:11 PM [express] GET /api/chat/sessions 304 in 23ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:43:11 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 304 in 23ms :: [{"i…
+7:44:25 PM [express] POST /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4/messages 200 in 60…
+7:44:25 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 23ms :: [{"i…
+7:44:25 PM [express] GET /api/chat/sessions 304 in 22ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:44:25 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 304 in 24ms :: [{"i…
+7:46:41 PM [express] POST /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4/messages 200 in 81…
+7:46:41 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 200 in 43ms :: [{"i…
+7:46:41 PM [express] GET /api/chat/sessions 304 in 30ms :: [{"id":"5f2438e9-7c44-4dca-b596-7c4b76b2c…
+7:46:41 PM [express] GET /api/chat/sessions/5f2438e9-7c44-4dca-b596-7c4b76b2c6b4 304 in 23ms :: [{"i…
+7:49:40 PM [express] POST /api/admin/login 200 in 536ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp…
+7:49:40 PM [express] GET /api/admin/documents 304 in 26ms :: [{"id":"228091b3-52b2-4bb0-b0b0-356dc86…
+7:52:17 PM [express] POST /api/admin/bulk-upload/analyze 500 in 57520ms :: {"message":"Unexpected fi…
+MulterError: Unexpected field
+    at wrappedFileFilter (/home/runner/workspace/node_modules/multer/index.js:40:19)
+    at Multipart.<anonymous> (/home/runner/workspace/node_modules/multer/lib/make-middleware.js:132:7)
+    at Multipart.emit (node:events:524:28)
+    at HeaderParser.cb (/home/runner/workspace/node_modules/busboy/lib/types/multipart.js:358:14)
+    at HeaderParser.push (/home/runner/workspace/node_modules/busboy/lib/types/multipart.js:162:20)
+    at SBMH.ssCb [as _cb] (/home/runner/workspace/node_modules/busboy/lib/types/multipart.js:394:37)
+    at feed (/home/runner/workspace/node_modules/streamsearch/lib/sbmh.js:248:10)
+    at SBMH.push (/home/runner/workspace/node_modules/streamsearch/lib/sbmh.js:104:16)
+    at Multipart._write (/home/runner/workspace/node_modules/busboy/lib/types/multipart.js:567:19)
+    at writeOrBuffer (node:internal/streams/writable:572:12)
+    at _write (node:internal/streams/writable:501:10)
+    at Writable.write (node:internal/streams/writable:510:10)
+    at IncomingMessage.ondata (node:internal/streams/readable:1009:22)
+    at IncomingMessage.emit (node:events:524:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at HTTPParser.parserOnBody (node:_http_common:130:24)

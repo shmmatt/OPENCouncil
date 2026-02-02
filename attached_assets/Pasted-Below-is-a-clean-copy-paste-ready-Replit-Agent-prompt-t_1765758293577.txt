@@ -1,0 +1,492 @@
+Below is a clean, copy-paste–ready Replit Agent prompt that turns your COO → CTO directive into an executable build instruction.
+
+This prompt is intentionally tight, explicit, and guardrailed to prevent scope creep, agent confusion, or “creative interpretation.” It assumes your existing stack (Express/TS backend, React frontend, Drizzle/DB, existing logging tables).
+
+
+---
+
+Replit Agent Prompt
+
+Project: OpenCouncil
+Task: Implement Admin Usage & Analytics Dashboard (v1)
+Role: Senior Full-Stack Engineer (execution only, no product design)
+
+
+---
+
+CONTEXT (READ CAREFULLY)
+
+You are implementing an internal-only Admin Usage & Analytics Dashboard for OpenCouncil.
+
+This dashboard is read-only, not user-facing, and intended to support Town Meeting season decision-making.
+
+You are executing a defined spec, not exploring options.
+
+⚠️ Important:
+
+The Town Meeting Template system is NOT implemented yet.
+
+You MUST create placeholder support for it (UI sections + backend stubs + event schema), but do not block the dashboard on it.
+
+
+
+---
+
+HARD CONSTRAINTS (DO NOT VIOLATE)
+
+1. Do not redesign the product
+
+
+2. Do not build a general BI system
+
+
+3. Do not add user scoring or invasive tracking
+
+
+4. Do not add third-party analytics
+
+
+5. Do not invent data that isn’t logged
+
+
+6. Do not refactor unrelated code
+
+
+7. Do not change chat behavior
+
+
+
+This is a reporting layer only.
+
+
+---
+
+ACCESS CONTROL (REQUIRED)
+
+Route group:
+
+/admin/usage
+
+Backend API namespace:
+
+/api/admin/usage/*
+
+Access restricted to users with role:
+
+admin
+municipal_admin
+
+
+Reject all others.
+
+
+---
+
+DASHBOARD STRUCTURE (REQUIRED)
+
+Implement one dashboard page with the following sections, in this order.
+
+
+---
+
+1. At-a-Glance Health (Top Panel)
+
+Metrics (last 24h + last 7d):
+
+DAU / WAU
+
+Sessions created
+
+Questions asked
+
+Total LLM cost (USD)
+
+Top town by questions
+
+
+Data sources:
+
+chat_sessions
+
+chat_messages
+
+llm_cost_logs
+
+
+
+---
+
+2. Usage & Engagement
+
+Metrics:
+
+Sessions per day
+
+Messages per session (avg + median)
+
+Questions per town
+
+Anonymous vs logged-in usage %
+
+
+Data sources:
+
+chat_sessions
+
+chat_messages
+
+users
+
+anonymous_users
+
+
+
+---
+
+3. Town Meeting Template Performance (PLACEHOLDER-READY)
+
+> ⚠️ The Town Meeting template system does not exist yet.
+You must scaffold this section so metrics appear once events exist.
+
+
+
+Metrics (per town / year / template):
+
+Template opens
+
+% of users clicking ≥1 follow-up
+
+Avg follow-ups per user
+
+Top follow-up prompts clicked
+
+Sessions originating from template vs free chat
+
+
+Required events (schema only):
+
+town_meeting_template_opened
+
+town_meeting_followup_clicked
+
+
+Event metadata (REQUIRED):
+
+town
+
+year
+
+template_id
+
+article_id (nullable)
+
+
+Data sources:
+
+events
+
+chat_sessions
+
+
+Implementation note:
+If no data exists, render “No data yet” states cleanly.
+
+
+---
+
+4. Recent Minutes Updates Engagement
+
+Metrics:
+
+Clicks on:
+
+“Ask about this meeting”
+
+“View minutes”
+
+
+Engagement by board
+
+
+Events to log (add if missing):
+
+recent_minutes_ask_clicked
+
+recent_minutes_view_clicked
+
+
+Event metadata:
+
+town
+
+board
+
+documentVersionId
+
+
+
+---
+
+5. Topic & Issue Demand
+
+Metrics:
+
+Top topics (weekly)
+
+Topic trends over time
+
+
+v1 Implementation (choose ONE):
+
+Use existing message embeddings OR
+
+Lightweight keyword/topic tagging at message creation
+
+
+Storage:
+
+chat_messages.metadata OR
+
+events
+
+
+Display:
+
+Top 5 topics overall
+
+Top 5 topics per town
+
+
+
+---
+
+6. Trust & Risk Signals
+
+Metrics:
+
+“No relevant documents found” rate
+
+Scope mismatch rate:
+
+Local → statewide
+
+Statewide → local
+
+
+% of answers with document citations
+
+
+Data sources:
+
+chat_v2 pipeline logs
+
+structured flags from answer synthesis
+
+
+⚠️ Do not infer. Use existing structured signals only.
+
+
+---
+
+7. Cost & Efficiency
+
+Metrics:
+
+Total LLM cost per day
+
+Cost by model
+
+Cost by town
+
+Cost per question (avg + median)
+
+Cost per “useful session”
+
+
+Definition: Useful session A session with any of:
+
+≥3 messages
+
+Follow-up clicked
+
+Town Meeting template used
+
+
+Data sources:
+
+llm_cost_logs
+
+events
+
+chat_sessions
+
+
+
+---
+
+8. Alerts Panel (Display-Only)
+
+Show warnings when:
+
+No-doc rate exceeds threshold
+
+Daily LLM cost exceeds threshold
+
+Scope mismatch rate exceeds threshold
+
+
+⚠️ No notifications. No emails. No Slack. UI only.
+
+
+---
+
+BACKEND REQUIREMENTS
+
+Create: adminUsageService
+
+Responsibilities:
+
+Aggregate metrics via SQL/ORM
+
+Support date-range filtering
+
+Fast responses (<500ms)
+
+
+API Routes
+
+GET /api/admin/usage/overview
+GET /api/admin/usage/engagement
+GET /api/admin/usage/town-meeting
+GET /api/admin/usage/minutes
+GET /api/admin/usage/topics
+GET /api/admin/usage/trust
+GET /api/admin/usage/costs
+GET /api/admin/usage/alerts
+
+Use indexes where necessary. Do not over-optimize prematurely.
+
+
+---
+
+FRONTEND REQUIREMENTS
+
+Single dashboard page
+
+Clear section headers
+
+Simple charts + tables
+
+Default date range: last 7 days
+
+No real-time streaming
+
+Graceful empty states
+
+
+
+---
+
+LOGGING & INSTRUMENTATION
+
+Add ONLY missing events:
+
+Town Meeting template interactions
+
+Recent minutes interactions
+
+
+❌ Do NOT duplicate existing logs
+❌ Do NOT add per-user analytics
+
+
+---
+
+DEFINITION OF DONE
+
+You are done when:
+
+1. Admins can view a single dashboard showing:
+
+usage
+
+engagement
+
+Town Meeting readiness
+
+costs
+
+
+
+2. Town Meeting sections render with placeholder support
+
+
+3. Cost metrics match llm_cost_logs
+
+
+4. No PII or per-user profiling
+
+
+5. Dashboard informs Town Meeting launch decisions
+
+
+
+
+---
+
+NON-GOALS (DO NOT IMPLEMENT)
+
+Predictive analytics
+
+Per-user scoring
+
+Data export
+
+Public metrics
+
+Paid features
+
+Third-party analytics
+
+
+
+---
+
+EXECUTION ORDER (MANDATORY)
+
+1. Backend aggregation + routes
+
+
+2. Event schema scaffolding
+
+
+3. Frontend dashboard UI
+
+
+4. Verify data integrity
+
+
+5. Stop
+
+
+
+
+---
+
+Begin implementation now.
+
+
+---
+
+If you want, next I can:
+
+Break this into a sprint plan
+
+Write example SQL queries
+
+Sketch the UI layout
+
+Define a Town Meeting “success score”
+
+
+Just say the word.

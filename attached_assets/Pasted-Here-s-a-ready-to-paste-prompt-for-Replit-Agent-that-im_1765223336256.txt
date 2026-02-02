@@ -1,0 +1,377 @@
+Here’s a ready-to-paste prompt for Replit Agent that implements the upgrades we just talked through: **sources wired through, structured answers, “currently” bias, and basic quota handling.**
+
+---
+
+**Replit Agent Task: Upgrade Chat v2 Pipeline (Sources, Structure, Recency, Quota Handling)**
+
+We have a municipal governance Q&A app in this repo (Node/TypeScript + Express) that uses:
+
+* Gemini 2.5 Flash
+* Gemini File Search
+* A v2 chat pipeline with these stages (visible in logs):
+
+  * `router`
+  * `retrievalPlanner`
+  * `complexAnswer_retrieval_*`
+  * `complexAnswer_synthesis`
+  * `critic` (sometimes skipped)
+  * `simpleAnswer`
+
+We also log `file_search_request` and `file_search_response` with `resultCount` and `results[].documentName`.
+
+### Current behavior (from logs)
+
+* For complex questions (e.g. “What is Ossipee's ambulance and emergency response situation currently? How much does it spend?”), the pipeline:
+
+  * Routes to `complex` with domains like `budget`, `town_report`, `meeting_minutes`, `ordinance`, `policy`.
+  * The retrieval planner sets `townPreference: "Ossipee"` and `allowStatewideFallback: false`.
+  * `complexAnswer_retrieval_1` calls file search with filters including `categories` and `town: "Ossipee"`.
+  * File search returns results like:
+
+    * `4dc17fb59d620dd1f2d2d71faeb3c16e`, `b8d009cbf035b1c91d20dd2ec656bed7`, etc.
+  * The retrieval LLM produces long, structured excerpts.
+  * The synthesis LLM produces a long, detailed narrative answer.
+
+* However, the final `chat_v2_response_ready` log shows:
+
+  * `"sourceCount": 0`
+  * `"sourceDocNames": []`
+
+So we are **using** documents but **not surfacing sources** in the final answer object.
+
+* Also, complex answers are **very long** (thousands of tokens).
+* The retrieval planner isn’t explicitly biased toward **recent** documents when the user says “currently”.
+* We occasionally hit Gemini 429 quota errors (`RESOURCE_EXHAUSTED`) and currently fall back in a brittle way.
+
+---
+
+## Goals
+
+Implement the following improvements:
+
+1. **Wire document sources through the entire pipeline**
+
+   * Attach file_search results (IDs and metadata like title/meetingDate) to the answer.
+   * Expose them as `sources` in the final response payload so the UI can show them.
+
+2. **Enforce a more useful answer structure for complex responses**
+
+   * For complex answers, use this structure:
+
+     * `### At a glance` – 2–4 bullet summary.
+     * `### Key numbers (Ossipee)` – short bullet list of dollars/percentages.
+     * `### Details from recent meetings` – a compact narrative referencing specific meetings/documents.
+   * Keep total length around **400–600 words** unless the question clearly requires more.
+
+3. **Bias retrieval toward recent documents when user asks about “current” status**
+
+   * If the question includes “currently”, “now”, “this year”, “recent”, or a specific year:
+
+     * Prefer **recent meeting_minutes and current-year budgets** for the specified town.
+   * Implement this in the retrieval planner and, if possible, via File Search filters.
+
+4. **Add basic quota error handling for Gemini**
+
+   * When Gemini returns 429 (quota exceeded), handle it gracefully:
+
+     * Log clearly.
+     * Return a friendly message instead of crashing or producing odd defaults.
+   * Optionally, fall back to a preconfigured secondary model if one exists.
+
+---
+
+## Implementation Instructions
+
+### 0. Find the relevant code
+
+1. Search the repo for the chat v2 pipeline and logging keys you see in the logs:
+
+   * `"chat_v2_request_received"`
+   * `"chat_v2_pipeline_start"`
+   * `"router_output"`
+   * `"retrievalPlanner"`
+   * `"complexAnswer_synthesis"`
+   * `"simpleAnswer"`
+   * `"file_search_request"`
+   * `"file_search_response"`
+   * `"chat_v2_response_ready"`
+
+   Likely locations:
+
+   * `src/server/chat/v2/` or similar directory.
+   * A central chat controller for `/api/chat/v2/sessions/:id/messages`.
+   * A file that wraps Gemini + File Search calls.
+
+2. Identify:
+
+   * The TypeScript types used for answers (e.g. `ChatAnswer`, `ChatV2Response`, etc.).
+   * The function where `file_search_response.results` is available.
+   * The function where the final answer JSON is built and returned to the Express handler.
+
+Use these as the anchor points for the changes below.
+
+---
+
+## 1. Wire sources from File Search into the final answer
+
+### 1.1 Capture source documents after file_search
+
+In the complex path, after `file_search_response` for `complexAnswer_retrieval_*`, you already have:
+
+* `resultCount`
+* `results: [{ documentName: string }, ...]`
+
+Add logic to map these results into a richer `SourceDoc` structure:
+
+```ts
+type SourceDoc = {
+  id: string;           // file_search documentName or internal documentId
+  title?: string;       // human-readable document title, if available
+  town?: string;        // from metadata
+  board?: string;       // e.g. "Board of Selectmen"
+  meetingDate?: string; // "YYYY-MM-DD" for minutes
+};
+
+function mapFileSearchResultsToSources(results: Array<{ documentName: string }>): SourceDoc[] {
+  // TODO: If you have a DB table that maps documentName -> metadata/title,
+  // query it here; otherwise at least expose documentName.
+  return results.map((r) => ({
+    id: r.documentName
+    // Optionally enrich with title/meetingDate from your existing metadata store
+  }));
+}
+```
+
+Store this on the **complex answer context** object that flows into the synthesis step, for example:
+
+```ts
+const sources = mapFileSearchResultsToSources(results);
+complexContext.sources = sources;
+```
+
+Do the same for the **simple path** if you want sources there as well (using `file_search_response` from `simpleAnswer_fileSearch`).
+
+### 1.2 Include sources in the synthesis prompt
+
+In the `complexAnswer_synthesis` stage, when you call Gemini with `systemPrompt` and `userPrompt`:
+
+* Add a short preamble in the userPrompt that lists the available source docs:
+
+```ts
+const sourcesForPrompt = (sources ?? [])
+  .map((s, idx) => `(${idx + 1}) [${s.title ?? s.id}]${s.meetingDate ? ` – meeting date: ${s.meetingDate}` : ""}`)
+  .join("\n");
+
+const userPrompt = `
+You are answering a question using the following retrieved excerpts (snippets omitted here in this template).
+
+You have these source documents available:
+${sourcesForPrompt || "None explicitly labeled."}
+
+[Then include the existing snippets / question as you already do]
+`;
+```
+
+And in the **system prompt**, add:
+
+> * When you use information from a document, mention it explicitly, e.g. “According to the Ossipee Board of Selectmen minutes from March 4, 2024…” or “As noted in the 2025 Ossipee budget…”.
+
+### 1.3 Attach sources to the final answer payload
+
+Locate where the final answer object is created before returning to the API caller (`chat_v2_response_ready` log point).
+
+Extend the answer type to include `sources`:
+
+```ts
+type ChatAnswer = {
+  text: string;
+  // existing fields ...
+  sources?: SourceDoc[];
+};
+```
+
+Then:
+
+```ts
+const answer: ChatAnswer = {
+  text: finalAnswerText,
+  // ...
+  sources: complexContext.sources || simpleContext.sources || []
+};
+```
+
+Also ensure you’re logging:
+
+```ts
+"sourceCount": answer.sources?.length ?? 0,
+"sourceDocNames": answer.sources?.map(s => s.title ?? s.id) ?? []
+```
+
+So logs and UI can see them.
+
+---
+
+## 2. Enforce structured, concise complex answers
+
+In the **complexAnswer_synthesis** system prompt, update to enforce structure and length. For the complex path, change the system prompt to something like:
+
+> You are an expert municipal governance assistant for New Hampshire. Synthesize information from multiple document sources to provide accurate, practical answers. Always distinguish between legal requirements and best practices.
+>
+> For complex answers, **use this structure exactly**:
+>
+> 1. `### At a glance`
+>
+>    * 2–4 bullet points summarizing the main answer in plain language.
+> 2. `### Key numbers (Ossipee)`
+>
+>    * A short bullet list of important figures (dollar amounts, percentages, contract values, budget line items).
+> 3. `### Details from recent meetings`
+>
+>    * 1–3 short paragraphs that reference specific meetings or documents (e.g. “BOS Minutes – March 4, 2024”) and describe the relevant discussion, decisions, or concerns.
+>
+> Additional rules:
+>
+> * Keep the entire answer roughly **400–600 words** unless the question explicitly demands more detailed statutory analysis.
+> * Explicitly distinguish between:
+>
+>   * What the documents say (facts, quoted or summarized).
+>   * What is unknown or not covered (and advise consulting town counsel or NHMA).
+> * When you mention a meeting or document, use a phrase like:
+>
+>   * “According to the Ossipee BOS minutes from [date]…” or
+>   * “In the 2025 Ossipee budget document…”.
+
+This should significantly shorten and structure the kind of ambulance/EMS answer you saw.
+
+---
+
+## 3. Bias retrieval toward “current” documents
+
+Modify the **retrievalPlanner** system prompt and logic.
+
+### 3.1 Update the retrievalPlanner system prompt
+
+In the retrieval planner’s system prompt, add explicit instructions:
+
+> * When the user’s question includes words like “currently”, “now”, “this year”, “recent”, or a specific year (e.g. “2025”), you must:
+>
+>   * Prefer **recent meeting_minutes** and **current or specified year budgets** for the town.
+>   * Set `categories` to focus on:
+>
+>     * `["meeting_minutes", "budget"]` first; include `town_report`, `policy`, or `ordinance` only if clearly relevant.
+>   * Reflect this recency preference in the filters you output, using any available metadata (e.g., meetingDate, year).
+> * When describing `infoNeeds`, be explicit that you want “most recent” or “current-year” data, not historical information.
+
+### 3.2 Use metadata if available
+
+If your File Search metadata for documents includes `meetingDate` and/or `year`, ensure that:
+
+* Those fields are set when documents are ingested (you may already be doing this in the v2 pipeline).
+* If File Search supports date/recency filters, have the retrievalPlanner include them in the `filters` object (for example, `year` or a custom `fromYear`/`toYear`), matching your actual metadata schema.
+
+If direct date filters are not supported, it’s still useful to:
+
+* Tell the retrieval LLM that “for the purpose of answering, focus on the most recent 6–12 months of minutes and the latest budget documents” in its user/system prompt.
+
+---
+
+## 4. Add basic Gemini quota error handling
+
+We saw a 429 error in the router stage:
+
+```json
+"code": 429,
+"message": "You exceeded your current quota..."
+```
+
+Right now, the pipeline falls back in a risky way. Improve this:
+
+### 4.1 Create a safe wrapper for Gemini calls
+
+Find where you call Gemini (for router, retrievalPlanner, simpleAnswer, complexAnswer_synthesis, critic). Wrap those calls in a helper like:
+
+```ts
+import { GoogleGenerativeAI, ApiError } from "@google/generative-ai"; // or your existing import
+
+async function safeGeminiCall<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err: any) {
+    // Handle quota errors gracefully
+    const apiError = err as ApiError;
+    const message = apiError?.message ?? String(err);
+    if (message.includes("quota") || message.includes("RESOURCE_EXHAUSTED") || apiError?.status === "RESOURCE_EXHAUSTED") {
+      // Log clearly
+      console.error("Gemini quota exceeded:", message);
+      // Re-throw a custom, caught-upstream error, or return a sentinel
+      throw new Error("GEMINI_QUOTA_EXCEEDED");
+    }
+    throw err;
+  }
+}
+```
+
+Then, in each pipeline stage:
+
+```ts
+const response = await safeGeminiCall(() =>
+  geminiModel.generateContent({ /* existing args */ })
+);
+```
+
+### 4.2 Handle `GEMINI_QUOTA_EXCEEDED` at the pipeline level
+
+In the top-level chat v2 pipeline (where you orchestrate router → retrievalPlanner → answer):
+
+* Wrap the whole process in a `try/catch`.
+* If you catch `GEMINI_QUOTA_EXCEEDED`, return a friendly fallback answer:
+
+```ts
+if (err instanceof Error && err.message === "GEMINI_QUOTA_EXCEEDED") {
+  const answer: ChatAnswer = {
+    text: "The assistant has temporarily reached its daily model quota and cannot generate new answers right now. Your documents are safe; this is just a usage limit. Please try again later or adjust the API quota settings.",
+    sources: []
+  };
+
+  // Log a special event
+  logger.info({ message: "chat_v2_quota_exceeded", sessionId, requestId });
+
+  return answer;
+}
+```
+
+Optionally, if you have a secondary model configured, you can fall back to it instead of returning this message—only do that if you already have the plumbing.
+
+---
+
+## 5. Keep behavior backwards-compatible
+
+* Don’t remove existing fields from the answer payload; just **add** `sources`.
+* Keep the simple path mostly unchanged, but it’s okay to also attach sources if helpful.
+* Don’t change route URLs or API contracts unless necessary.
+
+---
+
+### Done state
+
+When you’re finished, the system should:
+
+1. For complex questions like the Ossipee ambulance scenario:
+
+   * Retrieve Ossipee minutes and budgets via File Search.
+   * Produce a structured answer:
+
+     * `At a glance` bullets
+     * `Key numbers (Ossipee)`
+     * `Details from recent meetings`
+   * Include a `sources` array in the API response with document IDs/titles/dates.
+
+2. For “currently” questions:
+
+   * Prefer **recent** minutes and current-year budgets in retrieval.
+
+3. When Gemini quota is exceeded:
+
+   * Return a clear, user-friendly fallback answer instead of breaking the pipeline.
+
+Please implement these changes now across the chat v2 pipeline, ensuring all TypeScript types and logging are updated accordingly.

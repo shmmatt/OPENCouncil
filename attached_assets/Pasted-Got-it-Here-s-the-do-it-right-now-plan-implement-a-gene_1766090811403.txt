@@ -1,0 +1,281 @@
+Got it. Here’s the “do it right now” plan: implement a general Evidence Coverage Gate (using your existing critic slot) that can expand retrieval automatically, plus fix ingestion reliability so the gate actually has evidence to find. No topic-specific hacks, and it hardens the whole product.
+
+Below is a CTO-ready directive that bundles both pieces in one coherent upgrade.
+
+
+---
+
+CTO Directive — Antifragile Retrieval: Evidence Coverage Gate + Ingestion Hardening (Now)
+
+From: COO
+To: CTO
+Subject: Make chat_v2 self-correcting: Evidence Coverage Gate that expands retrieval + fix ingestion/indexing reliability
+
+Mission
+
+Ship a generalized upgrade that prevents misleading “partial evidence” answers by adding an Evidence Coverage Gate that can trigger additional retrieval passes (bounded by cost/time), and harden ingestion so the latest documents reliably index and are retrievable.
+
+This must be topic-agnostic (no tax-specific hardcoding) and must work across simple + complex paths.
+
+
+---
+
+Part A — Evidence Coverage Gate (Core)
+
+Goal
+
+Before we synthesize an answer, the system must determine whether the retrieved evidence is sufficiently broad and complete for the user’s question type. If not, it must self-correct by broadening retrieval (1–2 additional passes max), then proceed to synthesis with an evidence-aware structure.
+
+Where it runs
+
+Simple path: after initial file_search returns, before simpleAnswer synthesis.
+
+Complex path: after the first retrieval plan’s initial pass (complexAnswer_retrieval_1), before final synthesis. The gate may recommend additional retrieval passes, reusing the same retrieval mechanism.
+
+
+Inputs to the gate
+
+Provide:
+
+userQuestion
+
+conversationContext (short)
+
+townPreference (if any)
+
+routerOutput (domains, scopeHint, complexity)
+
+retrievalPlannerOutput (infoNeeds, filters, preferRecent)
+
+retrievalResultsSummary:
+
+count of chunks
+
+distinct doc count
+
+distinct categories count
+
+boards/towns represented
+
+top doc names
+
+a compact sample of retrieved snippets (token-capped)
+
+
+
+Gate outputs (strict JSON)
+
+{
+  "coverageScore": 0.0,
+  "questionIntent": "facts|mechanism|breakdown|why|compare|process|mixed",
+  "missingFacets": ["..."],
+  "shouldExpandRetrieval": true,
+  "recommendedPasses": [
+    {
+      "queryText": "string",
+      "filters": {
+        "townPreference": "Ossipee|null",
+        "allowStatewideFallback": true,
+        "categories": ["..."],
+        "boards": ["..."],
+        "preferRecent": true
+      },
+      "reason": "string"
+    }
+  ],
+  "shouldAskClarifyingQuestion": false,
+  "clarifyingQuestion": null
+}
+
+General logic (non-topic-specific)
+
+The gate should detect structural question types that often need breadth:
+
+“why did X change”
+
+“how is X calculated / determined”
+
+“what goes into X”
+
+“breakdown/components”
+
+“compare year-to-year”
+
+“who decides / process”
+
+
+If the intent is one of those and evidence is narrow (low diversity / only one category / only one board), the gate should expand retrieval.
+
+Retrieval expansion behavior
+
+Max additional retrieval passes: 2
+
+Max combined retrieved chunks: cap (e.g., 30–40)
+
+Use dedupe by (docId, chunkHash) to avoid bloat.
+
+For each recommended pass:
+
+broaden categories
+
+allow statewide fallback when appropriate
+
+widen boards
+
+prefer recent, but don’t exclude older if needed for process context
+
+
+
+Synthesis requirements after gating
+
+Update synthesis prompt rules:
+
+Do not present a single facet as the whole.
+
+If some facets remain unsupported, the answer must explicitly label:
+
+“Supported by retrieved documents”
+
+“General NH process context”
+
+“Not found in retrieved materials (yet)” This prevents misleading answers even when evidence remains incomplete.
+
+
+
+Logging requirements
+
+Add structured logs:
+
+coverage_gate_start
+
+coverage_gate_result (coverageScore, intent, missingFacets, passCount)
+
+coverage_gate_retrieval_pass (query, filters, resultCount, diversity)
+
+coverage_gate_final (totalChunks, distinctDocs, distinctCategories, criticUsed=true)
+
+
+Also ensure chat_v2_response_ready includes:
+
+criticUsed (now true when gate runs)
+
+retrievalPassCount
+
+coverageScore
+
+categoryDiversity
+
+
+
+---
+
+Part B — Ingestion & Indexing Hardening (Must ship with Part A)
+
+1) Fix PDF preview extraction bug
+
+You have: TypeError: pdfParse is not a function
+
+Fix by ensuring pdf-parse import works in the compiled dist/ runtime. This is likely ESM/CJS default export mismatch.
+
+Acceptance:
+
+extractPreviewText2() succeeds for typical municipal PDFs
+
+if extraction fails, the job should still proceed (with warning) and not crash.
+
+
+2) Add retry/backoff for File Search upload 503
+
+You have: ApiError 503 Service Unavailable
+
+Implement:
+
+exponential backoff with jitter
+
+max retries (e.g., 5)
+
+final failure marks job index_failed but keeps it visible & retryable
+
+
+3) Preserve and expose failed ingestion jobs
+
+After the 500, your jobs list returns [] — unacceptable for ops.
+
+Ensure:
+
+ingestion jobs are not deleted/hidden on failure
+
+/api/admin/ingestion/jobs returns failed jobs with error fields
+
+add “retry indexing” action in admin UI
+
+
+4) PreferRecent + “most recent docs” reliability
+
+Ensure “latest tax rate docs” queries work by:
+
+correct document timestamps (ingestedAt, meetingDate)
+
+correct isCurrent behavior for documentVersions
+
+correct category tags on upload/approval
+
+
+
+---
+
+Acceptance Criteria (Definition of Done)
+
+Evidence Gate
+
+1. For any “mechanism/breakdown/why/compare/process” question, if initial retrieval is narrow, the system automatically expands retrieval (up to 2 passes).
+
+
+2. The final answer clearly distinguishes:
+
+what is supported by retrieved documents
+
+general process context
+
+what was not found
+
+
+
+3. Logs show criticUsed:true, coverageScore, and retrievalPassCount.
+
+
+
+Ingestion
+
+4. Uploading and indexing a 2025 tax-rate PDF succeeds end-to-end.
+
+
+5. If File Search is temporarily unavailable (503), the job retries and either succeeds or ends as index_failed with a visible error and a retry path.
+
+
+6. Admin jobs list always shows failed jobs.
+
+
+
+
+---
+
+Implementation Notes (keep it lean)
+
+Reuse the existing “critic” mechanism if it exists; rename internally to evidenceGate but keep criticUsed logging for continuity.
+
+Keep the gate prompt short and JSON-only.
+
+Prefer deterministic heuristics (diversity metrics) to trigger the gate, but use the LLM gate to propose the right expansion queries.
+
+
+
+---
+
+If you want, I can also provide:
+
+a ready-to-paste system prompt for the evidence gate
+
+the diversity metrics definitions (categoryDiversityScore, boardDiversityScore, etc.)
+
+a minimal set of unit/regression tests (“tax rate”, “zoning change”, “contract award timeline”, “EMS agreement authority”)

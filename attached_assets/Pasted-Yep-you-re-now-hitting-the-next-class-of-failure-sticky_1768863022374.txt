@@ -1,0 +1,162 @@
+Yep — you’re now hitting the *next* class of failure: **sticky situation context leaking into unrelated questions**.
+
+### What’s happening
+
+Your pipeline has a persistent `situationTitle = "boardwalk - vote"` (Jan 6, ADA) in session context. When the user later asks about budget committees, the planner/synth still sees:
+
+* town preference: Ossipee ✅
+* “hasSituationContext”: true ✅
+* situation title contains “vote” + “Jan 6” ✅
+
+…and your synthesizer template *always* includes the heading **“What the Jan 6 vote changes”**, so it tries to force-fit that concept even when the question is totally different. It even says: “analysis assumes it refers…” which is exactly the “LLM over its skis” behavior you’re trying to avoid.
+
+So: this is not a retrieval problem. It’s **format + context routing**.
+
+---
+
+## Fix: Make the template conditional + make situation context “scoped”
+
+You need two changes:
+
+1. **Template headings must be dynamic** (not hard-coded “Jan 6”)
+2. **Situation context must be gated** (only applied if the new question matches the situation)
+
+Below is a prompt to Replit Agent that implements both with minimal complexity.
+
+---
+
+## Replit Agent prompt: stop context leakage + dynamic headings
+
+```md
+# REPLIT AGENT — Fix Situation Leakage + Dynamic Headings (No More “Jan 6” Everywhere)
+
+## Problem
+We have “sticky” situation context (e.g., boardwalk / Jan 6 vote) leaking into unrelated questions (e.g., budget committee rules). This happens because:
+
+1) The synthesizer output format includes a hard-coded heading: “What the Jan 6 vote changes”
+2) We always include situation context in planning/retrieval/synthesis when `hasSituationContext=true`
+3) The model tries to force-fit the old situation into new questions (“assumes it refers…”), causing confusion.
+
+We need:
+- Situation context applied ONLY when relevant to the new user question
+- Headings and structure to remain consistent, but NOT refer to “Jan 6” unless that is actually the situation in scope.
+
+---
+
+## Goal behavior
+- Boardwalk question → keep the “vote effect” section, but generic.
+- Budget committee question → no boardwalk references, no Jan 6 language, no “assumes it refers”.
+
+---
+
+## 1) Replace hard-coded heading with a generic one
+Update the required headings to:
+
+1) **Bottom line**
+2) **What we know (from sources)**
+3) **What the law generally requires**
+4) **What changes / what the decision affects**   <-- generic
+5) **Unknowns that matter**
+
+NEVER put a date in a heading (Jan 6, etc).
+The “changes” section should describe impacts relevant to the question’s actual scenario (vote, decision, policy, action), if any.
+
+---
+
+## 2) Add a relevance gate: should we use situation context?
+Before plannerV3 runs, compute `situationMatch` between:
+- current user question text (not the pasted article)
+- situationContext title/entities/topics (from stored context)
+
+### Heuristic scoring (simple + deterministic)
+Implement `computeSituationMatchScore(question, situationContext)`:
+
+Score +1 for each:
+- Any situation entity appears in question (case-insensitive substring)
+- Any key topic keyword overlaps (ADA, boardwalk, Constitution Park, selectmen vote, etc.)
+- The question explicitly references “the article,” “the boardwalk,” “that vote,” “Smith/Keyes/Copeland,” etc.
+
+Score -2 if question is clearly different domain:
+- contains “budget”, “appropriation”, “warrant article”, “RSA 32”, “budget committee”, “tax rate”, etc.
+- AND does not mention any situation entities/topics
+
+Decision:
+- `useSituationContext = (score >= 2)`
+- else `useSituationContext = false`
+
+Log:
+- situationMatchScore
+- useSituationContext boolean
+- reason string
+
+---
+
+## 3) Pass situation context to planner/synth ONLY if useSituationContext=true
+If false:
+- planner prompt must not include situation title/entities
+- retrieval plan should be generated from the current question only
+- synthesizer prompt must not mention the stored situation at all
+
+---
+
+## 4) Add “don’t force-fit” rule to synthesizer system prompt
+Add to the synthesizer system prompt:
+
+- Do not mention prior situations unless explicitly relevant to the current question.
+- If a section cannot be supported by retrieved sources, omit it rather than speculate.
+- Never write: “this assumes it refers to…” or similar bridging language.
+- If there is no concrete “decision/action” in the facts, section 4 must be titled:
+  **“How this typically works in NH”** and contain only general rules with citations.
+
+(Implement section title as dynamic; see step 5.)
+
+---
+
+## 5) Make section 4 title dynamic (based on question type)
+Implement:
+
+- If facts include an explicit action/event (vote, decision, appeal, enforcement step):
+  Title: **What changes / what the decision affects**
+- Else:
+  Title: **How this typically works in NH**
+
+This is deterministic and avoids “vote” framing for questions that are just about rules.
+
+---
+
+## 6) Acceptance tests
+### A) Boardwalk article chat
+- Answer contains “What changes / what the decision affects”
+- No “Jan 6” heading, but can mention Jan 6 in facts.
+
+### B) Budget committee question
+- No mention of boardwalk, ADA, or Jan 6
+- Section 4 title becomes “How this typically works in NH”
+- No “assumes it refers…”
+
+---
+
+## Deliverables
+- Update synthesizer format + prompt rules
+- Implement situationMatch gating + logs
+- Make section 4 title dynamic
+- Ensure planner/retriever do not see situation context when gated off
+```
+
+---
+
+## One more quick improvement (optional but high leverage)
+
+Right now you’re still allowing the model to say things like:
+
+> “incorporates federal ADA standards (28 C.F.R. part 36) [S2]”
+
+That can be *correct*, but only if **S2 actually contains that citation**. If S2 is a paraphrase-y chunk, the model may be smuggling in details.
+
+If you want to tighten “don’t get over skis” further, add:
+
+* **No CFR / statute section numbers unless they appear verbatim in a chunk**.
+
+---
+
+If you implement the gating + generic heading + dynamic section title, that “Jan 6 vote changes” leak into budget chats will disappear immediately, and the system will feel much more “natural” across messy conversation.

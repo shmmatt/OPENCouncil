@@ -1,0 +1,35 @@
+Starting S3 sync with options: { town: 'ossipee', dryRun: true }
+[S3Sync] Starting sync...
+[S3Sync] Options: town=ossipee, dryRun=true, concurrency=3
+[S3Sync] Found 517 PDF files
+[S3Sync] DRY RUN - would upload:
+  ossipee/g/031225zoningordinance2025final_0.pdf → ossipee/ordinances/Zoning Board/2025
+  ossipee/g/031225zoningordinance2025final_1.pdf → ossipee/ordinances/Zoning Board/2025
+  ossipee/g/1.6.26_state_sourced_revenues.pdf → ossipee/financials//
+  ossipee/g/2020_updated_welfare_guidelines_no_sigs.pdf → ossipee/document//2020
+  ossipee/g/2020updateproptxexmptcommindustrial.pdf → ossipee/document//2020
+  ossipee/g/2021-mail-in-app.pdf → ossipee/document//2021
+  ossipee/g/2022_diaper_depot.pdf → ossipee/document//2022
+  ossipee/g/2022_town_report_full_pdf_reduced.pdf → ossipee/reports//2022
+  ossipee/g/2024_transfer_station_fees_adopted.pdf → ossipee/document//2024
+  ossipee/g/assessment_versus_market_value_19-0327.pdf → ossipee/document//
+  ossipee/g/assistant_deputy_town_clerk_tax_collector_04.19.2024.pdf → ossipee/tax_records//2024
+  ossipee/g/baler.pdf → ossipee/document//
+  ossipee/g/bos_public_input_policy.pdf → ossipee/ordinances/Board of Selectmen/
+  ossipee/g/budget_committee_schedule_2026.pdf → ossipee/financials/Budget Committee/2026
+  ossipee/g/cemetery_rules_procedures2025.pdf → ossipee/document//2025
+  ossipee/g/cemetery_tax_maps_02_10_2014v_3reduced.pdf → ossipee/tax_records//2014
+  ossipee/g/cemetery_trustee_by-laws_2025.pdf → ossipee/document//2025
+  ossipee/g/citizen_complaint_form.pdf → ossipee/document//
+  ossipee/g/community_profile_2023.jsp_.pdf → ossipee/document//2023
+  ossipee/g/drivewat_permit_application_10.11.23_0.pdf → ossipee/permits//
+  ... and 497 more
+
+=== Sync Complete ===
+{
+  "total": 517,
+  "uploaded": 0,
+  "skipped": 0,
+  "failed": 0,
+  "errors": []
+}

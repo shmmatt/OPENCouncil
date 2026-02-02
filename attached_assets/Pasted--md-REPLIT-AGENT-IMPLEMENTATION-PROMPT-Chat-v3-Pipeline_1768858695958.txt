@@ -1,0 +1,408 @@
+````md
+# REPLIT AGENT IMPLEMENTATION PROMPT — Chat v3 Pipeline (Plan → Retrieve → Synthesize) + Red-Team Guardrails
+
+## Objective
+Rewire OpenCouncil’s chat flow so it behaves like a strong civic/legal analyst:
+- Interprets messy user intent naturally
+- Builds tailored queries per lane (local vs state) from an IssueMap
+- Retrieves multi-query per lane, merges with coverage constraints (esp. state law for legal questions)
+- Synthesizes a coherent explainer grounded in returned chunks + user-provided text
+- Avoids overreach when sources are weak (record strength tiers, “no uncited RSA” rule, post-audit + repair)
+
+This is default behavior (no user-facing modes/toggles).
+
+---
+
+## Current Context
+We currently have `server/chatV2/twoLaneRetrieve.ts` using a parallel two-lane approach:
+- Local lane: town-specific docs
+- State lane: RSA/NHMA guidance
+- merge + rerank + caps from `chatConfig.ts`
+
+Pain points:
+- State lane often weak/absent for “legal exposure” questions
+- System sometimes produces plausible-sounding RSA references without citations
+- When local is rich (or user pasted an article), answers can become article-centric instead of objective legal framing
+- “No relevant documents” dead-ends even when user provided a long article in-chat
+- Planner/prompt changes can cause drift or confidence laundering
+
+We will keep the existing lane search primitives but wrap them in a robust orchestrated pipeline.
+
+---
+
+## Design Overview (Chat v3)
+Implement a 3-stage pipeline:
+
+### Stage 0 — Session Sources (Ephemeral “User-Paste Docs”)
+When user provides a long paste (article/minutes/ordinance excerpt), store as session source:
+- `sessionSources: [{ id, type, title?, text, createdAt }]`, keep last 3.
+These are NOT part of Gemini File Search; they are used for planning and synthesis.
+
+### Stage 1 — Plan
+Call a small planner to produce:
+- `IssueMap` (entities, actions, legalTopics, boards, time hints, town)
+- `RetrievalPlan` (lane-specific query arrays, dynamic Ks/caps, coverage targets, priority “law-first vs facts-first”)
+Planner must be schema-constrained and validated against user/session text.
+
+### Stage 2 — Retrieve
+Execute multi-query retrieval:
+- local lane: run `plan.local.queries[]`
+- state lane: run `plan.state.queries[]`
+Deduplicate per lane, score, then merge with:
+- situation alignment boost (existing)
+- legal salience bias toward state lane
+- minimum state coverage when appropriate (if state candidates exist)
+
+### Stage 3 — Synthesize
+Generate final answer using:
+- user message
+- relevant sessionSources (especially the pasted article)
+- selected local chunks
+- selected state chunks
+Plus guardrails:
+- record strength tier A/B/C controls confidence + specificity
+- claim-type rules (FACT vs LAW/STANDARD vs INFERENCE vs PROCESS)
+- “No uncited RSA/procedure claims”
+- post-generation audit and repair pass if needed
+
+---
+
+## Red-Team Requirements (MUST IMPLEMENT)
+1) **Planner validation**: prevent planner hallucinations from steering retrieval.
+2) **Query budget**: cap query explosion; early-exit if sufficient good chunks exist.
+3) **Applicability discipline**: separate facts vs standards vs inference; no “legal laundering.”
+4) **Coverage without quota harm**: ensure state context when available, but don’t crowd out top factual chunks.
+5) **Corpus gaps transparency**: if state lane lacks relevant sources, answer generally and say “not found in archive.”
+6) **No uncited statute claims**: never mention RSA numbers unless supported by a state-lane chunk.
+7) **Post-audit + repair**: detect overreach and regenerate with stricter constraints.
+8) **Observability**: log plan/queries/counts/scores in dev/admin for debugging + CI golden tests.
+
+---
+
+## Implementation Scope
+
+### New/Updated Files (suggested)
+- NEW: `server/chatV2/chatOrchestrator.ts`
+- NEW: `server/chatV2/planner.ts`
+- NEW: `server/chatV2/types.ts`
+- NEW: `server/chatV2/sessionSources.ts` (or integrate into existing session model)
+- NEW: `server/chatV2/synthesizer.ts`
+- NEW: `server/chatV2/audit.ts`
+- UPDATE: `server/chatV2/twoLaneRetrieve.ts`
+- UPDATE: `server/chatV2/chatConfig.ts`
+- UPDATE: chat route/handler that currently calls `twoLaneRetrieve()` to call orchestrator
+
+(Exact filenames can vary—keep consistent with repo conventions.)
+
+---
+
+## Data Structures (TypeScript)
+
+### `IssueMap`
+```ts
+export interface IssueMap {
+  town?: string;
+  situationTitle?: string;
+  entities: string[];
+  actions: string[];
+  legalTopics: string[];
+  boards: string[];
+  timeHints: string[];
+  requestedOutput?: "explain" | "steps" | "cite_laws" | "risk" | "process";
+  legalSalience: number; // 0..1
+  plannerConfidence: number; // 0..1
+}
+````
+
+### `RetrievalPlan`
+
+```ts
+export interface LanePlan {
+  queries: string[];
+  k: number;
+  cap: number;
+}
+export interface RetrievalPlan {
+  local: LanePlan;
+  state: LanePlan;
+  mustInclude: { minState?: number; minLocalFacts?: number };
+  priority: "law-first" | "facts-first" | "process-first";
+  reason: string; // for debug
+}
+```
+
+### `RecordStrength`
+
+```ts
+export interface RecordStrength {
+  tier: "A" | "B" | "C";
+  localCount: number;
+  stateCount: number;
+  situationAlignment: number; // 0..1
+  legalTopicCoverage: number; // 0..1
+  authoritativeStatePresent: boolean;
+}
+```
+
+### `Chunk` metadata additions
+
+Ensure each chunk has:
+
+* `lane: "local" | "state"`
+* `authority: "rsa" | "nhma" | "official" | "minutes" | "news" | "other"`
+* `topicTags: string[]` (optional)
+* `situationMatchScore` (optional)
+* stable `sourceId/title` for citations
+
+---
+
+## Stage 0 — Session Sources
+
+### Detection heuristic
+
+Store message as session source if:
+
+* length >= 800 chars OR
+* contains many paragraph breaks OR
+* looks like a news article (date/byline/“Updated”/“Reporter” etc.)
+
+### Storage
+
+Add to session state (DB or in-memory, whatever you use for chat sessions):
+
+* keep last 3; drop older.
+
+### Use
+
+* planner can read last 1–2 sessionSources
+* synthesizer can cite “USER-PROVIDED TEXT” as a source, but it must not be treated as “archive grounding”
+
+---
+
+## Stage 1 — Planner (`planner.ts`)
+
+### Inputs
+
+* user message
+* active situation (if you already store)
+* last 1–2 sessionSources (if any)
+
+### Outputs
+
+* IssueMap + RetrievalPlan
+
+### Planner prompt requirements
+
+* Return JSON only matching schema
+* “Only include entities/topics that appear in provided text; otherwise omit”
+* Avoid guessing RSA numbers
+* Identify legal salience from user ask and text: (liability, legality, compliance, DOJ, ADA, etc.)
+
+### Planner validation (RED TEAM)
+
+After planner returns:
+
+1. Validate JSON schema strictly.
+2. Verify that proposed entities appear in either user message or session source text.
+
+   * if not, remove entity from IssueMap and do not include in queries.
+3. Clamp query list lengths (budget).
+4. If plannerConfidence low (<0.4), fall back to conservative plan:
+
+   * use existing buildLocalLaneQuery/buildStateLaneQuery with minimal expansions
+   * still apply synthesis tiering + audit
+
+---
+
+## Stage 2 — Retrieval Updates (`twoLaneRetrieve.ts`)
+
+### Add new entrypoint
+
+Keep existing `twoLaneRetrieve(query...)` for backward compatibility, but add:
+
+* `twoLaneRetrieveWithPlan(plan: RetrievalPlan, ctx: { town?, situation?, ... })`
+
+### Multi-query retrieval
+
+Implement `executeLaneRetrievalMany(lane, queries[], k)`:
+
+* run queries in parallel with Promise.all
+* dedupe results by document id/title + chunk hash
+* keep top M per lane by base score, then rerank by situation + legal topics
+
+### Query budgets + early exit (RED TEAM)
+
+* Max queries per lane: local 6, state 6 (configurable)
+* If after first 2 queries you already have enough good chunks (e.g., >= cap with good alignment), skip remaining queries.
+
+### Merge & selection improvements
+
+Replace pure “top score overall” with coverage-aware picking:
+
+* Always reserve `minLocalFacts` slots for top factual local chunks (minutes/ordinance) if available.
+* For legal salience high: `minState = 3 or 4` IF stateCandidates exist (even if mediocre).
+* Apply drift penalty: if chunk contains known off-topic anchors and lacks situation/legalTopic hits, downrank heavily.
+
+Important: **minState should be conditional on existence, not on high score** to avoid “no state context.”
+But still keep a low “relevance bar” so you don’t include total garbage (e.g., chunk must match at least one legalTopic keyword OR general terms like “municipal liability”, “ADA”, “building code”).
+
+### Compute record strength inputs
+
+Return metadata used for synthesis:
+
+* counts retrieved/selected per lane
+* situationAlignment score
+* whether authoritative state sources present (RSA/NHMA)
+* coverage of legal topics
+
+Also return debug details (dev/admin):
+
+* final queries used
+* top titles per lane
+* selected chunk ids
+
+---
+
+## Stage 3 — Synthesis (`synthesizer.ts`)
+
+### Inputs
+
+* user message
+* IssueMap
+* sessionSources (relevant excerpts)
+* selected local chunks (with citations)
+* selected state chunks (with citations)
+* RecordStrength tier
+
+### Output structure (must follow)
+
+1. **Situation anchor** (1–2 sentences)
+2. **What we know (facts)** — cite article/session/local minutes
+3. **Applicable legal framework (NH + federal)** — cite state lane; if state lane absent, speak generally and say so
+4. **Risk / likely outcomes** — hedged; cite the standards + facts
+5. **What would clarify / what to pull next** — missing docs list
+   (Keep it readable; avoid long legal treatises.)
+
+### Hard rules (RED TEAM)
+
+* Do NOT mention specific RSA numbers or specific agency process steps unless there is a supporting STATE lane chunk.
+* If state lane is weak/empty:
+
+  * do general descriptions (“NH has municipal liability/immunity rules…”) without RSA numbers.
+  * explicitly state: “I did not find the specific NH RSA text in the archive excerpts provided here.”
+* Distinguish FACT vs STANDARD vs INFERENCE in writing (not with labels, but with clear language).
+* Avoid absolute claims: “illegal”, “guaranteed”, “will be liable” unless explicitly supported (rare).
+* No analogies unless user asks; if used, label clearly and place after direct answer.
+
+### RecordStrength tier behavior
+
+* Tier A: cite specifics, more direct framing
+* Tier B: some specifics, but add explicit “gaps/depends”
+* Tier C: primarily summarize user-provided facts + general framework + “what to ingest next” (no statute numbers)
+
+---
+
+## Post-generation Audit + Repair (`audit.ts`)
+
+### Heuristic audit (fast)
+
+Scan the draft answer for:
+
+* `RSA \d` (or “RSA”)
+* named procedures (“Public Integrity Unit process is…”) without state citations
+* absolute legal language (“is illegal”, “will be liable”, “must result in”)
+* references to off-topic cases/entities (Brown/RV/cesspool) when not asked
+
+If violations found:
+
+* Trigger one repair regeneration with a stricter system message:
+
+  * “Remove or qualify any claim not supported by provided excerpts. Do not mention statutes/procedures without citations. Stay in the current situation.”
+* If still failing, fall back to Tier C style response.
+
+Limit to max 1 repair pass to control latency.
+
+---
+
+## Prompt / Citation Plumbing
+
+Ensure chunks are presented to the model in a citeable format:
+
+* Label each chunk `[L1]`, `[L2]`… and `[S1]`, `[S2]`…
+* Include title + short excerpt + lane + authority
+* Instruct: each paragraph with facts/standards must include at least one cite token.
+
+Ensure renderer maps `[Sx]` citations to actual sources.
+
+---
+
+## Observability (Dev/Admin)
+
+Add a debug object returned with each answer (dev only):
+
+* issueMap summary (entities/legalTopics)
+* plan queries per lane
+* retrieved/selected counts per lane
+* recordStrength tier + metrics
+* audit flags + whether repair ran
+  This is essential to tune and avoid chasing ghosts.
+
+---
+
+## Testing Requirements (MUST)
+
+Add tests that validate:
+
+1. **Boardwalk vote / liability**:
+
+   * given user-pasted article text + legal question
+   * state lane should contribute at least minState chunks if candidates exist
+   * answer includes “Applicable legal framework” section that cites `[Sx]` (not only article)
+   * no uncited RSA numbers
+2. **Weak state corpus**:
+
+   * if state lane returns none, answer must NOT mention RSA numbers and must transparently state lack of state sources
+3. **Drift regression**:
+
+   * when Brown case exists in archive, asking about boardwalk must not switch to Brown
+4. **Planner hallucination guard**:
+
+   * planner outputs entity not in user text → system must drop it and not query for it
+5. **Latency budget**:
+
+   * ensure query counts are capped and repair pass is max 1
+
+Include at least a small “golden set” test harness (10–30 prompts) runnable in CI if feasible.
+
+---
+
+## Migration Plan
+
+1. Implement orchestrator and keep old endpoint behind a flag.
+2. Add planner + session sources.
+3. Add twoLaneRetrieveWithPlan and merge coverage logic.
+4. Add synthesizer + audit + repair.
+5. Switch production chat route to orchestrator.
+6. Keep debug logs guarded.
+
+---
+
+## Definition of Done
+
+* For legal exposure questions, answers include objective NH/federal framework when available, with state citations.
+* No statute/procedure claims without citations.
+* When sources are weak, answers remain helpful and transparent, not overconfident.
+* No “no relevant documents” dead-end if user provided text.
+* Pipeline is observable and test-covered.
+
+---
+
+## Deliverables
+
+* Implement the files/functions above.
+* Update chat route to use `runChatTurn()`.
+* Add tests and dev debug output.
+* Provide brief developer notes: where to adjust thresholds, caps, keywords, and how to add new state “core legal pack” documents if needed.
+
+```
+```

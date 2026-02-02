@@ -1,0 +1,224 @@
+We already have an admin “Upload Document” form and backend upload route.
+I want to refine the metadata fields and make sure they are actually used in the Gemini File Search upload.
+
+Goals
+
+Update the admin upload UI metadata fields:
+
+Keep: Town, Board/Department, Year, Notes
+
+Change Category to a dropdown with a controlled list of values
+
+Make sure the frontend sends this metadata to the backend as a structured object.
+
+Make sure the backend passes that metadata into the Gemini File Search API call when indexing the document.
+
+Make sure we store the same metadata in our local DB for later filtering/search.
+
+1. Frontend: Upload Form Changes
+
+Find the React component that renders the admin upload form (the one that currently shows:
+“Category, Town, Board/Department, Year, Notes”).
+
+Update it as follows:
+
+1.1 Category field → dropdown
+
+Replace the free-text Category input with a <select> using these exact options:
+
+Budget
+
+Zoning
+
+Meeting Minutes
+
+Town Report
+
+Warrant Article
+
+Ordinance
+
+Policy
+
+Planning Board Docs
+
+ZBA Docs
+
+Licensing/Permits
+
+CIP
+
+Elections
+
+Misc / Other
+
+The value we send to the backend should be a normalized key (no spaces, lower-snake-case).
+Map labels → values like this:
+
+const CATEGORY_OPTIONS = [
+  { label: "Budget", value: "budget" },
+  { label: "Zoning", value: "zoning" },
+  { label: "Meeting Minutes", value: "meeting_minutes" },
+  { label: "Town Report", value: "town_report" },
+  { label: "Warrant Article", value: "warrant_article" },
+  { label: "Ordinance", value: "ordinance" },
+  { label: "Policy", value: "policy" },
+  { label: "Planning Board Docs", value: "planning_board_docs" },
+  { label: "ZBA Docs", value: "zba_docs" },
+  { label: "Licensing/Permits", value: "licensing_permits" },
+  { label: "CIP", value: "cip" },
+  { label: "Elections", value: "elections" },
+  { label: "Misc / Other", value: "misc_other" },
+];
+
+
+The select should be required and default to an empty “Select category…” placeholder.
+
+1.2 Other fields
+
+Keep the other fields as they are, but make sure the name / state keys are:
+
+town (string)
+
+board (string) – label in UI can still say “Board/Department”
+
+year (string or number; ideally 4-digit, e.g. "2024")
+
+notes (string, optional)
+
+1.3 Request payload
+
+When the admin submits the form, the frontend should send a FormData (for the file) that also contains a JSON-encoded metadata object, OR individual fields that the backend assembles.
+
+Preferred approach: send a JSON metadata field:
+
+const metadata = {
+  category,  // one of the CATEGORY_OPTIONS value strings
+  town,
+  board,
+  year,
+  notes,
+};
+
+const formData = new FormData();
+formData.append("file", fileInput.files[0]);
+formData.append("metadata", JSON.stringify(metadata));
+
+
+The admin upload POST should include this metadata field.
+
+If the current implementation already sends category/town/etc. as individual fields, refactor it to send the single metadata JSON field instead and update the backend accordingly.
+
+2. Backend: Handling Metadata on Upload
+
+Find the backend route that handles document uploads (something like POST /api/admin/docs/upload).
+
+2.1 Parse metadata
+
+Parse the metadata JSON field from req.body / req.fields depending on our upload middleware.
+
+Validate and normalize:
+
+Ensure category is one of the allowed values.
+
+Trim town, board, notes.
+
+Optionally coerce year to string and keep only 4 digits.
+
+Define a TypeScript type for local doc metadata:
+
+type DocumentMetadata = {
+  category: string;  // e.g. "budget", "zoning"
+  town?: string;
+  board?: string;
+  year?: string;
+  notes?: string;
+};
+
+2.2 Store metadata locally
+
+When you create the DB record for the uploaded document, store:
+
+filename
+
+filesize
+
+fileSearchFileId (whatever ID Gemini returns)
+
+fileSearchStoreId
+
+metadata (either as JSON column or separate columns: category, town, board, year, notes)
+
+2.3 Pass metadata to Gemini File Search
+
+Locate the helper that calls the Gemini File Search / upload/import API
+(in our earlier plan this was something like uploadDocumentToFileStore in src/ai/geminiClient.ts).
+
+Update it so it forwards the metadata into the File Search API call.
+
+Pseudocode:
+
+async function uploadDocumentToFileStore(
+  fileBuffer: Buffer,
+  filename: string,
+  metadata: DocumentMetadata
+) {
+  // Example shape; adapt to actual Gemini File Search API syntax
+  const response = await fetch(GEMINI_FILE_UPLOAD_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GEMINI_API_KEY}`,
+    },
+    body: createMultipartFormData({
+      file: { buffer: fileBuffer, filename },
+      fileMetadata: {
+        // Store metadata as flat key/value pairs for filtering
+        metadata: {
+          category: metadata.category,
+          town: metadata.town ?? "",
+          board: metadata.board ?? "",
+          year: metadata.year ?? "",
+          notes: metadata.notes ?? "",
+        },
+      },
+    }),
+  });
+
+  // parse response, return fileId/storeId
+}
+
+
+Use whatever exact field names Gemini File Search expects for metadata – the key point is that the same category, town, board, year, notes values we store locally are also attached to the File Search indexed file.
+
+Make sure the upload route calls this helper like:
+
+const { fileId, storeId } = await uploadDocumentToFileStore(fileBuffer, filename, metadata);
+
+
+and then persists fileId, storeId, and the metadata in the DB.
+
+3. Retrieval (for later, but wire the shape now)
+
+We will later use these metadata keys for retrieval filters, so:
+
+Keep the metadata keys exactly:
+
+category, town, board, year, notes
+
+Ensure the File Search metadata and the DB metadata use the same keys and values.
+
+This will allow us to:
+
+Filter to a specific town or category when the user’s question mentions it.
+
+Prefer recent docs by year.
+
+Please:
+
+Update the React admin upload form per the above.
+
+Update the upload API to parse and validate the metadata.
+
+Update the Gemini File Search upload helper to attach the metadata to the indexed file.
+
+Ensure the document list in the admin panel shows the new metadata fields (at least category, town, board, year) for each uploaded doc.

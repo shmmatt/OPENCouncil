@@ -1,0 +1,249 @@
+Here’s a Replit Agent prompt you can paste in as-is:
+
+---
+
+**Replit Agent Task: Add hyper-local vs RSA behavior + follow-up questions to chat_v2**
+
+You are a senior TypeScript engineer working in this Replit project.
+This repo implements a `chat_v2` pipeline for a municipal governance Q&A assistant for New Hampshire towns.
+
+Your goals are:
+
+1. **Keep the primary answer hyper-local to the town when one is specified.**
+2. **Provide broader RSA / statewide context only when explicitly requested OR via suggested follow-up questions.**
+3. **(Re)implement suggested follow-up questions**, with at least one follow-up that zooms out to general NH/RSA context when the original question is town-specific.
+
+---
+
+## 1. Locate the relevant code
+
+1. Find the implementation of the **chat v2 pipeline**, including:
+
+   * The router step (`chat_v2_request_received` → router LLM call).
+   * The retrieval planner step (`retrievalPlanner` log stage).
+   * The complex/simple paths (`chat_v2_complex_path`, `chat_v2_simple_path`).
+   * The “complexAnswer” and “simpleAnswer” LLM calls and any synthesis step.
+   * Where the final response object is constructed (`chat_v2_response_ready` logs show fields like `suggestedFollowUpCount`).
+
+2. Identify where the **router** and **retrievalPlanner** system prompts are defined (likely as strings/constants passed into the LLM client).
+
+3. Identify where **suggested follow-ups** are supposed to be generated (if that code still exists), or where they used to be attached to the response (note that recent logs show `"suggestedFollowUpCount": 0`).
+
+Do NOT guess file names; search the codebase for:
+
+* `"chat_v2_request_received"`
+* `"retrievalPlanner"`
+* `"simpleAnswer"`
+* `"complexAnswer"`
+* `"suggestedFollowUp"` or similar.
+
+---
+
+## 2. Tighten routing & retrieval to stay hyper-local by default
+
+### 2.1 Router prompt adjustments (light)
+
+In the **router** system prompt for chat v2, add brief guidance (you do NOT need to rewrite it completely, just append/adjust):
+
+* If the user question clearly names a specific town (e.g. “Ossipee”, “Conway”):
+
+  * Mark it as town-specific in the router’s JSON output if there’s an appropriate field, OR
+  * At minimum, make sure this information is preserved in the `rerankedQuestion` and is obvious for the next step.
+
+You don’t need to change the router’s JSON schema; just ensure the town mention is preserved in `rerankedQuestion` and not stripped out.
+
+### 2.2 RetrievalPlanner prompt adjustments (main behavioral change)
+
+In the **retrievalPlanner** system prompt, implement these rules:
+
+1. **Town preference + statewide fallback**
+
+   Add explicit instructions like:
+
+   ```text
+   - If the user question names a specific town (e.g. "Ossipee", "Conway"):
+     - Set filters.townPreference to that exact town name.
+     - Set filters.allowStatewideFallback to false
+       UNLESS the user explicitly asks about "New Hampshire" or state law in general.
+   - If the user explicitly asks about state-wide law or "New Hampshire" generally, you may set filters.townPreference to null and allowStatewideFallback to true.
+   ```
+
+2. **Meeting-minutes and budget for “what happened / how much” questions**
+
+   Add:
+
+   ```text
+   - If the user is asking what happened at a meeting, about board decisions, or about how something was decided:
+     - Always include "meeting_minutes" in filters.categories.
+   - If the user is asking about costs, spending, or budgets:
+     - Always include "budget" and/or "town_report" in filters.categories.
+   ```
+
+3. **Avoid RSA bias unless requested**
+
+   Add:
+
+   ```text
+   - Do NOT set rsaChapters in filters.rsaChapters unless the user explicitly asks about state law, statutes, or "RSA".
+   ```
+
+Keep the existing behavior otherwise; just append these rules to the existing prompt so the planner defaults to **hyper-local documents** when a town is named.
+
+---
+
+## 3. Make complex answer synthesis strictly hyper-local
+
+Find the **complex answer synthesis** LLM call (the one logged as `complexAnswer_synthesis`, using a system prompt like “You are an expert municipal governance assistant for New Hampshire…”).
+
+In that system prompt, add the following rules (again, append rather than rewrite from scratch):
+
+```text
+- If a specific town is identified in the question or the retrieval filters (e.g. Ossipee), base your primary answer ONLY on documents for that town.
+- Do NOT generalize to statewide RSA procedures or "how it usually works in NH" unless the user explicitly asks for statewide context.
+- If the documents do not clearly explain the legal or procedural basis for how something was established or approved, say that explicitly instead of guessing.
+- You may mention that state law or RSAs might apply, but do not describe their content in detail unless the user asked for that.
+```
+
+Goal: for town-specific questions like “How was Ossipee’s intermunicipal agreement decided?”, the synthesized answer stays in “taped minutes and budgets” land and does not drift into long RSA 53-A theory.
+
+---
+
+## 4. Implement a follow-up question generator step
+
+We now add a new step after the main answer is generated (both simple and complex paths).
+
+### 4.1 Add a `generateFollowups` helper
+
+Create a new TypeScript helper (in an appropriate existing utils/service file) with a signature along these lines:
+
+```ts
+async function generateFollowups(params: {
+  userQuestion: string;
+  answerText: string;
+  townPreference?: string | null;
+  detectedDomains?: string[];
+}): Promise<string[]> {
+  // ...
+}
+```
+
+Inside this function:
+
+* Use the existing LLM client abstraction (same one used for router/simple/complex) with a **fast/cheap model** as configured for short tasks (if there’s a clearly designated “fast” model in the config, use that; otherwise reuse the same model as router).
+* Prompt it with a **short context** (user question, answer, and minimal metadata) and the following system + user prompt behavior.
+
+#### System prompt for followups
+
+Implement a system prompt similar to:
+
+```text
+You are a follow-up question generator for a municipal governance Q&A assistant in New Hampshire.
+
+Your job:
+- Suggest 2–4 short follow-up questions the user might want to ask next.
+- Questions must be directly related to the user's original question and the assistant's answer.
+- They should help the user go deeper in useful directions, not random trivia.
+
+IMPORTANT LOGIC:
+
+1. If the question clearly targets a specific town (e.g. Ossipee, Conway):
+   - At least ONE follow-up must ask about GENERAL New Hampshire / RSA-level context, for example:
+     - "How are intermunicipal ambulance agreements typically established under New Hampshire law?"
+     - "What does RSA 53-A say about intermunicipal agreements?"
+
+2. The other follow-ups should stay hyper-local, for example:
+   - Asking about historical trends in that town's budget
+   - Asking about related boards, warrants, or policies in that same town
+   - Asking for clarification about actions taken at specific meetings
+
+3. Keep each follow-up:
+   - Under 100 characters
+   - Written in plain language a town official or resident would actually click.
+
+Output format:
+Return a JSON array of strings, like:
+["Question 1...", "Question 2...", "Question 3..."]
+```
+
+Use the **user question**, the **final answer text**, and the **townPreference** flag to help the model decide whether it’s a town-specific question.
+
+### 4.2 Wire `generateFollowups` into both simple + complex paths
+
+Wherever you currently prepare the final `answer` object (after simple or complex path), do the following:
+
+1. Call `generateFollowups({ userQuestion, answerText, townPreference, detectedDomains })`.
+2. If the call fails, logs an error and just fall back to `[]` to avoid breaking the pipeline.
+
+Attach the resulting array to the existing response object under a field like:
+
+```ts
+response.suggestedFollowUps = followups;
+response.suggestedFollowUpCount = followups.length;
+```
+
+If there is already a field for suggested followups, reuse that field name and update it consistently.
+
+Make sure this is done for both:
+
+* simple path responses, and
+* complex path responses.
+
+---
+
+## 5. Ensure UX + API shape are consistent
+
+1. Search the frontend/api types for the chat v2 response type that includes suggested follow-ups.
+
+   * Update the TypeScript interface so that the `suggestedFollowUps` field is typed as `string[]`.
+   * If the UI already renders these follow-ups (e.g. as chips/buttons), verify it now receives the new array and shows it again.
+
+2. Confirm that the backend logs (`chat_v2_response_ready`) include:
+
+   * `suggestedFollowUpCount` with the new non-zero value when followups exist.
+
+---
+
+## 6. Testing & validation
+
+1. Add or update at least a couple of automated tests (if test framework exists) to validate:
+
+   * When a town is mentioned (e.g. “Ossipee”), the retrieval planner sets `filters.townPreference` and `allowStatewideFallback` appropriately.
+   * `generateFollowups` returns an array of 2–4 strings and includes at least one statewide/RSA-style followup for town-specific questions.
+
+2. Manually run the dev server and test with questions like:
+
+   * **Town-specific, hyper-local answer + statewide followup:**
+
+     * “What is Ossipee's ambulance and emergency response situation currently? How much does it spend?”
+
+       * Expected:
+
+         * Main answer: almost entirely based on Ossipee minutes/budget documents.
+         * Suggested follow-ups: includes something like
+           “How are ambulance agreements typically set up under New Hampshire law?”
+
+   * **Explicit statewide question:**
+
+     * “Under New Hampshire law, how are intermunicipal agreements usually approved?”
+
+       * Expected:
+
+         * RetrievalPlanner allows statewide fallback and can use RSA-related materials.
+         * Followups may be about applying that to a specific town, budgets, etc.
+
+3. Confirm no TypeScript errors, tests pass, and the dev server runs cleanly (aside from any existing unrelated warnings like the PostCSS plugin warning).
+
+---
+
+## Constraints
+
+* Do not change model provider or keys; use the existing LLM client abstraction and configured models.
+* Keep changes minimal and well-contained; do not restructure the entire pipeline.
+* Prefer appending to existing prompts instead of rewriting them completely so we don’t regress other behavior.
+
+When you are done, summarize:
+
+* The files you changed.
+* The key prompt changes.
+* The new helper function(s) you added.
+* How to trigger and verify the new behavior manually.

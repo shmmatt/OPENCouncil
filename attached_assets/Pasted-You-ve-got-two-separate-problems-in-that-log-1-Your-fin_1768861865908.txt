@@ -1,0 +1,195 @@
+You’ve got **two separate problems** in that log:
+
+1. **Your final answer is being truncated to ~500 characters** (not 500 words).
+2. Your **repair selection logic is choosing the “less bad” but incomplete answer** (because it has fewer violations), even when the repair is clearly the better user-facing response.
+
+Both show up plainly here:
+
+* First synth response: `responseLength: 487`, `wordCount: 67` → the model didn’t “hit the 500-word cap.” It got **cut off**.
+* Second (repair) response: `wordCount: 421` and `lawSectionHasStateCitations: true` → looks *much* closer, but you then do:
+
+  * `Repair did not improve violations, using original`
+  * and ship the 487-char truncated answer.
+
+That’s why users see: “opened October …” and then nothing.
+
+---
+
+## What likely caused truncation (most probable)
+
+Somewhere after the LLM call you are applying a **“snippet truncate” utility to the final answer**.
+
+This pattern is common:
+
+* You have a `truncate(str, 500)` function used for logs/snippets/UI previews
+* It accidentally got applied to `finalAnswer` before saving/sending
+
+The smoking gun is the consistent ~500 size:
+
+* `answerLength: 487`
+* later: repair response had `responseLength: 500` (very “cap-like”)
+
+Also: your logs show `userPrompt length=500`, but that’s probably your **log redaction limit** (not necessarily actual prompt). The *answer* truncation is the real production symptom.
+
+---
+
+## Fix strategy
+
+### A) Never truncate the final answer (only the logged snippet)
+
+* Final answer: store + return full string
+* Log only: `responseSnippet = truncate(answer, 500)` (or whatever)
+
+### B) Fix repair selection logic
+
+Right now you’re comparing “violation counts” and choosing the lower one, even if it’s incomplete.
+
+You need a **gating rule**:
+
+> If the original is **incomplete** (missing required headings/sections OR too short), always prefer the repair output even if it has more minor violations.
+
+Even better: score both outputs.
+
+### C) Add a deterministic formatter fallback (no second model call)
+
+If repair output violates bullet caps / bullet lengths, you can **auto-trim**:
+
+* keep required headings
+* cap bullets per section
+* trim long bullets
+* drop extra text
+
+This will turn “13 violations” into “0–2 violations” without needing another LLM call.
+
+---
+
+# NEW REPLIT AGENT PROMPT (drop-in)
+
+```md
+# REPLIT AGENT — Fix Truncated Answers + Repair Selection + Deterministic Post-Formatter
+
+## Problem summary (from logs)
+We are seeing final answers truncated mid-sentence:
+- synth responseLength ~= 487 chars, answerLength ~= 487
+This is NOT the 500-word cap; it’s a ~500-character truncation applied after generation.
+
+Additionally, repair output is being generated but discarded:
+- Original: violationCount=3 but incomplete/truncated
+- Repair: violationCount=13 but has full structure + state citations
+Current logic chooses original because it has fewer violations.
+
+We must:
+1) Stop truncating final answers (only truncate snippets for logs)
+2) Choose the best answer even when repair has more minor violations
+3) Apply a deterministic formatter to make repair compliant without more LLM calls
+
+---
+
+## 1) Remove any final-answer truncation (keep snippet truncation only)
+Search for any code that truncates the model output before returning/saving, e.g.:
+- truncate(answer, 500)
+- slice(0, 500)
+- substring(0, 500)
+- maxChars
+- previewText
+
+Ensure:
+- The full LLM response string is stored in DB and returned to client.
+- Only the *logged* `responseSnippet` is truncated.
+
+Add explicit variables:
+- `finalAnswerFull` (never truncated)
+- `finalAnswerSnippet = truncate(finalAnswerFull, 500)` (logs only)
+
+Acceptance: answerLength in logs should match actual answer length (thousands of chars if needed), not ~500.
+
+---
+
+## 2) Fix repair selection logic: prioritize completeness + required format
+Right now we pick the answer with fewer violations, even if it is missing required sections.
+
+Implement `scoreAnswer(answer)` using these checks:
+
+### Completeness gates (hard)
+- Must include all 5 required headings:
+  - Bottom line
+  - What happened
+  - What the law generally requires
+  - What the Jan 6 vote changes
+  - Unknowns that matter
+If original fails this but repair passes → ALWAYS prefer repair.
+
+- Must exceed a minimum content size:
+  - wordCount >= 180 (tunable)
+If original below threshold but repair above → prefer repair.
+
+### Preference scoring (soft)
+Compute a score:
+- +50 if all headings present
+- +20 if law section has >=2 [Sx] when stateChunkCount>0
+- -2 per violation
+- -10 if contains banned phrases ("next steps", "consult counsel", etc.)
+
+Pick the higher score (repair vs original).
+
+---
+
+## 3) Deterministic post-formatter to enforce bullet caps + wordiness
+Even a good repair may violate bullet caps or bullet length.
+Create `normalizeAnswerFormat(answer)` that:
+- Parses sections by headings
+- Trims to max bullets per section:
+  - What happened: 5
+  - What the law generally requires: 5
+  - What the Jan 6 vote changes: 4
+  - Unknowns that matter: 4
+- For bullets > ~20 words:
+  - truncate to ~20 words, preserve citation tokens at end if present
+- Remove any extra sections not in the spec
+
+Run this normalization on:
+- repair output (first)
+- and optionally on original if it’s close
+
+Then rerun validator on the normalized output.
+This often turns “13 violations” into “pass” without another model call.
+
+---
+
+## 4) Repair policy update
+Current behavior: repair runs, but we may revert to original.
+
+New behavior:
+- If original is incomplete/truncated → never revert to original.
+- If both fail → prefer the one that is complete, then normalize it.
+
+Limit: still only 1 extra LLM call.
+
+---
+
+## 5) Add debug telemetry to confirm the fix
+Log these fields:
+- `finalAnswerCharLen`
+- `finalAnswerWordCount`
+- `didTruncateFinal` (should always be false)
+- `selectedAnswerSource: "original" | "repair" | "repair_normalized" | "original_normalized"`
+- `originalScore`, `repairScore`
+- `validatorFailures` list
+
+---
+
+## Acceptance test (boardwalk regression)
+Given the same boardwalk article input:
+- final answer is not cut off mid-sentence
+- all 5 headings present
+- <= 500 words
+- "What the law generally requires" includes >=2 [Sx] citations
+- no “next steps” appendix
+- if repair provides the only complete answer, it is selected (not reverted)
+
+Proceed to implement now.
+```
+
+---
+
+If you want a super quick sanity check before changing anything: grep your server for `500)` near the chat pipeline and see if something like `truncate(answer, 500)` is touching the final output. That’s almost certainly the culprit.

@@ -1,0 +1,291 @@
+Here’s a Replit Agent prompt you can paste in to implement the **docSourceType / scope-note** fix and cleanly wire it through both simple + complex paths.
+
+---
+
+**Prompt for Replit Agent**
+
+You are working on the **OpenCouncil** project, a municipal governance Q&A assistant. Your task is to fix a **scope-note bug** in the `chat_v2` pipeline and add explicit tracking of whether an answer used **local municipal docs**, **statewide / RSA docs**, both, or none.
+
+Right now, the system sometimes produces answers clearly based on Ossipee documents (e.g., naming the Planning Board chair, specific meeting dates, etc.) but still appends a generic note like:
+
+> **Source scope:** No directly relevant material was found in the OpenCouncil archive for this question. Where possible, this response reflects general New Hampshire municipal practice…
+
+This happens because the final “scope note” logic is relying on incomplete metadata (like `sourceCount` or `sourceDocNames`) that is not correctly populated for the **complex** path. Your job is to make this **explicit and reliable**.
+
+---
+
+## High-level goals
+
+1. Introduce an **explicit doc-source tracking mechanism** in the chat_v2 pipeline, used in *both* simple and complex paths.
+2. Ensure the **scope note at the bottom of each answer** is chosen based on this tracked value, not on implicit or missing metadata.
+3. Make the telemetry consistent: `chat_v2_response_ready` should reflect whether docs were used and of what type.
+4. Add basic tests / dev tooling (unit or integration) so this regression is caught in the future.
+
+---
+
+## Desired behavior
+
+For each user request, the pipeline should decide one of:
+
+```ts
+type DocSourceType =
+  | "none"        // no docs used
+  | "local"       // municipal docs for a specific town
+  | "statewide"   // RSA/state docs only (future-friendly)
+  | "mixed";      // both municipal and statewide
+```
+
+And optionally:
+
+```ts
+type DocSourceContext = {
+  docSourceType: DocSourceType;
+  townUsed: string | null; // e.g. "Ossipee"
+};
+```
+
+* If the answer is generated using **Ossipee docs** (budget, minutes, planning board docs, etc.), the final response should append a **local-doc scope note** (e.g. “Based on documents from the Town of Ossipee in the OpenCouncil archive…”).
+* If the answer is generated using **state-level / RSA** only, append a **statewide scope note**.
+* If no documents were used, append a **no-doc scope note**.
+* If both local + state docs are used (later), append a **mixed scope note**.
+
+Right now, you likely already have some scope-note text variants defined somewhere; reuse and route to those based on the new enum rather than old heuristics.
+
+---
+
+## Implementation steps
+
+### 1. Locate the chat_v2 pipeline
+
+1. Search the repo for:
+
+   * `chat_v2_request_received`
+   * `chat_v2_response_ready`
+   * `complexAnswer_synthesis`
+   * `simpleAnswer`
+   * `Scope` / `scope note` text.
+2. Identify:
+
+   * The **simple path** handler (where router decides `simple` and you do one `file_search` + one model call).
+   * The **complex path** handler (router -> retrievalPlanner -> complexAnswer_retrieval_* -> complexAnswer_synthesis).
+   * The function/module that **appends the scope note** to the final answer text.
+   * Any context / state object passed through the pipeline where you can hang the `DocSourceType` info.
+
+Do **not** hard-code file names; adapt to the actual project structure you find.
+
+### 2. Define `DocSourceType` and context
+
+In a shared module used by the chat_v2 pipeline (e.g. wherever you define types for the pipeline context), add:
+
+```ts
+export type DocSourceType =
+  | "none"
+  | "local"
+  | "statewide"
+  | "mixed";
+
+export interface DocSourceContext {
+  docSourceType: DocSourceType;
+  townUsed: string | null;
+}
+```
+
+Then extend your per-request pipeline context type to include:
+
+```ts
+docSourceType: DocSourceType;
+docSourceTown: string | null;
+```
+
+Initialize these once when the request context is created:
+
+```ts
+context.docSourceType = "none";
+context.docSourceTown = null;
+```
+
+### 3. Set docSourceType in the **simple path**
+
+Find the simple path code that:
+
+* Calls `file_search` (or equivalent) for the user’s query.
+* Receives `resultCount` and/or `results`.
+
+After you have the retrieval result (but before you call the answer model), set the context based on:
+
+* Whether any docs were returned.
+* Whether a `townPreference` or similar filter was active.
+* Whether these docs are local or statewide.
+
+Example logic (adapt to your real types):
+
+```ts
+if (fileSearchResult.resultCount > 0) {
+  const townPref = retrievalFilters?.townPreference ?? null;
+
+  if (townPref) {
+    context.docSourceType = "local";
+    context.docSourceTown = townPref;
+  } else {
+    // e.g., generic RSA/state index, or non-town-specific docs
+    context.docSourceType = "statewide";
+    context.docSourceTown = null;
+  }
+} else {
+  context.docSourceType = "none";
+  context.docSourceTown = null;
+}
+```
+
+Make sure this happens in the **simpleAnswer path** and not just in a shared utility used by complex.
+
+### 4. Set docSourceType in the **complex path**
+
+For the complex path, find where you:
+
+* Run the **retrieval planner** (router → retrievalPlanner).
+* Use a “Comprehensive Document Search” / `complexAnswer_retrieval_*` call.
+* Call `file_search` with filters like `{ town: "Ossipee", categories: [...] }`.
+* Pass snippets into the `complexAnswer_synthesis` model.
+
+Immediately after the `file_search` response for the complex path, set the same context logic:
+
+```ts
+const resultCount = fileSearchResult.resultCount ?? fileSearchResult.results?.length ?? 0;
+
+if (resultCount > 0) {
+  const townPref = retrievalFilters?.townPreference ?? null;
+
+  if (townPref) {
+    context.docSourceType = "local";
+    context.docSourceTown = townPref;
+  } else {
+    context.docSourceType = "statewide";
+    context.docSourceTown = null;
+  }
+} else {
+  context.docSourceType = "none";
+  context.docSourceTown = null;
+}
+```
+
+If you later add a separate state-level RSA index plus municipal index in the same pipeline and both are used, extend logic to set `"mixed"`.
+
+**Important:** Do **not** rely on `sourceCount` or `sourceDocNames` at the synthesis stage to decide this. Instead, treat this retrieval-phase assignment as the source of truth.
+
+### 5. Update telemetry (`chat_v2_response_ready`)
+
+When you emit the `chat_v2_response_ready` log/event, extend the payload to include:
+
+```ts
+docSourceType: context.docSourceType,
+docSourceTown: context.docSourceTown,
+```
+
+This will help debug future issues like the one we saw (answer and scope note disagree).
+
+### 6. Rewrite the scope-note helper
+
+Locate the function that appends the “Source scope” note at the end of the answer. Replace any existing heuristic logic like:
+
+* Checking `sourceCount` / `sourceDocNames.length`.
+* Checking whether retrieval “seemed” to find something.
+
+With a **pure switch** on `context.docSourceType`:
+
+```ts
+function appendScopeNote(answer: string, ctx: Context): string {
+  switch (ctx.docSourceType) {
+    case "local":
+      return answer + "\n\n" + localScopeNote(ctx.docSourceTown);
+    case "statewide":
+      return answer + "\n\n" + statewideScopeNote();
+    case "mixed":
+      return answer + "\n\n" + mixedScopeNote(ctx.docSourceTown);
+    case "none":
+    default:
+      return answer + "\n\n" + noDocScopeNote();
+  }
+}
+```
+
+If you already have existing scope-note strings, refactor them into functions like:
+
+```ts
+function localScopeNote(town: string | null): string {
+  const townName = town ?? "this municipality";
+  return `**Source scope:** Based on documents from the Town of ${townName} in the OpenCouncil archive. Local procedures may differ and this is informational only, not legal advice.`;
+}
+```
+
+Adjust wording to stay consistent with your current legal/tone guidelines.
+
+### 7. Optional safety net: simple lint check
+
+As an extra guard, you can add a development-only sanity check before returning the final answer:
+
+* If `context.docSourceType === "none"` but the answer text contains tell-tale phrases like:
+
+  * `"According to the Ossipee Planning Board minutes"`
+  * `"As noted in the Ossipee budget"`
+* Log a warning:
+
+```ts
+if (process.env.NODE_ENV === "development") {
+  if (ctx.docSourceType === "none" && /Ossipee/i.test(answer) && /Planning Board|budget/i.test(answer)) {
+    logger.warn("Potential docSourceType mismatch: answer looks local but docSourceType=none", { sessionId: ctx.sessionId });
+  }
+}
+```
+
+This will help catch mis-wiring early without blocking responses.
+
+---
+
+## Testing / validation
+
+Add or run tests that simulate the following:
+
+1. **Local docs used (complex path)**
+
+   * Question: “What is Ossipee’s ambulance and emergency response situation currently?”
+   * Ensure retrievalPlanner filters include `townPreference: "Ossipee"`.
+   * Ensure `file_search` returns some Ossipee docs.
+   * Assert:
+
+     * `context.docSourceType === "local"`.
+     * `context.docSourceTown === "Ossipee"`.
+     * Final answer includes a **local** scope note (not “no-doc”).
+
+2. **Local docs used (simple path)**
+
+   * Some simple query that hits Ossipee budget/minutes.
+   * Assert same as above.
+
+3. **No docs found**
+
+   * Use an obviously out-of-scope query.
+   * Ensure `context.docSourceType === "none"`.
+   * Scope note is the **no-doc** variant.
+
+4. **Statewide-only (placeholder)**
+
+   * If you have an RSA/state index, add a test where docs come only from that index and `townPreference` is null.
+   * Ensure `context.docSourceType === "statewide"` and the scope note is statewide.
+
+For now, it’s okay if `statewide` and `mixed` are future-facing; just implement the wiring cleanly so they can be used later.
+
+---
+
+## Constraints
+
+* Do **not** change user-visible answer content formatting (At a glance / Key numbers / Details from recent meetings); only the logic that determines which scope note to append.
+* Keep the change minimal but robust: no large-scale refactors; just introduce clear, explicit tracking and routing.
+* Be careful not to introduce any circular imports when adding the new types.
+
+When you’re done, summarize:
+
+1. Where you added `DocSourceType` and context fields.
+2. How the simple and complex paths now set these fields.
+3. How the scope-note helper now works.
+4. What tests / checks you added or updated.

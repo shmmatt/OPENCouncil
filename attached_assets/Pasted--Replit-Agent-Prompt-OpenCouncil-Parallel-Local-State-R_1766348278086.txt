@@ -1,0 +1,306 @@
+# Replit Agent Prompt — OpenCouncil: Parallel Local + State Retrieval (No New Indices)
+
+You are Replit Agent working in an existing OpenCouncil codebase. Your task is to **integrate an updated, more sufficient retrieval pipeline** that reduces latency while maintaining answer quality, **without introducing new vector indices** and **without substantial architecture changes**.
+
+You MUST:
+- Keep the current stage structure (Router → Simple/Complex → Evidence Gate → Critic → Followups).
+- Keep using the single existing Gemini File Search store (one index).
+- Implement **parallel “local lane” + “statewide lane” retrieval** using the same store, with query rewriting + existing metadata filters (if available), and then **condense synthesis** to avoid extra loops.
+- Preserve the “evidence-first” and “don’t invent statewide context” rules.
+- Reduce the common failure mode: town question needs RSA/state context but only local docs are retrieved.
+
+---
+
+## Goal
+
+### Primary goal
+For most questions, retrieve **local + statewide context in parallel**, then produce a single answer that:
+- cites local documents for local facts
+- cites statewide sources for RSA/process/mechanism
+- clearly labels missing evidence and assumptions
+
+### Latency goal
+Reduce repeated “expansion loop” retrieval passes by:
+- doing the two-lane retrieval up front (parallel)
+- replacing multiple synthesis loops with **one discriminator/synthesis call**
+- keeping Evidence Gate but making it less likely to trigger
+
+---
+
+## Constraints
+
+1. **No new indices** and no major data model changes.
+2. Do NOT require re-ingesting documents.
+3. Reuse current model registry:
+   - control stages: `gemini-2.5-flash`
+   - synthesis: `gemini-3-flash-preview`
+4. Keep the same output surface: final response + followups.
+5. If metadata filters exist, use them. If not, rely on query expansion only.
+
+---
+
+## High-level Design Change (What to implement)
+
+### A) Add “Two-Lane Retrieval” to both Simple and Complex paths
+Even if Router scopeHint is “local”, for almost all queries statewide context is useful.
+
+Implement:
+- Lane A: Local retrieval (town-biased)
+- Lane B: Statewide retrieval (state-biased)
+Run them **in parallel** using the same File Search tool. Merge + dedupe.
+
+### B) Collapse multi-pass complex retrieval into “Retrieve once → Synthesize once”
+Current complex path does up to 3 retrieval passes + Evidence Gate expansions.
+New default:
+1) Two-lane retrieval (local + state)
+2) One synthesis call that produces:
+   - final answer text
+   - whether statewide was used
+   - limitations / missing facets
+   - suggested followups
+3) Evidence Gate runs after synthesis ONLY if coverage is clearly insufficient (should happen less)
+
+### C) Tight caps to prevent prompt bloat
+After merge and rerank/dedupe:
+- pass at most **10 local chunks**
+- pass at most **5 statewide chunks**
+- never exceed **MAX_COMBINED_CHUNKS** (existing 40) but target 15.
+
+---
+
+## Implementation Tasks
+
+### 1) Introduce a shared utility: `twoLaneRetrieve()`
+Create a module (or function) used by Simple Answer and Complex Draft.
+
+Inputs:
+- `userQuestion`
+- `rerankedQuestion`
+- `townPreference` (nullable)
+- `domains/categories` (optional)
+- `preferRecent` boolean
+- `boards` optional
+- `scopeHint` (local/statewide/mixed/null)
+
+Outputs:
+- `localChunks[]` (each chunk includes doc_id, title, snippet/text, metadata, citation handle)
+- `stateChunks[]`
+- `mergedTopChunks[]` (deduped + ranked)
+- `debug`: counts, top doc titles per lane, etc.
+
+Mechanics:
+- Build `localQueryText`:
+  - `rerankedQuestion`
+  - + town name and board/category hints (if present)
+  - + doc-type hints like “minutes”, “warrant”, “ordinance”, “town report”
+- Build `stateQueryText`:
+  - `rerankedQuestion`
+  - + anchors: "New Hampshire RSA", "NH law", "administrative rules", "Right-to-Know", "NHMA", "AG guidance"
+  - explicitly: “ignore town-specific documents unless they explain statewide process”
+- Use Gemini File Search tool in parallel:
+  - `Promise.all([localSearchCall, stateSearchCall])`
+- If metadata filters exist:
+  - local: `town == townPreference`
+  - state: `scope == state` OR `jurisdiction == NH` OR `doc_type in [rsa, admin_rule, handbook]`
+- If metadata filters do NOT exist:
+  - just use the query anchors, no filters.
+
+Deduping:
+- Deduplicate by `doc_id` (or stable doc reference) and prefer the higher-scored chunk.
+- Maintain lane labels so citations can be described as Local vs State.
+
+Ranking:
+- If you have a lightweight reranker already, reuse it on the union.
+- If not, implement a simple heuristic:
+  - prefer chunks with query keyword overlap
+  - prefer RSA matches for statewide lane when question intent is mechanism/process
+  - prefer recency when `preferRecent=true`
+
+Finally cap:
+- keep top 10 local
+- keep top 5 state
+- keep `mergedTopChunks = [...localTop, ...stateTop]` then trim to 15 overall.
+
+### 2) Update SIMPLE ANSWER stage to call `twoLaneRetrieve()`
+Previously simple path was single File Search pass. Now:
+- Always do two-lane retrieval (unless config disables).
+- If local lane returns zero but state returns relevant, answer using state lane.
+- If state lane returns zero and question has RSA pattern, use the existing general knowledge RSA fallback.
+
+Update Simple system prompt to allow:
+- a brief "Statewide context" clause if statewide docs were retrieved
+- but only include if used.
+
+Target response 2–5 sentences (slightly expanded from 2–4 if needed).
+
+### 3) Update RETRIEVAL PLANNER minimally (no new stage; add flags)
+Do not restructure the planner; just extend output schema with:
+- `forceParallelStateRetrieval: true` (default true)
+- `stateLaneAnchors: [...]` (optional, can be hard-coded)
+
+Planner rules:
+- for local: keep `townPreference`
+- for mixed: allow fallback
+- BUT regardless of scopeHint, set `forceParallelStateRetrieval=true` unless the user asks something purely local like "what time was meeting called to order" AND Router says scopeHint=local AND complexity=simple. (Even then, state lane retrieval is cheap; you may still do it but it’s optional.)
+
+### 4) Replace Complex multi-pass retrieval with Single-pass + Coverage Gate fallback
+In Complex path:
+- Instead of 3 retrieval passes by type, do:
+  - `twoLaneRetrieve()` once
+  - pass results to synthesis
+- Evidence Gate runs on:
+  - question + retrieval summary stats + missing facets extracted from synthesis output
+- If Evidence Gate recommends expansion passes:
+  - perform up to 1–2 extra retrievals (existing mechanism)
+  - BUT use it surgically:
+    - expansion query should specify the missing facet (school budget, county tax, etc.)
+    - in expansion, also do two-lane retrieval but with narrower queries
+  - then re-run synthesis once.
+
+Goal: most queries should be 1 retrieval round + 1 synthesis.
+
+### 5) Create a combined “Discriminator + Synthesis” prompt for Complex Draft
+Replace the current synthesis prompt with a prompt that explicitly:
+- separates Local facts vs Statewide mechanism
+- includes a required “Applicability check” for statewide citations
+- outputs JSON including `answer_markdown`, `assumptions[]`, `limitations[]`, `used_statewide`, `followups[]`
+
+#### Output Schema (NEW)
+{
+  "answer_markdown": "string",
+  "used_statewide": true|false,
+  "statewide_reason": "string|null",
+  "applicability_check": "string|null",
+  "assumptions": ["..."],
+  "limitations": ["..."],
+  "suggested_followups": ["...","...","..."]
+}
+
+#### Synthesis Prompt Requirements
+- Evidence-first: Only describe processes if state lane docs support it.
+- If statewide docs are present but don’t clearly apply, do not use them; mention limitation instead.
+- If local docs show a decision but not the “why,” say so explicitly.
+- If mixed question (e.g., taxes): list major components (town/school/county/state) even if evidence is missing for some, and label missing.
+
+### 6) Critic stage stays, but should be invoked less often
+Keep the current Critic conditions.
+However, after new synthesis, the Critic should mostly tighten clarity and remove overreach.
+
+### 7) Follow-ups stage: use the synthesis-suggested followups when present
+If the synthesis output already contains `suggested_followups`, you can skip a separate follow-up model call OR keep it as a fallback if missing.
+This is a latency improvement.
+
+---
+
+## Files / Code Changes (Expected)
+
+You should:
+- Locate the pipeline orchestrator (likely `src/server/chatPipeline.ts` or similar).
+- Add `twoLaneRetrieve.ts`.
+- Update simple handler to call it.
+- Update complex handler to call it.
+- Update prompts in a central prompts file (likely `src/prompts/*`).
+- Add config flags:
+  - `ENABLE_PARALLEL_STATE_LANE=true`
+  - `LOCAL_LANE_K=12`
+  - `STATE_LANE_K=8`
+  - `LOCAL_CONTEXT_CAP=10`
+  - `STATE_CONTEXT_CAP=5`
+  - `MERGED_CONTEXT_CAP=15`
+
+---
+
+## New Prompts (Write these verbatim into prompts files)
+
+### Prompt: Complex Synthesis (Discriminator + Synthesis)
+SYSTEM:
+You are OpenCouncil’s answer synthesizer. You MUST produce a complete, trustworthy answer grounded ONLY in the provided retrieved excerpts.
+You have two evidence lanes:
+(1) LOCAL lane (town documents)
+(2) STATE lane (NH RSA / statewide guidance / administrative rules)
+Your job:
+- Use LOCAL lane for town-specific facts, votes, dates, amounts, board actions.
+- Use STATE lane for statewide authority, definitions, process, and mechanisms.
+EVIDENCE-FIRST RULES:
+- Do not state statewide mechanisms unless supported by STATE lane excerpts.
+- Do not apply statewide authority unless you can explain WHY it applies to this question using the excerpt content.
+- If evidence is missing for an expected facet, list it explicitly under “What’s not shown”.
+- Never speculate. If you must infer, label it as an assumption.
+
+OUTPUT ONLY VALID JSON with this schema:
+{
+  "answer_markdown": "string",
+  "used_statewide": true|false,
+  "statewide_reason": "string|null",
+  "applicability_check": "string|null",
+  "assumptions": ["string"],
+  "limitations": ["string"],
+  "suggested_followups": ["string"]
+}
+
+ANSWER STRUCTURE inside answer_markdown:
+### At a glance
+- 3–5 bullets based on evidence
+
+### Local details
+- What local documents explicitly show (with citations)
+
+### Statewide context (only if used_statewide=true)
+- Cite the authority and explain applicability in plain language
+
+### Key facts and numbers
+- List numbers with entity labels (town/school/county/state)
+
+### What is not shown in the available documents
+- Missing components/facets
+
+Style:
+Neutral, practical, non-partisan. Informational only, not legal advice.
+
+### Prompt: Simple Answer (updated)
+SYSTEM:
+You are generating a concise OpenCouncil answer grounded ONLY in the retrieved excerpts.
+You may have LOCAL lane and STATE lane excerpts.
+Use LOCAL for town facts and STATE only if it is clearly relevant and supported.
+Return 2–5 sentences.
+If the mechanism/process is not supported by STATE lane excerpts, do not describe it.
+Be transparent about what is not found. Do not apologize.
+Informational only, not legal advice.
+
+---
+
+## Acceptance Criteria
+
+Implement and verify:
+1) For a town question that requires RSA/process, answer includes both local facts and statewide authority when available.
+2) Latency reduced by fewer total model calls on complex questions (typical: router + planner + retrieval + synthesis + followups; expansions rare).
+3) No new indices introduced; same File Search store.
+4) Evidence Gate expansion triggers less often.
+5) Prompt token size stays controlled (caps enforced).
+
+---
+
+## Test Cases (Add to repo as comments or simple scripts)
+
+1) “Why did Ossipee property taxes go up in 2025?”
+Expect: mentions town/school/county components; uses statewide only if retrieved; lists missing facets.
+
+2) “What RSA governs nonpublic sessions for a select board?”
+Expect: state lane dominates, local lane optional.
+
+3) “What did the Ossipee Planning Board decide about case #25-03-LM?”
+Expect: local only; state lane likely unused.
+
+4) “How is the NH default municipal budget adopted if the warrant fails?”
+Expect: state lane required.
+
+---
+
+## Deliverables
+
+1) Code changes implementing `twoLaneRetrieve()` and updating simple/complex paths.
+2) Updated prompts in prompts directory.
+3) Config flags added and documented.
+4) Brief README note describing the new two-lane behavior and caps.
+
+Proceed to implement now.
