@@ -14,7 +14,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getOrCreateFileSearchStoreId } from "../gemini-store";
-import { getStoreIdForTown } from "../services/storeResolver";
+import { getStoreIdForTown, getStatewideStoreId } from "../services/storeResolver";
 import { logDebug, logError } from "../utils/logger";
 import { logFileSearchRequest, logFileSearchResponse, extractGroundingInfoForLogging, extractRetrievalDocCount } from "../utils/fileSearchLogging";
 import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging";
@@ -598,10 +598,12 @@ function buildStateLaneQuery(question: string): string {
 
 /**
  * Execute a single lane retrieval using Gemini File Search
+ * 
+ * @param options.storeIds - Array of store IDs to query (supports multi-store retrieval)
  */
 async function executeLaneRetrieval(options: {
   query: string;
-  storeId: string;
+  storeIds: string[];
   lane: "local" | "state";
   maxResults: number;
   logContext?: PipelineLogContext;
@@ -610,8 +612,16 @@ async function executeLaneRetrieval(options: {
   documentNames: string[];
   rawContent: string;
 }> {
-  const { query, storeId, lane, maxResults, logContext } = options;
+  const { query, storeIds, lane, maxResults, logContext } = options;
   const { model: retrievalModel } = getModelForStage('complexSummary');
+  
+  // Filter out null/empty store IDs
+  const validStoreIds = storeIds.filter(id => id && id.trim().length > 0);
+  
+  if (validStoreIds.length === 0) {
+    console.warn(`[executeLaneRetrieval] No valid store IDs for ${lane} lane`);
+    return { chunks: [], documentNames: [], rawContent: "" };
+  }
   
   const systemPrompt = lane === "local"
     ? `You are a document retrieval assistant. Extract relevant information from municipal documents. Focus on town-specific facts, decisions, votes, dates, amounts, and board actions. Be thorough and include specific details.`
@@ -623,9 +633,9 @@ async function executeLaneRetrieval(options: {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: `twoLane_${lane}`,
-    storeId,
+    storeId: validStoreIds.join(", "),
     queryText: query,
-    filters: { lane },
+    filters: { lane, storeCount: validStoreIds.length },
   });
   
   try {
@@ -638,7 +648,7 @@ async function executeLaneRetrieval(options: {
         tools: [
           {
             fileSearch: {
-              fileSearchStoreNames: [storeId],
+              fileSearchStoreNames: validStoreIds,
             },
           } as any,
         ],
@@ -1054,18 +1064,25 @@ export async function twoLaneRetrieve(
     return emptyResult;
   }
   
-  let storeId = await getStoreIdForTown(townPreference || "");
-  if (!storeId) {
-      storeId = await getOrCreateFileSearchStoreId();
-  }
-  console.log(`[DEBUG] Retrieval Store ID for ${townPreference}: ${storeId}`);
+  // Resolve town and statewide store IDs
+  const townStoreId = await getStoreIdForTown(townPreference || "");
+  const statewideStoreId = await getStatewideStoreId();
   
-  if (!storeId) {
+  // Fallback if no town store found
+  let finalTownStoreId = townStoreId;
+  if (!finalTownStoreId) {
+      finalTownStoreId = await getOrCreateFileSearchStoreId();
+  }
+  
+  console.log(`[DEBUG] Town Store ID for ${townPreference}: ${finalTownStoreId}`);
+  console.log(`[DEBUG] Statewide Store ID: ${statewideStoreId || 'none'}`);
+  
+  if (!finalTownStoreId && !statewideStoreId) {
     logError("two_lane_no_store", {
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "twoLaneRetrieve",
-      reason: "No file search store available",
+      reason: "No file search stores available (town or statewide)",
     });
     
     return { ...emptyResult, debug: { ...emptyResult.debug, durationMs: Date.now() - startTime } };
@@ -1099,12 +1116,22 @@ export async function twoLaneRetrieve(
   const baseStateCap = chatConfig.STATE_CONTEXT_CAP || 5;
   const dynamicStateCap = legalSalience >= 0.5 ? Math.min(baseStateCap + 2, 8) : baseStateCap;
   
+  // Build store ID arrays for each lane
+  // Local lane: query town store only (town-specific documents)
+  const localStoreIds = finalTownStoreId ? [finalTownStoreId] : [];
+  
+  // State lane: query statewide store (RSA, NHMA, etc.)
+  // In the future, could also include town store here for mixed queries
+  const stateStoreIds = statewideStoreId ? [statewideStoreId] : [];
+  
   logDebug("two_lane_start", {
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,
     stage: "twoLaneRetrieve",
     localQuery: localQuery.slice(0, 200),
     stateQuery: stateQuery.slice(0, 200),
+    localStores: localStoreIds,
+    stateStores: stateStoreIds,
     scopeHint,
     townPreference,
     hasSessionSources: (sessionSources || []).length > 0,
@@ -1116,14 +1143,14 @@ export async function twoLaneRetrieve(
   const [localResult, stateResult] = await Promise.all([
     executeLaneRetrieval({
       query: localQuery,
-      storeId,
+      storeIds: localStoreIds,
       lane: "local",
       maxResults: localK,
       logContext,
     }),
     executeLaneRetrieval({
       query: stateQuery,
-      storeId,
+      storeIds: stateStoreIds,
       lane: "state",
       maxResults: stateK,
       logContext,
@@ -1175,14 +1202,14 @@ export async function twoLaneRetrieve(
     const [secondLocalResult, secondStateResult] = await Promise.all([
       executeLaneRetrieval({
         query: secondPassLocalQuery,
-        storeId,
+        storeIds: localStoreIds,
         lane: "local",
         maxResults: secondPassLocalK,
         logContext,
       }),
       executeLaneRetrieval({
         query: secondPassStateQuery,
-        storeId,
+        storeIds: stateStoreIds,
         lane: "state",
         maxResults: secondPassStateK,
         logContext,
