@@ -1355,11 +1355,22 @@ export async function twoLaneRetrieveWithPlan(
   const { townPreference, situationContext, logContext } = options;
   const startTime = Date.now();
 
-  let storeId = await getStoreIdForTown(townPreference || "");
-  if (!storeId) {
-      storeId = await getOrCreateFileSearchStoreId();
+  // Get both town and statewide store IDs
+  const townStoreId = await getStoreIdForTown(townPreference || "");
+  const statewideStoreId = await getStatewideStoreId();
+  
+  // Fallback if no town store found
+  let finalTownStoreId = townStoreId;
+  if (!finalTownStoreId) {
+      finalTownStoreId = await getOrCreateFileSearchStoreId();
   }
-  console.log(`[DEBUG] Retrieval Store ID for ${townPreference}: ${storeId}`);
+  
+  console.log(`[DEBUG] V3 Town Store ID for ${townPreference}: ${finalTownStoreId}`);
+  console.log(`[DEBUG] V3 Statewide Store ID: ${statewideStoreId || 'none'}`);
+  
+  // Build store ID arrays for each lane
+  const localStoreIds = finalTownStoreId ? [finalTownStoreId] : [];
+  const stateStoreIds = statewideStoreId ? [statewideStoreId] : [];
 
   let localQueriesUsed: string[] = [];
   let stateQueriesUsed: string[] = [];
@@ -1376,7 +1387,7 @@ export async function twoLaneRetrieveWithPlan(
   const executeLocalQuery = async (query: string, idx: number) => {
     const result = await executeLaneRetrieval({
       query,
-      storeId,
+      storeIds: localStoreIds,
       lane: "local",
       maxResults: plan.local.k,
       logContext,
@@ -1387,7 +1398,7 @@ export async function twoLaneRetrieveWithPlan(
   const executeStateQuery = async (query: string, idx: number) => {
     const result = await executeLaneRetrieval({
       query,
-      storeId,
+      storeIds: stateStoreIds,
       lane: "state",
       maxResults: plan.state.k,
       logContext,
