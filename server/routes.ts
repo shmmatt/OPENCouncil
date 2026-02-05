@@ -32,6 +32,7 @@ import {
 import { parallelUpload, type UploadJob } from "./services/parallelUpload";
 
 import debugChatRoutes from "./routes/debugChatRoutes";
+import chatTestRoutes from "./routes/chatTestRoutes";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -69,6 +70,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount Debug Routes (Secure!)
   app.use("/api/admin/debug", authenticateAdmin, debugChatRoutes);
+  
+  // Mount Test Routes (Secure!)
+  app.use("/api/admin/test", authenticateAdmin, chatTestRoutes);
 
   // Admin login with bcrypt authentication
   app.post("/api/admin/login", async (req, res) => {
