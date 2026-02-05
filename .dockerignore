@@ -1,0 +1,47 @@
+# Dependencies (will be installed in container)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+dist
+.next
+out
+
+# Uploads and user data
+uploads
+uploads/**
+
+# Environment
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Logs
+logs
+*.log
+
+# Misc
+.cache
+tmp
+temp
