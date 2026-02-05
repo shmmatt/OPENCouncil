@@ -19,10 +19,17 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { chatConfig } from "./chatConfig";
 import type { PipelineLogContext, ChatHistoryMessage, DocSourceType } from "./types";
 import type { SituationContext, SessionSource } from "@shared/schema";
-import { twoLaneRetrieve, extractTwoLaneDocNames, buildTwoLaneSnippetText, classifyTwoLaneDocSource, type LaneChunk, type TwoLaneRetrievalResult } from "./twoLaneRetrieve";
+// Temporarily stubbed - V3 pipeline is active
+// import { twoLaneRetrieve, extractTwoLaneDocNames, buildTwoLaneSnippetText, classifyTwoLaneDocSource, type LaneChunk, type TwoLaneRetrievalResult } from "./twoLaneRetrieve";
+import { buildTwoLaneSnippetText, classifyTwoLaneDocSource, extractTwoLaneDocNames, type LaneChunk, type TwoLaneRetrievalResult } from "./twoLaneRetrieve";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+// Stub for V2 twoLaneRetrieve - V3 pipeline is active, this code path is not used
+async function twoLaneRetrieve(options: any): Promise<TwoLaneRetrievalResult> {
+  throw new Error("V2 pipeline is disabled - use V3 pipeline instead");
+}
 
 export interface UnifiedPipelineOptions {
   question: string;
