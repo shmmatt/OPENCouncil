@@ -7,3 +7,18 @@ vite.config.ts.*
 # User uploads
 uploads/
 uploads/**
+
+# Environment files (NEVER COMMIT SECRETS)
+.env
+.env.*
+!.env.example
+
+# Systemd service files (contain credentials)
+systemd/*.service
+*.service
+
+# AWS credentials
+.aws/
+
+# Logs with potential secrets
+logs/*.log
