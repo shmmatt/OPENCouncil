@@ -1,0 +1,17 @@
+{
+  "town": "Bartlett",
+  "crawledAt": "2026-02-10T15:15:08.881Z",
+  "discovered": 160,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 160,
+  "failed": 0,
+  "byCategory": {},
+  "byStrategy": {
+    "Homepage keywords": 4,
+    "Page: /AgendaCenter": 131,
+    "Page: /FormCenter": 4,
+    "Page: /DocumentCenter": 1,
+    "Sitemap": 29
+  }
+}

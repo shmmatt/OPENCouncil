@@ -1,0 +1,45 @@
+{
+  "town": "Ossipee",
+  "county": "Carroll",
+  "state": "NH",
+  "lastUpdated": "2026-02-06",
+  "sourceUrls": [
+    "https://www.ossipee.org",
+    "https://www.ossipee.org/contact",
+    "https://www.ossipee.org/departments",
+    "https://www.ossipee.org/boards",
+    "https://www.ossipee.org/calendar",
+    "https://www.ossipee.org/town-clerk"
+  ],
+  "townHall": {
+    "address": "55 Main Street • PO Box 67 • Center Ossipee, NH 03814",
+    "phone": "(603) 539-4181",
+    "email": null,
+    "website": "https://www.ossipee.org",
+    "hours": {
+      "weekdays": null,
+      "weekends": null
+    }
+  },
+  "boards": {
+    "select_board": {
+      "name": "Board of Selectmen",
+      "meetingSchedule": null,
+      "location": null,
+      "contact": null
+    }
+  },
+  "departments": {
+    "town_clerk": {
+      "name": "Town Clerk",
+      "staffName": null,
+      "phone": null,
+      "hours": null
+    }
+  },
+  "services": null,
+  "recreation": null,
+  "taxes": null,
+  "permits": null,
+  "notes": "\n\nExtracted from 6/6 pages on 2026-02-06."
+}

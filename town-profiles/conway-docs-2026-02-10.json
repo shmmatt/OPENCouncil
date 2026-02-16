@@ -1,0 +1,17 @@
+{
+  "town": "Conway",
+  "crawledAt": "2026-02-10T15:19:59.733Z",
+  "discovered": 239,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 238,
+  "failed": 1,
+  "byCategory": {},
+  "byStrategy": {
+    "TownCloud API": 10,
+    "Homepage keywords": 2,
+    "Page: /documents": 239,
+    "Page: /agendas": 0,
+    "Sitemap": 17
+  }
+}

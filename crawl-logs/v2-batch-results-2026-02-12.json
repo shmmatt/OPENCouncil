@@ -1,0 +1,166 @@
+[
+  {
+    "name": "Albany",
+    "url": "https://albanynh.org",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:29:59.146Z",
+    "endTime": "2026-02-12T18:32:46.758Z",
+    "durationMinutes": 2.8
+  },
+  {
+    "name": "Bartlett",
+    "url": "https://www.townofbartlett.nh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:32:51.764Z",
+    "endTime": "2026-02-12T18:36:16.478Z",
+    "durationMinutes": 3.4
+  },
+  {
+    "name": "Brookfield",
+    "url": "https://www.brookfieldnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:36:21.482Z",
+    "endTime": "2026-02-12T18:40:37.554Z",
+    "durationMinutes": 4.3
+  },
+  {
+    "name": "Chatham",
+    "url": "https://www.chathamnh.org",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:40:42.560Z",
+    "endTime": "2026-02-12T18:42:54.879Z",
+    "durationMinutes": 2.2
+  },
+  {
+    "name": "Conway",
+    "url": "https://conwaynh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:42:59.884Z",
+    "endTime": "2026-02-12T18:46:03.948Z",
+    "durationMinutes": 3.1
+  },
+  {
+    "name": "Eaton",
+    "url": "https://www.eatonnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:46:08.954Z",
+    "endTime": "2026-02-12T18:48:40.634Z",
+    "durationMinutes": 2.5
+  },
+  {
+    "name": "Effingham",
+    "url": "https://effinghamnh.net",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:48:45.639Z",
+    "endTime": "2026-02-12T18:55:32.188Z",
+    "durationMinutes": 6.8
+  },
+  {
+    "name": "Freedom",
+    "url": "https://townoffreedomnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:55:37.194Z",
+    "endTime": "2026-02-12T18:58:51.604Z",
+    "durationMinutes": 3.2
+  },
+  {
+    "name": "Hart's Location",
+    "url": "https://hartslocation.com",
+    "success": false,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:58:56.609Z",
+    "endTime": "2026-02-12T18:58:56.612Z",
+    "durationMinutes": 0,
+    "error": "Exit code 2"
+  },
+  {
+    "name": "Jackson",
+    "url": "https://www.jackson-nh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T18:59:01.618Z",
+    "endTime": "2026-02-12T19:00:13.727Z",
+    "durationMinutes": 1.2
+  },
+  {
+    "name": "Madison",
+    "url": "https://madison-nh.org",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:00:18.733Z",
+    "endTime": "2026-02-12T19:04:35.147Z",
+    "durationMinutes": 4.3
+  },
+  {
+    "name": "Moultonborough",
+    "url": "https://moultonboroughnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:04:40.150Z",
+    "endTime": "2026-02-12T19:10:58.592Z",
+    "durationMinutes": 6.3
+  },
+  {
+    "name": "Ossipee",
+    "url": "https://www.ossipee.org",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:11:03.598Z",
+    "endTime": "2026-02-12T19:15:09.663Z",
+    "durationMinutes": 4.1
+  },
+  {
+    "name": "Sandwich",
+    "url": "https://www.sandwichnh.com",
+    "success": false,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:15:14.668Z",
+    "endTime": "2026-02-12T19:35:14.767Z",
+    "durationMinutes": 20,
+    "error": "Timeout (20 minutes)"
+  },
+  {
+    "name": "Tamworth",
+    "url": "https://tamworthnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:35:19.773Z",
+    "endTime": "2026-02-12T19:41:12.643Z",
+    "durationMinutes": 5.9
+  },
+  {
+    "name": "Tuftonboro",
+    "url": "https://www.tuftonboronh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:41:17.647Z",
+    "endTime": "2026-02-12T19:46:48.657Z",
+    "durationMinutes": 5.5
+  },
+  {
+    "name": "Wakefield",
+    "url": "https://www.wakefieldnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:46:53.663Z",
+    "endTime": "2026-02-12T19:50:39.523Z",
+    "durationMinutes": 3.8
+  },
+  {
+    "name": "Wolfeboro",
+    "url": "https://www.wolfeboronh.us",
+    "success": true,
+    "docsFound": 0,
+    "startTime": "2026-02-12T19:50:44.526Z",
+    "endTime": "2026-02-12T19:56:44.874Z",
+    "durationMinutes": 6
+  }
+]

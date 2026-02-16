@@ -1,0 +1,630 @@
+
+> rest-express@1.0.0 crawl:universal:v2:batch
+> tsx --env-file=.env scripts/batch-universal-v2-crawler.ts --dry-run
+
+
+======================================================================
+📄 BATCH UNIVERSAL DOCUMENT CRAWLER V2
+======================================================================
+🏛️  Towns: 18
+🔍 Mode: DRY RUN
+⏰ Started: 2026-02-12T01:04:01.095Z
+======================================================================
+
+
+[1/18] Starting Albany...
+
+
+======================================================================
+🏛️  Crawling: Albany
+🌐 URL: https://albanynh.org
+⏰ Started: 2026-02-12T01:04:01.095Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Albany --url https://albanynh.org --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Albany
+🌐 URL: https://albanynh.org
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 5 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ✓ Found 30 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 48
+
+📥 Visiting pages and extracting documents...
+.....✓(17)✓(4)✓(4)✓(154)✓(107)✓(4)✓(9)✓(4)✓(6)✓(11)✓(4)✓(4)✓(4)✓(9)✓(4)
+   [20/100] 289 docs found
+✓(4)✓(10)✗✓(21)✓(4)✓(24)✓(4)✓(131)✓(589)✓(5)✓(4)✓(13)✓(4)✓(4)✓(5)✓(232)✓(131)✗✗✗✗✗✗✗✗✓(21)✗✓(10)
+
+============================================================
+DISCOVERY COMPLETE: 1249 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   http://albanynh.org/wp-content/uploads/2013/01/MasterPlanFinal.pdf
+   https://albanynh.org/wp-content/2025/05/SKM_C3320i25052910130.pdf
+   https://albanynh.org/wp-content/2025/11/SKM_C3320i25111308410-1.pdf
+   https://albanynh.org/wp-content/2026/02/SKM_C3320i26020414210.pdf
+   https://albanynh.org/wp-content/2026/02/SKM_C3320i26020414211.pdf
+   https://albanynh.org/wp-content/2025/02/2025-Warrant-signed-02202025.pdf
+   https://albanynh.org/wp-content/2025/05/Signed-MS-636-2025.pdf
+   https://albanynh.org/wp-content/2025/03/Albany-Town-Report-2024-proof.pdf
+   https://albanynh.org/wp-content/2024/02/Albany-Town-Report-2023-web.pdf
+   https://albanynh.org/wp-content/2023/02/2022-Albany-Town-Report.pdf
+
+✅ Completed: Albany (2.6 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[2/18] Starting Bartlett...
+
+
+======================================================================
+🏛️  Crawling: Bartlett
+🌐 URL: https://www.townofbartlett.nh.gov
+⏰ Started: 2026-02-12T01:06:41.591Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Bartlett --url https://www.townofbartlett.nh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Bartlett
+🌐 URL: https://www.townofbartlett.nh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 29 URLs in sitemap
+   Generated 143 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ✓ Found 16 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 379
+
+📥 Visiting pages and extracting documents...
+✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)
+   [20/100] 27 docs found
+✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✓(27)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 27 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/433/New-Fees-Effective-July-1-2024-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/409/Accessory-Dwelling-Unit-Permit-and-Checklist-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/412/Addition-Permit-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/413/Detached-Addition-Building-Permit-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/410/Interior-Change-of-Use-Residential-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/408/Minor-Modification-Form-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/411/New-House-Building-Permit-Application-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/415/Annual-Sign-Permit-Real-Estate-Contracted-Services-Etc-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/419/Cell-Tower-Application-or-Modification-PDF
+   https://www.townofbartlett.nh.gov/DocumentCenter/View/420/Commercial-Building-Permit-PDF
+
+✅ Completed: Bartlett (3.2 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[3/18] Starting Brookfield...
+
+
+======================================================================
+🏛️  Crawling: Brookfield
+🌐 URL: https://www.brookfieldnh.gov
+⏰ Started: 2026-02-12T01:09:58.092Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Brookfield --url https://www.brookfieldnh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Brookfield
+🌐 URL: https://www.brookfieldnh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   No sitemap found
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ✓ Found 48 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 247
+
+📥 Visiting pages and extracting documents...
+✓(2)✓(1)✓(1)✓(1)✓(1)✓(1)✓(2)✓(1)✓(1)✓(3)✓(1)✓(1)✓(1)✓(3)✓(1)✓(1)✓(1)✓(1)✓(1)✓(3)
+   [20/100] 9 docs found
+✓(6)✓(5)✓(4)✓(1)✓(1)✓(3)✓(1)✓(1)✓(2)✓(2)✓(1)✓(1)✓(10)✓(13)✓(1)✓(5)✓(1)✓(2)✓(1).
+   [40/100] 46 docs found
+...✗..✗.✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✓(1)✗✓(1)✗✗✓(1)✗✓(1)
+   [100/100] 46 docs found
+
+
+============================================================
+DISCOVERY COMPLETE: 46 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.brookfieldnh.gov/board-selectmen/files/town-ordinances
+   https://www.brookfieldnh.gov/sites/g/files/vyhlif346/f/uploads/municipal_fees_-_updated_3-28-2025_1.pdf
+   https://www.brookfieldnh.gov/building-code-enforcement/files/building-code-ordinance
+   https://www.brookfieldnh.gov/health-officer/files/nh-measles-update
+   https://www.brookfieldnh.gov/health-officer/files/nh-tickborne-disease-update
+   https://www.brookfieldnh.gov/timber-gravel-monitor/files/brookfield-earth-excavation-and-restoration-regulations
+   https://www.brookfieldnh.gov/timber-monitor/files/timber-harvesting
+   https://www.brookfieldnh.gov/board-selectmen/files/document-fee-schedule
+   https://www.brookfieldnh.gov/board-selectmen/files/public-participation-board-meetings
+   https://www.brookfieldnh.gov/cemetery-trustees/files/birds-eye-view
+
+✅ Completed: Brookfield (4.0 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[4/18] Starting Chatham...
+
+
+======================================================================
+🏛️  Crawling: Chatham
+🌐 URL: https://www.chathamnh.org
+⏰ Started: 2026-02-12T01:14:03.107Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Chatham --url https://www.chathamnh.org --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Chatham
+🌐 URL: https://www.chathamnh.org
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 3 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ✓ Found 23 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 39
+
+📥 Visiting pages and extracting documents...
+........✓(82)✓(1)✓(2)..✓(3)✓(2)✓(2)✓(4)✓(127)✓(7).
+   [20/100] 230 docs found
+✓(13)✓(10)....✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 253 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.chathamnh.org/wp-content/uploads/2017/06/Floodplain-Development-Permit-Application-final.pdf
+   https://www.chathamnh.org/wp-content/uploads/2017/06/Floodplain-Ordinance-final-and-sealed.pdf
+   https://www.chathamnh.org/wp-content/uploads/2022/06/FINAL2022-Subdivision-Regulations.pdf
+   https://www.chathamnh.org/wp-content/uploads/2014/09/Chatham-2014-Subdivision-application.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/07/OFFICIAL-MINUTES-05182023.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/07/OFFICIAL-MINUTES-04202023.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/07/OFFICIAL-MINUTES-03162023.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/07/OFFICIAL-MINUTES-02162023.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/07/OFFICIAL-MINUTES-01192023.pdf
+   https://www.chathamnh.org/wp-content/uploads/2023/04/12.15.2022-Planning-Board-Minutes.pdf
+
+✅ Completed: Chatham (2.0 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[5/18] Starting Conway...
+
+
+======================================================================
+🏛️  Crawling: Conway
+🌐 URL: https://conwaynh.gov
+⏰ Started: 2026-02-12T01:16:06.287Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Conway --url https://conwaynh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Conway
+🌐 URL: https://conwaynh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 17 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: Custom
+   Extracting navigation links...
+   ✓ Found 6 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 222
+
+📥 Visiting pages and extracting documents...
+✓(239)........✓(5)✓(5)..✓(1)..✓(1).✓(239).
+   [20/100] 250 docs found
+...✗.✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 250 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://conwaynh.gov/uploads/2019-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2020-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2021-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/copy-of-fall2022-2-.xlsx
+   https://conwaynh.gov/uploads/copy-of-spring-2022-1-.xlsx
+   https://conwaynh.gov/uploads/2022-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2023-full-statistical-revaluation-presentation-for-selectmen-10122023-conway.pdf
+   https://conwaynh.gov/uploads/copy-of-spring-2023-1-.xlsx
+   https://conwaynh.gov/uploads/2023-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2024-conway-tax-rates-final.pdf
+
+✅ Completed: Conway (2.9 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[6/18] Starting Eaton...
+
+
+======================================================================
+🏛️  Crawling: Eaton
+🌐 URL: https://www.eatonnh.gov
+⏰ Started: 2026-02-12T01:19:02.394Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Eaton --url https://www.eatonnh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Eaton
+🌐 URL: https://www.eatonnh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 6 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ✓ Found 29 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 48
+
+📥 Visiting pages and extracting documents...
+............✓(6)...✓(2)✓(6)✓(2)✓(2)
+   [20/100] 18 docs found
+.✓(32)✓(2)✓(15)...........✗✗✗.✗✗✗✗✗✗✗✓(15)✓(32)
+
+============================================================
+DISCOVERY COMPLETE: 65 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.eatonnh.gov/wp-content/uploads/2025/04/ZBA-March-17-2025-Minutes-.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2025/06/ZBA-April-21-2025-Minutes-.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2025/11/ZBA-June-16-2025-Minutes.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2025/11/ZBA-October-20-2025-Minutes.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2012/07/zba-Min-9-19-16.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2012/07/zba-Min-12-5-16.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2026/01/BOS-January-6-2026.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2026/02/BOS-January-20-2026.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2026/01/BOS-Minutes-2025.pdf
+   https://www.eatonnh.gov/wp-content/uploads/2025/01/Minutes-2024.pdf
+
+✅ Completed: Eaton (2.3 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[7/18] Starting Effingham...
+
+
+======================================================================
+🏛️  Crawling: Effingham
+🌐 URL: https://effinghamnh.net
+⏰ Started: 2026-02-12T01:21:24.405Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Effingham --url https://effinghamnh.net --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Effingham
+🌐 URL: https://effinghamnh.net
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 134 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: Custom
+   Extracting navigation links...
+   ✓ Found 7 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 333
+
+📥 Visiting pages and extracting documents...
+.✓(261)..✓(7)✓(7)✓(3)✓(10)✓(3).✓(1).✓(20)...✓(2).✓(3)✓(1)
+   [20/100] 301 docs found
+✓(3)✓(3)✓(2).✓(1)........✓(2)..✓(1).✓(1)✓(1)
+   [40/100] 302 docs found
+.✓(1)✓(1)✓(1).✓(1)✓(1)✓(1)✓(1)...........
+   [60/100] 303 docs found
+..........✓(1)✓(1)..✓(1)✓(1)✓(1)...
+   [80/100] 303 docs found
+......✓(1)..✓(1).....✓(3)...✓(1)
+   [100/100] 303 docs found
+   ⚡ High doc count, extending to 150 pages
+........✓(2).........✓(1).
+   [120/150] 303 docs found
+..........✓(1)....✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 303 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://effinghamnh.net/uploads/effingham-performance-report-2020.pdf
+   https://effinghamnh.net/uploads/effingham-q1-2021-ambulance-report-jan-to-march.pdf
+   https://effinghamnh.net/uploads/2021-perf-report-jan-to-oct-2021.pdf
+   https://effinghamnh.net/uploads/ambulance-q3-2021-report-jan-to-sep.pdf
+   https://effinghamnh.net/uploads/2022-performance-report-jan-mar.pdf
+   https://effinghamnh.net/uploads/animal-control-ordinance.pdf
+   https://effinghamnh.net/uploads/2014-audit-final-signed.pdf
+   https://effinghamnh.net/uploads/2015-audit.pdf
+   https://effinghamnh.net/uploads/2016-audited-financial-statements.pdf
+   https://effinghamnh.net/uploads/2017-audited-financial-statements.pdf
+
+✅ Completed: Effingham (6.5 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[8/18] Starting Freedom...
+
+
+======================================================================
+🏛️  Crawling: Freedom
+🌐 URL: https://townoffreedomnh.gov
+⏰ Started: 2026-02-12T01:28:02.082Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Freedom --url https://townoffreedomnh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Freedom
+🌐 URL: https://townoffreedomnh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 6 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ✓ Found 40 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 59
+
+📥 Visiting pages and extracting documents...
+✗.....✓(1)✓(1)✓(1)✓(1)✓(1)✓(5)✓(6)✓(8)✓(5)✓(4)✓(5)✓(5)✓(3)✓(5)
+   [20/100] 22 docs found
+✓(5)✓(5)✓(1)✓(589)✓(3)✓(157)✓(113)✓(27)✓(99)✓(87)✓(13)✓(171)✓(1)✓(29)✓(18)✓(152)✓(3)✓(59)✓(16)✗✓(2)✓(9)✓(2)✓(17)✓(39)✓(39)✗✗✗✓(1)✗✗✗✗✗✗✗✓(17)✓(39)
+
+============================================================
+DISCOVERY COMPLETE: 1594 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   http://townoffreedomnh.gov/wp-content/uploads/2022/07/Freedom-Zoning-Map-5.14.1990.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2022/11/tax-rate-history.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2015/11/pistol_permit.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2019/12/Amended-Snow-Plow-Ordinance-2018.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2025/12/Release-and-Waiver-of-Liability-and-Indemnity-Agreement-12.11.2025.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/05/UnderstandingYourPropertyRecordCard.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/05/Understanding-Veterans-Credits.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/10/Understanding-Elderly-Exemption.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2024/08/Reval-Q-and-A.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/10/elderly-qualification.pdf
+
+✅ Completed: Freedom (3.1 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[9/18] Starting Hart's Location...
+
+
+======================================================================
+🏛️  Crawling: Hart's Location
+🌐 URL: https://hartslocation.com
+⏰ Started: 2026-02-12T01:31:14.877Z
+======================================================================
+
+/bin/sh: 1: Syntax error: Unterminated quoted string
+
+✅ Completed: Hart's Location (0.0 min)
+
+❌ Failed: Hart's Location - Exit code 2
+
+⏳ Waiting 5 seconds before next town...
+
+
+[10/18] Starting Jackson...
+
+
+======================================================================
+🏛️  Crawling: Jackson
+🌐 URL: https://www.jackson-nh.gov
+⏰ Started: 2026-02-12T01:31:19.886Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Jackson --url https://www.jackson-nh.gov --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Jackson
+🌐 URL: https://www.jackson-nh.gov
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 8 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ⚠️  Homepage load failed: page.evaluate: Execution context was destroyed, most likely because of a navigation
+   Will rely on sitemap URLs
+
+📋 Building page visit queue...
+   Total pages to visit: 21
+
+📥 Visiting pages and extracting documents...
+........✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 0 documents found
+============================================================
+
+⚠️  No documents found.
+
+✅ Completed: Jackson (1.0 min)
+
+
+⏳ Waiting 5 seconds before next town...
+
+
+[11/18] Starting Madison...
+
+
+======================================================================
+🏛️  Crawling: Madison
+🌐 URL: https://madison-nh.org
+⏰ Started: 2026-02-12T01:32:27.198Z
+======================================================================
+
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Madison --url https://madison-nh.org --max-pages 100 --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Madison
+🌐 URL: https://madison-nh.org
+📊 Max pages: 100
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 9 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ⚠️  Redirect detected: madison-nh.org → www.madison-nh.org
+   ✓ CMS detected: WordPress
+   Extracting navigation links...
+   ✓ Found 62 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 84
+
+📥 Visiting pages and extracting documents...
+..........✓(19).✓(1).✓(2)✓(7)✓(28)✓(4).✓(6)
+   [20/100] 65 docs found
+✓(2).✓(2)✓(261)✓(459).✓(6)

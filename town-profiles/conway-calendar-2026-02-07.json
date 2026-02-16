@@ -1,0 +1,16 @@
+{
+  "town": "Conway",
+  "extractedAt": "2026-02-07T01:45:08.375Z",
+  "sourceUrl": "https://conwaynh.gov/",
+  "calendarLinks": [
+    "https://conwaynh.gov/_app/immutable/chunks/Calendar-4efde5ea.js"
+  ],
+  "meetings": [
+    {
+      "board": "Budget Committee",
+      "date": "December 29, 2025",
+      "title": "Public Hearing on Budget"
+    }
+  ],
+  "recurringPatterns": {}
+}

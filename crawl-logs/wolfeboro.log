@@ -1,0 +1,67 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Wolfeboro --url https://www.wolfeboronh.us --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Wolfeboro
+🌐 URL: https://www.wolfeboronh.us
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: CivicPlus
+
+📋 Strategy 1: Focused Index Pages
+   Checking 52 index page candidates...
+✗✗✗✗✓(1)✓(69)✓(51)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+   Result: 119 docs from 3 index pages
+
+   📄 Working index pages:
+      /DocumentCenter
+      /AgendaCenter
+      /FormCenter
+
+📊 Coverage Assessment:
+   Documents: 119
+   Categories:
+      - forms: 51
+      ✓ agendas: 42
+      ✓ minutes: 26
+   Years: ✓ Multiple
+   Status: ✓ Adequate
+
+⚡ Thorough mode: Running navigation strategy anyway...
+
+🗺️  Strategy 2: Navigation Following
+   Found 14 navigation links
+✗✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(4)✓(3)✓(3)
+   Result: 120 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 120 (+1)
+   Categories:
+      - forms: 51
+      ✓ agendas: 42
+      ✓ minutes: 26
+      - misc: 1 (+1)
+   Status: ✓ Adequate
+
+============================================================
+DISCOVERY COMPLETE: 120 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+🔍 DRY RUN
+
+Sample documents:
+   https://www.wolfeboronh.us/FormCenter/General-Forms-4/Contact-Us-79
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_12162025-196
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_12092025-186
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_11252025-188
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Minutes/_11252025-188
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_01282026-227
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Minutes/_01282026-227
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_01222026-226
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_01152026-220
+   https://www.wolfeboronh.us/AgendaCenter/ViewFile/Agenda/_01132026-205

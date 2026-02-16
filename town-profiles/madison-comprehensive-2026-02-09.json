@@ -1,0 +1,72 @@
+{
+  "town": "Madison",
+  "extractedAt": "2026-02-09T03:12:22.421Z",
+  "sourceUrl": "https://madison-nh.org",
+  "boards": {
+    "select_board": {
+      "name": "Select Board",
+      "location": "Library",
+      "meetingSchedule": "Tuesday at 4 at 4:30 pm at 6:00 pm at 7:00 pm"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Library",
+      "meetingSchedule": "Tuesday at 4 at 4:30 pm at 6:00 pm at 7:00 pm"
+    },
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "Town Hall"
+    },
+    "zoning_board": {
+      "name": "Zoning Board",
+      "location": "Town Hall"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Town Hall"
+    },
+    "conservation_board": {
+      "name": "Conservation Board",
+      "location": "Town Hall"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://madison-nh.org",
+    "https://madison-nh.org/boards",
+    "https://madison-nh.org/committees",
+    "https://madison-nh.org/boards-committees",
+    "https://madison-nh.org/government",
+    "https://madison-nh.org/selectboard",
+    "https://madison-nh.org/select-board",
+    "https://madison-nh.org/selectmen",
+    "https://madison-nh.org/board-of-selectmen",
+    "https://madison-nh.org/planning",
+    "https://madison-nh.org/planning-board",
+    "https://madison-nh.org/zoning",
+    "https://madison-nh.org/zba",
+    "https://madison-nh.org/conservation",
+    "https://madison-nh.org/budget-committee",
+    "https://madison-nh.org/departments",
+    "https://madison-nh.org/town-clerk",
+    "https://madison-nh.org/administration",
+    "https://madison-nh.org/calendar",
+    "https://madison-nh.org/events",
+    "https://madison-nh.org/meetings",
+    "https://madison-nh.org/agendas",
+    "https://madison-nh.org/contact",
+    "https://madison-nh.org/about",
+    "https://madison-nh.org/directory",
+    "https://madison-nh.org/pages/boards",
+    "https://madison-nh.org/pages/committees",
+    "https://madison-nh.org/pages/calendar"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603.367.4332",
+    "email": "priceadam095@gmail.com"
+  }
+}

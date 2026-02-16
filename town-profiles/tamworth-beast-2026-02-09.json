@@ -1,0 +1,16 @@
+{
+  "town": "Tamworth",
+  "crawledAt": "2026-02-09T19:33:55.178Z",
+  "discovered": 0,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {},
+  "byStrategy": {
+    "TownCloud API": 0,
+    "Sitemap": 0,
+    "Deep crawl": 0
+  },
+  "documents": []
+}

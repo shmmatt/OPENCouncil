@@ -1,0 +1,81 @@
+{
+  "completedAt": "2026-02-10T14:56:12.253Z",
+  "durationMinutes": 15,
+  "total": 18,
+  "successful": 18,
+  "failed": 0,
+  "results": [
+    {
+      "town": "Albany",
+      "success": true
+    },
+    {
+      "town": "Bartlett",
+      "success": true
+    },
+    {
+      "town": "Brookfield",
+      "success": true
+    },
+    {
+      "town": "Chatham",
+      "success": true
+    },
+    {
+      "town": "Conway",
+      "success": true
+    },
+    {
+      "town": "Eaton",
+      "success": true
+    },
+    {
+      "town": "Effingham",
+      "success": true
+    },
+    {
+      "town": "Freedom",
+      "success": true
+    },
+    {
+      "town": "Hart's Location",
+      "success": true
+    },
+    {
+      "town": "Jackson",
+      "success": true
+    },
+    {
+      "town": "Madison",
+      "success": true
+    },
+    {
+      "town": "Moultonborough",
+      "success": true
+    },
+    {
+      "town": "Ossipee",
+      "success": true
+    },
+    {
+      "town": "Sandwich",
+      "success": true
+    },
+    {
+      "town": "Tamworth",
+      "success": true
+    },
+    {
+      "town": "Tuftonboro",
+      "success": true
+    },
+    {
+      "town": "Wakefield",
+      "success": true
+    },
+    {
+      "town": "Wolfeboro",
+      "success": true
+    }
+  ]
+}

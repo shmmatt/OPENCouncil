@@ -1,0 +1,19 @@
+{
+  "town": "Freedom",
+  "crawledAt": "2026-02-10T22:56:14.516Z",
+  "discovered": 1498,
+  "downloaded": 64,
+  "uploaded": 64,
+  "skipped": 1424,
+  "failed": 10,
+  "byCategory": {
+    "misc": 64
+  },
+  "byStrategy": {
+    "Homepage keywords": 5,
+    "Page: /boards": 1,
+    "Page: /regulations": 17,
+    "Deep navigation": 1498,
+    "Sitemap": 6
+  }
+}

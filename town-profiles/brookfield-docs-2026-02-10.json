@@ -1,0 +1,19 @@
+{
+  "town": "Brookfield",
+  "crawledAt": "2026-02-10T21:00:39.765Z",
+  "discovered": 28,
+  "downloaded": 28,
+  "uploaded": 28,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {
+    "ordinance": 2,
+    "misc": 15,
+    "form": 9,
+    "planning": 2
+  },
+  "byStrategy": {
+    "Homepage keywords": 6,
+    "Page: /boards": 1
+  }
+}

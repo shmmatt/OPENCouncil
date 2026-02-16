@@ -1,0 +1,27 @@
+{
+  "town": "Conway",
+  "extractedAt": "2026-02-08T23:38:33.157Z",
+  "sourceUrl": "https://conwaynh.gov/",
+  "pagesVisited": [
+    "https://conwaynh.gov/",
+    "https://conwaynh.gov/town-departments",
+    "https://conwaynh.gov/boards-commissions-committees",
+    "https://conwaynh.gov/calandar",
+    "https://conwaynh.gov/pages/town-departments"
+  ],
+  "meetings": [
+    {
+      "board": "Budget Committee",
+      "date": "January 20, 2026",
+      "time": "11 am",
+      "location": "Town Hall opening at 11 am",
+      "description": "Public Hearing on Budget"
+    },
+    {
+      "board": "Budget Committee",
+      "date": "January 20, 2026",
+      "description": "Public Hearing on Budget"
+    }
+  ],
+  "recurringPatterns": {}
+}

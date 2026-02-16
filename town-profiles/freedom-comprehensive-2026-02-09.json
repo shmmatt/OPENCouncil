@@ -1,0 +1,14 @@
+{
+  "town": "Freedom",
+  "extractedAt": "2026-02-09T03:11:14.526Z",
+  "sourceUrl": "https://freedomnh.org",
+  "boards": {},
+  "departments": {},
+  "pagesExplored": [
+    "https://freedomnh.org"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ]
+}

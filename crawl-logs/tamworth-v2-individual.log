@@ -1,0 +1,45 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Tamworth --url https://tamworthnh.gov --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Tamworth
+🌐 URL: https://tamworthnh.gov
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 92 URLs in sitemap
+   Generated 737 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ⚠️  Homepage load failed: page.evaluate: Execution context was destroyed, most likely because of a navigation
+   Will rely on sitemap URLs
+
+📋 Building page visit queue...
+   Total pages to visit: 1026
+
+📥 Visiting pages and extracting documents...
+✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(84)✓(84)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(84)✗✓(84)✗✓(84)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 84 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://tamworthnh.gov/FormCenter/Contact-Us-5/Contact-Us-47
+   https://tamworthnh.gov/DocumentCenter/View/336/Personal-Wireless-Service-Facility-Co-location-or-Modification-Application-PDF
+   https://tamworthnh.gov/DocumentCenter/View/607/2017-Annual-Town-Report-PDF
+   https://tamworthnh.gov/DocumentCenter/View/608/2017-Captial-Improvement-Program-PDF
+   https://tamworthnh.gov/DocumentCenter/View/609/2017-Financial-Statements-PDF
+   https://tamworthnh.gov/DocumentCenter/View/610/2017-Town-Meeting-Warrant-PDF
+   https://tamworthnh.gov/DocumentCenter/View/611/2018-Town-Meeting-Warrant-PDF
+   https://tamworthnh.gov/DocumentCenter/View/612/Complete-2020-Town-Report-PDF
+   https://tamworthnh.gov/DocumentCenter/View/613/2021-Capital-Improvement-Plan-PDF
+   https://tamworthnh.gov/DocumentCenter/View/459/Local-Election-Absentee-Ballot-App-PDF

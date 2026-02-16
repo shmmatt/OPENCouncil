@@ -1,0 +1,73 @@
+{
+  "town": "Albany",
+  "extractedAt": "2026-02-09T03:03:22.037Z",
+  "sourceUrl": "https://albanynh.org",
+  "boards": {
+    "conservation_board": {
+      "name": "Conservation Board"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "TOWN HALL",
+      "meetingSchedule": "2nd Monday at 8:00am at 10:00am"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "TOWN HALL",
+      "meetingSchedule": "2nd and 4th Wednesday at 8:00am at 10:00am"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "TOWN HALL",
+      "meetingSchedule": "2nd and 4th Wednesday at 8:00am at 10:00am"
+    },
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "TOWN HALL"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://albanynh.org",
+    "https://albanynh.org/calendar/",
+    "https://albanynh.org/planning-board/",
+    "https://albanynh.org/selectmen-2/meeting-agendas/",
+    "https://albanynh.org/boards",
+    "https://albanynh.org/committees",
+    "https://albanynh.org/boards-committees",
+    "https://albanynh.org/government",
+    "https://albanynh.org/selectboard",
+    "https://albanynh.org/select-board",
+    "https://albanynh.org/board-of-selectmen",
+    "https://albanynh.org/planning",
+    "https://albanynh.org/planning-board",
+    "https://albanynh.org/zoning",
+    "https://albanynh.org/zba",
+    "https://albanynh.org/conservation",
+    "https://albanynh.org/budget-committee",
+    "https://albanynh.org/town-clerk",
+    "https://albanynh.org/administration",
+    "https://albanynh.org/calendar",
+    "https://albanynh.org/events",
+    "https://albanynh.org/meetings",
+    "https://albanynh.org/agendas",
+    "https://albanynh.org/contact",
+    "https://albanynh.org/about",
+    "https://albanynh.org/directory",
+    "https://albanynh.org/pages/boards",
+    "https://albanynh.org/pages/committees",
+    "https://albanynh.org/pages/calendar"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603-447-2877",
+    "email": "planningboard@albanynh.org",
+    "hours": "Tuesday 4:30 - 7:00pm, Wednesday 11:00am - 2:30pm, Thursday 4:30 - 7:00pm"
+  }
+}

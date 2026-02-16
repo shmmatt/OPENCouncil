@@ -1,0 +1,732 @@
+=== PHASE 2: PROCESSING QUEUE ===
+[IngestWorker] Processing 10 files...
+[S3Sync] Created store for chatham: fileSearchStores/opencouncil-chatham-vnv3qrz4vg5b
+PDF text extraction failed for minutes-to-meetings-March-2-2023.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] minutes-to-meetings-March-2-2023.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for chatham/minutes/2023/minutes-to-meetings-March-2-2023.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_605ba197-aaee-4527-b03c-e5950bf6cae4.pdf" "/tmp/ocr-1771168230260-ky9lfm/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: chatham/minutes/2023/minutes-to-meetings-March-2-2023.pdf
+PDF text extraction failed for minutes-to-meetings-September-7-2023.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] minutes-to-meetings-September-7-2023.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for chatham/minutes/2023/minutes-to-meetings-September-7-2023.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_dda2b552-a755-40b9-a98e-cdbefc7ab9b3.pdf" "/tmp/ocr-1771168232447-f1qyg/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: chatham/minutes/2023/minutes-to-meetings-September-7-2023.pdf
+[FileProcessing] minutes-to-meetings-April-11-2024.docx: OCR only applies to PDF files
+[IngestWorker] Failed chatham/minutes/2024/minutes-to-meetings-April-11-2024.docx: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+[FileProcessing] minutes-to-meetings-February-2-2023.docx: OCR only applies to PDF files
+[IngestWorker] Failed chatham/minutes/2023/minutes-to-meetings-February-2-2023.docx: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+[FileProcessing] chatham-5.jpg: OCR only applies to PDF files
+[IngestWorker] Failed chatham/documents/2024/chatham-5.jpg: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+[S3Sync] Created store for conway: fileSearchStores/opencouncil-conway-0ijk53yzdluy
+PDF text extraction failed for 2020-conway-tax-rates-final.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] 2020-conway-tax-rates-final.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for conway/documents/2020/2020-conway-tax-rates-final.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_33816b71-a6f5-4dc9-8386-003646228f14.pdf" "/tmp/ocr-1771168236643-hyb/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: conway/documents/2020/2020-conway-tax-rates-final.pdf
+PDF text extraction failed for water-rules-regulations.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] water-rules-regulations.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for conway/documents/water-rules-regulations.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_4f6222e3-58c9-44b3-8408-fac79c6dcafd.pdf" "/tmp/ocr-1771168239075-bb4isk/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: conway/documents/water-rules-regulations.pdf
+[S3Sync] Created store for freedom: fileSearchStores/opencouncil-freedom-aze98t6psscn
+PDF text extraction failed for Request-for-Appointment.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] Request-for-Appointment.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for freedom/documents/2022/Request-for-Appointment.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_6cf0cf26-6bbd-4b15-b00c-cc6a2d57492c.pdf" "/tmp/ocr-1771168243372-5mqu4/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: freedom/documents/2022/Request-for-Appointment.pdf
+[S3Sync] Created store for albany: fileSearchStores/opencouncil-albany-lbdwghaa4l37
+PDF text extraction failed for TownReport2009.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport2009.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2009/TownReport2009.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_86db49f0-d36f-43e1-b744-236da19cc03c.pdf" "/tmp/ocr-1771168246684-adzma/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2009/TownReport2009.pdf
+PDF text extraction failed for Feb27.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] Feb27.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/Feb27.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_82a1361c-251a-436b-8343-d51a9a8290ed.pdf" "/tmp/ocr-1771168251865-oy0mh/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/Feb27.pdf
+Batch complete. Total: 7 synced, 3 failed.
+[IngestWorker] Processing 10 files...
+[S3Sync] Created store for sandwich: fileSearchStores/opencouncil-sandwich-e012fx32dspg
+PDF text extraction failed for unknown.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] unknown.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for sandwich/misc/unknown.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_294c1d29-dfa0-4201-9f25-940c31a7702d.pdf" "/tmp/ocr-1771168255434-r8z44/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Failed sandwich/misc/unknown.pdf: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+[FileProcessing] waterfall.jpg: OCR only applies to PDF files
+[IngestWorker] Failed chatham/misc/2024/waterfall.jpg: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+PDF text extraction failed for AnnualReport2012.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] AnnualReport2012.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2012/AnnualReport2012.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_b20d6611-1577-40ff-aa4f-4f06b41d7d78.pdf" "/tmp/ocr-1771168257676-p2dxw/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2012/AnnualReport2012.pdf
+PDF text extraction failed for TownReport13.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport13.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2013/TownReport13.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_d853eb8b-ed96-4c8a-9522-7ee64bef7822.pdf" "/tmp/ocr-1771168262866-x5uogu/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2013/TownReport13.pdf
+PDF text extraction failed for TownReport2014.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport2014.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2013/TownReport2014.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_02fa91e7-a943-4760-83d9-d5b7b3b306ff.pdf" "/tmp/ocr-1771168268727-31jeeq/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2013/TownReport2014.pdf
+PDF text extraction failed for TownReport2015.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport2015.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2015/TownReport2015.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a3ef3cb2-4c6d-4693-8bbf-2ef82b240ec4.pdf" "/tmp/ocr-1771168274366-vlgyyd/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2015/TownReport2015.pdf
+PDF text extraction failed for AnnualReport2012.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] AnnualReport2012.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2018/AnnualReport2012.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a65893ba-5a58-48a0-b52c-f3aa146ea2e7.pdf" "/tmp/ocr-1771168280176-teh1th/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2018/AnnualReport2012.pdf
+PDF text extraction failed for TownReport.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2018/TownReport.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a5e3d4d6-3d16-49eb-8ec1-8bae2a71930f.pdf" "/tmp/ocr-1771168286667-2uvgwc/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2018/TownReport.pdf
+PDF text extraction failed for TownReport2018.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport2018.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/2019/TownReport2018.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_1a3d9089-25f8-44d1-8d6f-922f1aa60254.pdf" "/tmp/ocr-1771168292693-97e5pg/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/2019/TownReport2018.pdf
+PDF text extraction failed for TownReport.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] TownReport.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/annual-reports/general/unknown/TownReport.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_8f9190cf-5bd6-4398-8720-2b8df2dd9413.pdf" "/tmp/ocr-1771168298916-obfcfb/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/annual-reports/general/unknown/TownReport.pdf
+Batch complete. Total: 15 synced, 5 failed.
+[IngestWorker] Processing 10 files...
+PDF text extraction failed for EnergyAudit2010.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] EnergyAudit2010.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/audit/2010/EnergyAudit2010.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_3e4c8bdf-f626-4878-b232-e749b3f2cbf3.pdf" "/tmp/ocr-1771168306288-uvzd9q/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/audit/2010/EnergyAudit2010.pdf
+PDF text extraction failed for 2009Warrant.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] 2009Warrant.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/2009/2009Warrant.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_59f9fcab-2ab0-462c-b057-56a37b84a8d7.pdf" "/tmp/ocr-1771168309432-ndthkm/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/2009/2009Warrant.pdf
+PDF text extraction failed for Proposed2009Budget.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] Proposed2009Budget.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/2009/Proposed2009Budget.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_ceea075e-616a-4ec5-8f96-35c971185ab0.pdf" "/tmp/ocr-1771168311942-57d61k/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/2009/Proposed2009Budget.pdf
+PDF text extraction failed for 2011Budget.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] 2011Budget.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/2011/2011Budget.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_046da953-dea1-4976-b20c-d1e04385dece.pdf" "/tmp/ocr-1771168315246-47m9rn/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/2011/2011Budget.pdf
+PDF text extraction failed for 2011Warrant.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] 2011Warrant.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/2011/2011Warrant.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_d3c1d286-e976-4d4b-a9e8-7d4add4c9826.pdf" "/tmp/ocr-1771168318602-igcgu9/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/2011/2011Warrant.pdf
+PDF text extraction failed for Proposed2009Budget.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] Proposed2009Budget.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/general/2009/Proposed2009Budget.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_d7cd7f3b-d5dd-417c-997a-c7adb3925605.pdf" "/tmp/ocr-1771168320990-tggzzi/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/general/2009/Proposed2009Budget.pdf
+PDF text extraction failed for 2011Budget.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] 2011Budget.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/budget/general/2011/2011Budget.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_e3e826cd-48b2-431e-b7ae-82891a81d5d5.pdf" "/tmp/ocr-1771168324065-xxd8t/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/budget/general/2011/2011Budget.pdf
+PDF text extraction failed for StateAbsenteeBallotApp.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] StateAbsenteeBallotApp.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/election/StateAbsenteeBallotApp.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_189d5789-ef3a-4324-93ce-6f60df61b84e.pdf" "/tmp/ocr-1771168327427-mf67y/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/election/StateAbsenteeBallotApp.pdf
+PDF text extraction failed for ALBANYReformattedDOGORD.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ALBANYReformattedDOGORD.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/form/ALBANYReformattedDOGORD.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_ee0bc076-917d-4189-8dfc-c871f0b44132.pdf" "/tmp/ocr-1771168330057-axsx4q/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/form/ALBANYReformattedDOGORD.pdf
+PDF text extraction failed for APB-Form-10-Major-Minor-BLA-Sub.-Appl_8.6.18.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-10-Major-Minor-BLA-Sub.-Appl_8.6.18.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-10-Major-Minor-BLA-Sub.-Appl_8.6.18.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_356034fa-51d5-4425-957d-3e15697dc9f5.pdf" "/tmp/ocr-1771168332632-v5sd3/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-10-Major-Minor-BLA-Sub.-Appl_8.6.18.pdf
+Batch complete. Total: 25 synced, 5 failed.
+[IngestWorker] Processing 10 files...
+PDF text extraction failed for APB-Form-11-Maj.-Sub.-Chk-List_8.6.18.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-11-Maj.-Sub.-Chk-List_8.6.18.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-11-Maj.-Sub.-Chk-List_8.6.18.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_876bf310-93da-4515-b4e2-563d31f4fe7f.pdf" "/tmp/ocr-1771168335990-bdpze/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-11-Maj.-Sub.-Chk-List_8.6.18.pdf
+PDF text extraction failed for APB-Form-13-Minor-Sub.-Chk-List_8.6.18.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-13-Minor-Sub.-Chk-List_8.6.18.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-13-Minor-Sub.-Chk-List_8.6.18.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_418673d9-e943-484c-82b5-fd23e1ae63ac.pdf" "/tmp/ocr-1771168340658-4edx3/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-13-Minor-Sub.-Chk-List_8.6.18.pdf
+PDF text extraction failed for ABS_Minutes_11252020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_11252020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_11252020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a739ff72-e641-4771-aa6e-446676837208.pdf" "/tmp/ocr-1771168343543-bm5qtk/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_11252020.pdf
+PDF text extraction failed for APB-Form-17-Parcel-Mrgr-Appl_2017.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-17-Parcel-Mrgr-Appl_2017.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-17-Parcel-Mrgr-Appl_2017.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_f247c159-8e46-4297-94d4-057df9223e4a.pdf" "/tmp/ocr-1771168346758-dt8s0b/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-17-Parcel-Mrgr-Appl_2017.pdf
+PDF text extraction failed for APB-Form-20-SPR-Appl.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-20-SPR-Appl.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-20-SPR-Appl.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a4df60b9-5674-4e49-8e57-3cb93fc47219.pdf" "/tmp/ocr-1771168350740-ty32be/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-20-SPR-Appl.pdf
+PDF text extraction failed for APB-Form-21-SPR-Chklst.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-21-SPR-Chklst.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-21-SPR-Chklst.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_742cdef9-27f6-4df5-ad82-321eddc20a80.pdf" "/tmp/ocr-1771168353050-rnop0j/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-21-SPR-Chklst.pdf
+PDF text extraction failed for APB-Form-31-Preliminary-Consultation-Form-20191021.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-31-Preliminary-Consultation-Form-20191021.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2019/APB-Form-31-Preliminary-Consultation-Form-20191021.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_0426210e-0c9d-4538-ac3d-444b2a6d5b27.pdf" "/tmp/ocr-1771168356290-hzmle/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2019/APB-Form-31-Preliminary-Consultation-Form-20191021.pdf
+PDF text extraction failed for VendingCartApplication.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] VendingCartApplication.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2020/VendingCartApplication.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_c8909213-cf50-4ea5-8118-864e788542bd.pdf" "/tmp/ocr-1771168360613-588ns/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2020/VendingCartApplication.pdf
+PDF text extraction failed for APB-Form-15-BLA-Chk-List_8.6.18.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-15-BLA-Chk-List_8.6.18.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2021/APB-Form-15-BLA-Chk-List_8.6.18.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_a310a963-71f3-4691-b024-6ab933c7542f.pdf" "/tmp/ocr-1771168362790-ay0ow5/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2021/APB-Form-15-BLA-Chk-List_8.6.18.pdf
+PDF text extraction failed for APB-Form-22-Fee-Schedule-Revised_20231113.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] APB-Form-22-Fee-Schedule-Revised_20231113.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/2023/APB-Form-22-Fee-Schedule-Revised_20231113.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_24ad067a-122d-4167-97f2-85a4cbe5f346.pdf" "/tmp/ocr-1771168365807-id4nck/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/2023/APB-Form-22-Fee-Schedule-Revised_20231113.pdf
+Batch complete. Total: 35 synced, 5 failed.
+[IngestWorker] Processing 10 files...
+PDF text extraction failed for ALBANYReformattedDOGORD.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ALBANYReformattedDOGORD.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/forms/general/unknown/ALBANYReformattedDOGORD.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_96b52fdf-9f7e-49dd-8930-e5206bc76404.pdf" "/tmp/ocr-1771168369041-mg6at15/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/forms/general/unknown/ALBANYReformattedDOGORD.pdf
+[FileProcessing] Minutes2012.doc: OCR only applies to PDF files
+[IngestWorker] Failed albany/minutes/2012/Minutes2012.doc: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+PDF text extraction failed for Minutes2013.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] Minutes2013.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2013/Minutes2013.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_4d709f1e-81e5-409c-b3eb-c182343787b9.pdf" "/tmp/ocr-1771168371980-ffuyyl/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2013/Minutes2013.pdf
+PDF text extraction failed for ABS_Minutes_05062020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_05062020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_05062020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_16a9863a-797b-4970-a70c-3a160c6efde6.pdf" "/tmp/ocr-1771168375398-17evkr/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_05062020.pdf
+PDF text extraction failed for ABS_Minutes_07222020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_07222020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_07222020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_6afa00a9-c229-4597-b50c-c7517dc897c1.pdf" "/tmp/ocr-1771168377415-kyc8yb/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_07222020.pdf
+PDF text extraction failed for ABS_Minutes_08052020_revised.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_08052020_revised.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_08052020_revised.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_d79d6673-9723-4d19-a385-4669136a764d.pdf" "/tmp/ocr-1771168380231-fzdcch/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_08052020_revised.pdf
+PDF text extraction failed for ABS_Minutes_09022020_approved.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_09022020_approved.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_09022020_approved.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_5e4ee560-bcc1-4ea9-a8e3-1822b7bf85a9.pdf" "/tmp/ocr-1771168384682-yl5v6e/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_09022020_approved.pdf
+PDF text extraction failed for ABS_Minutes_09162020_approved.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_09162020_approved.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_09162020_approved.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_73b7418d-96bd-46c0-841f-c7f14ea071da.pdf" "/tmp/ocr-1771168389138-gayj1/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_09162020_approved.pdf
+PDF text extraction failed for ABS_Minutes_09232020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_09232020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_09232020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_77d1c5e2-d205-45c8-b2f1-7b7e8dae3283.pdf" "/tmp/ocr-1771168393563-2dx4gj/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_09232020.pdf
+PDF text extraction failed for ABS_Minutes_09302020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_09302020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_09302020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_c20784f3-fdf5-4d8a-b202-c10857b495fe.pdf" "/tmp/ocr-1771168396443-b7mr7f/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_09302020.pdf
+Batch complete. Total: 44 synced, 6 failed.
+[IngestWorker] Processing 10 files...
+PDF text extraction failed for ABS_Minutes_10212020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_10212020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_10212020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_e03006ee-2a92-44ae-9097-0a519691d098.pdf" "/tmp/ocr-1771168401249-1ooevv/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_10212020.pdf
+PDF text extraction failed for ABS_Minutes_10272020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_10272020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_10272020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_cfdaaca5-1cfe-4ea8-9851-180bff0b5a18.pdf" "/tmp/ocr-1771168404770-ze0chs/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_10272020.pdf
+PDF text extraction failed for ABS_Minutes_11042020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_11042020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_11042020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_03838916-132d-4c5d-bac4-0544abb3f027.pdf" "/tmp/ocr-1771168407169-v6b28k/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_11042020.pdf
+PDF text extraction failed for ABS_Minutes_12092020_approved.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ABS_Minutes_12092020_approved.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ABS_Minutes_12092020_approved.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_2d51a08e-596f-40ca-9b1d-44b2d3300b48.pdf" "/tmp/ocr-1771168410315-dolx46/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ABS_Minutes_12092020_approved.pdf
+PDF text extraction failed for ASB-Minutes-06102020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-06102020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-06102020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_d9395f6b-2dc5-4b0a-a869-e766922ce843.pdf" "/tmp/ocr-1771168414088-saam0p/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-06102020.pdf
+PDF text extraction failed for ASB-Minutes-06172020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-06172020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-06172020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_9966df71-2f48-4fcc-bc47-282607ea1b05.pdf" "/tmp/ocr-1771168418399-q9kbq/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-06172020.pdf
+PDF text extraction failed for ASB-Minutes-06242020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-06242020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-06242020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_5c77a753-c50c-4188-907d-3940f850f2c6.pdf" "/tmp/ocr-1771168422867-r53kwk/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-06242020.pdf
+PDF text extraction failed for ASB-Minutes-07012020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-07012020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-07012020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_5441dbe0-52e5-4714-ba6c-75e6afd4e48a.pdf" "/tmp/ocr-1771168427463-y85zpq/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-07012020.pdf
+PDF text extraction failed for ASB-Minutes-07152020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-07152020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-07152020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_bedd2e08-8781-4736-8ca9-676ad3e81ca7.pdf" "/tmp/ocr-1771168431303-kysb3n/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-07152020.pdf
+PDF text extraction failed for ASB-Minutes-08122020_approved.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-08122020_approved.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-08122020_approved.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_0afefac8-0c47-4f63-864c-ae58743d4c3d.pdf" "/tmp/ocr-1771168435820-3e1esg/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-08122020_approved.pdf
+Batch complete. Total: 54 synced, 6 failed.
+[IngestWorker] Processing 10 files...
+PDF text extraction failed for ASB-Minutes-10072020_approved.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes-10072020_approved.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes-10072020_approved.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_e921d38b-9e1a-4e8e-9ff7-607de743a2fe.pdf" "/tmp/ocr-1771168442683-nqmpq/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes-10072020_approved.pdf
+PDF text extraction failed for ASB-Minutes_04.08.2020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_04.08.2020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_04.08.2020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_3ecd9a29-81e0-429c-947e-171185d3f7f3.pdf" "/tmp/ocr-1771168446766-srjwpe/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_04.08.2020.pdf
+PDF text extraction failed for ASB-Minutes_04.22.2020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_04.22.2020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_04.22.2020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_14e4c120-33e3-4bc7-a72d-f9949565bd8e.pdf" "/tmp/ocr-1771168451112-2ashi1/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_04.22.2020.pdf
+PDF text extraction failed for ASB-Minutes_04.29.2020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_04.29.2020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_04.29.2020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_b3fcd3a8-537c-47ba-a2fb-ecbcc3057c2d.pdf" "/tmp/ocr-1771168455880-lxkfvs/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_04.29.2020.pdf
+PDF text extraction failed for ASB-Minutes_05202020.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_05202020.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_05202020.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_ff4cf6e0-7c68-466e-9fbd-a1c1fa1ae836.pdf" "/tmp/ocr-1771168460622-pbl0wn/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_05202020.pdf
+PDF text extraction failed for ASB-Minutes_1.15.20.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_1.15.20.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_1.15.20.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_b59f21de-07c3-4495-8a71-2c1c68a0c219.pdf" "/tmp/ocr-1771168465534-fi1e6i/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_1.15.20.pdf
+PDF text extraction failed for ASB-Minutes_1.29.20.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_1.29.20.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_1.29.20.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_141b7695-f3f3-4835-8749-b710214c4432.pdf" "/tmp/ocr-1771168468606-qz11wh/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_1.29.20.pdf
+PDF text extraction failed for ASB-Minutes_1.8.20.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_1.8.20.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_1.8.20.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_56741cbb-4a53-41cf-ae9d-e127e12e51c3.pdf" "/tmp/ocr-1771168471227-r6fupo/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.
+[IngestWorker] Synced: albany/minutes/2020/ASB-Minutes_1.8.20.pdf
+PDF text extraction failed for ASB-Minutes_2.12.20.pdf, proceeding without preview: TypeError: Class constructor AbortException cannot be invoked without 'new'
+    at extractPreviewText (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:65:31)
+    at async processFile (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/fileProcessing.ts:144:23)
+    at async processPendingFiles (/home/ubuntu/.openclaw/workspace/OPENCouncil/server/services/ingestionWorker.ts:66:24)
+    at async main (/home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/run-ingestion.ts:22:24)
+[FileProcessing] ASB-Minutes_2.12.20.pdf: Almost no text extracted (0 chars), queuing for OCR
+[IngestWorker] OCR Needed for albany/minutes/2020/ASB-Minutes_2.12.20.pdf (extracted 0 chars)
+[IngestWorker] OCR Failed: Command failed: pdftoppm -png "/tmp/ingest_ff8db175-f493-4bba-9abc-2e0e089ba670.pdf" "/tmp/ocr-1771168474045-tcyt34/page"
+/bin/sh: 1: pdftoppm: not found
+. Falling back to raw PDF.

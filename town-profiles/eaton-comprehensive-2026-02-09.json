@@ -1,0 +1,65 @@
+{
+  "town": "Eaton",
+  "extractedAt": "2026-02-09T03:08:47.026Z",
+  "sourceUrl": "https://eatonnh.org",
+  "boards": {
+    "select_board": {
+      "name": "Select Board",
+      "meetingSchedule": "3rd Tuesday at 3:00 PM at 6:30 PM"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "meetingSchedule": "3rd Tuesday at 3:00 PM at 6:30 PM"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "meetingSchedule": "3rd Tuesday"
+    },
+    "zoning_board": {
+      "name": "Zoning Board",
+      "meetingSchedule": "3rd Tuesday"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://eatonnh.org",
+    "https://eatonnh.org/boards",
+    "https://eatonnh.org/committees",
+    "https://eatonnh.org/boards-committees",
+    "https://eatonnh.org/government",
+    "https://eatonnh.org/selectboard",
+    "https://eatonnh.org/select-board",
+    "https://eatonnh.org/selectmen",
+    "https://eatonnh.org/board-of-selectmen",
+    "https://eatonnh.org/planning",
+    "https://eatonnh.org/planning-board",
+    "https://eatonnh.org/zoning",
+    "https://eatonnh.org/zba",
+    "https://eatonnh.org/conservation",
+    "https://eatonnh.org/budget-committee",
+    "https://eatonnh.org/departments",
+    "https://eatonnh.org/town-clerk",
+    "https://eatonnh.org/administration",
+    "https://eatonnh.org/calendar",
+    "https://eatonnh.org/events",
+    "https://eatonnh.org/meetings",
+    "https://eatonnh.org/agendas",
+    "https://eatonnh.org/contact",
+    "https://eatonnh.org/about",
+    "https://eatonnh.org/directory",
+    "https://eatonnh.org/pages/boards",
+    "https://eatonnh.org/pages/committees",
+    "https://eatonnh.org/pages/calendar"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 447-2840",
+    "email": "info@eatonnh.org"
+  }
+}

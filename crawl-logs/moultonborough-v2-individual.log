@@ -1,0 +1,38 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Moultonborough --url https://moultonboroughnh.gov --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Moultonborough
+🌐 URL: https://moultonboroughnh.gov
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 320 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ⚠️  Homepage load failed: page.evaluate: Execution context was destroyed, most likely because of a navigation
+   Will rely on sitemap URLs
+
+📋 Building page visit queue...
+   Total pages to visit: 517
+
+📥 Visiting pages and extracting documents...
+✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)
+   [140/200] 1 docs found
+✗✓(1)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 1 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://moultonboroughnh.gov/FormCenter/General-Forms-4/Send-Us-Comments-75

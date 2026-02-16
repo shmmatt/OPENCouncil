@@ -1,0 +1,55 @@
+{
+  "town": "Tuftonboro",
+  "extractedAt": "2026-02-09T03:51:44.513Z",
+  "sourceUrl": "https://www.tuftonboronh.gov",
+  "boards": {
+    "zoning_board": {
+      "name": "Zoning Board"
+    },
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "Library"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "Library"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Library"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Library"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.tuftonboronh.gov",
+    "https://www.tuftonboronh.gov/fire-rescue-department",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/additional-links",
+    "https://www.tuftonboronh.gov/fire-rescue-department/slideshows/apparatus",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/department-roster",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/fire-stations",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/history-tfd",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/mission-statement",
+    "https://www.tuftonboronh.gov/fire-rescue-department/links/online-fire-permits",
+    "https://www.tuftonboronh.gov/fire-rescue-department/pages/yearly-statistics",
+    "https://www.tuftonboronh.gov/highway-department",
+    "https://www.tuftonboronh.gov/police-department",
+    "https://www.tuftonboronh.gov/police-department/pages/additional-links",
+    "https://www.tuftonboronh.gov/town-clerk/links/town-meeting-minutes",
+    "https://www.tuftonboronh.gov/welfare-department",
+    "https://www.tuftonboronh.gov/welfare-department/links/public-assistance"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 569-4539"
+  }
+}

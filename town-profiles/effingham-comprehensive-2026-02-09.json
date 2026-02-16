@@ -1,0 +1,42 @@
+{
+  "town": "Effingham",
+  "extractedAt": "2026-02-09T03:47:40.204Z",
+  "sourceUrl": "https://effinghamnh.net",
+  "boards": {
+    "zoning_board": {
+      "name": "Zoning Board",
+      "location": "Town Hall"
+    },
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "Municipal Building"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Town Hall"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "Town Hall"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Town Hall"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://effinghamnh.net",
+    "https://effinghamnh.net/agendas",
+    "https://effinghamnh.net/news/public-hearing-budget-committee"
+  ],
+  "strategiesUsed": [
+    "TownCloud API",
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603-539-7770",
+    "email": "townofeffingham@effingham.nh.gov"
+  }
+}

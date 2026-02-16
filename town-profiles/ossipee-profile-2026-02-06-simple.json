@@ -1,0 +1,25 @@
+{
+  "town": "Ossipee",
+  "county": "Carroll",
+  "state": "NH",
+  "lastUpdated": "2026-02-06",
+  "sourceUrls": [
+    "https://www.ossipee.org",
+    "https://www.ossipee.org/",
+    "https://www.ossipee.org/documents",
+    "https://www.ossipee.org/about",
+    "https://www.ossipee.org/contact",
+    "https://www.ossipee.org/departments",
+    "https://www.ossipee.org/boards",
+    "https://www.ossipee.org/government"
+  ],
+  "townHall": {
+    "address": null,
+    "phone": "(603) 539-4181",
+    "email": null,
+    "website": "https://www.ossipee.org"
+  },
+  "boards": {},
+  "departments": {},
+  "notes": "Extracted 4 phones, 0 emails, 0 addresses, 0 hour entries, 0 meeting schedules.\n\nAdditional phones: (603) 937-4752, (603) 539-2284, (603) 539-4401\n"
+}

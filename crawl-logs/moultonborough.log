@@ -1,0 +1,65 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Moultonborough --url https://moultonboroughnh.gov --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Moultonborough
+🌐 URL: https://moultonboroughnh.gov
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: CivicPlus
+
+📋 Strategy 1: Focused Index Pages
+   Checking 52 index page candidates...
+✗✗✗✗.✓(115)✓(47)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+   Result: 162 docs from 2 index pages
+
+   📄 Working index pages:
+      /AgendaCenter
+      /FormCenter
+
+📊 Coverage Assessment:
+   Documents: 162
+   Categories:
+      ✓ agendas: 81
+      - forms: 47
+      ✓ minutes: 34
+   Years: ✓ Multiple
+   Status: ✓ Adequate
+
+⚡ Thorough mode: Running navigation strategy anyway...
+
+🗺️  Strategy 2: Navigation Following
+   Found 11 navigation links
+✗✗✗✗✗✗✗✗.✗✗
+   Result: 162 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 162 (+0)
+   Categories:
+      ✓ agendas: 81
+      - forms: 47
+      ✓ minutes: 34
+   Status: ✓ Adequate
+
+============================================================
+DISCOVERY COMPLETE: 162 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+🔍 DRY RUN
+
+Sample documents:
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_02032026-991
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_01022026-975
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_01022026-976
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_02032026-993
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Minutes/_02032026-993
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_02032026-989
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_01232026-984
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Minutes/_01232026-984
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Agenda/_01202026-986
+   https://moultonboroughnh.gov/AgendaCenter/ViewFile/Minutes/_01202026-986

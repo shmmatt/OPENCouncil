@@ -1,0 +1,52 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Ossipee --url https://www.ossipee.org --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Ossipee
+🌐 URL: https://www.ossipee.org
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   No sitemap found
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ✓ Found 171 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 370
+
+📥 Visiting pages and extracting documents...
+✓(59)✓(55)✗✓(55)✓(55)✓(55)✓(55)✗✗✓(55)✗✓(64)✓(55)✗✓(55)✗✓(64).✓(55)✓(55)
+   [20/200] 77 docs found
+✗✗.✗✓(55)✗✗.✗✓(55)✓(56)✗✗✗✗✗✓(63)✗✗✗✓(55).✓(55)✓(56)✗✗✗✗✗✗✗✗✗✓(55)✓(55)✗✗✗✗✗✗✓(58)✓(59)✓(55)✓(55)✗✗✗✓(55)✗✗✗✗✗✓(61)✗✓(68)✓(55)✗✓(56)
+   [80/200] 114 docs found
+✓(55)✓(55)✓(55)✓(55)✓(55)✓(55)✓(55)✓(55)✗✗✓(55)✗✓(55)✗✓(56)✗✗✓(55)✓(55)✗✗.✓(55)✓(58)✓(60)✓(58)..✗✓(57)✓(55)✓(55)✓(55)✓(55)✓(56)✗✗✗✓(55)✓(55)
+   [120/200] 129 docs found
+✗✓(55).✓(82)✓(55)✓(55)✓(55)✗✗✗✓(55)✓(56).✗✗✓(55)✗..✗..✗..✗✗....✗✗✓(58)✗✓(55)✗✓(55)✓(55)✓(56)
+   [160/200] 161 docs found
+✓(55)✓(65)✗.✓(55)✓(61).✗✓(61)✓(55)✓(55)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+
+============================================================
+DISCOVERY COMPLETE: 182 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.ossipee.org/about-ossipee/files/community-profile-2023
+   https://www.ossipee.org/board-of-selectmen/files/2022-employee-orginazation-chart-0
+   https://www.ossipee.org/board-of-selectmen/files/bos-public-input-policy
+   https://www.ossipee.org/board-of-selectmen/files/lake-ossipee-long-term-milfoil-plan-2019
+   https://www.ossipee.org/board-of-selectmen/files/state-sourced-revenue-report-020326
+   https://www.ossipee.org/budget-committee/files/2026-budget-committee-scgedule
+   https://www.ossipee.org/cemetery-trustees/files/cemetery-rules-procedures-2025
+   https://www.ossipee.org/cemetery-trustees/files/cemetery-trustee-by-laws-2025
+   https://www.ossipee.org/cemetery-trustees/files/tax-maps-with-cemetery-locations
+   https://www.ossipee.org/conservation-commission/files/byl-laws-2023-final

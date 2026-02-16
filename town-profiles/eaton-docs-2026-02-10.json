@@ -1,0 +1,22 @@
+{
+  "town": "Eaton",
+  "crawledAt": "2026-02-10T21:36:23.672Z",
+  "discovered": 101,
+  "downloaded": 101,
+  "uploaded": 101,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {
+    "misc": 56,
+    "ordinance": 2,
+    "form": 2,
+    "minutes": 41
+  },
+  "byStrategy": {
+    "Homepage keywords": 3,
+    "Page: /boards": 0,
+    "Page: /regulations": 15,
+    "Deep navigation": 121,
+    "Sitemap": 6
+  }
+}

@@ -1,0 +1,287 @@
+======================================================================
+📊 BATCH V3 CRAWLER - PARALLEL EXECUTION
+======================================================================
+🏛️  Towns: 18 (Carroll County)
+🚀 Concurrency: 4 towns at once
+📄 Max pages per town: 200
+⏰ Started: 2026-02-15T03:02:13.362Z
+======================================================================
+
+
+======================================================================
+🔄 BATCH 1/5: Albany, Bartlett, Brookfield, Chatham
+======================================================================
+
+[Albany] 🏛️  Starting...
+[Bartlett] 🏛️  Starting...
+[Brookfield] 🏛️  Starting...
+[Chatham] 🏛️  Starting...
+[Brookfield] 📊 20/200 pages, 8 docs
+[Bartlett] 📊 20/200 pages, 314 docs
+[Chatham] 📊 20/200 pages, 257 docs
+[Albany] 📊 20/200 pages, 46 docs
+[Brookfield] 📊 40/200 pages, 52 docs
+[Bartlett] 📊 40/200 pages, 336 docs
+[Chatham] 📊 40/200 pages, 292 docs
+[Albany] 📊 40/200 pages, 1104 docs
+[Brookfield] 📊 60/200 pages, 52 docs
+[Bartlett] 📊 60/200 pages, 336 docs
+[Chatham] 📊 60/200 pages, 292 docs
+[Brookfield] 📊 80/200 pages, 54 docs
+[Albany] 📊 60/200 pages, 1104 docs
+[Brookfield] 📊 100/200 pages, 73 docs
+[Chatham] 📊 80/200 pages, 292 docs
+[Bartlett] 📊 80/200 pages, 336 docs
+[Albany] 📊 80/200 pages, 1120 docs
+[Chatham] 📊 100/200 pages, 292 docs
+[Brookfield] 📊 120/200 pages, 82 docs
+[Bartlett] 📊 100/200 pages, 336 docs
+[Chatham] 📊 120/200 pages, 292 docs
+[Albany] 📊 100/200 pages, 1120 docs
+[Brookfield] 📊 140/200 pages, 86 docs
+[Bartlett] 📊 120/200 pages, 336 docs
+[Chatham] 📊 140/200 pages, 292 docs
+[Albany] 📊 120/200 pages, 1120 docs
+[Brookfield] 📊 160/200 pages, 87 docs
+[Chatham] 📊 160/200 pages, 292 docs
+[Bartlett] 📊 140/200 pages, 336 docs
+[Bartlett] ✅ Found 336 documents
+[Bartlett] ✅ Complete in 6.7min
+[Brookfield] 📊 180/200 pages, 106 docs
+[Albany] 📊 140/200 pages, 1120 docs
+[Chatham] 📊 180/200 pages, 292 docs
+[Brookfield] 📊 200/200 pages, 167 docs
+[Brookfield] ✅ Found 167 documents
+[Brookfield] ✅ Complete in 7.5min
+[Chatham] 📊 200/200 pages, 292 docs
+[Chatham] ✅ Found 292 documents
+[Chatham] ✅ Complete in 7.7min
+[Albany] 📊 160/200 pages, 1225 docs
+[Albany] 📊 180/200 pages, 1283 docs
+[Albany] 📊 200/200 pages, 1283 docs
+[Albany] ✅ Found 1283 documents
+[Albany] ✅ Complete in 10.0min
+
+✅ Batch 1 complete: 4/4 succeeded, 2078 total docs
+
+
+======================================================================
+🔄 BATCH 2/5: Conway, Eaton, Effingham, Freedom
+======================================================================
+
+[Conway] 🏛️  Starting...
+[Eaton] 🏛️  Starting...
+[Effingham] 🏛️  Starting...
+[Freedom] 🏛️  Starting...
+[Effingham] 📊 20/200 pages, 272 docs
+[Conway] 📊 20/200 pages, 251 docs
+[Eaton] 📊 20/200 pages, 102 docs
+[Freedom] 📊 20/200 pages, 935 docs
+[Effingham] 📊 40/200 pages, 272 docs
+[Conway] 📊 40/200 pages, 257 docs
+[Eaton] 📊 40/200 pages, 102 docs
+[Freedom] 📊 40/200 pages, 1569 docs
+[Effingham] 📊 60/200 pages, 307 docs
+[Conway] 📊 60/200 pages, 262 docs
+[Eaton] 📊 60/200 pages, 102 docs
+[Conway] ✅ Found 291 documents
+[Conway] ✅ Complete in 2.9min
+[Freedom] 📊 60/200 pages, 1655 docs
+[Effingham] 📊 80/200 pages, 308 docs
+[Eaton] 📊 80/200 pages, 102 docs
+[Effingham] 📊 100/200 pages, 308 docs
+[Freedom] 📊 80/200 pages, 1655 docs
+[Eaton] 📊 100/200 pages, 102 docs
+[Effingham] 📊 120/200 pages, 308 docs
+[Freedom] 📊 100/200 pages, 1655 docs
+[Eaton] 📊 120/200 pages, 102 docs
+[Effingham] 📊 140/200 pages, 308 docs
+[Freedom] 📊 120/200 pages, 1657 docs
+[Effingham] 📊 160/200 pages, 308 docs
+[Effingham] ✅ Found 308 documents
+[Eaton] 📊 140/200 pages, 102 docs
+[Effingham] ✅ Complete in 6.1min
+[Freedom] 📊 140/200 pages, 1657 docs
+[Eaton] 📊 160/200 pages, 102 docs
+[Freedom] 📊 160/200 pages, 1657 docs
+[Eaton] 📊 180/200 pages, 156 docs
+[Freedom] 📊 180/200 pages, 1657 docs
+[Eaton] 📊 200/200 pages, 157 docs
+[Eaton] ✅ Found 157 documents
+[Eaton] ✅ Complete in 8.5min
+[Freedom] ✅ Found 1657 documents
+[Freedom] ✅ Complete in 8.9min
+
+✅ Batch 2 complete: 4/4 succeeded, 2413 total docs
+
+
+======================================================================
+🔄 BATCH 3/5: Hart's Location, Jackson, Madison, Moultonborough
+======================================================================
+
+[Hart's Location] 🏛️  Starting...
+[Jackson] 🏛️  Starting...
+[Madison] 🏛️  Starting...
+[Moultonborough] 🏛️  Starting...
+[Moultonborough] 📊 20/200 pages, 157 docs
+[Madison] 📊 20/200 pages, 1198 docs
+[Jackson] 📊 20/200 pages, 154 docs
+[Hart's Location] 📊 20/200 pages, 87 docs
+[Hart's Location] ✅ Found 87 documents
+[Hart's Location] ✅ Complete in 1.7min
+[Moultonborough] 📊 40/200 pages, 356 docs
+[Madison] 📊 40/200 pages, 1204 docs
+[Jackson] 📊 40/200 pages, 450 docs
+[Moultonborough] 📊 60/200 pages, 1001 docs
+[Madison] 📊 60/200 pages, 1204 docs
+[Jackson] 📊 60/200 pages, 450 docs
+[Moultonborough] 📊 80/200 pages, 1036 docs
+[Madison] 📊 80/200 pages, 1204 docs
+[Jackson] 📊 80/200 pages, 450 docs
+[Moultonborough] 📊 100/200 pages, 1060 docs
+[Madison] 📊 100/200 pages, 1204 docs
+[Jackson] 📊 100/200 pages, 450 docs
+[Moultonborough] 📊 120/200 pages, 1114 docs
+[Madison] 📊 120/200 pages, 1204 docs
+[Jackson] 📊 120/200 pages, 450 docs
+[Moultonborough] 📊 140/200 pages, 1262 docs
+[Madison] 📊 140/200 pages, 1204 docs
+[Moultonborough] 📊 160/200 pages, 1384 docs
+[Madison] 📊 160/200 pages, 1204 docs
+[Jackson] 📊 140/200 pages, 450 docs
+[Moultonborough] 📊 180/200 pages, 1491 docs
+[Madison] 📊 180/200 pages, 1204 docs
+[Jackson] 📊 160/200 pages, 450 docs
+[Moultonborough] 📊 200/200 pages, 1536 docs
+[Moultonborough] ✅ Found 1536 documents
+[Madison] 📊 200/200 pages, 1204 docs
+[Madison] ✅ Found 1204 documents
+[Moultonborough] ✅ Complete in 8.9min
+[Madison] ✅ Complete in 8.9min
+[Jackson] 📊 180/200 pages, 450 docs
+[Jackson] 📊 200/200 pages, 450 docs
+[Jackson] ✅ Found 450 documents
+[Jackson] ✅ Complete in 10.0min
+
+✅ Batch 3 complete: 4/4 succeeded, 3277 total docs
+
+
+======================================================================
+🔄 BATCH 4/5: Ossipee, Sandwich, Tamworth, Tuftonboro
+======================================================================
+
+[Ossipee] 🏛️  Starting...
+[Sandwich] 🏛️  Starting...
+[Tamworth] 🏛️  Starting...
+[Tuftonboro] 🏛️  Starting...
+[Tuftonboro] 📊 20/200 pages, 123 docs
+[Ossipee] 📊 20/200 pages, 78 docs
+[Tamworth] 📊 20/200 pages, 624 docs
+[Ossipee] 📊 40/200 pages, 97 docs
+[Tuftonboro] 📊 40/200 pages, 144 docs
+[Tamworth] 📊 40/200 pages, 694 docs
+[Ossipee] 📊 60/200 pages, 118 docs
+[Tuftonboro] 📊 60/200 pages, 178 docs
+[Sandwich] ✅ Found 0 documents
+[Sandwich] ✅ Complete in 2.4min
+[Tamworth] 📊 60/200 pages, 730 docs
+[Ossipee] 📊 80/200 pages, 136 docs
+[Tuftonboro] 📊 80/200 pages, 202 docs
+[Tamworth] 📊 80/200 pages, 762 docs
+[Ossipee] 📊 100/200 pages, 178 docs
+[Tuftonboro] 📊 100/200 pages, 416 docs
+[Tamworth] 📊 100/200 pages, 771 docs
+[Tuftonboro] 📊 120/200 pages, 417 docs
+[Ossipee] 📊 120/200 pages, 204 docs
+[Tamworth] 📊 120/200 pages, 771 docs
+[Tuftonboro] 📊 140/200 pages, 422 docs
+[Ossipee] 📊 140/200 pages, 223 docs
+[Tamworth] 📊 140/200 pages, 774 docs
+[Tuftonboro] 📊 160/200 pages, 431 docs
+[Ossipee] 📊 160/200 pages, 227 docs
+[Tuftonboro] 📊 180/200 pages, 431 docs
+[Tamworth] 📊 160/200 pages, 790 docs
+[Ossipee] 📊 180/200 pages, 231 docs
+[Tuftonboro] 📊 200/200 pages, 432 docs
+[Tuftonboro] ✅ Found 432 documents
+[Tuftonboro] ✅ Complete in 7.5min
+[Tamworth] 📊 180/200 pages, 790 docs
+[Ossipee] 📊 200/200 pages, 231 docs
+[Ossipee] ✅ Found 231 documents
+[Ossipee] ✅ Complete in 7.7min
+[Tamworth] 📊 200/200 pages, 790 docs
+[Tamworth] ✅ Found 790 documents
+[Tamworth] ✅ Complete in 8.5min
+
+✅ Batch 4 complete: 4/4 succeeded, 1453 total docs
+
+
+======================================================================
+🔄 BATCH 5/5: Wakefield, Wolfeboro
+======================================================================
+
+[Wakefield] 🏛️  Starting...
+[Wolfeboro] 🏛️  Starting...
+[Wolfeboro] 📊 20/200 pages, 94 docs
+[Wolfeboro] 📊 40/200 pages, 94 docs
+[Wolfeboro] 📊 60/200 pages, 94 docs
+[Wakefield] 📊 20/200 pages, 48 docs
+[Wolfeboro] 📊 80/200 pages, 94 docs
+[Wakefield] 📊 40/200 pages, 100 docs
+[Wolfeboro] 📊 100/200 pages, 131 docs
+[Wakefield] 📊 60/200 pages, 106 docs
+[Wakefield] 📊 80/200 pages, 107 docs
+[Wolfeboro] 📊 120/200 pages, 184 docs
+[Wakefield] 📊 100/200 pages, 112 docs
+[Wolfeboro] 📊 140/200 pages, 330 docs
+[Wakefield] 📊 120/200 pages, 368 docs
+[Wakefield] 📊 140/200 pages, 373 docs
+[Wolfeboro] 📊 160/200 pages, 336 docs
+[Wakefield] 📊 160/200 pages, 378 docs
+[Wolfeboro] 📊 180/200 pages, 380 docs
+[Wakefield] 📊 180/200 pages, 383 docs
+[Wolfeboro] 📊 200/200 pages, 399 docs
+[Wolfeboro] ✅ Found 399 documents
+[Wolfeboro] ✅ Complete in 6.4min
+[Wakefield] 📊 200/200 pages, 384 docs
+[Wakefield] ✅ Found 384 documents
+[Wakefield] ✅ Complete in 6.5min
+
+✅ Batch 5 complete: 2/2 succeeded, 783 total docs
+
+
+======================================================================
+📊 FINAL RESULTS
+======================================================================
+✅ Success: 18/18
+❌ Failed: 0
+📄 Total documents: 10004
+📄 Total pages visited: 2988
+⏱️  Total time: 43.9 minutes
+⚡ Avg time per town: 2.4 minutes
+
+======================================================================
+📋 DETAILED RESULTS
+======================================================================
+Town                 | Docs  | Pages | Time(m) | Coverage
+----------------------------------------------------------------------
+✅ Freedom            |  1657 |   185 |     8.9 |
+✅ Moultonborough     |  1536 |   200 |     8.9 |    584%
+✅ Albany             |  1283 |   200 |    10.0 |
+✅ Madison            |  1204 |   200 |     8.9 |     86%
+✅ Tamworth           |   790 |   200 |     8.5 |
+✅ Jackson            |   450 |   200 |    10.0 |
+✅ Tuftonboro         |   432 |   200 |     7.5 |
+✅ Wolfeboro          |   399 |   200 |     6.4 |    137%
+✅ Wakefield          |   384 |   200 |     6.5 |
+✅ Bartlett           |   336 |   143 |     6.7 |
+✅ Effingham          |   308 |   161 |     6.1 |
+✅ Chatham            |   292 |   200 |     7.7 |
+✅ Conway             |   291 |    73 |     2.9 |
+✅ Ossipee            |   231 |   200 |     7.7 |     35%
+✅ Brookfield         |   167 |   200 |     7.5 |
+✅ Eaton              |   157 |   200 |     8.5 |
+✅ Hart's Location    |    87 |    25 |     1.7 |
+✅ Sandwich           |     0 |     1 |     2.4 |
+
+💾 Results saved: /home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/batch-v3-2026-02-15.json

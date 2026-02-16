@@ -1,0 +1,14 @@
+{
+  "town": "Chatham",
+  "crawledAt": "2026-02-10T20:58:55.595Z",
+  "discovered": 157,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 157,
+  "failed": 0,
+  "byCategory": {},
+  "byStrategy": {
+    "Homepage keywords": 5,
+    "Sitemap": 3
+  }
+}

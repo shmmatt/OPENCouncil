@@ -1,0 +1,18 @@
+{
+  "town": "Effingham",
+  "crawledAt": "2026-02-10T15:21:51.579Z",
+  "discovered": 266,
+  "downloaded": 5,
+  "uploaded": 5,
+  "skipped": 260,
+  "failed": 1,
+  "byCategory": {
+    "misc": 5
+  },
+  "byStrategy": {
+    "TownCloud API": 18,
+    "Homepage keywords": 3,
+    "Page: /agendas": 0,
+    "Sitemap": 134
+  }
+}

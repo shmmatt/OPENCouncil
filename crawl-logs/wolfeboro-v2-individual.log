@@ -1,0 +1,57 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Wolfeboro --url https://www.wolfeboronh.us --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Wolfeboro
+🌐 URL: https://www.wolfeboronh.us
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   ✓ Found 270 URLs in sitemap
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ✓ Found 31 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 484
+
+📥 Visiting pages and extracting documents...
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✗✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)
+   [20/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✗✗✓(3)✓(3)✓(3)✓(3)
+   [40/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)
+   [60/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✗✓(3)✗.✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✗.✓(3)✓(3)
+   [80/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✗✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✗✓(3)✓(3)
+   [100/200] 3 docs found
+✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)
+   [120/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)
+   [140/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)
+   [160/200] 3 docs found
+✓(3)✓(3)✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3).✗✓(3)✓(3)✓(3)✓(3)
+   [180/200] 3 docs found
+✓(3)✓(3)✓(3).✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✓(3)✗✓(3)✓(3)✓(3)✗✓(3)✓(3)✓(3)
+   [200/200] 3 docs found
+
+
+============================================================
+DISCOVERY COMPLETE: 3 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.wolfeboronh.us/FormCenter/General-Forms-4/Contact-Us-79
+   https://www.wolfeboronh.us/FormCenter/Water-Sewer-Utilities-24/Water-Sewer-Request-Form-72
+   https://www.wolfeboronh.us/DocumentCenter/View/238/Assessors-Manual-PDF

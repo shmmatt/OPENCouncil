@@ -1,0 +1,45 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Madison --url https://madison-nh.org --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Madison
+🌐 URL: https://madison-nh.org
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: WordPress
+
+📋 Strategy 1: Focused Index Pages
+   Checking 7 index page candidates...
+✗.✗.✗..
+   Result: 0 docs from 0 index pages
+
+📊 Coverage Assessment:
+   Documents: 0
+   Categories:
+   Years: ✗ Limited
+   Status: ⚠️  Insufficient
+
+⚡ Coverage insufficient, switching to navigation strategy...
+   Reason: No minutes or agendas found
+
+🗺️  Strategy 2: Navigation Following
+   Found 0 navigation links
+
+   Result: 0 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 0 (+0)
+   Categories:
+   Status: ⚠️  Best effort
+
+============================================================
+DISCOVERY COMPLETE: 0 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+⚠️  No documents found.
+

@@ -1,0 +1,41 @@
+{
+  "town": "Bartlett",
+  "extractedAt": "2026-02-09T03:44:51.375Z",
+  "sourceUrl": "https://www.townofbartlettnh.org",
+  "boards": {
+    "select_board": {
+      "name": "Select Board"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board"
+    },
+    "conservation_board": {
+      "name": "Conservation Board",
+      "location": "Library"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Library"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.townofbartlettnh.org",
+    "https://www.townofbartlettnh.org/35/Contact",
+    "https://www.townofbartlettnh.org/agendacenter",
+    "https://www.townofbartlettnh.org/calendar.aspx?CID=14",
+    "https://www.townofbartlettnh.org/calendar",
+    "https://www.townofbartlettnh.org/directory"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 356-2950",
+    "address": "56 Town Hall Rd,\n\n Intervale, NH 03845"
+  }
+}

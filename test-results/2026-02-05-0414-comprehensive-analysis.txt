@@ -1,0 +1,34 @@
+
+> rest-express@1.0.0 test:chat
+> tsx --env-file=.env scripts/test-chat-pipeline.ts analyze test-results/2026-02-05-0414-comprehensive.json
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 CHAT PIPELINE TEST REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 SUMMARY
+  Total Tests:     50
+  Passed:          50 ✅
+  Failed:          0 ❌
+  Pass Rate:       100.0%
+  Avg Duration:    19454ms
+
+📁 BY CATEGORY
+  meetings                  5/5 (100%)
+  contact                   5/5 (100%)
+  permits                   5/5 (100%)
+  taxes                     5/5 (100%)
+  voting                    5/5 (100%)
+  zoning                    5/5 (100%)
+  services                  5/5 (100%)
+  recreation                5/5 (100%)
+  budget                    5/5 (100%)
+  records                   5/5 (100%)
+
+💡 RECOMMENDATIONS
+  • 38 questions (76%) were Tier C
+    → Add more comprehensive documentation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

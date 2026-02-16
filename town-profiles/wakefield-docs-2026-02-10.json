@@ -1,0 +1,22 @@
+{
+  "town": "Wakefield",
+  "crawledAt": "2026-02-10T22:09:43.707Z",
+  "discovered": 77,
+  "downloaded": 59,
+  "uploaded": 59,
+  "skipped": 5,
+  "failed": 13,
+  "byCategory": {
+    "form": 9,
+    "misc": 27,
+    "zoning": 7,
+    "planning": 9,
+    "election": 3,
+    "minutes": 2,
+    "ordinance": 2
+  },
+  "byStrategy": {
+    "Homepage keywords": 7,
+    "Deep navigation": 179
+  }
+}

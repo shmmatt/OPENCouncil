@@ -1,0 +1,25 @@
+[Unit]
+Description=OPENCouncil Document Uploader Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/OPENCouncil
+ExecStart=/home/ubuntu/.npm-global/bin/tsx /home/ubuntu/.openclaw/workspace/OPENCouncil/scripts/document-uploader-service.ts
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="AWS_REGION=us-east-1"
+Environment="AWS_ACCESS_KEY_ID=AKIAXEEDJLE2AYAKJDMZ"
+Environment="AWS_SECRET_ACCESS_KEY=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"
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

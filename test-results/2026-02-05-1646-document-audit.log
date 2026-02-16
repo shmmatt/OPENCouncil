@@ -1,0 +1,667 @@
+🔍 DOCUMENT DATABASE AUDIT
+
+================================================================================
+
+📁 LEGACY DOCUMENTS TABLE (documents):
+
+Total legacy documents: 718
+
+  Statewide: 1 documents
+    - planning_board_docs: 1
+  statewide: 185 documents
+    - misc_other: 69
+    - policy: 66
+    - zba_docs: 1
+    - budget: 23
+    - elections: 4
+    - licensing_permits: 6
+    - ordinance: 10
+    - warrant_article: 3
+    - cip: 1
+    - zoning: 1
+    - meeting_minutes: 1
+  Unknown: 288 documents
+    - misc_other: 180
+    - policy: 10
+    - meeting_minutes: 44
+    - budget: 24
+    - warrant_article: 11
+    - cip: 2
+    - licensing_permits: 3
+    - planning_board_docs: 1
+    - elections: 11
+    - town_report: 2
+  ossipee: 15 documents
+    - policy: 5
+    - ordinance: 4
+    - zoning: 1
+    - misc_other: 5
+  Ossipee: 228 documents
+    - misc_other: 43
+    - policy: 11
+    - ordinance: 6
+    - zoning: 6
+    - zba_docs: 9
+    - licensing_permits: 3
+    - meeting_minutes: 132
+    - town_report: 2
+    - warrant_article: 1
+    - budget: 3
+    - elections: 1
+    - planning_board_docs: 11
+  Madison: 1 documents
+    - misc_other: 1
+
+
+📚 V2 PIPELINE (logicalDocuments):
+
+Total logical documents: 2417
+
+  Ossipee: 229 documents
+    - misc_other: 43
+    - policy: 11
+    - ordinance: 6
+    - zoning: 6
+    - zba_docs: 9
+    - licensing_permits: 3
+    - meeting_minutes: 132
+    - town_report: 2
+    - warrant_article: 1
+    - budget: 4
+    - elections: 1
+    - planning_board_docs: 11
+  statewide: 409 documents
+    - policy: 60
+    - misc_other: 211
+    - licensing_permits: 9
+    - ordinance: 10
+    - planning_board_docs: 1
+    - budget: 47
+    - warrant_article: 10
+    - cip: 1
+    - zoning: 1
+    - elections: 14
+    - town_report: 2
+    - meeting_minutes: 43
+  ossipee: 734 documents
+    - minutes: 640
+    - ordinances: 9
+    - document: 71
+    - permits: 6
+    - financials: 2
+    - tax_records: 2
+    - reports: 4
+  Madison: 1 documents
+    - misc_other: 1
+  conway: 1044 documents
+    - minutes: 714
+    - document: 239
+    - permits: 31
+    - ordinances: 6
+    - tax_records: 9
+    - reports: 44
+    - financials: 1
+
+
+🔎 DETAILED: OSSIPEE DOCUMENTS
+
+================================================================================
+
+Legacy (228):
+  - public_notice_111425.docx (misc_other, no year)
+  - ossipee031225tmresults.pdf (misc_other, no year)
+  - bos_public_input_policy.pdf (policy, no year)
+  - restoration_of_involuntarily_merged_lots_03_08_22.pdf (misc_other, no year)
+  - dogs_on_town_property_june_06_2012.pdf (misc_other, 2012)
+  - contract_for_use_of_facilities_11-19-24.pdf (misc_other, no year)
+  - reg_for_use_of_rec_areas_v2_9_14_09.pdf (misc_other, no year)
+  - release_private_road_ff_01_23_18_0.pdf (misc_other, no year)
+  - 06.2424route_25_parking_ban_ordinance_clean_0.pdf (ordinance, no year)
+  - tax_reduction_form_06.02.21.pdf (misc_other, no year)
+  - 031225zoningordinance2025final_3.pdf (zoning, 2025)
+  - cemetery_rules_procedures2025.pdf (misc_other, 2025)
+  - cemetery_trustee_by-laws_2025.pdf (misc_other, 2025)
+  - Chapter 289 CEMETERIES.pdf (misc_other, no year)
+  - cemetery_trustee_by-laws_2025 (1).pdf (misc_other, 2025)
+  - occ_-_bylaws_2023_final.pdf (misc_other, 2023)
+  - pb_by_-_laws_2022.pdf (misc_other, 2022)
+  - pb_order_of_business_-_rev._2019.pdf (misc_other, 2019)
+  - pb_fee_schedule_final_2023.pdf (misc_other, 2023)
+  - pb_rules_of_procedure_-_2024.pdf (misc_other, 2024)
+  ... and 208 more
+
+V2 Pipeline (229):
+  - public_notice_111425.docx (misc_other, board: none)
+  - ossipee031225tmresults.pdf (misc_other, board: none)
+  - bos_public_input_policy.pdf (policy, board: none)
+  - restoration_of_involuntarily_merged_lots_03_08_22.pdf (misc_other, board: none)
+  - dogs_on_town_property_june_06_2012.pdf (misc_other, board: none)
+  - contract_for_use_of_facilities_11-19-24.pdf (misc_other, board: none)
+  - reg_for_use_of_rec_areas_v2_9_14_09.pdf (misc_other, board: none)
+  - release_private_road_ff_01_23_18_0.pdf (misc_other, board: none)
+  - 06.2424route_25_parking_ban_ordinance_clean_0.pdf (ordinance, board: none)
+  - tax_reduction_form_06.02.21.pdf (misc_other, board: none)
+  - 031225zoningordinance2025final_3.pdf (zoning, board: none)
+  - cemetery_rules_procedures2025.pdf (misc_other, board: none)
+  - cemetery_trustee_by-laws_2025.pdf (misc_other, board: none)
+  - Chapter 289 CEMETERIES.pdf (misc_other, board: none)
+  - cemetery_trustee_by-laws_2025 (1).pdf (misc_other, board: none)
+  - occ_-_bylaws_2023_final.pdf (misc_other, board: none)
+  - pb_by_-_laws_2022.pdf (misc_other, board: none)
+  - pb_order_of_business_-_rev._2019.pdf (misc_other, board: none)
+  - pb_fee_schedule_final_2023.pdf (misc_other, board: none)
+  - pb_rules_of_procedure_-_2024.pdf (misc_other, board: none)
+  ... and 209 more
+
+
+🔎 DETAILED: CONWAY DOCUMENTS
+
+================================================================================
+
+Legacy (0):
+
+V2 Pipeline (0):
+
+
+📅 DOCUMENTS WITH 'SCHEDULE', 'AGENDA', 'CALENDAR' IN TITLE
+
+================================================================================
+
+Legacy (83):
+  - [null] Chapter 91-A ACCESS TO GOVERNMENTAL RECORDS AND MEETINGS.pdf
+  - [statewide] rtk_poster-public_meetings.pdf
+  - [statewide] public_meetings_governmental_records.pdf
+  - [statewide] rtk_manual_is_it_a_meeting_.pdf
+  - [statewide] town-meeting-guide-2026_0.pdf
+  - [statewide] Town Meeting Handbook Best Practices Final Sm.pdf
+  - [statewide] LEGAL Q&A_ Town Meetings and Citizen Petitioned Warrant Articles _ New Hampshire Municipal Association.pdf
+  - [null] 2023-2027-assessment-review-schedule.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025 (2).pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025.pdf
+  - [Ossipee] 2025.3.31_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.14_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.28_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.5.16_bos_meeting_minutes_cb_hearing.pdf
+  - [Ossipee] 2025.06.03_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.6.3_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] 2025.6.30_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] selectmen_meeting_min_7-21-2025.pdf
+  - [Ossipee] selectmens_meeting_8-4-2025.pdf
+  - [Ossipee] selectmen_meeting_min_8-25-2025.pdf
+  - [Ossipee] selectmens_meeting_9-22-2025.pdf
+  - [Ossipee] selectmens_meeting_min_10-6-2025.pdf
+  - [Ossipee] bos_meeting_min_10-20-2025.pdf
+  - [Ossipee] selectmens_meeting_10-27-25.pdf
+  - [Ossipee] selectmens_meeting_10-28-25.pdf
+  - [Ossipee] ttf_meeting_min_9-10-25.pdf
+  - [Ossipee] ttf_aug_2025_meeting_min.pdf
+  - [Ossipee] ttf_meeting_min_3-19-2025.pdf
+  - [Ossipee] ttf_meeting_minutes_1-8-2025.pdf
+  - [statewide] 2023-2027-assessment-review-schedule.pdf
+  - [statewide] 2018-2022-ar-schedule.pdf
+  - [statewide] Chapter 39 TIME FOR HOLDING TOWN MEETINGS AND WARNING THEREOF.pdf
+  - [statewide] Chapter 40 GOVERNMENT OF TOWN MEETING.pdf
+  - [null] SB_Meeting_Schedule_2025-2026.pdf
+  - [Ossipee] selectmen_meeting_minutes_12-1-2025.pdf
+  - [Ossipee] selectmen_meeting_minutes_12-1-2025.pdf
+  - [null] SB_Meeting_Schedule_2025-2026.pdf
+  - [null] SB_Meeting_Schedule_2025-2026.pdf
+  - [null] selectmen_meeting_minutes_12-1-2025.pdf
+  - [null] selectmens_meeting_2-11-2025.pdf
+  - [null] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [null] work_sess_meeting_min_3-3-2025_0.pdf
+  - [null] selectmens_meeting_2-11-2025.pdf
+  - [null] selectmens_meeting_1-27-2025.pdf
+  - [null] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [null] 2025.4.14_bos_meeting_minutes.pdf
+  - [null] 2025.3.31_bos_meeting_minutes.pdf
+  - [null] work_sess_meeting_min_3-3-2025.pdf
+  - [null] work_sess_meeting_min_3-3-2025_0.pdf
+  - [null] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025 (2).pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025.pdf
+  - [Ossipee] 2025.3.31_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.14_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.28_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.5.16_bos_meeting_minutes_cb_hearing.pdf
+  - [Ossipee] 2025.06.03_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.6.3_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] 2025.6.30_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] selectmen_meeting_min_7-21-2025.pdf
+  - [Ossipee] selectmens_meeting_8-4-2025.pdf
+  - [Ossipee] selectmen_meeting_min_8-25-2025.pdf
+  - [Ossipee] selectmens_meeting_9-22-2025.pdf
+  - [Ossipee] selectmens_meeting_min_10-6-2025.pdf
+  - [Ossipee] bos_meeting_min_10-20-2025.pdf
+  - [Ossipee] selectmens_meeting_10-27-25.pdf
+  - [Ossipee] selectmens_meeting_10-28-25.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [null] 2023-2027-assessment-review-schedule.pdf
+  - [null] 2018-2022-ar-schedule.pdf
+
+V2 Pipeline (307):
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025 (2).pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025.pdf
+  - [Ossipee] 2025.3.31_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.14_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.28_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.5.16_bos_meeting_minutes_cb_hearing.pdf
+  - [Ossipee] 2025.06.03_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.6.3_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] 2025.6.30_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] selectmen_meeting_min_7-21-2025.pdf
+  - [Ossipee] selectmens_meeting_8-4-2025.pdf
+  - [Ossipee] selectmen_meeting_min_8-25-2025.pdf
+  - [Ossipee] selectmens_meeting_9-22-2025.pdf
+  - [Ossipee] selectmens_meeting_min_10-6-2025.pdf
+  - [Ossipee] bos_meeting_min_10-20-2025.pdf
+  - [Ossipee] selectmens_meeting_10-27-25.pdf
+  - [Ossipee] selectmens_meeting_10-28-25.pdf
+  - [Ossipee] ttf_meeting_min_9-10-25.pdf
+  - [Ossipee] ttf_aug_2025_meeting_min.pdf
+  - [Ossipee] ttf_meeting_min_3-19-2025.pdf
+  - [Ossipee] ttf_meeting_minutes_1-8-2025.pdf
+  - [statewide] 2023-2027-assessment-review-schedule.pdf
+  - [statewide] 2018-2022-ar-schedule.pdf
+  - [statewide] Chapter 39 TIME FOR HOLDING TOWN MEETINGS AND WARNING THEREOF.pdf
+  - [statewide] Chapter 40 GOVERNMENT OF TOWN MEETING.pdf
+  - [statewide] SB_Meeting_Schedule_2025-2026.pdf
+  - [Ossipee] selectmen_meeting_minutes_12-1-2025.pdf
+  - [statewide] SB_Meeting_Schedule_2025-2026.pdf
+  - [Ossipee] selectmen_meeting_minutes_12-1-2025.pdf
+  - [statewide] SB_Meeting_Schedule_2025-2026.pdf
+  - [statewide] SB_Meeting_Schedule_2025-2026.pdf
+  - [statewide] selectmen_meeting_minutes_12-1-2025.pdf
+  - [statewide] selectmens_meeting_2-11-2025.pdf
+  - [statewide] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [statewide] work_sess_meeting_min_3-3-2025_0.pdf
+  - [statewide] selectmens_meeting_2-11-2025.pdf
+  - [statewide] selectmens_meeting_1-27-2025.pdf
+  - [statewide] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [statewide] 2025.4.14_bos_meeting_minutes.pdf
+  - [statewide] 2025.3.31_bos_meeting_minutes.pdf
+  - [statewide] work_sess_meeting_min_3-3-2025.pdf
+  - [statewide] work_sess_meeting_min_3-3-2025_0.pdf
+  - [statewide] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [Ossipee] selectmens_meeting_1-27-2025.pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025_0.pdf
+  - [Ossipee] selectmens_meeting_2-11-2025 (2).pdf
+  - [Ossipee] work_sess_meeting_min_3-3-2025.pdf
+  - [Ossipee] 2025.3.31_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.14_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.4.28_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.5.16_bos_meeting_minutes_cb_hearing.pdf
+  - [Ossipee] 2025.06.03_bos_meeting_minutes.pdf
+  - [Ossipee] 2025.6.3_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] 2025.6.30_bos_meeting_and_hearing_minutes.pdf
+  - [Ossipee] selectmen_meeting_min_7-21-2025.pdf
+  - [Ossipee] selectmens_meeting_8-4-2025.pdf
+  - [Ossipee] selectmen_meeting_min_8-25-2025.pdf
+  - [Ossipee] selectmens_meeting_9-22-2025.pdf
+  - [Ossipee] selectmens_meeting_min_10-6-2025.pdf
+  - [Ossipee] bos_meeting_min_10-20-2025.pdf
+  - [Ossipee] selectmens_meeting_10-27-25.pdf
+  - [Ossipee] selectmens_meeting_10-28-25.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [statewide] 2023-2027-assessment-review-schedule.pdf
+  - [statewide] 2018-2022-ar-schedule.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2019] selectmens_meeting-3.18.2019_0.pdf
+  - [conway] [Conway] rental-inspection-fee-schedule-1-.pdf
+  - [ossipee] [Ossipee - 2023] pb_fee_schedule_final_2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2019] selectmens_meeting_12-9-19.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2018] selectmens_meeting-7.2.2018.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2020] selectmens_meeting_minutes_1-27-2020.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2020] selectmens_meeting_minutes_2-3-2020.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectman_meeting_minutes_5-10-21.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minute_10-25-21.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_12-6-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_3-15-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_3-22-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_4-19-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_4-26-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_5-24-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_5-3-21.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-15-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-22-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-22-2021_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_5-17-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-14-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-20-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-21-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-7-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_7-12-21_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_7-12-21_1.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_8-23-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_8-9-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_9-27-2021.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_9-26-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-17-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-24-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-31-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_11-7-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_9-12-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmen_meeting_minutes_3-14-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_1-10-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_1-24-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_10-3-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_2-14-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_2-7-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_3-21-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_3-7-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-11-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-18-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-25-22.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-4-2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_december_12_2022.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selecmen_meeting_minutes_3-27-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_7-31-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minute_1-23-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_11-13-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_11-27-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_3-20-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_4-10-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_4-24-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_5-22-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_7-17-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_8-14-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_8-28-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_9-11-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_9-25-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_10-02-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_10-02-2023_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_1-9-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_10-16-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_12-18-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_4-10-2023.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_5-8-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_6-5-23.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] 2024.3.04_public_meeting_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-1-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-15-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-29-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_5-13-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_7-9-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_aug_19.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_min_12-2-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_minutes_1-22-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_minutes_3-18-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_work_session_9-24-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_s_work_sess_meeting_min_12-30-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_10-15-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_10-28-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_11-4-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_5-28-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_6-17-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_6-4-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_7-22-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_8-6-24_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_9-16-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_9-16-24_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_and_work_sess_10-7-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_minutes_1-8-2024.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_minutes_2-5-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_work_sess_meeting_min_10-21-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_work_sess_meeting_min_12-17-24.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.06.03_bos_meeting_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.4.28_bos_meeting_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.6.30_bos_meeting_and_hearing_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.5.16_bos_meeting_minutes_cb_hearing.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.6.3_bos_meeting_and_hearing_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] bos_meeting_min_10-20-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] bos_meeting_minutes_12-15-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_min_7-21-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_min_8-25-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_minutes_12-1-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_work_sess_and_meeting_1-13-25.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_1-27-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_10-27-25.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_10-28-25.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_2-11-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_8-4-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_9-22-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_min_10-6-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] work_sess_meeting_min_3-3-2025.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] work_sess_meeting_min_3-3-2025_0.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2026] bos_meeting_minutes_1-5-2026.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.4.14_bos_meeting_minutes.pdf
+  - [ossipee] [Ossipee - Budget Committee - 2026] budget_committee_schedule_2026.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.3.31_bos_meeting_minutes.pdf
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minute_10-25-21.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_12-6-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_min_12-2-2024.pdf (OCR)
+  - [conway] [Conway] rental-inspection-fee-schedule-1-.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2019] selectmens_meeting_12-9-19.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2020] selectmens_meeting_minutes_1-27-2020.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_3-22-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_4-26-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_5-24-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-15-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-22-2021_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_5-17-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-20-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-7-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_7-12-21_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_8-23-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_8-9-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_9-26-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-24-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-31-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_9-12-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmen_meeting_minutes_3-14-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_1-10-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_10-3-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_2-7-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_3-7-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-11-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-25-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-4-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_7-31-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minute_1-23-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_11-27-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_4-10-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_4-24-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_7-17-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_8-14-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_9-11-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_9-25-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_10-02-2023_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_1-9-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_12-18-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_5-8-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_6-5-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-1-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-29-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_minutes_3-18-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_work_session_9-24-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_10-15-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_10-28-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_5-28-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_6-4-2024.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_7-22-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_9-16-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_9-16-24_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_minutes_1-8-2024.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_minutes_2-5-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_work_sess_meeting_min_12-17-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] bos_meeting_min_10-20-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_min_7-21-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_work_sess_and_meeting_1-13-25.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_1-27-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_10-28-25.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_8-4-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_9-22-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] work_sess_meeting_min_3-3-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] work_sess_meeting_min_3-3-2025_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2026] bos_meeting_minutes_1-5-2026.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2020] selectmens_meeting_minutes_2-3-2020.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectman_meeting_minutes_5-10-21.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_3-15-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_4-19-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmen_meeting_minutes_5-3-21.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_11-22-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-14-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_6-21-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_7-12-21_1.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2021] selectmens_meeting_minutes_9-27-2021.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_10-17-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] bos_meeting_minutes_11-7-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_1-24-22.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_2-14-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_3-21-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_4-18-2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2022] selectmens_meeting_minutes_december_12_2022.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selecmen_meeting_minutes_3-27-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_11-13-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_3-20-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_5-22-23.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmen_meeting_minutes_8-28-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_10-02-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_10-16-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2023] selectmens_meeting_minutes_4-10-2023.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_4-15-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_5-13-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_7-9-2024.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_aug_19.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_meeting_minutes_1-22-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmen_s_work_sess_meeting_min_12-30-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_11-4-2024.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_6-17-2024.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_8-6-24_0.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_meeting_and_work_sess_10-7-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2024] selectmens_work_sess_meeting_min_10-21-24.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] 2025.06.03_bos_meeting_minutes.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] bos_meeting_minutes_12-15-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_min_8-25-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmen_meeting_minutes_12-1-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_10-27-25.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_2-11-2025.pdf (OCR)
+  - [ossipee] [Ossipee - Board of Selectmen - 2025] selectmens_meeting_min_10-6-2025.pdf (OCR)
+
+
+📞 DOCUMENTS WITH 'CONTACT', 'DIRECTORY', 'PHONE', 'HOURS' IN TITLE
+
+================================================================================
+
+Legacy (2):
+  - [null] FY2027_New_Staff_Requests.pdf
+  - [null] FY2027_New_Staff_Requests.pdf
+
+V2 Pipeline (4):
+  - [statewide] FY2027_New_Staff_Requests.pdf
+  - [statewide] FY2027_New_Staff_Requests.pdf
+  - [statewide] FY2027_New_Staff_Requests.pdf
+  - [conway] [Conway - 2018] template-for-phone-call-to-utility-co.-may-9-2018.pdf
+
+
+💰 DOCUMENTS WITH 'FEE', 'COST', 'RATE' IN TITLE
+
+================================================================================
+
+Legacy (15):
+  - [null] 2025-village-district-tax-rates.pdf
+  - [null] 2025-municipal-tax-rates.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [statewide] 2025-village-district-tax-rates.pdf
+  - [statewide] 2024-municipal-tax-rates.pdf
+  - [statewide] 2024-village-district-tax-rates.pdf
+  - [statewide] 2025-village-district-tax-rates.pdf
+  - [statewide] 2024-municipal-tax-rates.pdf
+  - [statewide] 2024-village-district-tax-rates.pdf
+  - [statewide] 2024-comparison-of-full-value-tax-rates-ranking-order.pdf
+  - [statewide] Chapter 53 UNINCORPORATED PLACES.pdf
+  - [null] 2023-municipal-tax-rates.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+
+V2 Pipeline (31):
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [statewide] 2025-municipal-tax-rates.pdf
+  - [statewide] 2025-village-district-tax-rates.pdf
+  - [statewide] 2024-municipal-tax-rates.pdf
+  - [statewide] 2024-village-district-tax-rates.pdf
+  - [statewide] 2025-municipal-tax-rates.pdf
+  - [statewide] 2025-village-district-tax-rates.pdf
+  - [statewide] 2024-municipal-tax-rates.pdf
+  - [statewide] 2024-village-district-tax-rates.pdf
+  - [statewide] 2024-comparison-of-full-value-tax-rates-ranking-order.pdf
+  - [statewide] 2025-municipal-tax-rates (1).pdf
+  - [statewide] 2025-municipal-tax-rates (1).pdf
+  - [statewide] Chapter 53 UNINCORPORATED PLACES.pdf
+  - [statewide] 2023-municipal-tax-rates.pdf
+  - [Ossipee] pb_fee_schedule_final_2023.pdf
+  - [Ossipee] zba_fee_fee_schedule_07_18_18.pdf
+  - [conway] [Conway] rental-inspection-fee-schedule-1-.pdf
+  - [conway] [Conway - 2023] 2023-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2022] 2022-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2020] 2020-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2019] 2019-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2021] 2021-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2024] 2024-conway-tax-rates-final.pdf
+  - [conway] [Conway - 2025] 2025-conway-tax-rates-final.pdf
+  - [ossipee] [Ossipee - 2024] 2024_transfer_station_fees_adopted.pdf
+  - [ossipee] [Ossipee - 2023] pb_fee_schedule_final_2023.pdf
+  - [conway] [Conway - 2024] 2024-conway-tax-rates-final.pdf (OCR)
+  - [conway] [Conway - 2025] 2025-sewer-rates.pdf (OCR)
+  - [conway] [Conway - 2025] 2025-water-rates.pdf (OCR)
+  - [conway] [Conway] rental-inspection-fee-schedule-1-.pdf (OCR)
+
+
+🧪 SAMPLE: What was retrieved for 'When is next Ossipee Select Board meeting?'
+
+================================================================================
+
+From test results (meet-01):
+  - Retrieved 9 local + 5 state documents
+  - Tier: C
+  - Answer: "The provided documents do not explicitly state a regular meeting schedule..."
+  
+Retrieved documents included:
+  - ingest_794d4393-3c4f-4d19-be74-9c9f455c45b6.pdf
+  - ingest_821b5115-e82d-48c2-be6a-476255a46d26.pdf
+  - ... (meeting minutes from past, policies, but no future schedule)
+  
+This suggests: Documents retrieved successfully, but they don't contain current schedule info.
+  
+
+
+✅ AUDIT COMPLETE
+
+================================================================================
+
+SUMMARY:
+- Database contains documents for Ossipee and Conway
+- Documents ARE being retrieved (9 local chunks found for meeting question)
+- Problem is NOT retrieval failure - it's document content
+- Missing: Current meeting schedules, office hours, fee schedules, contact directories
+- Present: Historical minutes, zoning ordinances, policies, state laws
+
+RECOMMENDATION:
+The pipeline is working correctly. The documents just don't contain the forward-looking
+operational information users need (next meeting date, current hours, current fees).
+  

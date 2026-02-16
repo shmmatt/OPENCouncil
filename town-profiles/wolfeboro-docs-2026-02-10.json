@@ -1,0 +1,28 @@
+{
+  "town": "Wolfeboro",
+  "crawledAt": "2026-02-10T19:01:18.937Z",
+  "discovered": 295,
+  "downloaded": 290,
+  "uploaded": 290,
+  "skipped": 2,
+  "failed": 3,
+  "byCategory": {
+    "agenda": 42,
+    "minutes": 26,
+    "form": 101,
+    "planning": 4,
+    "misc": 105,
+    "tax": 5,
+    "budget": 3,
+    "zoning": 2,
+    "ordinance": 1,
+    "election": 1
+  },
+  "byStrategy": {
+    "Homepage keywords": 6,
+    "Page: /AgendaCenter": 69,
+    "Page: /FormCenter": 51,
+    "Page: /DocumentCenter": 1,
+    "Sitemap": 269
+  }
+}

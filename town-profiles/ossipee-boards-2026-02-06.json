@@ -1,0 +1,53 @@
+{
+  "town": "Ossipee",
+  "extractedAt": "2026-02-06T20:34:32.542Z",
+  "sourceUrl": "https://www.ossipee.org/",
+  "pagesVisited": 3,
+  "boards": [
+    {
+      "name": "Board of Selectmen",
+      "location": "Library or Town Hall",
+      "members": [
+        "Employee Orginazation",
+        "Public Input",
+        "Policy Board",
+        "Health Officer",
+        "Lake Ossipee",
+        "Long Term",
+        "Milfoil Plan"
+      ],
+      "contact": "(603) 539-4181",
+      "url": "https://www.ossipee.org"
+    },
+    {
+      "name": "Board of Selectmen",
+      "location": "Library or Town Hall",
+      "members": [
+        "Home Keywords",
+        "Home About",
+        "Community Profile",
+        "Ossipee Images",
+        "Ossipee Boards",
+        "Employee Orginazation",
+        "Public Input"
+      ],
+      "contact": "(603) 539-4181",
+      "url": "https://www.ossipee.org/boards"
+    },
+    {
+      "name": "Select Board",
+      "location": "Library or Town Hall",
+      "members": [
+        "Home Keywords",
+        "Home About",
+        "Community Profile",
+        "Ossipee Images",
+        "Ossipee Boards",
+        "Employee Orginazation",
+        "Public Input"
+      ],
+      "contact": "(603) 539-4181",
+      "url": "https://www.ossipee.org/board-of-selectmen"
+    }
+  ]
+}

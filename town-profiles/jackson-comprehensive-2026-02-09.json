@@ -1,0 +1,64 @@
+{
+  "town": "Jackson",
+  "extractedAt": "2026-02-09T03:49:22.927Z",
+  "sourceUrl": "https://www.jackson-nh.gov",
+  "boards": {
+    "select_board": {
+      "name": "Select Board"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board"
+    },
+    "budget_board": {
+      "name": "Budget Board"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Library"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.jackson-nh.gov",
+    "https://www.jackson-nh.gov/departments/",
+    "https://www.jackson-nh.gov/departments/assessing/",
+    "https://www.jackson-nh.gov/departments/assessing/applications-forms/",
+    "https://www.jackson-nh.gov/departments/assessing/assessing-data/",
+    "https://www.jackson-nh.gov/departments/assessing/current-use-program/",
+    "https://www.jackson-nh.gov/departments/assessing/exemptions-credit-information/",
+    "https://www.jackson-nh.gov/departments/assessing/revaluation-process-2024-faq/",
+    "https://www.jackson-nh.gov/departments/assessing/tax-cards/",
+    "https://www.jackson-nh.gov/departments/assessing/tax-maps/",
+    "https://www.jackson-nh.gov/departments/emergency-management/",
+    "https://www.jackson-nh.gov/departments/emergency-management/e911-street-numbering-ordinance/",
+    "https://www.jackson-nh.gov/departments/emergency-management/emergency-preparedness-links/",
+    "https://www.jackson-nh.gov/departments/emergency-management/hazard-mitigation-strategies/",
+    "https://www.jackson-nh.gov/departments/emergency-management/jackson-neighbor-care-program/",
+    "https://www.jackson-nh.gov/departments/fire-department/",
+    "https://www.jackson-nh.gov/departments/fire-department/fire-permits/",
+    "https://www.jackson-nh.gov/departments/fire-department/informational-bulletins/",
+    "https://www.jackson-nh.gov/departments/fire-department/jackson-firefighters-association/",
+    "https://www.jackson-nh.gov/departments/fire-department/safety-tips/",
+    "https://www.jackson-nh.gov/departments/police-department/",
+    "https://www.jackson-nh.gov/departments/police-department/dog-control-regulations-violation-penalties/",
+    "https://www.jackson-nh.gov/departments/police-department/employment-opportunity/",
+    "https://www.jackson-nh.gov/departments/police-department/important-local-and-state-links/",
+    "https://www.jackson-nh.gov/departments/police-department/roam-to-home-dog-rescue-program/",
+    "https://www.jackson-nh.gov/departments/police-department/safe-at-home-online-house-check-form/",
+    "https://www.jackson-nh.gov/departments/highway-department/",
+    "https://www.jackson-nh.gov/departments/highway-department/driveway-culverts/",
+    "https://www.jackson-nh.gov/departments/highway-department/private-roads/",
+    "https://www.jackson-nh.gov/departments/bartlett-jackson-transfer-station/"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 383-4223",
+    "email": "ChiefPerley@jackson-nh.org"
+  }
+}

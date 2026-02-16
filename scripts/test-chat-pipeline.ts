@@ -144,6 +144,69 @@ const testQuestionSets: Record<string, TestQuestion[]> = {
       },
     },
   ],
+  // Comprehensive test set - 50 real-world questions
+  comprehensive: [
+    // Meetings (5)
+    { id: "meet-01", message: "When is the next Ossipee Select Board meeting?", town: "Ossipee", category: "meetings", description: "Meeting schedule" },
+    { id: "meet-02", message: "What time does the Conway planning board meet?", town: "Conway", category: "meetings", description: "Meeting time" },
+    { id: "meet-03", message: "Where can I find the agenda for the next Bartlett town meeting?", town: "Bartlett", category: "meetings", description: "Agenda access" },
+    { id: "meet-04", message: "How do I get on the agenda for the Ossipee Select Board meeting?", town: "Ossipee", category: "meetings", description: "Agenda participation" },
+    { id: "meet-05", message: "Are town meetings in Albany open to the public?", town: "Albany", category: "meetings", description: "Public access" },
+    // Contact (5)
+    { id: "cont-01", message: "What are the office hours for the Conway town clerk?", town: "Conway", category: "contact", description: "Office hours" },
+    { id: "cont-02", message: "How do I contact the Ossipee tax collector?", town: "Ossipee", category: "contact", description: "Department contact" },
+    { id: "cont-03", message: "What's the phone number for the Madison town office?", town: "Madison", category: "contact", description: "Phone number" },
+    { id: "cont-04", message: "Is the Bartlett town hall open on weekends?", town: "Bartlett", category: "contact", description: "Weekend hours" },
+    { id: "cont-05", message: "Who is the current town administrator in Ossipee?", town: "Ossipee", category: "contact", description: "Staff directory" },
+    // Permits (5)
+    { id: "perm-01", message: "How do I apply for a building permit in Ossipee?", town: "Ossipee", category: "permits", description: "Building permit process" },
+    { id: "perm-02", message: "What documents do I need for a driveway permit in Conway?", town: "Conway", category: "permits", description: "Permit requirements" },
+    { id: "perm-03", message: "How much does a building permit cost in Bartlett?", town: "Bartlett", category: "permits", description: "Permit fees" },
+    { id: "perm-04", message: "Do I need a permit to install a shed in my backyard in Ossipee?", town: "Ossipee", category: "permits", description: "Permit necessity" },
+    { id: "perm-05", message: "How long does it take to get a septic permit approved?", town: "Conway", category: "permits", description: "Permit timeline" },
+    // Taxes (5)
+    { id: "tax-comp-01", message: "When are property taxes due in Ossipee?", town: "Ossipee", category: "taxes", description: "Tax due dates" },
+    { id: "tax-comp-02", message: "What is the current tax rate in Conway?", town: "Conway", category: "taxes", description: "Tax rates" },
+    { id: "tax-comp-03", message: "How do I pay my property taxes online?", town: "Bartlett", category: "taxes", description: "Online payment" },
+    { id: "tax-comp-04", message: "Can I set up a payment plan for my property taxes in Madison?", town: "Madison", category: "taxes", description: "Payment plans" },
+    { id: "tax-comp-05", message: "How do I apply for an abatement on my property taxes?", town: "Ossipee", category: "taxes", description: "Tax abatement" },
+    // Voting (5)
+    { id: "vote-01", message: "How do I register to vote in Carroll County?", town: "Ossipee", category: "voting", description: "Voter registration" },
+    { id: "vote-02", message: "Where is my polling place in Conway?", town: "Conway", category: "voting", description: "Polling location" },
+    { id: "vote-03", message: "Can I vote absentee in the next election?", town: "Bartlett", category: "voting", description: "Absentee voting" },
+    { id: "vote-04", message: "What do I need to bring to register to vote on election day?", town: "Madison", category: "voting", description: "Election day registration" },
+    { id: "vote-05", message: "When is the deadline to request an absentee ballot?", town: "Ossipee", category: "voting", description: "Absentee deadline" },
+    // Zoning (5)
+    { id: "zone-01", message: "What is my property zoned as in Ossipee?", town: "Ossipee", category: "zoning", description: "Zoning lookup" },
+    { id: "zone-02", message: "Can I run a business from my home in Conway?", town: "Conway", category: "zoning", description: "Home business" },
+    { id: "zone-03", message: "What are the setback requirements for building in Bartlett?", town: "Bartlett", category: "zoning", description: "Setback requirements" },
+    { id: "zone-04", message: "How do I request a zoning variance in Madison?", town: "Madison", category: "zoning", description: "Variance process" },
+    { id: "zone-05", message: "Are there any wetland restrictions on my property?", town: "Ossipee", category: "zoning", description: "Wetland restrictions" },
+    // Services (5)
+    { id: "serv-01", message: "What day is trash pickup in my neighborhood in Ossipee?", town: "Ossipee", category: "services", description: "Trash schedule" },
+    { id: "serv-02", message: "How do I get a dump sticker in Conway?", town: "Conway", category: "services", description: "Transfer station access" },
+    { id: "serv-03", message: "Does Bartlett have curbside recycling?", town: "Bartlett", category: "services", description: "Recycling services" },
+    { id: "serv-04", message: "What items can I bring to the transfer station?", town: "Madison", category: "services", description: "Acceptable items" },
+    { id: "serv-05", message: "Is there a hazardous waste collection day coming up?", town: "Ossipee", category: "services", description: "Special collection" },
+    // Recreation (5)
+    { id: "rec-park-01", message: "Where are the public beaches in Ossipee?", town: "Ossipee", category: "recreation", description: "Beach locations" },
+    { id: "rec-park-02", message: "How do I register my child for summer camp in Conway?", town: "Conway", category: "recreation", description: "Program registration" },
+    { id: "rec-park-03", message: "Are dogs allowed at town parks in Bartlett?", town: "Bartlett", category: "recreation", description: "Park rules" },
+    { id: "rec-park-04", message: "What hiking trails are maintained by the town of Madison?", town: "Madison", category: "recreation", description: "Trail info" },
+    { id: "rec-park-05", message: "How much does a beach pass cost?", town: "Ossipee", category: "recreation", description: "Pass fees" },
+    // Budget (5)
+    { id: "budg-01", message: "What is the town budget for Ossipee this year?", town: "Ossipee", category: "budget", description: "Budget overview" },
+    { id: "budg-02", message: "How much does Conway spend on schools?", town: "Conway", category: "budget", description: "School budget" },
+    { id: "budg-03", message: "Where can I find the town warrant articles?", town: "Bartlett", category: "budget", description: "Warrant access" },
+    { id: "budg-04", message: "What happened with the bond vote last year?", town: "Madison", category: "budget", description: "Vote history" },
+    { id: "budg-05", message: "How is the town budget approved?", town: "Ossipee", category: "budget", description: "Budget process" },
+    // Records (5)
+    { id: "rec-pub-01", message: "How do I request public records from the town?", town: "Ossipee", category: "records", description: "Records request" },
+    { id: "rec-pub-02", message: "Where can I find meeting minutes from last month?", town: "Conway", category: "records", description: "Minutes access" },
+    { id: "rec-pub-03", message: "How do I get a copy of my property deed?", town: "Bartlett", category: "records", description: "Deed copy" },
+    { id: "rec-pub-04", message: "Are planning board decisions public record?", town: "Madison", category: "records", description: "Public records" },
+    { id: "rec-pub-05", message: "How long does it take to fulfill a records request?", town: "Ossipee", category: "records", description: "Request timeline" },
+  ],
 };
 
 async function runTests(setNames: string[]): Promise<TestResult[]> {

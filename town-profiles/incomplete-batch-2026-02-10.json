@@ -1,0 +1,29 @@
+{
+  "completedAt": "2026-02-10T17:35:38.765Z",
+  "durationMinutes": 6,
+  "total": 5,
+  "successful": 5,
+  "failed": 0,
+  "results": [
+    {
+      "town": "Eaton",
+      "success": true
+    },
+    {
+      "town": "Freedom",
+      "success": true
+    },
+    {
+      "town": "Tuftonboro",
+      "success": true
+    },
+    {
+      "town": "Wakefield",
+      "success": true
+    },
+    {
+      "town": "Wolfeboro",
+      "success": true
+    }
+  ]
+}

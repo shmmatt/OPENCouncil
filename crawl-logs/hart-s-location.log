@@ -1,0 +1,61 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Hart's Location --url https://hartslocation.com --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Hart's Location
+🌐 URL: https://hartslocation.com
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: WordPress
+
+📋 Strategy 1: Focused Index Pages
+   Checking 7 index page candidates...
+✗✗✗✗✗✗✗
+   Result: 0 docs from 0 index pages
+
+📊 Coverage Assessment:
+   Documents: 0
+   Categories:
+   Years: ✗ Limited
+   Status: ⚠️  Insufficient
+
+⚡ Coverage insufficient, switching to navigation strategy...
+   Reason: No minutes or agendas found
+
+🗺️  Strategy 2: Navigation Following
+   Found 12 navigation links
+.........✓(35).✓(1)
+   Result: 35 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 35 (+35)
+   Categories:
+      - misc: 17 (+17)
+      - reports: 11 (+11)
+      - ordinances: 4 (+4)
+      - forms: 2 (+2)
+      - regulations: 1 (+1)
+   Status: ⚠️  Best effort
+
+============================================================
+DISCOVERY COMPLETE: 35 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+🔍 DRY RUN
+
+Sample documents:
+   https://hartslocation.com/wp-content/uploads/2026/02/Notice-of-Decision-Findings-of-Fact-Zoning.pdf
+   https://hartslocation.com/wp-content/uploads/2026/02/Notice-of-Decision-Findings-of-Fact-Sign.pdf
+   https://hartslocation.com/wp-content/uploads/2026/01/Feb2nd-ZBAPacket.pdf
+   https://hartslocation.com/wp-content/uploads/2026/01/Public-Notice-Planning-Board-Hearing-1-12-26.pdf
+   https://hartslocation.com/wp-content/uploads/2026/01/Voter-Explanatory-Notes_01_12_26.pdf
+   https://hartslocation.com/wp-content/uploads/2026/01/2026-Proposed-Warrant-Articles_01_12_26.pdf
+   https://hartslocation.com/wp-content/uploads/2026/01/Zoning-Ordinance-Propose-Revisions_01_12_26.pdf
+   https://hartslocation.com/wp-content/uploads/2025/12/Notice-to-Property-Owners_12_10_25.pdf
+   https://hartslocation.com/wp-content/uploads/2025/12/2025-Preliminary-Assessment-Values.pdf
+   https://hartslocation.com/wp-content/uploads/2025/12/Vision-Element-V2.pdf

@@ -1,0 +1,89 @@
+
+> rest-express@1.0.0 crawl:docs
+> tsx --env-file=.env scripts/comprehensive-document-crawler.ts --town Eaton --url https://www.eatonnh.gov --dry-run
+
+
+🔍 COMPREHENSIVE DOCUMENT CRAWLER
+Town: Eaton
+URL: https://www.eatonnh.gov
+Max documents: 2000
+Dry run: true
+
+🚀 Launching browser...
+
+============================================================
+PHASE 1: DISCOVERY
+============================================================
+
+🔗 Loading homepage...
+   → Redirected to: https://www.eatonnh.gov/
+
+🔍 Detecting CMS...
+   → Detected: WordPress
+
+📋 Checking TownCloud API...
+   ✗ Not a TownCloud site
+
+🔗 Discovering keyword links from homepage...
+   Waiting 10 seconds for Cloudflare/JS...
+   ✓ Found 3 promising links
+
+📄 Scraping high-value document pages...
+  /documents... ✗ (HTTP 404)
+  /minutes... ✗ (HTTP 404)
+  /agendas... ✗ (HTTP 404)
+  /boards... ✗ page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:167)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+  /forms... ✗ (HTTP 404)
+  /reports... ✗ (HTTP 404)
+  /AgendaCenter... ✗ (HTTP 404)
+  /FormCenter... ✗ (HTTP 404)
+  /DocumentCenter... ✗ (HTTP 404)
+  /downloads... ✗ (HTTP 404)
+  /ordinances... ✗ (HTTP 404)
+  /regulations... ✗ page.evaluate: ReferenceError: __name is not defined
+    at eval (eval at evaluate (:290:30), <anonymous>:1:167)
+    at UtilityScript.evaluate (<anonymous>:292:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+
+📄 Visiting keyword-discovered pages...
+  /selectmen/minutes/... ✗
+  /selectmen/archive-minutes/... ✗
+  /regulations/... ✗
+
+🌲 Deep crawling navigation structure...
+   Found 44 promising links to explore
+   First 10 links:
+     /
+     /?s=
+     /history/
+     /town-officers/
+     /boards/
+     /boards/planning-board/
+     /boards/zoning-board/
+     /boards/school-board/
+     /boards/conservation-commission/
+     /selectmen/
+✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗
+   Visited 0 pages, found 0 documents
+
+📁 Skipping Google Drive detection (navigation error)
+
+🗺️  Parsing sitemap...
+   ✓ Found 6 URLs in sitemap
+   Crawling 6 sitemap pages for documents...
+✗✗✗✗✗✗
+   Found 0 documents from sitemap pages
+
+============================================================
+DISCOVERY COMPLETE: 0 documents found
+============================================================
+
+⚠️  No documents discovered. This town might:
+   - Use a custom CMS not yet supported
+   - Require JavaScript rendering (check page manually)
+   - Store documents on external platforms
+   - Have documents behind authentication
+

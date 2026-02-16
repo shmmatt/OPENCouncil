@@ -1,0 +1,19 @@
+{
+  "town": "Moultonborough",
+  "crawledAt": "2026-02-10T18:58:25.269Z",
+  "discovered": 278,
+  "downloaded": 1,
+  "uploaded": 1,
+  "skipped": 277,
+  "failed": 0,
+  "byCategory": {
+    "minutes": 1
+  },
+  "byStrategy": {
+    "Homepage keywords": 6,
+    "Page: /AgendaCenter": 115,
+    "Page: /FormCenter": 47,
+    "Page: /DocumentCenter": 0,
+    "Sitemap": 320
+  }
+}

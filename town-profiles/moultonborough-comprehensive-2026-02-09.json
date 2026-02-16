@@ -1,0 +1,57 @@
+{
+  "town": "Moultonborough",
+  "extractedAt": "2026-02-09T03:14:32.200Z",
+  "sourceUrl": "https://moultonboroughnh.gov",
+  "boards": {
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "Library"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "TOWN HALL"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "Conference Room"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Conference Room"
+    },
+    "zoning_board": {
+      "name": "Zoning Board",
+      "location": "Town Hall"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://moultonboroughnh.gov",
+    "https://moultonboroughnh.gov/154/Departments",
+    "https://moultonboroughnh.gov/agendacenter",
+    "https://moultonboroughnh.gov/calendar.aspx?CID=14",
+    "https://moultonboroughnh.gov/calendar.aspx?view=list&year=2026&month=2&day=11&CID=14",
+    "https://moultonboroughnh.gov/calendar.aspx?view=list&year=2026&month=2&day=16&CID=14",
+    "https://moultonboroughnh.gov/calendar.aspx?view=list&year=2026&month=2&day=17&CID=14",
+    "https://moultonboroughnh.gov/calendar.aspx?view=list&year=2026&month=2&day=18&CID=14",
+    "https://moultonboroughnh.gov/calendar.aspx?view=list&year=2026&month=2&day=25&CID=14",
+    "https://moultonboroughnh.gov/Calendar.aspx?EID=1035",
+    "https://moultonboroughnh.gov/Calendar.aspx?EID=1071",
+    "https://moultonboroughnh.gov/Calendar.aspx?EID=994",
+    "https://moultonboroughnh.gov/Calendar.aspx?EID=1023",
+    "https://moultonboroughnh.gov/AgendaCenter",
+    "https://moultonboroughnh.gov/Calendar.aspx",
+    "https://moultonboroughnh.gov/calendar",
+    "https://moultonboroughnh.gov/directory"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603-476-2347"
+  }
+}

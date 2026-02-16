@@ -1,0 +1,13 @@
+{
+  "town": "Sandwich",
+  "url": "https://www.sandwichnh.com",
+  "documentsFound": 0,
+  "pagesVisited": 1,
+  "strategies": {
+    "sitemap": 0,
+    "crawl": 0,
+    "knownPaths": 0
+  },
+  "duration": 138.518,
+  "documents": []
+}

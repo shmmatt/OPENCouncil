@@ -1,0 +1,33 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Ossipee --url https://www.ossipee.org --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Ossipee
+🌐 URL: https://www.ossipee.org
+============================================================
+
+🔍 Fingerprinting site...
+   Cloudflare detected, proceeding with pattern-based discovery
+   CMS: Custom
+
+📋 Strategy 1: Focused Index Pages
+   Checking 59 index page candidates...
+..✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗.✗✗✗
+   Result: 0 docs from 0 index pages
+
+📊 Coverage Assessment:
+   Documents: 0
+   Categories:
+   Years: ✗ Limited
+   Status: ⚠️  Insufficient
+
+============================================================
+DISCOVERY COMPLETE: 0 documents
+Strategies used: Index Pages
+============================================================
+
+⚠️  No documents found.
+

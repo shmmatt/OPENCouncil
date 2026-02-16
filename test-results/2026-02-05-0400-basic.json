@@ -1,0 +1,176 @@
+[
+  {
+    "questionId": "basic-01",
+    "question": "When is the next Ossipee Select Board meeting?",
+    "town": "Ossipee",
+    "category": "basic-meeting",
+    "answerText": "The provided documents do not specify the regular meeting schedule for the Ossipee Select Board [L1, L3, L5, L8]. Information about past meetings from 2018 to 2021 is available, but no details regarding upcoming meetings are included [L2, L4, L6, L7, L9]. Therefore, the exact date of the next Ossipee Select Board meeting cannot be determined from the materials provided.\n\nNew Hampshire municipalities are required to provide public notice for their meetings [S1, S2, S3]. While the Select Board's schedule is not listed, other town boards in Ossipee do have defined meeting times. For example, the Planning Board meets on the first and third Tuesday of each month, and the Zoning Board of Adjustment meets on the second Tuesday of each month [L1, L3, L5, L8]. Select Board meetings are open to the public and include opportunities for public input [L1, L3, L5, L8].",
+    "sourceDocumentNames": [
+      "ingest_f6bc19c1-1c75-4c75-a7f3-e0dca76ac547.pdf",
+      "ingest_6bfcb5a0-3e38-4d50-aa84-254144345c32.pdf",
+      "ingest_794d4393-3c4f-4d19-be74-9c9f455c45b6.pdf",
+      "ingest_458d3ed4-a964-4e43-a34d-011cdda0ff76.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_da834f05-15fc-406d-9597-061d79f630d1.pdf",
+      "ingest_191e8b93-cc2a-4a8a-8158-9d340f9ef846.pdf",
+      "ingest_da2c0171-ce45-4705-9529-35702e5b830b.pdf",
+      "ingest_ea3b1064-bafc-4383-927a-e18b77d98c0d.pdf",
+      "62516d2892a3e456c3850fe6f61f2be1",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt",
+      "18402e21a4d7f338658d0bf2fd0ceb17"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 15075,
+      "localSelected": 9,
+      "stateSelected": 3,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee Select Board meeting schedule",
+          "Ossipee Select Board next meeting",
+          "Ossipee Select Board meeting dates"
+        ],
+        "state": [
+          "NH municipal meeting notice requirements"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 9,
+        "stateRetrieved": 3,
+        "stateSelected": 3
+      }
+    },
+    "passed": false,
+    "failureReasons": [
+      "Expected tier A, got C"
+    ]
+  },
+  {
+    "questionId": "basic-02",
+    "question": "What are the office hours for the Conway town clerk?",
+    "town": "Conway",
+    "category": "basic-contact",
+    "answerText": "The provided local documents do not specify the office hours for the Conway town clerk [L1, L2, L3, L4, L5, L6, L7, L8]. These records confirm that Louise M. Inkell serves as the current Town Clerk/Tax Collector for Conway [L1, L2, L3, L5, L7]. The available documents primarily list town officials and their roles across various years. They do not contain details regarding the operational schedules for the town clerk's office or the broader town hall [L4, L6, L8].\n\nNew Hampshire state law requires town clerks to maintain necessary office hours for the execution of their duties [S1, S2, S3]. The town clerk's role encompasses a wide range of important responsibilities for residents. These include essential record-keeping, such as maintaining official town reports, books, and documents, and managing vital statistics [S1, S2, S3]. Clerks also administer town elections and voter registration, and are authorized by the state to register motor vehicles [S1, S2, S3]. This state framework mandates that clerks ensure public access for these critical functions through established hours. However, the specific daily or weekly schedule for Conway's town clerk is not detailed within the provided materials.",
+    "sourceDocumentNames": [
+      "ingest_bfe75cfe-0142-4753-9619-ecb45b68deab.pdf",
+      "ingest_22f5e32c-5694-4d4c-8f7d-5d950c9506d7.pdf",
+      "ingest_fba1961b-5819-4ac3-a6a0-92d3ae67ee64.pdf",
+      "ingest_759e247b-ae15-40c5-99a3-7488f6b9a33a.pdf",
+      "ingest_214ee6f0-cc5b-490e-bc12-88e40f656a10.pdf",
+      "ingest_0e4b8ff4-8e4b-4d78-a1ae-2d2904a519cb.pdf",
+      "ingest_a20175e4-5330-43d8-b7aa-341e73accb3c.pdf",
+      "ingest_7f98243c-ba12-4381-8142-6f138da1110b.pdf",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "01100a4dbd4bdda1b146aef787cf4525",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 8,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": false,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 8
+    },
+    "debug": {
+      "durationMs": 15905,
+      "localSelected": 8,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway town clerk office hours",
+          "Conway town hall hours",
+          "Conway town clerk contact information"
+        ],
+        "state": [
+          "NH town clerk duties"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 8,
+        "stateRetrieved": 3,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "basic-03",
+    "question": "How do I register to vote in Carroll County?",
+    "town": "Ossipee",
+    "category": "basic-process",
+    "answerText": "To register to vote in Ossipee, you must meet specific qualifications. You need to be at least 18 years old by election day, a United States citizen, and domiciled in Ossipee. You must also not be otherwise disqualified from voting [S1].\n\nYou can register on Election Day at the polls in Ossipee. When you register, you will need to provide a photo ID and proof of residence [L1, L2, L3]. Polls are typically open from 8 AM to 7 PM on Election Day [L1]. The Ossipee Town Clerk, Kellie J. Skehan, oversees voter registration duties [L2, L3]. The Supervisors of the Checklist also maintain voter lists and hold public sessions for registration [L4, S1]. A statewide voter registration application form is used for all registrations [S1].",
+    "sourceDocumentNames": [
+      "ingest_657c18ec-316b-4b82-b664-584791f6323d.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_3fbf255e-22fc-4ae4-9300-724c3f8ce8c9.pdf",
+      "ba89d00c87ffcb69726f206ed194e7d7"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 1,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 1,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 21209,
+      "localSelected": 5,
+      "stateSelected": 1,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee voter registration process",
+          "Ossipee Town Clerk voter registration",
+          "Ossipee Supervisors of the Checklist"
+        ],
+        "state": [
+          "New Hampshire voter registration requirements",
+          "NH RSA voter registration",
+          "NHMA voter registration guidance",
+          "NH voter eligibility"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 11,
+        "localSelected": 5,
+        "stateRetrieved": 4,
+        "stateSelected": 1
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  }
+]

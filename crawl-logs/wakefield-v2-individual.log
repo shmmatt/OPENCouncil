@@ -1,0 +1,48 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Wakefield --url https://www.wakefieldnh.gov --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Wakefield
+🌐 URL: https://www.wakefieldnh.gov
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   No sitemap found
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ✓ CMS detected: CivicPlus
+   Extracting navigation links...
+   ✓ Found 32 navigation links
+
+📋 Building page visit queue...
+   Total pages to visit: 231
+
+📥 Visiting pages and extracting documents...
+..✓(15).✓(2).✓(8)✓(3)✓(1)..✓(12)✓(1).✓(4).✓(2).✓(2)✓(5)
+   [20/200] 55 docs found
+.✓(2)✓(4)✓(2)..✓(74).✓(2)✓(4)..✗✗✗✗✗✗✗✗✗✗✗✗✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✓(15)✗✗✗✗✗✗✗✗✗✗✗✗✓(15)✗✗✓(15)✗✓(15)✗✓(15)✗✓(15)✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗.✗✗.✗.✗.✗.✗.✗✗.✗.✗.✗.✗.✗✗.✗.✗.✗.✗✗✗✗✗✗✗✗✗✗✗✗✓(1)✗✗✓(1)✗✓(1)✗✓(1)✗✓(1)✗✓(1)✗✗✓(1)✗✓(1)✗✓(1)✗✓(1)✓(4)✓(4)
+   [200/200] 99 docs found
+
+
+============================================================
+DISCOVERY COMPLETE: 99 documents found
+============================================================
+
+🔍 DRY RUN - Skipping download/upload
+
+Sample documents:
+   https://www.wakefieldnh.gov/administration-selectmen/files/2015-annual-town-report
+   https://www.wakefieldnh.gov/administrationselectmen/files/2016-annual-town-report
+   https://www.wakefieldnh.gov/administrationselectmen/files/2017-annual-town-report
+   https://www.wakefieldnh.gov/administration-selectmen/files/2018-annual-town-report
+   https://www.wakefieldnh.gov/administration-selectmen/files/2019-annual-town-report
+   https://www.wakefieldnh.gov/administration-selectmen/files/2020-annual-town-report
+   https://www.wakefieldnh.gov/administration-selectmen/files/2021-annual-town-report
+   https://www.wakefieldnh.gov/administrationselectmen/files/2022-annual-town-report
+   https://www.wakefieldnh.gov/administrationselectmen/files/2023-annual-town-report
+   https://www.wakefieldnh.gov/administrationselectmen/files/2024-annual-town-report

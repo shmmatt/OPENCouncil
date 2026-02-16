@@ -1,0 +1,14 @@
+{
+  "town": "Jackson",
+  "crawledAt": "2026-02-10T20:59:05.460Z",
+  "discovered": 105,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 105,
+  "failed": 0,
+  "byCategory": {},
+  "byStrategy": {
+    "Homepage keywords": 22,
+    "Sitemap": 8
+  }
+}

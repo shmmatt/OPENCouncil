@@ -1,0 +1,17 @@
+{
+  "town": "Bartlett",
+  "crawledAt": "2026-02-09T21:58:25.515Z",
+  "discovered": 0,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {},
+  "byStrategy": {
+    "TownCloud API": 0,
+    "Google Drive": 0,
+    "Sitemap": 29,
+    "Deep crawl": 29
+  },
+  "documents": []
+}

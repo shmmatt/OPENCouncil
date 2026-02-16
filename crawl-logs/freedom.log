@@ -1,0 +1,77 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Freedom --url https://townoffreedomnh.gov --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Freedom
+🌐 URL: https://townoffreedomnh.gov
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: WordPress
+
+📋 Strategy 1: Focused Index Pages
+   Checking 7 index page candidates...
+✗✗✗✓(1)✗✓(39)✓(17)
+   Result: 52 docs from 3 index pages
+
+   📄 Working index pages:
+      /boards
+      /applications
+      /regulations
+
+📊 Coverage Assessment:
+   Documents: 52
+   Categories:
+      - forms: 25
+      - misc: 21
+      - ordinances: 5
+      - regulations: 1
+   Years: ✓ Multiple
+   Status: ⚠️  Insufficient
+
+⚡ Coverage insufficient, switching to navigation strategy...
+   Reason: No minutes or agendas found
+
+🗺️  Strategy 2: Navigation Following
+   Found 40 navigation links
+✓(1)✓(1)✓(1)✓(1)✓(1)✓(5)✓(6)✓(8)✓(5)✓(4)✓(5)✓(5)✓(3)✓(5)✓(5)✓(5)✓(1)✓(589)✓(3)✓(157)
+   [20/40] 818 docs total
+✓(113)✓(27)✓(99)✓(87)✓(13)✓(171)✓(1)✓(29)✓(18)✓(152)✓(3)✓(59)✓(16)✗✓(2)✓(9)✓(2)✓(17)✓(39)✓(17)
+   [40/40] 1594 docs total
+
+   Result: 1594 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 1594 (+1542)
+   Categories:
+      - misc: 1216 (+1195)
+      ✓ minutes: 326 (+326)
+      - forms: 28 (+3)
+      - ordinances: 10 (+5)
+      - reports: 9 (+9)
+      ✓ agendas: 3 (+3)
+      - regulations: 1
+      - budget: 1 (+1)
+   Status: ✓ Adequate
+
+============================================================
+DISCOVERY COMPLETE: 1594 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+🔍 DRY RUN
+
+Sample documents:
+   http://townoffreedomnh.gov/wp-content/uploads/2022/07/Freedom-Zoning-Map-5.14.1990.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2025/04/Building_Zoning-Packet-4.25.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2018/04/Zoning-Complaint-Form.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2023/01/Electrical-Permit-Application-01-23-fillable.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2023/01/Plumbing-Permit-Application-01-23-fillable.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2024/11/Gas-Piping-Permit-Application-08-23-fillable.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2023/08/HVAC-Permit-Application-08-23-fillable.pdf
+   https://townoffreedomnh.gov/wp-content/uploads/2023/08/Demolition-Permit-Application-8-23-fillable.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/04/Totem-Pole-Zoning-Permit-Application-2012.pdf
+   http://townoffreedomnh.gov/wp-content/uploads/2021/04/Private-Road-Acknowledgment-form.pdf

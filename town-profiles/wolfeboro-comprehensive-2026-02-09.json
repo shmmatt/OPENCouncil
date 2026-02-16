@@ -1,0 +1,59 @@
+{
+  "town": "Wolfeboro",
+  "extractedAt": "2026-02-09T03:20:12.981Z",
+  "sourceUrl": "https://wolfeboronh.us",
+  "boards": {
+    "budget_board": {
+      "name": "Budget Board"
+    },
+    "conservation_board": {
+      "name": "Conservation Board",
+      "location": "Library"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "Conference Room"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Conference Room"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://wolfeboronh.us",
+    "https://wolfeboronh.us/agendacenter",
+    "https://wolfeboronh.us/calendar.aspx",
+    "https://wolfeboronh.us/FormCenter/General-Forms-4/Contact-Us-79",
+    "https://wolfeboronh.us/calendar.aspx?CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=9&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=10&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=11&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=12&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=17&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=18&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=19&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=23&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=24&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=25&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=26&CID=14,23",
+    "https://wolfeboronh.us/calendar.aspx?view=list&year=2026&month=2&day=28&CID=14,23",
+    "https://wolfeboronh.us/Calendar.aspx?EID=696",
+    "https://wolfeboronh.us/Calendar.aspx?EID=771",
+    "https://wolfeboronh.us/Calendar.aspx?EID=718",
+    "https://wolfeboronh.us/Calendar.aspx?EID=553",
+    "https://wolfeboronh.us/departments",
+    "https://wolfeboronh.us/calendar",
+    "https://wolfeboronh.us/directory"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603-569-5639"
+  }
+}

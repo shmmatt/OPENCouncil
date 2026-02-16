@@ -1,0 +1,15 @@
+{
+  "town": "Sandwich",
+  "crawledAt": "2026-02-10T15:32:57.629Z",
+  "discovered": 152,
+  "downloaded": 2,
+  "uploaded": 2,
+  "skipped": 30,
+  "failed": 120,
+  "byCategory": {
+    "misc": 2
+  },
+  "byStrategy": {
+    "Homepage keywords": 4
+  }
+}

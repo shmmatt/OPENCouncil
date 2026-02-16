@@ -1,0 +1,76 @@
+{
+  "results": [
+    {
+      "name": "Madison",
+      "url": "https://madison-nh.org",
+      "success": true,
+      "docsFound": 0,
+      "uploaded": 0,
+      "duration": 13.4149
+    },
+    {
+      "name": "Moultonborough",
+      "url": "https://moultonboroughnh.gov",
+      "success": false,
+      "docsFound": 0,
+      "uploaded": 0,
+      "error": "spawnSync tsx ETIMEDOUT",
+      "duration": 21.30613333333333
+    },
+    {
+      "name": "Ossipee",
+      "url": "https://www.ossipee.org",
+      "success": true,
+      "docsFound": 0,
+      "uploaded": 0,
+      "duration": 6.319816666666667
+    },
+    {
+      "name": "Sandwich",
+      "url": "https://www.sandwichnh.com",
+      "success": false,
+      "docsFound": 0,
+      "uploaded": 0,
+      "error": "spawnSync tsx ETIMEDOUT",
+      "duration": 31.205066666666667
+    },
+    {
+      "name": "Tamworth",
+      "url": "https://tamworthnh.gov",
+      "success": true,
+      "docsFound": 0,
+      "uploaded": 0,
+      "duration": 16.75655
+    },
+    {
+      "name": "Tuftonboro",
+      "url": "https://www.tuftonboronh.gov",
+      "success": true,
+      "docsFound": 0,
+      "uploaded": 0,
+      "duration": 7.832416666666666
+    },
+    {
+      "name": "Wakefield",
+      "url": "https://www.wakefieldnh.gov",
+      "success": true,
+      "docsFound": 0,
+      "uploaded": 0,
+      "duration": 8.583466666666668
+    },
+    {
+      "name": "Wolfeboro",
+      "url": "https://www.wolfeboronh.us",
+      "success": false,
+      "docsFound": 0,
+      "uploaded": 0,
+      "error": "spawnSync tsx ETIMEDOUT",
+      "duration": 21.38703333333333
+    }
+  ],
+  "summary": {
+    "success": 5,
+    "failed": 3,
+    "totalMinutes": 127.38931666666667
+  }
+}

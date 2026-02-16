@@ -1,0 +1,89 @@
+{
+  "completedAt": "2026-02-09T03:22:15.979Z",
+  "durationMinutes": 19,
+  "total": 18,
+  "successful": 10,
+  "failed": 8,
+  "results": [
+    {
+      "town": "Albany",
+      "success": true
+    },
+    {
+      "town": "Bartlett",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Brookfield",
+      "success": true
+    },
+    {
+      "town": "Chatham",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Conway",
+      "success": true
+    },
+    {
+      "town": "Eaton",
+      "success": true
+    },
+    {
+      "town": "Effingham",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Freedom",
+      "success": true
+    },
+    {
+      "town": "Hart's Location",
+      "success": false,
+      "error": "Exit code 2"
+    },
+    {
+      "town": "Jackson",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Madison",
+      "success": true
+    },
+    {
+      "town": "Moultonborough",
+      "success": true
+    },
+    {
+      "town": "Ossipee",
+      "success": true
+    },
+    {
+      "town": "Sandwich",
+      "success": true
+    },
+    {
+      "town": "Tamworth",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Tuftonboro",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Wakefield",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Wolfeboro",
+      "success": true
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "completedAt": "2026-02-09T03:55:41.583Z",
+  "durationMinutes": 11,
+  "total": 8,
+  "successful": 6,
+  "failed": 2,
+  "results": [
+    {
+      "town": "Bartlett",
+      "success": true
+    },
+    {
+      "town": "Chatham",
+      "success": true
+    },
+    {
+      "town": "Effingham",
+      "success": true
+    },
+    {
+      "town": "Hart's Location",
+      "success": false,
+      "error": "Exit code 2"
+    },
+    {
+      "town": "Jackson",
+      "success": true
+    },
+    {
+      "town": "Tamworth",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Tuftonboro",
+      "success": true
+    },
+    {
+      "town": "Wakefield",
+      "success": true
+    }
+  ]
+}

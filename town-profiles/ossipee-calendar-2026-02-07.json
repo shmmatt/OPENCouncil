@@ -1,0 +1,134 @@
+{
+  "town": "Ossipee",
+  "extractedAt": "2026-02-07T01:44:40.967Z",
+  "sourceUrl": "https://www.ossipee.org/",
+  "calendarLinks": [
+    "https://www.ossipee.org/planning-board/files/pb-fee-schedule-final-2023",
+    "https://www.ossipee.org/zoning-board-of-adjustment/links/zba-fee-schedule",
+    "https://www.ossipee.org/ossipee-parks-recreation/links/calendar-programevents",
+    "https://www.ossipee.org/ossipee-parks-recreation/pages/upcoming-events",
+    "https://www.ossipee.org/transfer-station/files/2025-transfer-station-holiday-schedule",
+    "https://www.ossipee.org/calendar/month/2026-02",
+    "https://www.ossipee.org/calendar/day/2026-02-02",
+    "https://www.ossipee.org/board-of-selectmen/events/46061",
+    "https://www.ossipee.org/calendar/day/2026-02-03",
+    "https://www.ossipee.org/planning-board/events/46041",
+    "https://www.ossipee.org/calendar/day/2026-02-04",
+    "https://www.ossipee.org/budget-committee/events/46026",
+    "https://www.ossipee.org/budget-committee/events/46051",
+    "https://www.ossipee.org/calendar/day/2026-02-09",
+    "https://www.ossipee.org/economic-development-committee/events/41526",
+    "https://www.ossipee.org/calendar/day/2026-02-10",
+    "https://www.ossipee.org/supervisors-of-the-checklist/events/46111",
+    "https://www.ossipee.org/zoning-board-of-adjustment/events/46091",
+    "https://www.ossipee.org/calendar/day/2026-02-11",
+    "https://www.ossipee.org/conservation-commission/events/46101",
+    "https://www.ossipee.org/calendar/day/2026-02-17",
+    "https://www.ossipee.org/planning-board/events/46081",
+    "https://www.ossipee.org/calendar/month",
+    "https://www.ossipee.org/minutes-and-agendas"
+  ],
+  "meetings": [
+    {
+      "board": "Board of Selectmen",
+      "title": "Board of Selectmen"
+    },
+    {
+      "board": "Budget Committee",
+      "title": "Budget Information"
+    },
+    {
+      "board": "Conservation Commission",
+      "title": "Long Sands Constitution Park Conservation Area - Trail Map"
+    },
+    {
+      "board": "Board",
+      "title": "Ossipee Economic Developement Committee"
+    },
+    {
+      "board": "Planning Board",
+      "title": "Planning Forms"
+    },
+    {
+      "board": "Zoning Board of Adjustment",
+      "date": "March 20",
+      "title": "Zoning Ordinance as of March 2025"
+    },
+    {
+      "board": "Zoning Board of Adjustment",
+      "title": "Building Inspector / Zoning Enforcement"
+    },
+    {
+      "board": "Board of Selectmen",
+      "date": "Monday, February 2, 2026",
+      "time": "3:30pm",
+      "title": "2026.02.02_selectmens_agenda.pdf"
+    },
+    {
+      "board": "Planning Board",
+      "date": "Tuesday, February 3, 2026",
+      "time": "7:00pm",
+      "title": "Planning Board"
+    },
+    {
+      "board": "Budget Committee",
+      "date": "Wednesday, February 4, 2026",
+      "time": "6:30pm",
+      "title": "Budget Committee"
+    },
+    {
+      "board": "Board",
+      "date": "Monday, February 9, 2026",
+      "time": "6:30pm",
+      "title": "Economic Developement Council"
+    },
+    {
+      "board": "Zoning Board of Adjustment",
+      "date": "Tuesday, February 10, 2026",
+      "time": "7:00pm",
+      "title": "2026_02_10_zba_agenda.pdf"
+    },
+    {
+      "board": "Conservation Commission",
+      "date": "Wednesday, February 11, 2026",
+      "time": "7:00pm",
+      "title": "Conservation Commission"
+    },
+    {
+      "board": "Planning Board",
+      "date": "Tuesday, February 17, 2026",
+      "time": "7:00pm",
+      "title": "Planning Board"
+    },
+    {
+      "board": "Board",
+      "time": "3:45",
+      "location": "Town Hall)",
+      "title": "6p - 7p Boys Travel Basketball (Tamworth Recreation (KA Brett School))"
+    },
+    {
+      "board": "Board",
+      "time": "4:45",
+      "location": "Town Hall)",
+      "title": "5p - 6p Boys Travel Basketball (Freedom Recreation (Freedom Elementary School))"
+    },
+    {
+      "board": "Board",
+      "time": "5:30",
+      "location": "Town Hall)",
+      "title": "5:30p - 6:45p Boys Travel Basketball (Ossipee Central School (Practice))"
+    },
+    {
+      "board": "Board",
+      "time": "6:45",
+      "title": "6:45p - 8p Girls Travel Basketball (Ossipee Central School (Practice))"
+    }
+  ],
+  "recurringPatterns": {
+    "Board of Selectmen": "Regular meetings at 3:30pm",
+    "Budget Committee": "Regular meetings at 6:30pm",
+    "Conservation Commission": "Regular meetings at 7:00pm",
+    "Planning Board": "Regular meetings at 7:00pm",
+    "Zoning Board of Adjustment": "Regular meetings at 7:00pm"
+  }
+}

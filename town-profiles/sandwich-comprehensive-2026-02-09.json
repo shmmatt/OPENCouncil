@@ -1,0 +1,73 @@
+{
+  "town": "Sandwich",
+  "extractedAt": "2026-02-09T03:17:43.878Z",
+  "sourceUrl": "https://sandwichnh.org",
+  "boards": {
+    "budget_board": {
+      "name": "Budget Board",
+      "location": "Town Hall"
+    },
+    "select_board": {
+      "name": "Select Board",
+      "location": "Town Hall"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Town Hall"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "location": "Town Hall"
+    },
+    "conservation_board": {
+      "name": "Conservation Board",
+      "location": "Town Hall"
+    },
+    "zoning_board": {
+      "name": "Zoning Board",
+      "location": "Town Hall"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://sandwichnh.org",
+    "https://sandwichnh.org/calendar.php",
+    "https://sandwichnh.org/departments/index.php",
+    "https://sandwichnh.org/departments/cemetery_trustees/index.php",
+    "https://sandwichnh.org/departments/compliance_officer/index.php",
+    "https://sandwichnh.org/departments/fire_department/index.php",
+    "https://sandwichnh.org/departments/fire_department/emergency_management.php",
+    "https://sandwichnh.org/departments/health_officer/index.php",
+    "https://sandwichnh.org/departments/highway_department/index.php",
+    "https://sandwichnh.org/departments/library/index.php",
+    "https://sandwichnh.org/departments/parks_and_recreation/index.php",
+    "https://sandwichnh.org/departments/police_department/index.php",
+    "https://sandwichnh.org/departments/selectmens_office/index.php",
+    "https://sandwichnh.org/departments/tax_collector/index.php",
+    "https://sandwichnh.org/departments/town_clerks_office/index.php",
+    "https://sandwichnh.org/departments/transfer_station/index.php",
+    "https://sandwichnh.org/boards_and_committees/index.php",
+    "https://sandwichnh.org/boards_and_committees/agriculture_commission/index.php",
+    "https://sandwichnh.org/boards_and_committees/broadband_advisory_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/budget_advisory_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/conservation_commission/index.php",
+    "https://sandwichnh.org/boards_and_committees/energy_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/historic_district_commission/index.php",
+    "https://sandwichnh.org/boards_and_committees/human_resources_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/meadow_brook_ad_hoc_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/planning_board/index.php",
+    "https://sandwichnh.org/government/boards_and_committees/planning_board/master_plan.php",
+    "https://sandwichnh.org/boards_and_committees/police_building_advisory_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/remick_park_revitalization_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/safety_committee/index.php",
+    "https://sandwichnh.org/boards_and_committees/sandwich_stagecoach.php"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 998-4966",
+    "email": "fire@sandwichnh.org"
+  }
+}

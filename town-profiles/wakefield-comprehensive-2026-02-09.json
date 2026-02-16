@@ -1,0 +1,58 @@
+{
+  "town": "Wakefield",
+  "extractedAt": "2026-02-09T03:53:28.492Z",
+  "sourceUrl": "https://www.wakefieldnh.gov",
+  "boards": {
+    "select_board": {
+      "name": "Select Board"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board"
+    },
+    "budget_board": {
+      "name": "Budget Board"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    },
+    "planning_board": {
+      "name": "Planning Board"
+    },
+    "zoning_board": {
+      "name": "Zoning Board",
+      "meetingSchedule": "2nd Thursday at 6:15pm at 6:00pm at 7:00pm at 5:45pm"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.wakefieldnh.gov",
+    "https://www.wakefieldnh.gov/boards",
+    "https://www.wakefieldnh.gov/board-assessors",
+    "https://www.wakefieldnh.gov/budget-committee",
+    "https://www.wakefieldnh.gov/joint-loss-management-committee",
+    "https://www.wakefieldnh.gov/planning-board",
+    "https://www.wakefieldnh.gov/zoning-board-adjustment",
+    "https://www.wakefieldnh.gov/departments",
+    "https://www.wakefieldnh.gov/webforms/contact-us",
+    "https://www.wakefieldnh.gov/home/urgent-alerts/fraud-alert-wakefield-police-department-and-wakefield-land-use-department-would",
+    "https://www.wakefieldnh.gov/minutes-and-agendas",
+    "https://www.wakefieldnh.gov/home/events/22691",
+    "https://www.wakefieldnh.gov/supervisors-checklist/events/22166",
+    "https://www.wakefieldnh.gov/administrationselectmen/events/22256",
+    "https://www.wakefieldnh.gov/conservation-commission/events/22466",
+    "https://www.wakefieldnh.gov/administrationselectmen/events/22361",
+    "https://www.wakefieldnh.gov/administrationselectmen/events/20316",
+    "https://www.wakefieldnh.gov/home/events/22701",
+    "https://www.wakefieldnh.gov/planning-board/events/20256",
+    "https://www.wakefieldnh.gov/conservation-commission/events/20471",
+    "https://www.wakefieldnh.gov/conservation-commission/events/22526",
+    "https://www.wakefieldnh.gov/administrationselectmen/events/20356"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 522-6205"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "town": "Ossipee",
+  "crawledAt": "2026-02-10T20:13:29.258Z",
+  "discovered": 67,
+  "downloaded": 0,
+  "uploaded": 0,
+  "skipped": 3,
+  "failed": 64,
+  "byCategory": {},
+  "byStrategy": {
+    "Homepage keywords": 45
+  }
+}

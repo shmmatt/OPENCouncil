@@ -1,0 +1,26 @@
+{
+  "town": "Tuftonboro",
+  "crawledAt": "2026-02-10T22:12:36.978Z",
+  "discovered": 148,
+  "downloaded": 129,
+  "uploaded": 129,
+  "skipped": 2,
+  "failed": 17,
+  "byCategory": {
+    "form": 12,
+    "ordinance": 9,
+    "misc": 80,
+    "budget": 10,
+    "tax": 1,
+    "election": 3,
+    "minutes": 1,
+    "planning": 10,
+    "zoning": 1,
+    "audit": 2
+  },
+  "byStrategy": {
+    "Homepage keywords": 48,
+    "Page: /boards": 89,
+    "Deep navigation": 3710
+  }
+}

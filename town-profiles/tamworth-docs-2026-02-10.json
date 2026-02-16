@@ -1,0 +1,15 @@
+{
+  "town": "Tamworth",
+  "crawledAt": "2026-02-10T01:49:06.195Z",
+  "discovered": 1,
+  "downloaded": 1,
+  "uploaded": 1,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {
+    "misc": 1
+  },
+  "byStrategy": {
+    "Sitemap": 92
+  }
+}

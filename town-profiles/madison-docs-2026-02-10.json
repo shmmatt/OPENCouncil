@@ -1,0 +1,21 @@
+{
+  "town": "Madison",
+  "crawledAt": "2026-02-10T01:47:08.039Z",
+  "discovered": 14,
+  "downloaded": 14,
+  "uploaded": 14,
+  "skipped": 0,
+  "failed": 0,
+  "byCategory": {
+    "minutes": 14
+  },
+  "byStrategy": {
+    "Page: /documents": 0,
+    "Page: /minutes": 14,
+    "Page: /agendas": 0,
+    "Page: /boards": 0,
+    "Page: /forms": 0,
+    "Page: /reports": 0,
+    "Sitemap": 9
+  }
+}

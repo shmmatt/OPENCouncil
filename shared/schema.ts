@@ -515,3 +515,8 @@ export interface ActorIdentifier {
   userId?: string;
   anonId?: string;
 }
+
+// ============================================================
+// CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
+// ============================================================
+export * from './crawler-schema';

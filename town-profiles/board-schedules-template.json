@@ -1,0 +1,62 @@
+{
+  "_comment": "Manual board meeting schedules - populate from town websites, phone calls, or meeting notices",
+  "ossipee": {
+    "select_board": {
+      "name": "Board of Selectmen",
+      "schedule": "2nd and 4th Monday at 6:00 PM",
+      "location": "Town Hall, 195 Main Street",
+      "contact": "(603) 539-4181",
+      "notes": "Agendas posted 24 hours in advance"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    },
+    "zoning_board": {
+      "name": "Zoning Board of Adjustment",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    },
+    "conservation": {
+      "name": "Conservation Commission",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    },
+    "budget_committee": {
+      "name": "Budget Committee",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    }
+  },
+  "conway": {
+    "select_board": {
+      "name": "Conway Select Board",
+      "schedule": "TBD",
+      "location": "Town Hall, 23 Main Street",
+      "contact": "(603) 447-3811"
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    },
+    "zoning_board": {
+      "name": "Zoning Board of Adjustment",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    },
+    "conservation": {
+      "name": "Conservation Commission",
+      "schedule": "TBD",
+      "location": "Town Hall",
+      "contact": "TBD"
+    }
+  }
+}

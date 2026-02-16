@@ -1,0 +1,67 @@
+
+> rest-express@1.0.0 crawl:smart
+> tsx --env-file=.env scripts/smart-document-crawler.ts --town Conway --url https://conwaynh.gov --dry-run --thorough
+
+
+============================================================
+🤖 Smart Document Crawler (Thorough)
+🏛️  Town: Conway
+🌐 URL: https://conwaynh.gov
+============================================================
+
+🔍 Fingerprinting site...
+   CMS: Custom
+
+📋 Strategy 1: Focused Index Pages
+   Checking 59 index page candidates...
+✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✓(239)✗.✗✗✗✗
+   Result: 239 docs from 1 index pages
+
+   📄 Working index pages:
+      /documents
+
+📊 Coverage Assessment:
+   Documents: 239
+   Categories:
+      - misc: 185
+      - forms: 33
+      - reports: 19
+      - regulations: 2
+   Years: ✓ Multiple
+   Status: ⚠️  Insufficient
+
+⚡ Coverage insufficient, switching to navigation strategy...
+   Reason: No minutes or agendas found
+
+🗺️  Strategy 2: Navigation Following
+   Found 6 navigation links
+✓(239).....
+   Result: 239 docs after navigation following
+
+📊 Final Assessment:
+   Documents: 239 (+0)
+   Categories:
+      - misc: 185
+      - forms: 33
+      - reports: 19
+      - regulations: 2
+   Status: ⚠️  Best effort
+
+============================================================
+DISCOVERY COMPLETE: 239 documents
+Strategies used: Index Pages → Navigation Following
+============================================================
+
+🔍 DRY RUN
+
+Sample documents:
+   https://conwaynh.gov/uploads/2019-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2020-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2021-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/copy-of-fall2022-2-.xlsx
+   https://conwaynh.gov/uploads/copy-of-spring-2022-1-.xlsx
+   https://conwaynh.gov/uploads/2022-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2023-full-statistical-revaluation-presentation-for-selectmen-10122023-conway.pdf
+   https://conwaynh.gov/uploads/copy-of-spring-2023-1-.xlsx
+   https://conwaynh.gov/uploads/2023-conway-tax-rates-final.pdf
+   https://conwaynh.gov/uploads/2024-conway-tax-rates-final.pdf

@@ -1,0 +1,42 @@
+{
+  "town": "Chatham",
+  "extractedAt": "2026-02-09T03:46:04.154Z",
+  "sourceUrl": "https://www.chathamnh.org",
+  "boards": {
+    "planning_board": {
+      "name": "Planning Board"
+    },
+    "select_board": {
+      "name": "Select Board"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board"
+    },
+    "budget_board": {
+      "name": "Budget Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.chathamnh.org",
+    "https://www.chathamnh.org/school-board/",
+    "https://www.chathamnh.org/planning-board/",
+    "https://www.chathamnh.org/the-chatham-citizens-advisory-committee/",
+    "https://www.chathamnh.org/meeting-minutes/",
+    "https://www.chathamnh.org/bulletin-board/",
+    "https://www.chathamnh.org/events/",
+    "https://www.chathamnh.org/contact/",
+    "https://www.chathamnh.org/planning-board",
+    "https://www.chathamnh.org/town-clerk",
+    "https://www.chathamnh.org/events",
+    "https://www.chathamnh.org/contact"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "603-694-2117",
+    "email": "planningboard@chathamnh.org"
+  }
+}

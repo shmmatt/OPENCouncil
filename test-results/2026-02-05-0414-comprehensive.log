@@ -1,0 +1,529 @@
+
+> rest-express@1.0.0 test:chat
+> tsx --env-file=.env scripts/test-chat-pipeline.ts run --sets comprehensive --output test-results/2026-02-05-0414-comprehensive.json
+
+🧪 Running 50 tests...
+
+Testing meet-01: "When is the next Ossipee Select Board meeting?..." {"level":30,"time":"2026-02-05T04:15:58.251Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"b47eaeff-ade6-401a-8760-d1f0be76fd67","sessionId":"test-meet-01","stage":"v3_orchestrator","messageLength":46,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[StoreResolver] Found statewide store: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:16:13.479Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"b47eaeff-ade6-401a-8760-d1f0be76fd67","sessionId":"test-meet-01","stage":"v3_orchestrator","answerLength":917,"tier":"C","localSelected":9,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":15229,"msg":"v3_pipeline_complete"}
+✅ PASS (15229ms)
+Testing meet-02: "What time does the Conway planning board meet?..." {"level":30,"time":"2026-02-05T04:16:13.480Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"f28a9843-303b-43cd-9486-94144402acce","sessionId":"test-meet-02","stage":"v3_orchestrator","messageLength":46,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:16:29.902Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"f28a9843-303b-43cd-9486-94144402acce","sessionId":"test-meet-02","stage":"v3_orchestrator","answerLength":1251,"tier":"C","localSelected":6,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":16422,"msg":"v3_pipeline_complete"}
+✅ PASS (16422ms)
+Testing meet-03: "Where can I find the agenda for the next Bartlett town meeti..." {"level":30,"time":"2026-02-05T04:16:29.902Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"ebe668a6-ed96-43dc-887c-bcff347bafed","sessionId":"test-meet-03","stage":"v3_orchestrator","messageLength":63,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (25959ms)
+{"level":30,"time":"2026-02-05T04:16:55.861Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"ebe668a6-ed96-43dc-887c-bcff347bafed","sessionId":"test-meet-03","stage":"v3_orchestrator","answerLength":1450,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":1,"repairRan":true,"durationMs":25959,"msg":"v3_pipeline_complete"}
+Testing meet-04: "How do I get on the agenda for the Ossipee Select Board meet..." {"level":30,"time":"2026-02-05T04:16:55.861Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"21454dcc-17f3-440e-b753-5221ea333ca7","sessionId":"test-meet-04","stage":"v3_orchestrator","messageLength":64,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:17:13.324Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"21454dcc-17f3-440e-b753-5221ea333ca7","sessionId":"test-meet-04","stage":"v3_orchestrator","answerLength":889,"tier":"C","localSelected":4,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":17463,"msg":"v3_pipeline_complete"}
+✅ PASS (17463ms)
+Testing meet-05: "Are town meetings in Albany open to the public?..." {"level":30,"time":"2026-02-05T04:17:13.324Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"88bfbe2e-08ef-4c8b-97e8-0f6014e6e0a7","sessionId":"test-meet-05","stage":"v3_orchestrator","messageLength":47,"townPreference":"Albany","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Albany: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Albany: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (16255ms)
+Testing cont-01: "What are the office hours for the Conway town clerk?..." {"level":30,"time":"2026-02-05T04:17:29.579Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"88bfbe2e-08ef-4c8b-97e8-0f6014e6e0a7","sessionId":"test-meet-05","stage":"v3_orchestrator","answerLength":1252,"tier":"B","localSelected":6,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":16255,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:17:29.579Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"09383c2e-2adc-404f-960b-ba35deb3006d","sessionId":"test-cont-01","stage":"v3_orchestrator","messageLength":52,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:17:50.247Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"09383c2e-2adc-404f-960b-ba35deb3006d","sessionId":"test-cont-01","stage":"v3_orchestrator","answerLength":900,"tier":"C","localSelected":8,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":20667,"msg":"v3_pipeline_complete"}
+✅ PASS (20667ms)
+Testing cont-02: "How do I contact the Ossipee tax collector?..." {"level":30,"time":"2026-02-05T04:17:50.247Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"42f14976-afff-4c9c-a703-481618bc04e0","sessionId":"test-cont-02","stage":"v3_orchestrator","messageLength":43,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (17102ms)
+Testing cont-03: "What's the phone number for the Madison town office?..." {"level":30,"time":"2026-02-05T04:18:07.349Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"42f14976-afff-4c9c-a703-481618bc04e0","sessionId":"test-cont-02","stage":"v3_orchestrator","answerLength":1289,"tier":"C","localSelected":5,"stateSelected":3,"auditFlagCount":1,"repairRan":false,"durationMs":17102,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:18:07.350Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"5a9dbcf6-ce0d-4990-b722-e1c869e14a7c","sessionId":"test-cont-03","stage":"v3_orchestrator","messageLength":52,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:18:25.427Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"5a9dbcf6-ce0d-4990-b722-e1c869e14a7c","sessionId":"test-cont-03","stage":"v3_orchestrator","answerLength":1447,"tier":"C","localSelected":9,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":18078,"msg":"v3_pipeline_complete"}
+✅ PASS (18078ms)
+Testing cont-04: "Is the Bartlett town hall open on weekends?..." {"level":30,"time":"2026-02-05T04:18:25.427Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"cba5ef43-cbbe-4975-bb2a-f432b3078e4e","sessionId":"test-cont-04","stage":"v3_orchestrator","messageLength":43,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:18:39.487Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"cba5ef43-cbbe-4975-bb2a-f432b3078e4e","sessionId":"test-cont-04","stage":"v3_orchestrator","answerLength":1263,"tier":"C","localSelected":7,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":14060,"msg":"v3_pipeline_complete"}
+✅ PASS (14060ms)
+Testing cont-05: "Who is the current town administrator in Ossipee?..." {"level":30,"time":"2026-02-05T04:18:39.488Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e023d036-c7e7-4528-9480-e383e0a8472e","sessionId":"test-cont-05","stage":"v3_orchestrator","messageLength":49,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:19:16.798Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e023d036-c7e7-4528-9480-e383e0a8472e","sessionId":"test-cont-05","stage":"v3_orchestrator","answerLength":1099,"tier":"C","localSelected":4,"stateSelected":3,"auditFlagCount":1,"repairRan":false,"durationMs":37310,"msg":"v3_pipeline_complete"}
+✅ PASS (37310ms)
+Testing perm-01: "How do I apply for a building permit in Ossipee?..." {"level":30,"time":"2026-02-05T04:19:16.799Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"4e318db1-3494-4be4-b206-0be5cdaf5338","sessionId":"test-perm-01","stage":"v3_orchestrator","messageLength":48,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:19:34.435Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"4e318db1-3494-4be4-b206-0be5cdaf5338","sessionId":"test-perm-01","stage":"v3_orchestrator","answerLength":1290,"tier":"C","localSelected":6,"stateSelected":4,"auditFlagCount":0,"repairRan":false,"durationMs":17636,"msg":"v3_pipeline_complete"}
+✅ PASS (17636ms)
+Testing perm-02: "What documents do I need for a driveway permit in Conway?..." {"level":30,"time":"2026-02-05T04:19:34.436Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"06fd1852-ea9e-4d6c-b19c-ab9d5adf6aa2","sessionId":"test-perm-02","stage":"v3_orchestrator","messageLength":57,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (25820ms)
+Testing perm-03: "How much does a building permit cost in Bartlett?..." {"level":30,"time":"2026-02-05T04:20:00.256Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"06fd1852-ea9e-4d6c-b19c-ab9d5adf6aa2","sessionId":"test-perm-02","stage":"v3_orchestrator","answerLength":1041,"tier":"C","localSelected":7,"stateSelected":2,"auditFlagCount":1,"repairRan":false,"durationMs":25820,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:20:00.257Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"510cf37f-a785-4946-8b29-1269983fd953","sessionId":"test-perm-03","stage":"v3_orchestrator","messageLength":49,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:20:19.297Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"510cf37f-a785-4946-8b29-1269983fd953","sessionId":"test-perm-03","stage":"v3_orchestrator","answerLength":1185,"tier":"C","localSelected":5,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":19040,"msg":"v3_pipeline_complete"}
+✅ PASS (19040ms)
+Testing perm-04: "Do I need a permit to install a shed in my backyard in Ossip..." {"level":30,"time":"2026-02-05T04:20:19.297Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"9a05f333-fec0-41ab-b3f0-88d8659d1656","sessionId":"test-perm-04","stage":"v3_orchestrator","messageLength":63,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:20:41.583Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"9a05f333-fec0-41ab-b3f0-88d8659d1656","sessionId":"test-perm-04","stage":"v3_orchestrator","answerLength":1490,"tier":"B","localSelected":4,"stateSelected":4,"auditFlagCount":0,"repairRan":false,"durationMs":22285,"msg":"v3_pipeline_complete"}
+✅ PASS (22285ms)
+Testing perm-05: "How long does it take to get a septic permit approved?..." {"level":30,"time":"2026-02-05T04:20:41.583Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"0f17c275-d7bb-4d45-a996-d8e71044b523","sessionId":"test-perm-05","stage":"v3_orchestrator","messageLength":54,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (15717ms)
+Testing tax-comp-01: "When are property taxes due in Ossipee?..." {"level":30,"time":"2026-02-05T04:20:57.300Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"0f17c275-d7bb-4d45-a996-d8e71044b523","sessionId":"test-perm-05","stage":"v3_orchestrator","answerLength":1090,"tier":"C","localSelected":3,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":15717,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:20:57.300Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"5959d29e-fd67-4874-ade7-e729ced99d40","sessionId":"test-tax-comp-01","stage":"v3_orchestrator","messageLength":39,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (17616ms)
+Testing tax-comp-02: "What is the current tax rate in Conway?..." {"level":30,"time":"2026-02-05T04:21:14.916Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"5959d29e-fd67-4874-ade7-e729ced99d40","sessionId":"test-tax-comp-01","stage":"v3_orchestrator","answerLength":1473,"tier":"C","localSelected":7,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":17616,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:21:14.916Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8ec6d266-45a6-4eaf-98e4-b376eb1798e1","sessionId":"test-tax-comp-02","stage":"v3_orchestrator","messageLength":39,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:21:32.076Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8ec6d266-45a6-4eaf-98e4-b376eb1798e1","sessionId":"test-tax-comp-02","stage":"v3_orchestrator","answerLength":1197,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":17160,"msg":"v3_pipeline_complete"}
+✅ PASS (17160ms)
+Testing tax-comp-03: "How do I pay my property taxes online?..." {"level":30,"time":"2026-02-05T04:21:32.076Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2cee101d-51e8-43d1-80e7-38161ff6a629","sessionId":"test-tax-comp-03","stage":"v3_orchestrator","messageLength":38,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:21:46.757Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2cee101d-51e8-43d1-80e7-38161ff6a629","sessionId":"test-tax-comp-03","stage":"v3_orchestrator","answerLength":607,"tier":"C","localSelected":9,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":14681,"msg":"v3_pipeline_complete"}
+✅ PASS (14681ms)
+Testing tax-comp-04: "Can I set up a payment plan for my property taxes in Madison..." {"level":30,"time":"2026-02-05T04:21:46.758Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc2b6cd1-7f93-43be-b312-91486f4d7204","sessionId":"test-tax-comp-04","stage":"v3_orchestrator","messageLength":61,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:22:04.745Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc2b6cd1-7f93-43be-b312-91486f4d7204","sessionId":"test-tax-comp-04","stage":"v3_orchestrator","answerLength":1419,"tier":"C","localSelected":5,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":17987,"msg":"v3_pipeline_complete"}
+✅ PASS (17987ms)
+Testing tax-comp-05: "How do I apply for an abatement on my property taxes?..." {"level":30,"time":"2026-02-05T04:22:04.745Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"0828a392-aa9c-4610-a207-a2552113cb19","sessionId":"test-tax-comp-05","stage":"v3_orchestrator","messageLength":53,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (21543ms)
+Testing vote-01: "How do I register to vote in Carroll County?..." {"level":30,"time":"2026-02-05T04:22:26.289Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"0828a392-aa9c-4610-a207-a2552113cb19","sessionId":"test-tax-comp-05","stage":"v3_orchestrator","answerLength":1337,"tier":"B","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":21543,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:22:26.289Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"68e3f9a9-7083-42b7-9e11-1763de147c1e","sessionId":"test-vote-01","stage":"v3_orchestrator","messageLength":44,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (22573ms)
+Testing vote-02: "Where is my polling place in Conway?..." {"level":30,"time":"2026-02-05T04:22:48.862Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"68e3f9a9-7083-42b7-9e11-1763de147c1e","sessionId":"test-vote-01","stage":"v3_orchestrator","answerLength":943,"tier":"C","localSelected":5,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":22573,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:22:48.862Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8e53e404-b593-4267-98a2-2ac92154d804","sessionId":"test-vote-02","stage":"v3_orchestrator","messageLength":36,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:23:06.472Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8e53e404-b593-4267-98a2-2ac92154d804","sessionId":"test-vote-02","stage":"v3_orchestrator","answerLength":1431,"tier":"C","localSelected":5,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":17610,"msg":"v3_pipeline_complete"}
+✅ PASS (17610ms)
+Testing vote-03: "Can I vote absentee in the next election?..." {"level":30,"time":"2026-02-05T04:23:06.472Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc634fe0-455a-456e-9f2b-b2c1b398193c","sessionId":"test-vote-03","stage":"v3_orchestrator","messageLength":41,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:23:30.740Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc634fe0-455a-456e-9f2b-b2c1b398193c","sessionId":"test-vote-03","stage":"v3_orchestrator","answerLength":1960,"tier":"B","localSelected":7,"stateSelected":2,"auditFlagCount":0,"repairRan":false,"durationMs":24268,"msg":"v3_pipeline_complete"}
+✅ PASS (24268ms)
+Testing vote-04: "What do I need to bring to register to vote on election day?..." {"level":30,"time":"2026-02-05T04:23:30.741Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"9a84d36d-0d73-4e5a-abea-256a528be3f7","sessionId":"test-vote-04","stage":"v3_orchestrator","messageLength":60,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (22864ms)
+Testing vote-05: "When is the deadline to request an absentee ballot?..." {"level":30,"time":"2026-02-05T04:23:53.604Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"9a84d36d-0d73-4e5a-abea-256a528be3f7","sessionId":"test-vote-04","stage":"v3_orchestrator","answerLength":1278,"tier":"B","localSelected":3,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":22864,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:23:53.604Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e77f5bf2-b8d9-40a9-8117-777a6dc2199a","sessionId":"test-vote-05","stage":"v3_orchestrator","messageLength":51,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (15711ms)
+Testing zone-01: "What is my property zoned as in Ossipee?..." {"level":30,"time":"2026-02-05T04:24:09.315Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e77f5bf2-b8d9-40a9-8117-777a6dc2199a","sessionId":"test-vote-05","stage":"v3_orchestrator","answerLength":1247,"tier":"C","localSelected":6,"stateSelected":1,"auditFlagCount":0,"repairRan":false,"durationMs":15711,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:24:09.315Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"265efe27-40b4-4f11-be03-74c9eab20921","sessionId":"test-zone-01","stage":"v3_orchestrator","messageLength":40,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (26985ms)
+Testing zone-02: "Can I run a business from my home in Conway?..." {"level":30,"time":"2026-02-05T04:24:36.301Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"265efe27-40b4-4f11-be03-74c9eab20921","sessionId":"test-zone-01","stage":"v3_orchestrator","answerLength":1263,"tier":"C","localSelected":7,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":26985,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:24:36.301Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"7c2d7669-0d5f-4ae7-ab1c-5cfa814e7704","sessionId":"test-zone-02","stage":"v3_orchestrator","messageLength":44,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:24:50.287Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"7c2d7669-0d5f-4ae7-ab1c-5cfa814e7704","sessionId":"test-zone-02","stage":"v3_orchestrator","answerLength":1354,"tier":"B","localSelected":4,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":13986,"msg":"v3_pipeline_complete"}
+✅ PASS (13986ms)
+Testing zone-03: "What are the setback requirements for building in Bartlett?..." {"level":30,"time":"2026-02-05T04:24:50.287Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2ef084ac-a45d-419c-96d1-e6fcb6690e97","sessionId":"test-zone-03","stage":"v3_orchestrator","messageLength":59,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:25:14.997Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2ef084ac-a45d-419c-96d1-e6fcb6690e97","sessionId":"test-zone-03","stage":"v3_orchestrator","answerLength":1605,"tier":"B","localSelected":6,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":24710,"msg":"v3_pipeline_complete"}
+✅ PASS (24710ms)
+Testing zone-04: "How do I request a zoning variance in Madison?..." {"level":30,"time":"2026-02-05T04:25:14.998Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"3c78954e-9956-49d4-9a76-abb94e39d485","sessionId":"test-zone-04","stage":"v3_orchestrator","messageLength":46,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:25:36.803Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"3c78954e-9956-49d4-9a76-abb94e39d485","sessionId":"test-zone-04","stage":"v3_orchestrator","answerLength":1036,"tier":"B","localSelected":10,"stateSelected":2,"auditFlagCount":1,"repairRan":false,"durationMs":21805,"msg":"v3_pipeline_complete"}
+✅ PASS (21805ms)
+Testing zone-05: "Are there any wetland restrictions on my property?..." {"level":30,"time":"2026-02-05T04:25:36.803Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"979ae913-4406-447b-90bf-4c17f87166ea","sessionId":"test-zone-05","stage":"v3_orchestrator","messageLength":50,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:26:00.783Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"979ae913-4406-447b-90bf-4c17f87166ea","sessionId":"test-zone-05","stage":"v3_orchestrator","answerLength":1385,"tier":"B","localSelected":3,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":23980,"msg":"v3_pipeline_complete"}
+✅ PASS (23980ms)
+Testing serv-01: "What day is trash pickup in my neighborhood in Ossipee?..." {"level":30,"time":"2026-02-05T04:26:00.783Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"1884aefa-d47c-4b47-919b-36d9ed7fde5f","sessionId":"test-serv-01","stage":"v3_orchestrator","messageLength":55,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:26:23.114Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"1884aefa-d47c-4b47-919b-36d9ed7fde5f","sessionId":"test-serv-01","stage":"v3_orchestrator","answerLength":1162,"tier":"C","localSelected":6,"stateSelected":0,"auditFlagCount":0,"repairRan":false,"durationMs":22331,"msg":"v3_pipeline_complete"}
+✅ PASS (22331ms)
+Testing serv-02: "How do I get a dump sticker in Conway?..." {"level":30,"time":"2026-02-05T04:26:23.114Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"85291f52-5cd3-40f5-b817-1278f9c0d9fd","sessionId":"test-serv-02","stage":"v3_orchestrator","messageLength":38,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:26:45.642Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"85291f52-5cd3-40f5-b817-1278f9c0d9fd","sessionId":"test-serv-02","stage":"v3_orchestrator","answerLength":1092,"tier":"C","localSelected":10,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":22528,"msg":"v3_pipeline_complete"}
+✅ PASS (22528ms)
+Testing serv-03: "Does Bartlett have curbside recycling?..." {"level":30,"time":"2026-02-05T04:26:45.642Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"d602a9ce-6a43-4bf3-b3bc-995de417874a","sessionId":"test-serv-03","stage":"v3_orchestrator","messageLength":38,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:27:03.780Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"d602a9ce-6a43-4bf3-b3bc-995de417874a","sessionId":"test-serv-03","stage":"v3_orchestrator","answerLength":1519,"tier":"C","localSelected":5,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":18138,"msg":"v3_pipeline_complete"}
+✅ PASS (18138ms)
+Testing serv-04: "What items can I bring to the transfer station?..." {"level":30,"time":"2026-02-05T04:27:03.780Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"88df5937-32d4-4abc-92ba-675dffb41935","sessionId":"test-serv-04","stage":"v3_orchestrator","messageLength":47,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:27:22.754Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"88df5937-32d4-4abc-92ba-675dffb41935","sessionId":"test-serv-04","stage":"v3_orchestrator","answerLength":1443,"tier":"C","localSelected":8,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":18974,"msg":"v3_pipeline_complete"}
+✅ PASS (18974ms)
+Testing serv-05: "Is there a hazardous waste collection day coming up?..." {"level":30,"time":"2026-02-05T04:27:22.754Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"a3358982-630b-42c2-b208-e4f030b59c9b","sessionId":"test-serv-05","stage":"v3_orchestrator","messageLength":52,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (16779ms)
+Testing rec-park-01: "Where are the public beaches in Ossipee?..." {"level":30,"time":"2026-02-05T04:27:39.533Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"a3358982-630b-42c2-b208-e4f030b59c9b","sessionId":"test-serv-05","stage":"v3_orchestrator","answerLength":1306,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":16779,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:27:39.534Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"6fc468fb-6fb0-4986-8e38-742a8fb23369","sessionId":"test-rec-park-01","stage":"v3_orchestrator","messageLength":40,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:27:58.389Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"6fc468fb-6fb0-4986-8e38-742a8fb23369","sessionId":"test-rec-park-01","stage":"v3_orchestrator","answerLength":1308,"tier":"C","localSelected":6,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":18855,"msg":"v3_pipeline_complete"}
+✅ PASS (18855ms)
+Testing rec-park-02: "How do I register my child for summer camp in Conway?..." {"level":30,"time":"2026-02-05T04:27:58.389Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e5dda2a4-11c9-4ebb-90d8-4180754357a7","sessionId":"test-rec-park-02","stage":"v3_orchestrator","messageLength":53,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:28:11.904Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e5dda2a4-11c9-4ebb-90d8-4180754357a7","sessionId":"test-rec-park-02","stage":"v3_orchestrator","answerLength":889,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":13515,"msg":"v3_pipeline_complete"}
+✅ PASS (13515ms)
+Testing rec-park-03: "Are dogs allowed at town parks in Bartlett?..." {"level":30,"time":"2026-02-05T04:28:11.904Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2d0ec6c9-da61-4b06-94b6-efb8c256883e","sessionId":"test-rec-park-03","stage":"v3_orchestrator","messageLength":43,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:28:28.094Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"2d0ec6c9-da61-4b06-94b6-efb8c256883e","sessionId":"test-rec-park-03","stage":"v3_orchestrator","answerLength":884,"tier":"C","localSelected":4,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":16190,"msg":"v3_pipeline_complete"}
+✅ PASS (16190ms)
+Testing rec-park-04: "What hiking trails are maintained by the town of Madison?..." {"level":30,"time":"2026-02-05T04:28:28.095Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"24354397-3dac-47a4-a918-547b10baf9c2","sessionId":"test-rec-park-04","stage":"v3_orchestrator","messageLength":57,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:28:47.009Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"24354397-3dac-47a4-a918-547b10baf9c2","sessionId":"test-rec-park-04","stage":"v3_orchestrator","answerLength":1291,"tier":"C","localSelected":9,"stateSelected":4,"auditFlagCount":0,"repairRan":false,"durationMs":18914,"msg":"v3_pipeline_complete"}
+✅ PASS (18914ms)
+Testing rec-park-05: "How much does a beach pass cost?..." {"level":30,"time":"2026-02-05T04:28:47.009Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc662ae1-0905-45b7-83b1-1f78ef33e633","sessionId":"test-rec-park-05","stage":"v3_orchestrator","messageLength":32,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:29:00.624Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"bc662ae1-0905-45b7-83b1-1f78ef33e633","sessionId":"test-rec-park-05","stage":"v3_orchestrator","answerLength":1126,"tier":"C","localSelected":6,"stateSelected":4,"auditFlagCount":0,"repairRan":false,"durationMs":13615,"msg":"v3_pipeline_complete"}
+✅ PASS (13615ms)
+Testing budg-01: "What is the town budget for Ossipee this year?..." {"level":30,"time":"2026-02-05T04:29:00.624Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"67e059b4-ba5c-4d78-b380-2cc5c5ca7e71","sessionId":"test-budg-01","stage":"v3_orchestrator","messageLength":46,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:29:18.291Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"67e059b4-ba5c-4d78-b380-2cc5c5ca7e71","sessionId":"test-budg-01","stage":"v3_orchestrator","answerLength":1513,"tier":"C","localSelected":5,"stateSelected":4,"auditFlagCount":0,"repairRan":false,"durationMs":17667,"msg":"v3_pipeline_complete"}
+✅ PASS (17667ms)
+Testing budg-02: "How much does Conway spend on schools?..." {"level":30,"time":"2026-02-05T04:29:18.291Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"92901c1a-72ee-43a7-8030-c81c7127dcf9","sessionId":"test-budg-02","stage":"v3_orchestrator","messageLength":38,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:29:39.061Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"92901c1a-72ee-43a7-8030-c81c7127dcf9","sessionId":"test-budg-02","stage":"v3_orchestrator","answerLength":1569,"tier":"C","localSelected":10,"stateSelected":3,"auditFlagCount":0,"repairRan":false,"durationMs":20770,"msg":"v3_pipeline_complete"}
+✅ PASS (20770ms)
+Testing budg-03: "Where can I find the town warrant articles?..." {"level":30,"time":"2026-02-05T04:29:39.061Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"282b9b3a-4cf9-4910-babd-42892f100ea2","sessionId":"test-budg-03","stage":"v3_orchestrator","messageLength":43,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (25791ms)
+Testing budg-04: "What happened with the bond vote last year?..." {"level":30,"time":"2026-02-05T04:30:04.852Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"282b9b3a-4cf9-4910-babd-42892f100ea2","sessionId":"test-budg-03","stage":"v3_orchestrator","answerLength":1249,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":25791,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:30:04.853Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e93fd615-5b8e-43a6-a837-3849f1d1828b","sessionId":"test-budg-04","stage":"v3_orchestrator","messageLength":43,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:30:32.320Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e93fd615-5b8e-43a6-a837-3849f1d1828b","sessionId":"test-budg-04","stage":"v3_orchestrator","answerLength":1023,"tier":"C","localSelected":10,"stateSelected":2,"auditFlagCount":2,"repairRan":true,"durationMs":27467,"msg":"v3_pipeline_complete"}
+✅ PASS (27467ms)
+Testing budg-05: "How is the town budget approved?..." {"level":30,"time":"2026-02-05T04:30:32.321Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"828e766c-bb39-4163-84ca-373b0c0b833c","sessionId":"test-budg-05","stage":"v3_orchestrator","messageLength":32,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:30:48.112Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"828e766c-bb39-4163-84ca-373b0c0b833c","sessionId":"test-budg-05","stage":"v3_orchestrator","answerLength":1072,"tier":"C","localSelected":9,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":15792,"msg":"v3_pipeline_complete"}
+✅ PASS (15792ms)
+Testing rec-pub-01: "How do I request public records from the town?..." {"level":30,"time":"2026-02-05T04:30:48.112Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"35681ee4-50e2-4096-9e48-15d9e6c7adc7","sessionId":"test-rec-pub-01","stage":"v3_orchestrator","messageLength":46,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+✅ PASS (17302ms)
+Testing rec-pub-02: "Where can I find meeting minutes from last month?..." {"level":30,"time":"2026-02-05T04:31:05.414Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"35681ee4-50e2-4096-9e48-15d9e6c7adc7","sessionId":"test-rec-pub-01","stage":"v3_orchestrator","answerLength":1256,"tier":"B","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":17302,"msg":"v3_pipeline_complete"}
+{"level":30,"time":"2026-02-05T04:31:05.414Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8fe87764-a0fd-46d3-85c2-a5804ba35e42","sessionId":"test-rec-pub-02","stage":"v3_orchestrator","messageLength":49,"townPreference":"Conway","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Town Store ID for Conway: fileSearchStores/opencouncil-conway-t32r6k55yqct
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:31:24.481Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"8fe87764-a0fd-46d3-85c2-a5804ba35e42","sessionId":"test-rec-pub-02","stage":"v3_orchestrator","answerLength":812,"tier":"C","localSelected":10,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":19067,"msg":"v3_pipeline_complete"}
+✅ PASS (19067ms)
+Testing rec-pub-03: "How do I get a copy of my property deed?..." {"level":30,"time":"2026-02-05T04:31:24.481Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"17e72994-4ee6-4105-9e14-42cb4e25811e","sessionId":"test-rec-pub-03","stage":"v3_orchestrator","messageLength":40,"townPreference":"Bartlett","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Bartlett: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Bartlett: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:31:38.662Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"17e72994-4ee6-4105-9e14-42cb4e25811e","sessionId":"test-rec-pub-03","stage":"v3_orchestrator","answerLength":915,"tier":"C","localSelected":7,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":14181,"msg":"v3_pipeline_complete"}
+✅ PASS (14181ms)
+Testing rec-pub-04: "Are planning board decisions public record?..." {"level":30,"time":"2026-02-05T04:31:38.662Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e52846d1-6ada-4188-b3bf-69a168ed29c4","sessionId":"test-rec-pub-04","stage":"v3_orchestrator","messageLength":43,"townPreference":"Madison","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Failed to resolve store for Madison: TypeError: Cannot read properties of undefined (reading 'referencedTable')
+    at normalizeRelation (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/relations.ts:571:74)
+    at PgDialect.buildRelationalQueryWithoutPK (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/dialect.ts:1282:32)
+    at QueryPromise._getQuery (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:117:23)
+    at QueryPromise._toSQL (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:134:22)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:92:39)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise._prepare (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:91:17)
+    at <anonymous> (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:154:16)
+    at Object.startActiveSpan (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/tracing.ts:27:11)
+    at QueryPromise.execute (/home/ubuntu/.openclaw/workspace/OPENCouncil/node_modules/src/pg-core/query-builders/query.ts:153:17)
+[DEBUG] V3 Town Store ID for Madison: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:31:55.236Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"e52846d1-6ada-4188-b3bf-69a168ed29c4","sessionId":"test-rec-pub-04","stage":"v3_orchestrator","answerLength":1358,"tier":"B","localSelected":8,"stateSelected":5,"auditFlagCount":1,"repairRan":false,"durationMs":16574,"msg":"v3_pipeline_complete"}
+✅ PASS (16574ms)
+Testing rec-pub-05: "How long does it take to fulfill a records request?..." {"level":30,"time":"2026-02-05T04:31:55.236Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"3f7fd5b9-f671-48ba-a0ca-270a55da9639","sessionId":"test-rec-pub-05","stage":"v3_orchestrator","messageLength":51,"townPreference":"Ossipee","hasSituationContext":false,"situationGated":true,"situationScore":0,"situationReason":"No situation context established","sessionSourceCount":0,"historyCleared":false,"msg":"v3_pipeline_start"}
+[StoreResolver] Found store for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Town Store ID for Ossipee: fileSearchStores/opencouncil-ossipee-efnhpf60017r
+[DEBUG] V3 Statewide Store ID: fileSearchStores/opencouncil-municipal-docum-0m5niphod6wk
+{"level":30,"time":"2026-02-05T04:32:10.981Z","pid":49932,"hostname":"ip-172-31-29-126","requestId":"3f7fd5b9-f671-48ba-a0ca-270a55da9639","sessionId":"test-rec-pub-05","stage":"v3_orchestrator","answerLength":1271,"tier":"B","localSelected":6,"stateSelected":5,"auditFlagCount":0,"repairRan":false,"durationMs":15745,"msg":"v3_pipeline_complete"}
+✅ PASS (15745ms)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 CHAT PIPELINE TEST REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 SUMMARY
+  Total Tests:     50
+  Passed:          50 ✅
+  Failed:          0 ❌
+  Pass Rate:       100.0%
+  Avg Duration:    19454ms
+
+📁 BY CATEGORY
+  meetings                  5/5 (100%)
+  contact                   5/5 (100%)
+  permits                   5/5 (100%)
+  taxes                     5/5 (100%)
+  voting                    5/5 (100%)
+  zoning                    5/5 (100%)
+  services                  5/5 (100%)
+  recreation                5/5 (100%)
+  budget                    5/5 (100%)
+  records                   5/5 (100%)
+
+💡 RECOMMENDATIONS
+  • 38 questions (76%) were Tier C
+    → Add more comprehensive documentation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+💾 Results saved to: /home/ubuntu/.openclaw/workspace/OPENCouncil/test-results/2026-02-05-0414-comprehensive.json

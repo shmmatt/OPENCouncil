@@ -1,0 +1,36 @@
+{
+  "town": "Albany",
+  "crawledAt": "2026-02-10T15:14:08.294Z",
+  "discovered": 971,
+  "downloaded": 830,
+  "uploaded": 830,
+  "skipped": 139,
+  "failed": 2,
+  "byCategory": {
+    "budget": 4,
+    "misc": 737,
+    "report": 9,
+    "audit": 1,
+    "minutes": 66,
+    "election": 1,
+    "zoning": 1,
+    "ordinance": 10,
+    "form": 1
+  },
+  "byStrategy": {
+    "Homepage keywords": 14,
+    "Page: /documents": 231,
+    "Page: /minutes": 131,
+    "Page: /agendas": 4,
+    "Page: /boards": 4,
+    "Page: /forms": 4,
+    "Page: /reports": 4,
+    "Page: /AgendaCenter": 4,
+    "Page: /FormCenter": 4,
+    "Page: /DocumentCenter": 4,
+    "Page: /downloads": 4,
+    "Page: /ordinances": 21,
+    "Page: /regulations": 4,
+    "Sitemap": 5
+  }
+}

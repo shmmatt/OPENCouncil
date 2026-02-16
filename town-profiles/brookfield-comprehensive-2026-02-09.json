@@ -1,0 +1,41 @@
+{
+  "town": "Brookfield",
+  "extractedAt": "2026-02-09T03:05:58.003Z",
+  "sourceUrl": "https://brookfieldnh.org",
+  "boards": {
+    "select_board": {
+      "name": "Select Board"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    },
+    "planning_board": {
+      "name": "Planning Board"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://brookfieldnh.org",
+    "https://brookfieldnh.org/boards",
+    "https://brookfieldnh.org/boards-committees",
+    "https://brookfieldnh.org/planning-board",
+    "https://brookfieldnh.org/departments",
+    "https://brookfieldnh.org/town-clerk",
+    "https://brookfieldnh.org/calendar",
+    "https://brookfieldnh.org/contact"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 522-3688",
+    "email": "selectmen@brookfieldnh.gov"
+  }
+}

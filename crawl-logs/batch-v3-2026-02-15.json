@@ -1,0 +1,164 @@
+{
+  "timestamp": "2026-02-15T03:46:07.886Z",
+  "concurrency": 4,
+  "maxPages": 200,
+  "totalDuration": 43.90871666666667,
+  "results": [
+    {
+      "name": "Freedom",
+      "url": "https://townoffreedomnh.gov",
+      "success": true,
+      "documentsFound": 1657,
+      "pagesVisited": 185,
+      "duration": 8.89435
+    },
+    {
+      "name": "Moultonborough",
+      "url": "https://moultonboroughnh.gov",
+      "success": true,
+      "documentsFound": 1536,
+      "pagesVisited": 200,
+      "duration": 8.865516666666668,
+      "coverage": 584
+    },
+    {
+      "name": "Albany",
+      "url": "https://albanynh.org",
+      "success": true,
+      "documentsFound": 1283,
+      "pagesVisited": 200,
+      "duration": 9.963283333333333
+    },
+    {
+      "name": "Madison",
+      "url": "https://madison-nh.org",
+      "success": true,
+      "documentsFound": 1204,
+      "pagesVisited": 200,
+      "duration": 8.937916666666666,
+      "coverage": 86.1
+    },
+    {
+      "name": "Tamworth",
+      "url": "https://tamworthnh.gov",
+      "success": true,
+      "documentsFound": 790,
+      "pagesVisited": 200,
+      "duration": 8.530183333333333
+    },
+    {
+      "name": "Jackson",
+      "url": "https://www.jackson-nh.gov",
+      "success": true,
+      "documentsFound": 450,
+      "pagesVisited": 200,
+      "duration": 10.040816666666666
+    },
+    {
+      "name": "Tuftonboro",
+      "url": "https://www.tuftonboronh.gov",
+      "success": true,
+      "documentsFound": 432,
+      "pagesVisited": 200,
+      "duration": 7.530283333333333
+    },
+    {
+      "name": "Wolfeboro",
+      "url": "https://www.wolfeboronh.us",
+      "success": true,
+      "documentsFound": 399,
+      "pagesVisited": 200,
+      "duration": 6.3816999999999995,
+      "coverage": 137.1
+    },
+    {
+      "name": "Wakefield",
+      "url": "https://www.wakefieldnh.gov",
+      "success": true,
+      "documentsFound": 384,
+      "pagesVisited": 200,
+      "duration": 6.479816666666666
+    },
+    {
+      "name": "Bartlett",
+      "url": "https://www.townofbartlett.nh.gov",
+      "success": true,
+      "documentsFound": 336,
+      "pagesVisited": 143,
+      "duration": 6.744716666666666
+    },
+    {
+      "name": "Effingham",
+      "url": "https://effinghamnh.net",
+      "success": true,
+      "documentsFound": 308,
+      "pagesVisited": 161,
+      "duration": 6.10865
+    },
+    {
+      "name": "Chatham",
+      "url": "https://www.chathamnh.org",
+      "success": true,
+      "documentsFound": 292,
+      "pagesVisited": 200,
+      "duration": 7.740666666666667
+    },
+    {
+      "name": "Conway",
+      "url": "https://conwaynh.gov",
+      "success": true,
+      "documentsFound": 291,
+      "pagesVisited": 73,
+      "duration": 2.8543833333333333
+    },
+    {
+      "name": "Ossipee",
+      "url": "https://www.ossipee.org",
+      "success": true,
+      "documentsFound": 231,
+      "pagesVisited": 200,
+      "duration": 7.708583333333333,
+      "coverage": 35.3
+    },
+    {
+      "name": "Brookfield",
+      "url": "https://www.brookfieldnh.gov",
+      "success": true,
+      "documentsFound": 167,
+      "pagesVisited": 200,
+      "duration": 7.536133333333334
+    },
+    {
+      "name": "Eaton",
+      "url": "https://www.eatonnh.gov",
+      "success": true,
+      "documentsFound": 157,
+      "pagesVisited": 200,
+      "duration": 8.541333333333334
+    },
+    {
+      "name": "Hart's Location",
+      "url": "https://hartslocation.com",
+      "success": true,
+      "documentsFound": 87,
+      "pagesVisited": 25,
+      "duration": 1.7325666666666666
+    },
+    {
+      "name": "Sandwich",
+      "url": "https://www.sandwichnh.com",
+      "success": true,
+      "documentsFound": 0,
+      "pagesVisited": 1,
+      "duration": 2.372
+    }
+  ],
+  "summary": {
+    "total": 18,
+    "success": 18,
+    "failed": 0,
+    "totalDocuments": 10004,
+    "totalPages": 2988,
+    "avgTimePerTown": 2.439373148148148
+  }
+}

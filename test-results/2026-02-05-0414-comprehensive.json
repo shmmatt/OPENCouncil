@@ -1,0 +1,2969 @@
+[
+  {
+    "questionId": "meet-01",
+    "question": "When is the next Ossipee Select Board meeting?",
+    "town": "Ossipee",
+    "category": "meetings",
+    "answerText": "The provided documents do not explicitly state a regular meeting schedule for the Ossipee Select Board [L1, L3, L5, L8]. There is no information available regarding the specific date of the next upcoming meeting [L2, L4, L6, L7, L9]. While a \"SELECTMEN'S MEETINGS PUBLIC INPUT POLICY\" encourages public attendance, it does not specify meeting dates or times [L1, L3, L5, L8]. Past meeting dates are mentioned from 2021, but no future dates are listed for the Select Board [L2, L4, L6, L7, L9].\n\nNew Hampshire's Right-to-Know Law requires all public bodies, including the Select Board, to provide public notice for their meetings [S1, S2, S3, S4, S5]. This notice must be given at least 24 hours in advance, excluding Sundays and legal holidays [S1, S3, S5]. The notice must be posted in two prominent public places or published in a local newspaper, and it must include the time and place of the meeting [S1, S3, S5].",
+    "sourceDocumentNames": [
+      "ingest_794d4393-3c4f-4d19-be74-9c9f455c45b6.pdf",
+      "ingest_821b5115-e82d-48c2-be6a-476255a46d26.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_191e8b93-cc2a-4a8a-8158-9d340f9ef846.pdf",
+      "ingest_f6bc19c1-1c75-4c75-a7f3-e0dca76ac547.pdf",
+      "ingest_6bfcb5a0-3e38-4d50-aa84-254144345c32.pdf",
+      "ingest_60376239-0c96-4ff9-9ce0-72421b986c5c.pdf",
+      "ingest_da2c0171-ce45-4705-9529-35702e5b830b.pdf",
+      "ingest_422c5db5-26a0-40de-88ab-587ac9e2e914.pdf",
+      "f289b2e9223b1e674e1e4652d534b4fb",
+      "27ae842817cc46de06785a4b9b76d9bb",
+      "16f7f92a0e1e9e100034e4fa0afef8cc",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "c39b23dd0ebf7dc0038d2de8c0101763"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 15229,
+      "localSelected": 9,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee Select Board meeting schedule",
+          "Ossipee Select Board upcoming meetings",
+          "Ossipee Select Board agenda",
+          "Ossipee town calendar"
+        ],
+        "state": [
+          "NH Right-to-Know law meeting notice",
+          "RSA 91-A public meeting schedule"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 9,
+        "stateRetrieved": 9,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "meet-02",
+    "question": "What time does the Conway planning board meet?",
+    "town": "Conway",
+    "category": "meetings",
+    "answerText": "The specific meeting time for the Conway Planning Board is not detailed in the provided documents. The Conway Planning Board did review and unanimously approve its 2024 meeting schedule on October 26, 2023 [L1, L2, L3, L4, L5, L6]. This approved schedule included the start times for meetings [L1, L2, L3, L4, L5, L6]. However, the exact dates and specific start times of these approved meetings are not present in the available records [L1, L2, L3, L4, L5, L6]. For the most current and precise meeting information, it is advisable to check the official town website or contact the Planning Department directly.\n\nNew Hampshire Planning Boards operate under specific state requirements for their meetings [S1]. Boards are mandated to meet at least once a month [S1]. They may convene more frequently as needed [S1]. All planning board meetings are subject to New Hampshire's Right-to-Know Law [S1]. This law ensures public access to meetings and requires proper notice [S1]. A minimum of 24-hour notice is required for all meetings, with specific notice requirements for public hearings [S1]. Meetings must be open, and minutes must be recorded and made available for public review [S1]. These regulations help ensure transparency in local governance.",
+    "sourceDocumentNames": [
+      "ingest_1a3bfead-5802-4053-a30f-0fadcfd39cb5.pdf",
+      "ingest_3f34bd2e-73d7-4d8c-a164-b202b65f38d4.pdf",
+      "ingest_2484da9b-a230-4fa7-931f-5529f184c553.pdf",
+      "ingest_838b9877-939e-41ac-a66f-65659d8104a0.pdf",
+      "ingest_e37cdb59-5308-4643-a245-41b7199d7b40.pdf",
+      "ingest_b60900e1-4f97-4464-9348-3a19ebb1f705.pdf",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt",
+      "18402e21a4d7f338658d0bf2fd0ceb17"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 16422,
+      "localSelected": 6,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway Planning Board meeting schedule",
+          "Conway Planning Board meeting time",
+          "Conway Planning Board bylaws"
+        ],
+        "state": [
+          "NH Planning Board meeting requirements",
+          "NH municipal meeting schedules"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 6,
+        "stateRetrieved": 3,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "meet-03",
+    "question": "Where can I find the agenda for the next Bartlett town meeting?",
+    "town": "Bartlett",
+    "category": "meetings",
+    "answerText": "The agenda for a Bartlett town meeting is formally known as the town warrant. The town's Board of Selectmen is responsible for preparing and posting this warrant [S1, S3, S5]. It must be posted at least 14 days before the meeting to inform the public of the election and meeting details [L2, L4, L7]. Bartlett town meetings typically take place on the second Tuesday of March, April, or May, though towns can vote for an alternative date for the business session [L2, L4, L7]. The warrant must clearly state the meeting's place, day, and hour, and all business to be acted upon must be distinctly listed [S1, S3, S5].\n\nThe 2025 Town Warrant includes several articles, primarily focusing on proposed amendments to the town's zoning ordinance, which were put forward by the Planning Board [L1, L3, L5, L6]. These proposed changes cover various sections, such as modifications to articles on discontinuance and expiration of use, cluster development, and special exception review procedures, including provisions for joint meetings in accordance with RSA 676:2 [L1, L3, L5, L6]. Other articles address short-term rentals, non-conforming structures, and updates to definitions like \"Manufactured Home or Mobile Home Park\" and \"Structure\" [L1, L3, L5, L6]. Additionally, a petition warrant article received on January 10, 2025, requests $18,000 to complete the revision of the Master Plan, which was last updated in 2006 [L1, L3, L5, L6].\n\nWord Count: 200",
+    "sourceDocumentNames": [
+      "ossipeetownreportdigital2024_ocr.txt",
+      "6a6fe6335d77d0d605a91ef6267c0926",
+      "73f56a94df33930378faa65bb8ee6061",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt",
+      "e105b10e11d0213cd35a5fb33834f8c7",
+      "2025_02_05_bc_mtg._minutes_ocr.txt",
+      "fee43139a1ee29dc4d8a09c060204217",
+      "Chapter 39 TIME FOR HOLDING TOWN MEETINGS AND WARNING THEREOF_ocr.txt",
+      "62516d2892a3e456c3850fe6f61f2be1",
+      "1efa2591d0d4de79db8599a55fa3e100",
+      "f289b2e9223b1e674e1e4652d534b4fb"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 25959,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [
+        "uncited_rsa:error"
+      ],
+      "repairRan": true,
+      "planQueries": {
+        "local": [
+          "Bartlett town meeting agenda",
+          "Bartlett official website town meeting",
+          "Bartlett public notices town meeting"
+        ],
+        "state": [
+          "NH town meeting agenda requirements",
+          "NH public notice laws town meeting"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 7,
+        "stateRetrieved": 6,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "meet-04",
+    "question": "How do I get on the agenda for the Ossipee Select Board meeting?",
+    "town": "Ossipee",
+    "category": "meetings",
+    "answerText": "To request an item be placed on the Ossipee Select Board agenda, the provided local documents do not explicitly outline a formal process for individuals [L1, L2, L3]. It is recommended to contact the Town of Ossipee Selectmen's Office directly for specific inquiries. You can reach them at 603-539-4181 or visit 55 Main Street, PO Box 67, Center Ossipee, NH 03814 [L1, L2, L3].\n\nGenerally, residents in New Hampshire submit requests to the Town Administrator's Office by a specified deadline, such as 12 PM on the Thursday prior to a meeting [S2, S4]. The Town Administrator typically prepares the agenda and determines item inclusion [S2, S4]. If an item is excluded, the Board is informed and may vote to include it on a future agenda [S2, S4]. The Select Board also holds two public input sessions during each meeting for comments on existing agenda items [L1, L2, L3].\n\nWord Count: 129",
+    "sourceDocumentNames": [
+      "ingest_f6bc19c1-1c75-4c75-a7f3-e0dca76ac547.pdf",
+      "ingest_794d4393-3c4f-4d19-be74-9c9f455c45b6.pdf",
+      "ingest_c4be65f4-3453-4dd6-a17e-daa4ee0a97ed.pdf",
+      "ingest_0092d562-c315-4229-bea9-8eab7ba23d8a.pdf",
+      "39964a5e496c5c9a549aeffba2ba0c7b",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "27ae842817cc46de06785a4b9b76d9bb",
+      "fb113177f293e979048199c40ae6d3ca",
+      "f289b2e9223b1e674e1e4652d534b4fb"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 4,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 4
+    },
+    "debug": {
+      "durationMs": 17463,
+      "localSelected": 4,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee Select Board agenda request process",
+          "Ossipee Select Board meeting rules",
+          "Ossipee public participation Select Board meetings",
+          "Ossipee Select Board contact information"
+        ],
+        "state": [
+          "NH municipal select board agenda process",
+          "NHMA select board agenda guidance",
+          "NH public meeting rules agenda",
+          "RSA public participation municipal meetings"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 4,
+        "stateRetrieved": 8,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "meet-05",
+    "question": "Are town meetings in Albany open to the public?",
+    "town": "Albany",
+    "category": "meetings",
+    "answerText": "Yes, town meetings in Albany are open to the public. New Hampshire's Open Meeting Law, RSA 91-A, mandates that all meetings of public bodies must be open to the public, with certain exceptions [S1, S2]. Albany's Board of Selectmen meetings are typically held at the Albany Town Hall [L2]. These meetings are properly noticed as per RSA 91-A, with notice of the time and place posted at least 24 hours in advance, excluding Sundays and legal holidays [L2, S1].\n\nDuring Albany town meetings, individuals wishing to speak during public participation segments or public hearings must raise their hand to be recognized by the Chairperson [L1]. Once recognized, they should state their name and the subject they will address [L1]. Comments must be concise, strictly related to the facts of the public hearing or legitimate town business, and are generally limited to 5 minutes [L1]. Participants must conduct themselves civilly, avoiding inappropriate language, and direct questions to the Board [L1]. Issues that might infringe on another person's privacy rights should be directed to the Town Administrator for possible inclusion in a Non-Public Session [L1]. Failure to adhere to these guidelines may result in the curtailment of speaking privileges [L1].",
+    "sourceDocumentNames": [
+      "pb_rules_of_procedure_-_2024_ocr.txt",
+      "fb113177f293e979048199c40ae6d3ca",
+      "gemini-1769572443835.pdf",
+      "4c9a5a6bd7162f2a85ec3860a374bb06",
+      "45ac9ad600aeadd9c5db6a5da19cec96",
+      "bos_public_input_policy_ocr.txt",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "27ae842817cc46de06785a4b9b76d9bb",
+      "84cf6096622ad93e575f08fef33b4f6f",
+      "6df10c68037c137b156a2497c55d78e1",
+      "0f45d6dbe6b6540c341e15b1f6c727d4"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Albany",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 6,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 16255,
+      "localSelected": 6,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Albany town meeting public access",
+          "Albany town meeting rules",
+          "Albany annual meeting procedures",
+          "Albany public participation policy"
+        ],
+        "state": [
+          "NH Open Meeting Law",
+          "RSA 91-A",
+          "New Hampshire town meeting public access",
+          "NHMA Open Meeting Law guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 6,
+        "stateRetrieved": 8,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "cont-01",
+    "question": "What are the office hours for the Conway town clerk?",
+    "town": "Conway",
+    "category": "contact",
+    "answerText": "The provided local documents do not contain specific information regarding the Conway town clerk's office hours. These materials also do not specify the general operating hours for the Conway town hall itself [L1, L4]. Our current archival coverage does not include details on these specific operating times [USER]. Therefore, the precise schedule for the town clerk's office cannot be determined from the documents available.\n\nNew Hampshire law mandates that municipal clerks must hold office hours. These hours are necessary for the clerk to perform all their official functions and to comply with mandatory office hour requirements [S1]. Town clerks have a wide range of responsibilities, including record-keeping, election administration, and providing public services to residents [S3]. The availability of these hours ensures public access to vital municipal services. While state law defines a",
+    "sourceDocumentNames": [
+      "ingest_bfe75cfe-0142-4753-9619-ecb45b68deab.pdf",
+      "ingest_22f5e32c-5694-4d4c-8f7d-5d950c9506d7.pdf",
+      "ingest_fba1961b-5819-4ac3-a6a0-92d3ae67ee64.pdf",
+      "ingest_759e247b-ae15-40c5-99a3-7488f6b9a33a.pdf",
+      "ingest_214ee6f0-cc5b-490e-bc12-88e40f656a10.pdf",
+      "ingest_0e4b8ff4-8e4b-4d78-a1ae-2d2904a519cb.pdf",
+      "ingest_a20175e4-5330-43d8-b7aa-341e73accb3c.pdf",
+      "ingest_7f98243c-ba12-4381-8142-6f138da1110b.pdf",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "38491382934e9fc9f117eb1a52b73448",
+      "84cf6096622ad93e575f08fef33b4f6f",
+      "ba89d00c87ffcb69726f206ed194e7d7"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 8,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 8
+    },
+    "debug": {
+      "durationMs": 20667,
+      "localSelected": 8,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway town clerk office hours",
+          "Conway town hall hours",
+          "Conway town clerk contact information"
+        ],
+        "state": [
+          "NH municipal clerk duties",
+          "NH town office hours regulations"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 8,
+        "stateRetrieved": 7,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "cont-02",
+    "question": "How do I contact the Ossipee tax collector?",
+    "town": "Ossipee",
+    "category": "contact",
+    "answerText": "The Ossipee Town Clerk/Tax Collector's office can be reached by phone at (603) 539-2008 [L1, L3]. You may also send an email to tctc@ossipee.org [L1, L3]. The office hours are Monday through Friday, from 8:00 AM to 4:30 PM [L1, L2, L3, L4, L5].\n\nIn New Hampshire, the tax collector plays a crucial role in municipal finance [S2, S3]. Their primary duty is to collect property taxes and other sums mandated by statute, such as the land use change tax [S1, S2, S3]. This involves maintaining accurate and detailed accounts of all taxes due, collected, and abated [S1, S2, S3]. These records are considered public and must be meticulously kept [S1]. All collected funds must be remitted to the town treasurer, often on a weekly or even daily basis depending on the amount [S1, S2, S3]. Tax collectors are also required to submit their tax books for inspection by the treasurer and selectmen upon request [S1, S2, S3]. They must also provide a written report to the town at the end of each fiscal year detailing tax amounts and collections [S1]. State law requires the tax collector to be available at their usual place of business for at least two continuous hours, at least one day each month, for tax business [S2, S3]. This specific time and location must be printed on tax bills [S2, S3].",
+    "sourceDocumentNames": [
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_5bdbd815-7e50-4168-b6eb-d6545a7aa25a.pdf",
+      "ingest_3fbf255e-22fc-4ae4-9300-724c3f8ce8c9.pdf",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "62516d2892a3e456c3850fe6f61f2be1"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 17102,
+      "localSelected": 5,
+      "stateSelected": 3,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee tax collector contact information",
+          "Ossipee tax collector office hours",
+          "Ossipee town hall contact"
+        ],
+        "state": [
+          "NH municipal tax collector duties",
+          "NHMA tax collector guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 5,
+        "stateRetrieved": 5,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "cont-03",
+    "question": "What's the phone number for the Madison town office?",
+    "town": "Madison",
+    "category": "contact",
+    "answerText": "The provided documents do not contain the phone number for the Madison town office [L1, L2, L3, L4, L5, L6, L7, L8, L9]. Several sources explicitly state that this specific contact information could not be found within their content [L1, L3, L5, L7, L9]. Instead, some of the documents primarily offer details and phone numbers for various departments and services within the Town of Ossipee [L1, L3, L5, L7, L9]. This indicates the archival coverage for Madison's specific contact information is limited in the materials provided.\n\nOther documents discuss general municipal procedures. For example, they outline guidelines for public input at board meetings [L2, L4, L6, L8]. They also mention the process for directing inquiries to a Town Administrator for potential inclusion in a Non-Public Session [L2, L4, L6, L8]. However, these documents do not provide the requested phone number or address for the Madison town hall [L2, L4, L6, L8].\n\nNew Hampshire municipalities, including towns like Madison, function under a comprehensive legal framework established by the state [S1]. This framework encompasses state statutes and administrative rules that govern various aspects of municipal administration, such as property taxation and general operations [S1, S2, S3, S4, S5]. While these state documents describe the broader legal structure for towns, they do not include specific contact details for individual town offices [S1, S2, S3, S4, S5].",
+    "sourceDocumentNames": [
+      "0da27413cd6b4f4fe813d04a7f84f63c",
+      "gemini-1769572443835.pdf",
+      "2df838c97a5296b3ac778bc298298864",
+      "4c9a5a6bd7162f2a85ec3860a374bb06",
+      "ossipeetownreportdigital2024_ocr.txt",
+      "45ac9ad600aeadd9c5db6a5da19cec96",
+      "e105b10e11d0213cd35a5fb33834f8c7",
+      "bos_public_input_policy_ocr.txt",
+      "Ossipee-Annual-Town-Report-2023_ocr.txt",
+      "e72694d2dedbac2535b254b796698385",
+      "gemini-1769625569781.pdf",
+      "32287e8d9aa21f37e2f59766ae5c27fc",
+      "3124a33324e6f730a46c51d9da9b6734",
+      "0736694b2bee20c59ccbe42c87f2bd7b"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 18078,
+      "localSelected": 9,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison town office phone number",
+          "Madison town hall contact information",
+          "Madison municipal building phone"
+        ],
+        "state": [
+          "New Hampshire"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 9,
+        "stateRetrieved": 5,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "cont-04",
+    "question": "Is the Bartlett town hall open on weekends?",
+    "town": "Bartlett",
+    "category": "contact",
+    "answerText": "Thank you for your inquiry about Bartlett Town Hall weekend hours. The primary administrative offices, including the Town Clerk/Tax Collector's Office, are open Monday through Friday from 8:00 AM to 4:30 PM [L1, L3, L4, L6]. The Water/Sewer Department also operates during the week, specifically Monday through Friday from 7:00 AM to 3:30 PM [L1, L3, L4, L6]. These essential town services are closed on both Saturdays and Sundays.\n\nThe Bartlett Library, a separate town department, offers services on weekends. It is open on Saturdays from 9:00 AM to 1:00 PM [L1, L3, L4, L6]. The Library remains closed on Sundays [L1, L3, L4, L6]. Other town functions, such as Planning Board and Zoning Board of Adjustment meetings, are held on specific weekdays [L1, L3, L4, L6]. The Building Inspector and Zoning Enforcement officer is available by appointment during the week [L1, L3, L4, L6].\n\nNew Hampshire state law provides a general definition of a \"business day\" as Monday through Friday for public record keeping and meeting requirements [S1, S2, S3]. However, the specific operating hours for most municipal offices, beyond certain election-related duties, are determined locally by each municipality [S1, S2, S3]. Bartlett sets its own hours for these departments.",
+    "sourceDocumentNames": [
+      "e105b10e11d0213cd35a5fb33834f8c7",
+      "Ossipee-Annual-Town-Report-2023_ocr.txt",
+      "ossipeetownreportdigital2024_ocr.txt",
+      "gemini-1769571621102.pdf",
+      "work_sess_meeting_min_3-3-2025_ocr.txt",
+      "gemini-1769298668391.pdf",
+      "work_sess_meeting_min_3-3-2025_0_ocr.txt",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "84cf6096622ad93e575f08fef33b4f6f",
+      "ba89d00c87ffcb69726f206ed194e7d7"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 14060,
+      "localSelected": 7,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett town hall hours",
+          "Bartlett town office schedule",
+          "Bartlett town hall weekend hours"
+        ],
+        "state": [
+          "NH municipal office hours"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 7,
+        "stateRetrieved": 3,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "cont-05",
+    "question": "Who is the current town administrator in Ossipee?",
+    "town": "Ossipee",
+    "category": "contact",
+    "answerText": "Matt Sawyer Jr. is the current Town Administrator for Ossipee [L1, L4]. He also serves as the Health Officer for the town [L1, L2, L3, L4]. The Town Administrator typically oversees the daily operations of municipal government, working under the direction of the Board of Selectmen. This role involves managing town departments, implementing policies, and preparing budgets to ensure the efficient delivery of public services to residents.\n\nInformation regarding specific municipal staff, such as the Town Administrator, is maintained directly by each town at the local level. These details are consistently found in official organizational charts and other town records, which are the most reliable sources for current personnel [L2, L3]. While the New Hampshire Municipal Association offers general guidance and support for municipal officials, state documents do not provide a comprehensive statewide directory of individual staff members across all towns and cities [S1, S2, S3]. This local record-keeping ensures that residents can access accurate information about their town's administration.",
+    "sourceDocumentNames": [
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_547a098d-2242-4fe2-9405-910d48ee5d58.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "gemini-1769054297487.pdf",
+      "gemini-1769054273093.pdf"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 4,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 4
+    },
+    "debug": {
+      "durationMs": 37310,
+      "localSelected": 4,
+      "stateSelected": 3,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee town administrator",
+          "Ossipee staff directory",
+          "Ossipee contact information"
+        ],
+        "state": [
+          "NH municipal staff directory"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 4,
+        "stateRetrieved": 3,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "perm-01",
+    "question": "How do I apply for a building permit in Ossipee?",
+    "town": "Ossipee",
+    "category": "permits",
+    "answerText": "To apply for a building permit in Ossipee, you must first contact the Zoning Enforcement and Building Department. A permit is required before starting most construction, placement, or modification of structures [L1]. Exceptions exist for detached accessory structures 120 square feet or less, fences 7 feet and under, and general repairs without structural changes [L1]. Permits are issued by the Town Authority, which is either the Zoning Enforcement Officer or the Building Inspector [L1]. The Town of Ossipee has adopted its own Building Code, which incorporates the New Hampshire State Building Code [L4]. State law requires local building codes to include provisions for building permits and a building inspector [S1].\n\nYou should consult the building permit fee schedule for associated costs [L1]. A permit is valid for one year and may be extended once at the zoning officer's discretion [L1]. Work must commence within 180 days, or the permit may be revoked [L1]. No new permit will be issued if an existing zoning violation is known [L1]. Mandatory inspections are required for new construction, including foundation, rough framing, and electrical [L1]. For inquiries, you can reach the department at (603) 539-4181 ext. 5, or email building@ossipee.org or zoning@ossipee.org [L1].",
+    "sourceDocumentNames": [
+      "ingest_6caf603b-c8a0-4b61-86f3-e781817de38e.pdf",
+      "ingest_321883d1-a8ea-49ff-993a-e7fa4ba573b0.pdf",
+      "ingest_6724ced9-eac9-480e-aad8-2798ccfaa27f.pdf",
+      "ingest_f4ef35d8-0da0-469a-932e-4e9bc8305edf.pdf",
+      "ingest_a0c168c4-59bd-4fc7-8e35-2fd74f4c304e.pdf",
+      "ingest_23c71085-9427-4bbb-babf-507533881913.pdf",
+      "03a47d755f237933ddbf8155112b7919",
+      "031225zoningordinance2025final_3_ocr.txt",
+      "a216fd33862dd25fb17419bb48ff45d1",
+      "421fe1cf564b84aad4211dbb2318b903"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 4,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 4,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 17636,
+      "localSelected": 6,
+      "stateSelected": 4,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee building permit application",
+          "Ossipee building permit process",
+          "Ossipee building inspector",
+          "Ossipee planning board building permits"
+        ],
+        "state": [
+          "NH building permit requirements",
+          "NH state building code",
+          "NH municipal building permits"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 6,
+        "stateRetrieved": 5,
+        "stateSelected": 4
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "perm-02",
+    "question": "What documents do I need for a driveway permit in Conway?",
+    "town": "Conway",
+    "category": "permits",
+    "answerText": "To obtain a driveway permit in Conway, you must submit a Driveway Permit Application [L1]. This application requires a fee of $100 [L4]. You will also need to provide proof of liability insurance to the Town before construction begins [L6]. A surety deposit or a continuing surety bond is required, equal to the estimated cost of the work or $2,000, whichever amount is greater [L4]. This deposit is returned upon satisfactory installation of the driveway [L4]. The applicant is responsible for completing page 3 of the permit application [L7]. By signing the application, you agree to the permit's conditions and provisions [L5].\n\nBefore a permit is issued, the driveway's location must be staked out [L7]. Driveways must adhere to the Town of Conway Road Standards [L7]. For driveways exceeding 500 feet in length, specific emergency vehicle access sections and a turn-around are required [L6]. New Hampshire law grants municipalities the authority to regulate driveways connecting to local highways, often through the planning board [S1].",
+    "sourceDocumentNames": [
+      "ingest_43c31166-9f23-4be1-a1c3-d92e8ae01af0.pdf",
+      "ingest_93432813-8538-438a-bb83-851ce28ba8a4.pdf",
+      "ingest_2080348d-9bc0-4c22-b291-fda28a22c68f.pdf",
+      "ingest_bc677d18-0ac9-418a-a8f3-8782ee8eb9c4.pdf",
+      "ingest_aea5a4f3-a85d-4024-8f4c-27062939133f.pdf",
+      "ingest_986b0b9a-dfb8-4db8-817e-2634c5368932.pdf",
+      "ingest_5c9f2f0c-19c3-4731-8250-a29e174df1e9.pdf",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "5d3a3b55d10943e69715c202201ee99d"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 2,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 2,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 25820,
+      "localSelected": 7,
+      "stateSelected": 2,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway driveway permit application",
+          "Conway driveway regulations",
+          "Conway Public Works driveway permit",
+          "Conway Planning Board driveway requirements"
+        ],
+        "state": [
+          "NH municipal driveway permit laws",
+          "NH DOT driveway regulations",
+          "NHMA driveway permits guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 11,
+        "localSelected": 7,
+        "stateRetrieved": 6,
+        "stateSelected": 2
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "perm-03",
+    "question": "How much does a building permit cost in Bartlett?",
+    "town": "Bartlett",
+    "category": "permits",
+    "answerText": "The provided documents for Bartlett outline fee schedules for the Zoning Board of Adjustments and the Planning Board, but they do not specify the cost of a general building permit [L1, L2, L3, L4, L5]. These schedules detail fees for applications such as variances, special exceptions, equitable waivers of dimensional requirements, site plan reviews (minor, major, and amendments), and subdivisions (minor and major) [L1, L5]. For example, a minor site plan review has a $225.00 application fee, and a variance application includes a $75.00 review fee plus a $210.00 public notice fee, along with postage costs [L1, L5].\n\nIn New Hampshire, local legislative bodies or selectmen are responsible for establishing building permit fees as part of an ordinance [S1, S3]. These fees, along with those for inspections and certificates of occupancy, must be published in a publicly accessible location during normal business hours [S1, S3]. If a fee is not published when an application is submitted, it is considered waived for that application [S1]. A building inspector is authorized to issue building permits and perform inspections to ensure compliance with the local building code [S3].",
+    "sourceDocumentNames": [
+      "gemini-1769572625833.pdf",
+      "b2d1a7e97ba2e3cee0b9ecc114c8c0a1",
+      "gemini-1769572538324.pdf",
+      "11698e98c4dae20c86f4f6f7a3a99fba",
+      "pb_fee_schedule_final_2023_ocr.txt",
+      "03a47d755f237933ddbf8155112b7919",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "a216fd33862dd25fb17419bb48ff45d1",
+      "a91b74d4e9bb1af0f0a9d359904ba885",
+      "Chapter 47 POWERS OF CITY COUNCILS_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 19040,
+      "localSelected": 5,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett building permit fees",
+          "Bartlett building permit cost schedule",
+          "Bartlett building department fees"
+        ],
+        "state": [
+          "NH building permit fees",
+          "NH municipal building permit regulations",
+          "RSA building permits"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 5,
+        "stateRetrieved": 6,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "perm-04",
+    "question": "Do I need a permit to install a shed in my backyard in Ossipee?",
+    "town": "Ossipee",
+    "category": "permits",
+    "answerText": "In Ossipee, a permit is generally required for installing a structure in your backyard. However, a building and zoning permit is not needed for a one-story detached accessory structure, such as a tool or storage shed, if its floor area is 120 square feet or less and its maximum height is 12 feet [L1, L3]. This means a shed measuring 10 feet by 12 feet or smaller would be exempt from the permit process based on its size and height.\n\nEven if a permit is not required due to size, sheds are classified as \"Accessory Buildings\" under the Town of Ossipee Zoning Ordinance [L2, L4]. These structures must still comply with specific zoning regulations. For instance, a shed must be at least ten feet from the rear lot line and any other buildings on the property [L2, L4]. Its height cannot exceed twelve feet, and it can cover no more than thirty percent of the rear setback area [L2, L4]. Sheds also contribute to the overall lot coverage, which has maximum percentages depending on your zoning district [L2, L4].\n\nNew Hampshire law establishes a state building code that applies to all towns and cities, and municipalities like Ossipee have the authority to enforce this code and enact their own ordinances, provided they are not less stringent [S1, S3]. When a permit is required for a larger structure, it is issued by the Town Authority, which includes the Zoning Enforcement Officer or Building Inspector [L1, L3]. Permits are valid for one year and may have an associated fee [L1, L3].",
+    "sourceDocumentNames": [
+      "ingest_f4ef35d8-0da0-469a-932e-4e9bc8305edf.pdf",
+      "ingest_6caf603b-c8a0-4b61-86f3-e781817de38e.pdf",
+      "ingest_23c71085-9427-4bbb-babf-507533881913.pdf",
+      "ingest_321883d1-a8ea-49ff-993a-e7fa4ba573b0.pdf",
+      "03a47d755f237933ddbf8155112b7919",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "a216fd33862dd25fb17419bb48ff45d1",
+      "Chapter 47 POWERS OF CITY COUNCILS_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 4,
+      "stateCount": 4,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 4,
+      "distinctLocalDocs": 4
+    },
+    "debug": {
+      "durationMs": 22285,
+      "localSelected": 4,
+      "stateSelected": 4,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee shed permit",
+          "Ossipee zoning ordinance shed",
+          "Ossipee accessory structure regulations",
+          "Ossipee building permit requirements"
+        ],
+        "state": [
+          "NH municipal building permits",
+          "NH accessory structure zoning law",
+          "NHMA shed permits",
+          "RSA municipal zoning authority"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 6,
+        "localSelected": 4,
+        "stateRetrieved": 5,
+        "stateSelected": 4
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "perm-05",
+    "question": "How long does it take to get a septic permit approved?",
+    "town": "Conway",
+    "category": "permits",
+    "answerText": "To obtain a septic permit in Conway, New Hampshire, applicants must first secure Town approval before seeking state approval. The Town Building Inspector reviews all septic plans within seven days of submission [L1]. A complete application, one copy of the septic plan, and a $15.00 fee must be provided [L1]. The plan must detail land within 125 feet of the proposed system, include a location map, identify surface waters and wetlands, and note all setbacks [L1]. Failure to provide all necessary information and fees will result in an automatic denial [L1].\n\nAfter Town approval, the New Hampshire Department of Environmental Services (NHDES) regulates the state approval process for waste disposal systems [S1]. This requires submitting detailed plans and specifications to NHDES [S1]. A fee of $450 per system is typically required, payable to the Treasurer - State of NH [S1]. The local approving body must submit a copy of the final approved plans to NHDES within 30 days for informational purposes [S1]. The provided documents do not specify a timeline for the NHDES review process.",
+    "sourceDocumentNames": [
+      "ingest_b49a000c-61b1-4b8b-a27f-4ea4ba047cef.pdf",
+      "ingest_044586b3-e3af-4b41-90ce-8cfd5ddf6e6e.pdf",
+      "ingest_c1a2a0a4-a100-40b6-9ed0-c84cd4fbb744.pdf",
+      "6df10c68037c137b156a2497c55d78e1",
+      "b6a67cd9ff93db87c23b556877eff193",
+      "0f45d6dbe6b6540c341e15b1f6c727d4",
+      "26f4e4012fd1f747389411def3894e9a",
+      "7a419a5a2395aa105ac132100ab5e4f2"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 3,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 3
+    },
+    "debug": {
+      "durationMs": 15717,
+      "localSelected": 3,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway septic permit approval process",
+          "Conway health officer septic permit",
+          "Conway planning board septic regulations",
+          "Conway septic permit timeline",
+          "Conway building department septic permits"
+        ],
+        "state": [
+          "NH septic permit approval process",
+          "NHDES septic system permits",
+          "NH municipal septic regulations",
+          "NH RSA septic systems",
+          "NH septic permit timeline"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 6,
+        "localSelected": 3,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "tax-comp-01",
+    "question": "When are property taxes due in Ossipee?",
+    "town": "Ossipee",
+    "category": "taxes",
+    "answerText": "In Ossipee, property tax bills for 2019 were due on July 1, 2019 [L1, L3, L4, L5]. These specific bills were scheduled for mailing during the first week of May that year [L1, L3, L4, L5]. Payments for past-due property taxes were required by April 23, 2019, to prevent a lien from being placed on the property [L1, L2, L3, L4, L5, L6, L7]. Additionally, personal checks were no longer accepted for tax payments after June 24, 2019 [L1, L2, L3, L4, L5, L6, L7].\n\nNew Hampshire law provides a general framework for property tax due dates [S1, S3]. The state's property tax year typically runs from April 1 to March 31 [S1, S2, S3]. For municipalities that bill semi-annually, a partial payment for taxes is generally due on July 1 [S1, S3]. The remaining balance of the assessed taxes is then due on December 1 [S1, S3]. Some cities and towns with an optional fiscal year may adopt a system for quarterly billing [S1, S2, S3]. In such cases, payments are typically due on July 1, October 1, January 2, and March 31 [S1, S2, S3]. Interest on unpaid taxes usually begins the day after the established due date [S1, S3].\n\nFor the most current property tax due dates in Ossipee, residents should contact the Town Clerk/Tax Collector's office [L1, L3, L4, L5]. Kellie Skehan serves as the Ossipee Tax Collector [L2, L6, L7]. Her office is located at 55 Main Street, Ossipee [L2, L6, L7]. She can be reached by phone at (603) 539-2008 or via email at tctc@ossipee.org [L2, L6, L7].",
+    "sourceDocumentNames": [
+      "ingest_c01c719c-8f28-4c2c-98d5-ee455b5acec8.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_da2c0171-ce45-4705-9529-35702e5b830b.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_3fbf255e-22fc-4ae4-9300-724c3f8ce8c9.pdf",
+      "ingest_a61a7ee6-50c7-4bfb-8b32-cb5bb7053da2.pdf",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "107d12c49f1d02968b36c68f7336fe3c",
+      "e72694d2dedbac2535b254b796698385"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 17616,
+      "localSelected": 7,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee property tax due dates",
+          "Ossipee tax collector",
+          "Ossipee annual tax bill schedule"
+        ],
+        "state": [
+          "NH property tax due dates law",
+          "RSA property tax billing schedule",
+          "NH municipal tax collection deadlines"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 7,
+        "stateRetrieved": 5,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "tax-comp-02",
+    "question": "What is the current tax rate in Conway?",
+    "town": "Conway",
+    "category": "taxes",
+    "answerText": "The 2025 base tax rate for Conway is \\$11.54 per \\$1,000 of assessed value [L1, L3, L4, L6, L7]. This base rate is composed of several parts that fund different services. The Town portion is \\$2.50, covering local municipal expenses. The County portion is \\$0.81, contributing to county-level services. The local school rate is \\$7.12, and the state school rate is \\$1.11 [L1]. These components combine to form the overall base rate for the town, as is standard for property taxation in New Hampshire [S1].\n\nBeyond the base rate, specific precincts in Conway have additional rates to fund local services. For example, the Center Conway Fire precinct has an additional \\$0.86, making its total rate \\$12.40 [L1]. North Conway Water adds \\$1.19, resulting in a total rate of \\$12.73 [L1]. Kearsarge Lighting has an additional \\$1.45, leading to a total rate of \\$12.99 [L1]. Properties within Kearsarge are also included in North Conway Water and receive the sum of both rates [L1]. The Non-Precinct Fire rate adds \\$0.98, for a total of \\$12.52 [L1]. New Hampshire property tax law outlines that the total tax rate is a sum of municipal, county, state education, and local education tax rates [S1].",
+    "sourceDocumentNames": [
+      "ingest_1b6c3f87-7789-4f3f-86c3-252c50c869c1.pdf",
+      "ingest_bfe75cfe-0142-4753-9619-ecb45b68deab.pdf",
+      "ingest_89fbea8d-0c9a-44cf-a782-8fd0ab15f573.pdf",
+      "ingest_6de658cd-e869-4f18-92af-96976801cd13.pdf",
+      "ingest_22f5e32c-5694-4d4c-8f7d-5d950c9506d7.pdf",
+      "ingest_7d93e7c6-4cc5-47ab-819e-d7466bb34d15.pdf",
+      "ingest_a20175e4-5330-43d8-b7aa-341e73accb3c.pdf",
+      "f59ec168b8530d74efba99f9ba54a3b2",
+      "e72694d2dedbac2535b254b796698385",
+      "6ffb54f1cdbfcf1a15ffd90f631654e2",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "4f4ad802440570c5ec47c8478b2c9938"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 17160,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway tax rate",
+          "Conway property tax rate",
+          "Conway current tax rate"
+        ],
+        "state": [
+          "NH municipal tax rate calculation",
+          "NH property tax law"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 7,
+        "stateRetrieved": 7,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "tax-comp-03",
+    "question": "How do I pay my property taxes online?",
+    "town": "Bartlett",
+    "category": "taxes",
+    "answerText": "The provided documents do not confirm whether Bartlett, New Hampshire, currently offers an online payment system for property taxes [L1, L3, L5, L7, L8]. New Hampshire state law does authorize municipalities to accept payments for local taxes, including property taxes, via electronic transactions such as credit or debit cards [S1, S2, S3, S4, S5]. If a municipality offers electronic payment options, it may add a service charge to cover the associated costs [S1, S2, S3, S4, S5]. The governing body of a municipality can authorize an appropriate official to accept these electronic payments [S2, S3, S5].",
+    "sourceDocumentNames": [
+      "62516d2892a3e456c3850fe6f61f2be1",
+      "gemini-1769625556490.pdf",
+      "7eb3d167d25d9b7f98e30b3cea200fc0",
+      "8dcf5e852e9c7b6da7fd3cba8596e25f",
+      "e72694d2dedbac2535b254b796698385",
+      "7a22d9c6d5b16ee01b9ab6fecacb68a3",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "107d12c49f1d02968b36c68f7336fe3c",
+      "Ossipee-Annual-Town-Report-2023_ocr.txt",
+      "2afa753680f122823c1b9d3e6bb79ada"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 14681,
+      "localSelected": 9,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett NH property tax online payment",
+          "Bartlett NH tax collector",
+          "Bartlett NH pay taxes online",
+          "Bartlett NH property tax payment methods"
+        ],
+        "state": [
+          "NH municipal property tax payment options",
+          "NH online tax payment systems for towns"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 9,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "tax-comp-04",
+    "question": "Can I set up a payment plan for my property taxes in Madison?",
+    "town": "Madison",
+    "category": "taxes",
+    "answerText": "In Madison, property taxes are structured around a quarterly billing system. This system is adopted under state law for towns with an optional fiscal year [L1, S1]. The first two quarterly payments are due on July 1 and October 1. These initial payments are calculated based on the previous year's assessed valuation and tax rate, then divided by four [L1, L3]. Assessors may use the current year's appraisal with the previous year's tax rate if changes in property valuation are observed [L1, L5]. The tax collector is responsible for mailing all bills for these first two payments at least 30 days before their respective due dates [L1, L3].\n\nThe remaining balance of the taxes, after accounting for the July 1 and October 1 payments, is split into two equal billings. These are due on January 2 and March 31 [L1, L5]. Similarly, bills for these final two quarterly payments are mailed no later than 30 days before their due dates [L1, L3]. Should taxes not be paid by their due dates, interest will be charged at the rate prescribed by state law, which is 8 percent per annum [L1, S1]. The town's tax collector may accept various payment methods, including credit cards, debit cards, or other electronic transactions, which may include a service charge [L2, L4]. However, the provided information does not indicate an option to set up an individualized payment plan beyond this established quarterly schedule [USER].",
+    "sourceDocumentNames": [
+      "e72694d2dedbac2535b254b796698385",
+      "7eb3d167d25d9b7f98e30b3cea200fc0",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "62516d2892a3e456c3850fe6f61f2be1",
+      "107d12c49f1d02968b36c68f7336fe3c"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 17987,
+      "localSelected": 5,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison property tax payment plan",
+          "Madison tax collector payment options",
+          "Madison property tax due dates"
+        ],
+        "state": [
+          "NH RSA property tax payment plans",
+          "NH municipal property tax collection",
+          "NHMA property tax payment guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 5,
+        "stateRetrieved": 5,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "tax-comp-05",
+    "question": "How do I apply for an abatement on my property taxes?",
+    "town": "Ossipee",
+    "category": "taxes",
+    "answerText": "To apply for a property tax abatement, you must submit a written application to the Ossipee assessing department [L2]. This application should be on a prescribed form [S1, S3]. State law requires applications to be filed by March 1st following the notice of tax, or within 60 days of the tax bill, whichever is later [S3]. For towns with a notice of tax after December 31, the initial application must be filed within two months of the notice date [S2]. The Board of Selectmen reviews these requests for \"good cause shown\" [S1]. Examples of approved abatements include adjustments for clerical errors, property destruction, or changes in property value [L1, L2]. The town must respond in writing by July 1st after the notice of tax [S1, S3].\n\nThe Town of Ossipee also offers a specific \"Application for Property Tax Exemption\" for commercial and industrial properties [L1, L3]. This exemption, processed under state law, provides a 50% reduction for five years on municipal and local school property taxes [L1, L4]. You must submit this application by December 31st, prior to the tax year for which you seek the exemption [L1, L4]. The application requires details such as business name, property address, project description, and estimated cost [L1]. You can contact the Town of Ossipee Office of the Selectmen for the application [L1].",
+    "sourceDocumentNames": [
+      "ingest_4a0ea604-838c-4f39-87c9-f6e0e73932e9.pdf",
+      "ingest_d87b947c-adc5-4644-a0cd-335e6a3f599f.pdf",
+      "ingest_336ac0a3-9898-4381-80c6-7b37a14882db.pdf",
+      "ingest_da2c0171-ce45-4705-9529-35702e5b830b.pdf",
+      "ingest_3452d0c5-a9b2-4f5b-bcd5-fa1169082f87.pdf",
+      "ingest_2560f763-e63d-4498-b848-c82340458967.pdf",
+      "ingest_d0b87b64-17fc-47d5-ad88-c600f1d1fdf4.pdf",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "107d12c49f1d02968b36c68f7336fe3c",
+      "e72694d2dedbac2535b254b796698385",
+      "75d19ab7579c32254e428be107fbcf18",
+      "436b929ca006c1576b3439a3bc4f4817"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 21543,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee property tax abatement application",
+          "Ossipee tax abatement process",
+          "Ossipee assessing department abatement"
+        ],
+        "state": [
+          "NH property tax abatement law",
+          "RSA property tax abatement",
+          "NHMA property tax abatement guidance",
+          "New Hampshire tax appeal process"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 15,
+        "localSelected": 7,
+        "stateRetrieved": 11,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "vote-01",
+    "question": "How do I register to vote in Carroll County?",
+    "town": "Ossipee",
+    "category": "voting",
+    "answerText": "To register to vote in Ossipee, you must be a United States citizen, at least 18 years old by the next election, and domiciled in town [S1, S3]. You will need to present a photo ID and proof of residency [L3, L5]. Proof of citizenship and age is also required [S2, S3]. Examples of proof include a driver's license, passport, birth certificate, or a utility bill for residency [S2]. If you do not have these documents, you can sign an affidavit attesting to your qualifications [S1, S2].\n\nYou can register with the Ossipee Town Clerk, Kellie J. Skehan, or with the Supervisors of the Checklist [L3, L5, S3]. The Supervisors of the Checklist are responsible for preparing and maintaining the town's voter checklist [S1, S3]. The Town Clerk's office may be closed on election days [L3, L5]. Voter registration is also available on Election Day at the polls [L3, L5, S3]. Records show election day registrations have occurred in Ossipee [L3, L5].",
+    "sourceDocumentNames": [
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_657c18ec-316b-4b82-b664-584791f6323d.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_5bdbd815-7e50-4168-b6eb-d6545a7aa25a.pdf",
+      "ba89d00c87ffcb69726f206ed194e7d7",
+      "bb2471187b8aaba2295362df0f2614af",
+      "9ec45c16c998ab75babbec8565990ab5"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 22573,
+      "localSelected": 5,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee voter registration",
+          "Ossipee town clerk voter registration",
+          "Ossipee supervisors of the checklist"
+        ],
+        "state": [
+          "New Hampshire voter registration requirements",
+          "NH voter registration laws",
+          "NH Secretary of State voter registration",
+          "NHMA voter registration guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 5,
+        "stateRetrieved": 6,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "vote-02",
+    "question": "Where is my polling place in Conway?",
+    "town": "Conway",
+    "category": "voting",
+    "answerText": "Conway, New Hampshire has utilized different polling places for various elections. For a ballot held on Tuesday, April 14, 2020, voting took place at the Center Conway Fire Department, located at 1593 East Main Street, Center Conway [L1, L2, L3, L4]. The polls at this location were open from 8:00 a.m. to 7:00 p.m. [L1, L2, L3, L4]. Another location listed for past voting is the Ames Gymnasium at Kennett High School, situated at 409 Eagles Way, Conway [L1, L2, L3, L4]. Polls there also operated from 8:00 a.m. to 7:00 p.m. [L1, L2, L3, L4]. For voting on all Warrant Articles in Conway, the Center Conway Fire Department is typically used [L5].\n\nIn New Hampshire, the town clerk is responsible for entering and maintaining the official polling place location, street address, and polling hours for each election [S1]. This information is recorded in the Statewide Voter Registration System (SVRS) [S1]. It is then published on the Secretary of State's website for public access [S1]. Towns have the option to establish additional polling places by a vote at their town meeting [S1]. These locations must be equipped similarly to the central polling place [S1]. All polling places are required to be accessible to elderly persons and individuals with physical disabilities [S1]. For the most current polling place information for an upcoming election, residents should consult the town clerk or the Secretary of State's website.",
+    "sourceDocumentNames": [
+      "ingest_34a39f97-0c6b-471f-95b3-68ea323aa72a.pdf",
+      "ingest_7f98243c-ba12-4381-8142-6f138da1110b.pdf",
+      "ingest_759e247b-ae15-40c5-99a3-7488f6b9a33a.pdf",
+      "ingest_0e4b8ff4-8e4b-4d78-a1ae-2d2904a519cb.pdf",
+      "ingest_22f5e32c-5694-4d4c-8f7d-5d950c9506d7.pdf",
+      "ba89d00c87ffcb69726f206ed194e7d7",
+      "18402e21a4d7f338658d0bf2fd0ceb17",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 17610,
+      "localSelected": 5,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway polling place",
+          "Conway voting locations",
+          "Conway election information"
+        ],
+        "state": [
+          "NH polling place designation",
+          "NH election law polling places"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 5,
+        "stateRetrieved": 4,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "vote-03",
+    "question": "Can I vote absentee in the next election?",
+    "town": "Bartlett",
+    "category": "voting",
+    "answerText": "In Bartlett, you may vote by absentee ballot if you meet specific criteria. This includes anticipating absence from town on election day, having a physical disability preventing in-person voting, or being a member of the uniformed services (or their spouse/dependent) who will be absent. Other reasons include being eligible as a Federal Office Only Absentee Voter, having a religious observance that prevents in-person voting, or having an employment obligation that keeps you from your polling place during polling hours. Employment in this context includes caring for children and infirm adults. Additionally, if the National Weather Service issues a winter storm, blizzard, or ice storm warning for Bartlett on election day, and you have safety concerns about traveling, you can request an absentee ballot on the Monday immediately preceding the election. The clerk's office must be open from 3:00 p.m. to 5:00 p.m. on that Monday for this purpose [L1, L4]. New Hampshire law mandates absentee voting for towns that use official ballots [S1].\n\nTo receive an absentee ballot, you must provide proof of identity with your application. This can be a photo ID shown to the local clerk in person, a photocopy of your ID mailed with the application, or a notarized absentee ballot application [L1, L4]. Absentee ballots must be received by the clerk no later than 5:00 PM on election day. You, or a delivery agent, can mail or personally deliver the ballot to the clerk. A delivery agent must present a government-issued photo identification or have their identity verified by the clerk and complete a form [L1, L4]. Family members, nursing home and elder care facility administrators, and a person assisting a voter with a disability (for up to four voters) can act as delivery agents [L1, L4]. To be eligible to vote at all, you must be a U.S. citizen, at least 18 years old by election day, have a domicile in Bartlett, and not be otherwise disqualified [S2].",
+    "sourceDocumentNames": [
+      "6a6fe6335d77d0d605a91ef6267c0926",
+      "18402e21a4d7f338658d0bf2fd0ceb17",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "ba89d00c87ffcb69726f206ed194e7d7",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt",
+      "976ddcd001bae681dae3c81d588158fb",
+      "e105b10e11d0213cd35a5fb33834f8c7",
+      "bb2471187b8aaba2295362df0f2614af"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 7,
+      "stateCount": 2,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.3333333333333333,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 2,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 24268,
+      "localSelected": 7,
+      "stateSelected": 2,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett absentee voting",
+          "Bartlett election procedures",
+          "Bartlett town clerk elections"
+        ],
+        "state": [
+          "NH absentee voting law",
+          "NH voter eligibility requirements",
+          "RSA 657 absentee ballot"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 7,
+        "stateRetrieved": 4,
+        "stateSelected": 2
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "vote-04",
+    "question": "What do I need to bring to register to vote on election day?",
+    "town": "Madison",
+    "category": "voting",
+    "answerText": "In Madison, New Hampshire, you can register to vote on Election Day at the polls. To do so, you will need to complete a Voter Registration form. You must also provide proof of four key qualifications: citizenship, age, primary residence address (domicile), and identity. You must be a U.S. citizen and at least 18 years old on the date of the election. Your principal residence must be in the town or ward where you intend to register. The supervisors of the checklist determine if you meet these qualifications, as outlined in RSA 654:12. [L1, S1]\n\nIf you do not have the required proof for any of these qualifications, you can sign an affidavit form. Your local election official will provide this form. Supervisors and clerks can approve various reasonable documents to establish your identity, age, citizenship, and domicile. If you register for the first time on Election Day and vote without presenting a qualified photo ID, your ballot will be marked as an \"Affidavit Ballot.\" This ballot is counted on Election Day. You will then receive a letter and a postage-paid envelope to send a copy of your proof of identity to the Secretary of State within 7 days. If this proof is not provided, your vote will be retrieved and subtracted from the election results. [L1, S1, S2]",
+    "sourceDocumentNames": [
+      "ba89d00c87ffcb69726f206ed194e7d7",
+      "9ec45c16c998ab75babbec8565990ab5",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt",
+      "bb2471187b8aaba2295362df0f2614af"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 3,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 3
+    },
+    "debug": {
+      "durationMs": 22864,
+      "localSelected": 3,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison NH election day voter registration requirements",
+          "Madison NH town clerk voter registration",
+          "Madison NH election procedures"
+        ],
+        "state": [
+          "NH election day voter registration requirements",
+          "NH voter registration laws documents",
+          "NHMA voter registration guidance",
+          "RSA 654 voter registration"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 3,
+        "stateRetrieved": 7,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "vote-05",
+    "question": "When is the deadline to request an absentee ballot?",
+    "town": "Ossipee",
+    "category": "voting",
+    "answerText": "In Ossipee, the deadline to request an absentee ballot is the day immediately preceding the election [L1, L4]. On this specific day, the Town Clerk/Tax Collector's office maintains dedicated hours to assist residents with these requests. The office is required by law to be open from 3 PM to 5 PM for this purpose [L1, L4]. This ensures that voters have a final opportunity to apply for an absentee ballot if they meet the eligibility criteria for voting by mail.\n\nNew Hampshire election law establishes the framework for absentee voting in various elections, including those held at the town level [S1]. This provision helps ensure that qualified voters can participate even if they are unable to vote in person due to specific circumstances [S1]. Reasons for absentee voting can include being elderly or infirm, or anticipating issues like school or child care cancellations [S1]. Voters may also vote absentee if they have safety concerns about traveling on election day [S1]. To obtain an absentee ballot, an individual must apply to their town clerk [S1]. Applications can be submitted using a state form or by providing the necessary information in writing [S1]. The application requests contact information, which remains confidential [S1].",
+    "sourceDocumentNames": [
+      "ingest_3fbf255e-22fc-4ae4-9300-724c3f8ce8c9.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_d51a1514-4f91-405e-90d1-adfc5e9e60c8.pdf",
+      "ingest_5bdbd815-7e50-4168-b6eb-d6545a7aa25a.pdf",
+      "ingest_3358aeeb-6257-4dc5-8403-d6ccc6a0805f.pdf",
+      "ba89d00c87ffcb69726f206ed194e7d7"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 1,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 1,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 15711,
+      "localSelected": 6,
+      "stateSelected": 1,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee absentee ballot deadline",
+          "Ossipee town clerk election information",
+          "Ossipee voting procedures"
+        ],
+        "state": [
+          "NH absentee ballot request deadline",
+          "New Hampshire election law absentee voting",
+          "RSA absentee ballot deadline"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 6,
+        "stateRetrieved": 3,
+        "stateSelected": 1
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "zone-01",
+    "question": "What is my property zoned as in Ossipee?",
+    "town": "Ossipee",
+    "category": "zoning",
+    "answerText": "Zoning is a municipal tool used to manage land use and development within a town. New Hampshire law permits local legislative bodies to adopt zoning ordinances and divide municipalities into districts, establishing regulations for each [S1]. The Town of Ossipee has established several distinct zoning districts. These include Commercial, Corridor, Nodal, Residential, Roadside Commercial, Rural, Village, and Water Resources Overlay districts [L1, L4]. The Ossipee Zoning Ordinance, first adopted in 1988 and revised through March 11, 2025, details the permitted uses, lot requirements, and setbacks for each of these districts [L2, L5].\n\nTo find the specific zoning designation for your property, you need to refer to the official Ossipee Zoning Map. This map serves as the definitive authority for all land, water areas, buildings, and structures within Ossipee [L1, L4]. The official Zoning Map is maintained and available for public viewing at the Ossipee Planning Office, located at 1 Moultonville Road [L1, L4]. This map was most recently amended on March 12, 2024 [L1, L4]. For any specific project or question, the Planning Board suggests discussing your plans with the Zoning Enforcement Officer to ensure compliance with local regulations [L3, L6, L7].",
+    "sourceDocumentNames": [
+      "ingest_9dae31f7-c555-42ed-8d0a-8a2633826601.pdf",
+      "ingest_6caf603b-c8a0-4b61-86f3-e781817de38e.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_570bcc04-49af-4678-bcc9-edfcb2e5e94f.pdf",
+      "ingest_321883d1-a8ea-49ff-993a-e7fa4ba573b0.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "03a47d755f237933ddbf8155112b7919",
+      "29044019fba3602a0aab6d7040ad2d40",
+      "c39b23dd0ebf7dc0038d2de8c0101763"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 26985,
+      "localSelected": 7,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee zoning map",
+          "Ossipee zoning ordinance",
+          "Ossipee property zoning lookup",
+          "Ossipee planning board"
+        ],
+        "state": [
+          "NH zoning law",
+          "RSA municipal zoning",
+          "NHMA zoning guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 11,
+        "localSelected": 7,
+        "stateRetrieved": 7,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "zone-02",
+    "question": "Can I run a business from my home in Conway?",
+    "town": "Conway",
+    "category": "zoning",
+    "answerText": "You can generally run a business from your home in Conway, provided it meets specific town regulations for home occupations. These businesses are considered an accessory use to a residential property [L1, L2]. Before starting operations, you must obtain a change-of-use permit [L1, L2]. New Hampshire law also recognizes home occupations as valid accessory uses, subject to certain conditions [S1].\n\nConway's regulations outline several requirements. The business cannot exceed 50% of your home's total floor area or 1,500 square feet, whichever is less [L1, L2]. It must operate within the principal residential unit or an approved accessory structure [L1, L2]. The business must be run by full-time residents of the home, and you may have up to two employees who do not live on the premises [L1, L2]. Exterior storage of commercial items is not allowed, and the business must not change the residential character of your home [L1, L2]. It should not create nuisances like excessive noise, vibration, or odors, nor should it generate traffic volumes greater than what is typical for a residential neighborhood [L1, L2]. Adequate off-street parking must be provided [L1, L2]. Retail or wholesale sales are only permitted for items raised or made on the premises [L1, L2]. Any signage must conform to Subsection F(7)(m) of the town's regulations [L1, L2].",
+    "sourceDocumentNames": [
+      "ingest_bd6ddfd1-82b2-4137-a673-9b42e1972896.pdf",
+      "ingest_b5a8014d-312d-4b68-855e-fa08efe2efbf.pdf",
+      "ingest_a8281a41-72a4-47c3-ae6c-769ff925725b.pdf",
+      "ingest_8c86b28b-41d7-44d8-bd69-c6a268cab6f6.pdf",
+      "03a47d755f237933ddbf8155112b7919",
+      "gemini-1769572485341.pdf",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "76249006a61563c737a8f50a51771102",
+      "07a2f38429e2ae0d8df559347254a7e6"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 4,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.6666666666666666,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 4
+    },
+    "debug": {
+      "durationMs": 13986,
+      "localSelected": 4,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway home business regulations",
+          "Conway zoning ordinance home occupation",
+          "Conway residential business permits",
+          "Conway planning board home business"
+        ],
+        "state": [
+          "NH home occupation law",
+          "RSA municipal zoning authority",
+          "NHMA home business guidance",
+          "NH zoning residential business"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 4,
+        "stateRetrieved": 7,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "zone-03",
+    "question": "What are the setback requirements for building in Bartlett?",
+    "town": "Bartlett",
+    "category": "zoning",
+    "answerText": "New Hampshire municipalities, including Bartlett, establish zoning regulations to manage the size, location, and use of buildings to promote community health and safety [S1]. Setbacks are a key part of these regulations, defining areas where structures are generally not permitted [S1]. In Bartlett, structures are typically not allowed in the front setback area, which is measured from the road right-of-way to the setback line [L1]. For corner lots, this front setback applies to the side where the driveway enters the property [L1]. If a lot borders a water course or body of water, the front setback is measured from the water's normal operating level or natural high-water mark; in these cases, the rear setback is measured from the road right-of-way [L1].\n\nThe town's zoning ordinance also defines side and rear setback areas where structures are generally prohibited [L1]. Specific distances for these areas are detailed in \"Table 2\" of the zoning ordinance [L1]. However, ornamental features like eaves and cornices may project up to two feet into the required side or rear setback areas [L1]. Accessory buildings can be constructed in the rear setback area if they are no taller than twelve feet, are at least ten feet from the rear lot line or other buildings, and cover no more than thirty percent of the setback area [L1]. Telecommunication facilities have a special setback, requiring the base of any tower to be two-thirds of its height from any property line, road, dwelling, or public area [L1]. Deviations from these setback requirements may be considered through a variance request [L5].",
+    "sourceDocumentNames": [
+      "031225zoningordinance2025final_3_ocr.txt",
+      "gemini-1769572485341.pdf",
+      "76249006a61563c737a8f50a51771102",
+      "07a2f38429e2ae0d8df559347254a7e6",
+      "zba_min_3-11-2025_ocr.txt",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "03a47d755f237933ddbf8155112b7919"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 6,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 24710,
+      "localSelected": 6,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett zoning ordinance setback requirements",
+          "Bartlett building setbacks",
+          "Bartlett planning board setback regulations",
+          "Bartlett zoning district requirements"
+        ],
+        "state": [
+          "New Hampshire municipal zoning authority setbacks",
+          "NHMA zoning setback guidance",
+          "New Hampshire RSA municipal planning and zoning"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 18,
+        "localSelected": 6,
+        "stateRetrieved": 12,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "zone-04",
+    "question": "How do I request a zoning variance in Madison?",
+    "town": "Madison",
+    "category": "zoning",
+    "answerText": "To request a zoning variance in Madison, you must first obtain a determination that your proposed use is not permitted without one. This is often demonstrated by a denied building permit, and a copy of this must be attached to your application [L1, L2]. All required information must be provided to the secretary of the Board of Adjustment before a hearing can be scheduled [L1]. The Variance Application form was revised on April 13, 2017 [L1].\n\nFor a variance to be legally granted, the proposed use must satisfy five conditions. These include that the variance will not be contrary to the public interest, the spirit of the ordinance is observed, and substantial justice is done. Property values of surrounding areas must not be diminished. Finally, literal enforcement of the ordinance must result in unnecessary hardship due to special conditions of the property [L1, S1]. RSA 674:33, I(b)(5) provides criteria for establishing unnecessary hardship [L2]. You must appear in person at the public hearing to present your appeal [L1].",
+    "sourceDocumentNames": [
+      "gemini-1769572641617.pdf",
+      "03a47d755f237933ddbf8155112b7919",
+      "gemini-1769055125949.pdf",
+      "031225zoningordinance2025final_3_ocr.txt",
+      "c6e04bf5f933d984e3a0c36445890fbf",
+      "gemini-1769097185451.pdf",
+      "680d4927d1a2bac27dccc9de7c3eb9bb",
+      "gemini-1769572485341.pdf",
+      "c2996aa9623623f99b49a1ef0e1bd7c3",
+      "49e4b2342c07129f65b37fc070121936",
+      "c39b23dd0ebf7dc0038d2de8c0101763"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 10,
+      "stateCount": 2,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 2,
+      "distinctLocalDocs": 10
+    },
+    "debug": {
+      "durationMs": 21805,
+      "localSelected": 10,
+      "stateSelected": 2,
+      "auditFlags": [
+        "absolute_legal_claim:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison zoning variance application",
+          "Madison zoning variance process",
+          "Madison Zoning Board of Adjustment",
+          "Madison zoning ordinance"
+        ],
+        "state": [
+          "NH RSA zoning variance",
+          "New Hampshire Zoning Board of Adjustment powers",
+          "NHMA zoning variance guidance",
+          "New Hampshire municipal zoning law"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 16,
+        "localSelected": 10,
+        "stateRetrieved": 5,
+        "stateSelected": 2
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "zone-05",
+    "question": "Are there any wetland restrictions on my property?",
+    "town": "Ossipee",
+    "category": "zoning",
+    "answerText": "To determine if your property has wetland restrictions, you can consult the Ossipee Wetlands Map. This map is available at the Ossipee Planning Office located at 1 Moultonville Road. The official Zoning Map, found in the Town Hall, serves as the final authority for zoning status, including wetlands [L1, L3]. New Hampshire defines wetlands as areas inundated or saturated by surface or groundwater, supporting vegetation typically adapted for life in saturated soil conditions [S1, S5].\n\nThe Town of Ossipee's Zoning Ordinance, Article XIX, addresses wetlands and directs users to New Hampshire Department of Environmental Services (NHDES) Chapter 482-A, which pertains to fill and dredge activities in wetlands [L1, L3]. If you plan activities such as dredging, filling, or placing structures in wetlands, a permit is required. You must complete five copies of the appropriate NHDES Wetlands Bureau application form and file them with the Town Clerk [L1, L2, L3]. The Town Clerk will establish the official filing date and distribute copies to the Board of Selectmen, Planning Board, Conservation Commission, and the Wetlands Bureau. Abutting landowners must also be notified by certified mail, as required by RSA 482-A [L1, L2, L3]. The Ossipee Conservation Commission has the authority to delay the Wetlands Bureau's review to allow for additional local consideration [L1, L2, L3].",
+    "sourceDocumentNames": [
+      "ingest_6caf603b-c8a0-4b61-86f3-e781817de38e.pdf",
+      "ingest_7e9cfea9-e478-4d0b-b551-13e2d2902f96.pdf",
+      "ingest_321883d1-a8ea-49ff-993a-e7fa4ba573b0.pdf",
+      "26f4e4012fd1f747389411def3894e9a",
+      "5cd838e34cc958f054c8746f4f787f9d",
+      "b6231d673068b67fa0b44f8bee382274",
+      "2f69dbbbc8433269f2f820234e8bcb8e",
+      "43b1fdfecd2d8a5ad692c4a64fced54f"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 3,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 3
+    },
+    "debug": {
+      "durationMs": 23980,
+      "localSelected": 3,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee wetland ordinance",
+          "Ossipee zoning wetlands",
+          "Ossipee Conservation Commission wetlands regulations",
+          "Ossipee property wetland restrictions"
+        ],
+        "state": [
+          "NH RSA wetlands",
+          "NH DES wetland regulations",
+          "New Hampshire wetland buffer requirements",
+          "NH municipal wetland authority"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 3,
+        "stateRetrieved": 12,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "serv-01",
+    "question": "What day is trash pickup in my neighborhood in Ossipee?",
+    "town": "Ossipee",
+    "category": "services",
+    "answerText": "Ossipee does not offer curbside trash pickup in neighborhoods. Residents instead utilize the town's waste disposal facilities [L1, L2, L4]. The Recycling Facility is available on Sunday from 8:00 AM to 1:00 PM, and on Monday, Thursday, Friday, and Saturday from 8:00 AM to 4:00 PM. It is closed on Tuesdays and Wednesdays [L3, L5, L6]. The Transfer Station operates on Friday, Saturday, Sunday, and Monday from 8:00 AM to 4:30 PM. It is closed on Tuesdays, Wednesdays, and Thursdays [L3, L5, L6].\n\nA two-year permit is required for access to these facilities, which costs $20.00 [L1, L3, L5, L6]. The Transfer Station observes several holidays and will be closed on those dates in 2025. These closures include Civil Rights Day on Monday, January 20th; President's Day on Monday, February 17th; Easter Day on Sunday, April 20th; Memorial Day on Monday, May 26th; Independence Day on Friday, July 4th; Labor Day on Monday, September 1st; Columbus Day on Monday, October 13th; and Thanksgiving on Friday, November 28th [L1, L3, L5, L6]. You can reach the Recycling Facility at (603) 539-4121 or the Public Works Department at 603-539-8417 for more information [L1].",
+    "sourceDocumentNames": [
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_ee2a35d3-3bc4-488f-9f46-f1d752747ecd.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_ca8403ed-0d79-42f0-9401-66712f4dba29.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_638194f7-49b1-4fc7-b365-cdcdc5a9e4ac.pdf"
+    ],
+    "docSourceType": "local",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 0,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": false,
+      "distinctStateDocs": 0,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 22331,
+      "localSelected": 6,
+      "stateSelected": 0,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee trash pickup schedule",
+          "Ossipee waste collection days",
+          "Ossipee refuse collection neighborhood"
+        ],
+        "state": [
+          "New Hampshire pickup"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 12,
+        "localSelected": 6,
+        "stateRetrieved": 0,
+        "stateSelected": 0
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "serv-02",
+    "question": "How do I get a dump sticker in Conway?",
+    "town": "Conway",
+    "category": "services",
+    "answerText": "There is no explicit mention of a general use permit or annual fee required for residents to access the Conway Transfer Station for typical household waste and recycling. [L2] The Transfer Station is located at 755 East Conway Road. It is operated by the Lower Mount Washington Solid Waste District. [L2] This district manages solid waste facilities under state regulations. [S2] You can contact the attendant at 603-356-2272 for further information. [L2] While general access does not require a sticker, specific items like refrigerators, tires, or construction materials do incur fees. [L2]\n\nThe documents do describe a \"Conway parking permit sticker.\" [L1] This sticker costs $5.00. [L1] It is for parking and is valid from the Saturday of Father's Day weekend through the Sunday of Labor Day weekend. [L1] To obtain this parking permit, Conway or Albany residents must show a driver's license and vehicle registration. [L1] Second homeowners need a tax bill and driver's license. [L1] These parking stickers will be available at the Conway Town Clerk's office starting March 1, 2025. [L1]",
+    "sourceDocumentNames": [
+      "ingest_aea5a4f3-a85d-4024-8f4c-27062939133f.pdf",
+      "ingest_743b9efd-0e0f-4290-86e2-f313b49c02d4.pdf",
+      "ingest_8ceea477-3d40-4d61-adae-5ef94c99a33e.pdf",
+      "ingest_3c68568b-2dce-430e-9f3d-313e938b1d1a.pdf",
+      "ingest_0e9de44d-c37f-46ce-aea1-fa3fbe54979c.pdf",
+      "ingest_c1a2a0a4-a100-40b6-9ed0-c84cd4fbb744.pdf",
+      "ingest_0d9a7d09-8bb7-47e2-9123-568a4b5c03d9.pdf",
+      "ingest_78f5c4ab-3f4e-4b8f-af34-90aae833c6e9.pdf",
+      "ingest_ab523aca-328a-4f68-bfe5-e26c95e8d781.pdf",
+      "ingest_f5e6eb39-d605-4e7c-a072-c3222f07534b.pdf",
+      "8173b24fb965cd9256fdf2a195c1d725",
+      "Chapter 53-B SOLID WASTE MANAGEMENT DISTRICTS_ocr.txt",
+      "24dd8884f96e90f4e4a25e607aad5073",
+      "2032c7edbb7e42e6088543b894a06de2",
+      "d9bf32aa97e60165210dff0ea2ffbb04"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 10,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 10
+    },
+    "debug": {
+      "durationMs": 22528,
+      "localSelected": 10,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway dump sticker",
+          "Conway transfer station permit",
+          "Conway solid waste disposal rules",
+          "Conway resident sticker"
+        ],
+        "state": [
+          "NH municipal solid waste regulations",
+          "NH municipal authority transfer station"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 14,
+        "localSelected": 10,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "serv-03",
+    "question": "Does Bartlett have curbside recycling?",
+    "town": "Bartlett",
+    "category": "services",
+    "answerText": "The available local documents do not contain information directly addressing curbside recycling services in Bartlett [L1-L5]. The records instead focus on other recycling initiatives within the town. Discussions have occurred about recycling at the Town Hall, including a motion to place a soda can recycling bin in the lobby [L1-L5]. The profitability of various materials at the Transfer Station has also been a topic. Currently, only OCC cardboard and aluminum cans generate profit when recycled through the Transfer Station. Plastics are not profitable, and there is no market for them at this time [L1-L5].\n\nNew Hampshire's municipal recycling efforts are guided by state administrative rules, primarily the Env-Sw chapters, which supplement the statutory authority of RSA 149-M [S2, S4, S5]. These rules establish a comprehensive framework for solid waste management facilities. Their purpose is to ensure that facilities are designed, operated, and closed in a manner that protects public health and the environment [S2, S4, S5]. Facilities, such as transfer stations, are required to separate and divert recyclable materials to authorized locations for reuse, avoiding landfill disposal of these materials [S1, S3]. The state guidelines focus on the operational requirements for recycling facilities and the management of materials, including the reduction of toxics in packaging [S1, S3]. They do not, however, mandate specific collection methods like curbside recycling services for individual municipalities.",
+    "sourceDocumentNames": [
+      "gemini-1769571645832.pdf",
+      "gemini-1769571632871.pdf",
+      "gemini-1769298693975.pdf",
+      "gemini-1769298687687.pdf",
+      "gemini-1769298655912.pdf",
+      "1191cf3848a1fda4a366aadfc8e107e9",
+      "91dcb35b2552d3066d090e84cb750621",
+      "405287056ad332ee09af60503d67e185",
+      "6dfe29231199b73ce26f215bd57af2e9",
+      "9c068fe2aeca1757ed7629299bc64fa5"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 18138,
+      "localSelected": 5,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett curbside recycling",
+          "Bartlett recycling program",
+          "Bartlett waste management",
+          "Bartlett trash collection"
+        ],
+        "state": [
+          "NH municipal recycling guidelines",
+          "NH solid waste management"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 5,
+        "stateRetrieved": 7,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "serv-04",
+    "question": "What items can I bring to the transfer station?",
+    "town": "Madison",
+    "category": "services",
+    "answerText": "The Madison transfer station accepts a variety of materials from residents. These include mixed municipal solid waste and source-separated recyclable materials [L1]. You can also bring bulky waste, such as white goods, furniture, and stumps [L1]. The facility is equipped to handle construction and demolition debris, tires, and wood ash from household stoves [L1]. Additionally, source-separated food waste, household infectious waste, used cooking oil, and latex paint collected for recycling are accepted [L1]. The transfer station processes a wide range of items, including glass, corrugated cardboard, electronics, air conditioners, refrigerators, propane tanks, batteries, tin cans, aluminum cans, and light iron [L1]. It is worth noting that the transfer station generates revenue from items like OCC cardboard and aluminum cans, but not from plastics, due to baling costs [L1].\n\nNew Hampshire's solid waste management is governed by the New Hampshire Code of Administrative Rules, specifically Chapter Env-Sw 1000 [S1]. These rules ensure that all solid waste facilities, including those operating in Madison, are sited, designed, constructed, and operated in a manner that protects public health and the environment [S1]. This regulatory framework is established under the statutory authority of RSA 149-M:7 [S1]. The state's regulations aim to minimize accidents and prevent adverse impacts from waste disposal [S1].\n\nWord Count: 231",
+    "sourceDocumentNames": [
+      "405287056ad332ee09af60503d67e185",
+      "gemini-1769571645832.pdf",
+      "c60ec638f457dab24e7339fdd0b748b8",
+      "gemini-1769571632871.pdf",
+      "331f01b69faf6bcfcbfe16579336a1d1",
+      "0da27413cd6b4f4fe813d04a7f84f63c",
+      "8173b24fb965cd9256fdf2a195c1d725",
+      "3cc2612624300ac60d44180c5e8124d4",
+      "91dcb35b2552d3066d090e84cb750621",
+      "6dfe29231199b73ce26f215bd57af2e9",
+      "fd0a5a7e65b6ee641bc544e4f35efb04",
+      "1191cf3848a1fda4a366aadfc8e107e9",
+      "c0b312ac0789bdac7d5e9305ef2f8427"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 8,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 8
+    },
+    "debug": {
+      "durationMs": 18974,
+      "localSelected": 8,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison transfer station accepted items",
+          "Madison waste disposal rules",
+          "Madison recycling guidelines",
+          "Madison transfer station regulations"
+        ],
+        "state": [
+          "NH solid waste management regulations",
+          "NH municipal recycling laws"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 8,
+        "stateRetrieved": 9,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "serv-05",
+    "question": "Is there a hazardous waste collection day coming up?",
+    "town": "Ossipee",
+    "category": "services",
+    "answerText": "The available records indicate that the most recent annual hazardous waste collection events were scheduled for July 30, 2022, and August 6, 2022 [L1, L3]. Ossipee has historically participated in regional collection projects. In 2021, Ossipee served as one of eight regional collection sites, with 72 households from town participating [L1, L3]. These events allowed for the disposal of household hazardous waste, with 39 tons collected in 2021 [L1].\n\nDiscussions have occurred regarding the costs associated with these collections, which have seen increases [L1]. Concerns were also raised about event locations and the need for improved organization by regional planning commissions [L1]. New Hampshire's hazardous waste collection programs are governed by state administrative rules and statutes, primarily RSA 147-A and RSA 147-B [S1, S3]. The New Hampshire Department of Environmental Services (NHDES) oversees these regulations, which include requirements for household hazardous waste (HHW) collection projects [S1, S3].\n\nThe documents provided do not contain information about hazardous waste collection days scheduled after August 2022 [L1]. For the most current information regarding any upcoming hazardous waste collection days, please contact the Ossipee Town Office directly.\n\nWord Count: 179",
+    "sourceDocumentNames": [
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_580053dd-f6a3-4b62-b9dd-e1f25770a96c.pdf",
+      "ingest_638194f7-49b1-4fc7-b365-cdcdc5a9e4ac.pdf",
+      "ingest_e13155af-46aa-4be6-92e8-90e0657749ae.pdf",
+      "ingest_ee2a35d3-3bc4-488f-9f46-f1d752747ecd.pdf",
+      "ingest_3c2690ec-8e82-4e26-a3c4-b5eb71b6a234.pdf",
+      "ingest_a4b432e5-5527-400e-b150-ccee82fadfca.pdf",
+      "24d24c6dbb7f8bf6213eff460a974cc8",
+      "88fd6b017b93c36409885daf5716c1f7",
+      "36488e034d0970391227e4345e98167a",
+      "ec531e41a04ab5c7a4851470f6ac241e",
+      "acf6fcdd3dd20c4c27ba567d16186970"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 16779,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee hazardous waste collection day",
+          "Ossipee waste disposal events",
+          "Ossipee transfer station schedule"
+        ],
+        "state": [
+          "NH hazardous waste collection programs",
+          "NH DES household hazardous waste"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 7,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-park-01",
+    "question": "Where are the public beaches in Ossipee?",
+    "town": "Ossipee",
+    "category": "recreation",
+    "answerText": "Ossipee Lake features several designated public beaches for swimming and water contact activities. These designated areas can be operated by various entities, including municipalities, other governmental subdivisions, or private organizations, and may be accessible with or without a fee [L1, L2, L4, L5]. For example, some designated beaches are found at hotels, youth recreation camps, and recreational campgrounds [L3, L6]. Additionally, a beach is located at Duncan Lake, where discussions have occurred regarding potential improvements like restrooms and trash removal [L3, L6]. While conservation land at 220 Newman Drew Road on the Bearcamp River offers water access, its primary purpose is conservation, not a designated public recreational beach [L1, L2, L4, L5].\n\nThe Town of Ossipee is actively working to acquire a town-owned public beach on Ossipee Lake, reflecting strong community interest and a Town Meeting vote [L1, L2, L3, L4, L5, L6]. Funds have been allocated to a Capital Reserve account specifically for this acquisition [L3, L6]. A subcommittee has been formed to continue researching suitable locations on Ossipee Lake and to explore enhancements for Duncan Lake [L3, L6]. In New Hampshire, \"public access\" signifies that all members of the public have the right to use public waters",
+    "sourceDocumentNames": [
+      "ingest_45606bb1-4335-4761-b235-4f84091e7e9b.pdf",
+      "ingest_b1c8dbc1-a33c-4500-9554-7040ac000082.pdf",
+      "ingest_1fd36412-6e33-492f-89db-b994f5cc4329.pdf",
+      "ingest_6de2c80a-c80f-4cb0-aada-c4ee8f99a9b4.pdf",
+      "ingest_e9fe2514-4fbb-41fd-9644-c22e738c907f.pdf",
+      "ingest_d46d0c08-3803-4204-b18a-24424038d704.pdf",
+      "d4c72dc8a04cefb5f6b3d7bca80a3988",
+      "779de92dc22ad23e25c8fcef3ab61c57",
+      "5cb6edf0616eed6ab2cf216c9d72dc0a",
+      "72f86e197e789b83dbf50341f3f4243b",
+      "ed1e3103b5814b73fed3749c3d836287"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 18855,
+      "localSelected": 6,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee public beaches",
+          "Ossipee beaches",
+          "Ossipee recreation areas",
+          "Ossipee lake access"
+        ],
+        "state": [
+          "NH public beach access",
+          "NH municipal beaches"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 6,
+        "stateRetrieved": 5,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-park-02",
+    "question": "How do I register my child for summer camp in Conway?",
+    "town": "Conway",
+    "category": "recreation",
+    "answerText": "The Conway Parks and Recreation Department offers a summer camp program for children. This program has seen significant enrollment in recent years, with 312 children registered in 2023 [L1, L2]. The camp provides a variety of activities, including games, field trips, and swimming [L1, L4]. Counselors also receive training for diabetes management [L1]. Local recreation commissions are authorized to manage recreational services and establish rules for program participation [S1].\n\nHowever, the available documents do not contain specific details regarding current or upcoming registration dates and procedures for the summer camp [L3, L7]. To obtain the most up-to-date information on how to register your child, please contact the Conway Parks and Recreation Department directly [L5]. They can provide details on specific forms, deadlines, and any necessary requirements for enrollment.",
+    "sourceDocumentNames": [
+      "ingest_a20175e4-5330-43d8-b7aa-341e73accb3c.pdf",
+      "ingest_22f5e32c-5694-4d4c-8f7d-5d950c9506d7.pdf",
+      "ingest_00963f6b-b199-4115-84ba-82528594af38.pdf",
+      "ingest_fba1961b-5819-4ac3-a6a0-92d3ae67ee64.pdf",
+      "ingest_759e247b-ae15-40c5-99a3-7488f6b9a33a.pdf",
+      "ingest_7f98243c-ba12-4381-8142-6f138da1110b.pdf",
+      "ingest_0e4b8ff4-8e4b-4d78-a1ae-2d2904a519cb.pdf",
+      "ed1e3103b5814b73fed3749c3d836287",
+      "17bdc0b200df42586bdbbfeaa92088ef",
+      "5c60569801bbb9cf380df7e1e7a45c47",
+      "d83bbb1f36402284667f1f32e84c3d4a",
+      "850f2f7afac48c5a70e4bac6ceba600a"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 13515,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway summer camp registration",
+          "Conway Parks & Recreation summer programs",
+          "Conway youth activities summer",
+          "Conway camp sign up process"
+        ],
+        "state": [
+          "NH summer camp regulations",
+          "NH youth camp licensing"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 7,
+        "stateRetrieved": 9,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-park-03",
+    "question": "Are dogs allowed at town parks in Bartlett?",
+    "town": "Bartlett",
+    "category": "recreation",
+    "answerText": "The documents provided do not contain specific regulations for dogs in town parks within Bartlett. The local policies referenced in the materials pertain to the Town of Ossipee, not Bartlett [L1, L2, L3, L4].\n\nIn New Hampshire, municipalities have the authority to establish their own rules for public parks and other town properties [S1]. This means that regulations concerning dogs can differ significantly from one town to another [S1]. For example, the Town of Ossipee prohibits dogs, whether restrained or unrestrained, from areas such as cemeteries, ballfields, tennis courts, skate parks, and town-owned beaches [L1]. Ossipee's rules also require owners to have means to remove animal waste and dispose of it properly, with exceptions for service dogs [L1]. However, these specific regulations are for Ossipee and are not confirmed as the policies for Bartlett town parks [L1].",
+    "sourceDocumentNames": [
+      "dogs_on_town_property_june_06_2012_ocr.txt",
+      "gemini-1769572456594.pdf",
+      "e32db1afa1f2a79830848c43f62e03ce",
+      "8a2a9a135c9e72cde30bf7ae4b480674",
+      "d83bbb1f36402284667f1f32e84c3d4a",
+      "60774b8de903199badea32ff601e44c9"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 4,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.3333333333333333,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 4
+    },
+    "debug": {
+      "durationMs": 16190,
+      "localSelected": 4,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett town parks dog policy",
+          "Bartlett animal control ordinance dogs parks",
+          "Bartlett recreation department dog rules"
+        ],
+        "state": [
+          "NH municipal park regulations dogs",
+          "NH animal control laws parks",
+          "NHMA park ordinances dogs"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 4,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-park-04",
+    "question": "What hiking trails are maintained by the town of Madison?",
+    "town": "Madison",
+    "category": "recreation",
+    "answerText": "The town of Madison is involved in an initiative concerning the Conway Branch Rail Trail. This 21-mile section, stretching from Ossipee Corner to Route 113 in Madison, is being transferred to the New Hampshire Department of Natural and Cultural Resources (DNCR), Bureau of Trails [L1, L3, L5, L7]. The goal is to open this rail line for various recreational uses, including walking and hiking [L1, L2, L3, L4, L5, L6, L7, L8, L9]. A Warrant Article is planned to establish an Expendable Trust Fund (ETF) with $25,000 to help fund this future rail trail [L2, L4, L6, L8, L9]. Site walks have been conducted to assess conditions for this upcoming project, noting areas like the Madison Boulder Natural Area and towards Silver Lake Station [L1, L3, L5, L7].\n\nBased on the available documents, there is no indication that the town of Madison currently maintains specific hiking trails. The information focuses on the development of the Conway Branch Rail Trail as a future recreational resource, which will be managed by the state's Bureau of Trails. New Hampshire towns generally manage land use, including potential open space and trails, under state laws and guidance [S1]. However, the provided records do not detail any existing hiking trails maintained by the town itself.\n\nWORD COUNT: 170",
+    "sourceDocumentNames": [
+      "gemini-1769572432632.docx",
+      "gemini-1769571615067.pdf",
+      "88380e11015148d25baa64b0b3c9e795",
+      "gemini-1769570677742.pdf",
+      "26cc73099bb91598e59069aac2fc60c0",
+      "gemini-1769298672575.pdf",
+      "selectmen_work_sess_and_meeting_1-13-25_ocr.txt",
+      "gemini-1769298651607.pdf",
+      "6dfdbad6c31bdeb5caf6231adc3d297b",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "e72694d2dedbac2535b254b796698385",
+      "75d19ab7579c32254e428be107fbcf18",
+      "436b929ca006c1576b3439a3bc4f4817"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 4,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 4,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 18914,
+      "localSelected": 9,
+      "stateSelected": 4,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison hiking trails maintained",
+          "Madison trail maintenance",
+          "Madison Conservation Commission trails",
+          "Madison Recreation Department trails",
+          "Madison public trails map"
+        ],
+        "state": [
+          "NH municipal trail maintenance guidelines",
+          "NH town land use trails"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 9,
+        "stateRetrieved": 4,
+        "stateSelected": 4
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-park-05",
+    "question": "How much does a beach pass cost?",
+    "town": "Ossipee",
+    "category": "recreation",
+    "answerText": "Our available local documents do not contain information regarding the specific cost of an Ossipee beach pass. The records discuss the town's efforts to establish a town beach on Ossipee Lake. They also mention existing recreational facilities like Mill Pond and Duncan Lake. However, no specific fees for accessing or using these beaches are detailed in the provided documents [L1, L2, L3, L4, L5, L6].\n\nNew Hampshire municipalities are authorized to establish and collect fees for recreation park services and facilities, including town beaches [S1, S3]. A town can authorize its board of selectmen to establish or amend such fees. This requires a majority vote at an annual or special town meeting [S2, S4]. This authorization remains in effect until rescinded [S2, S4]. Before any fees are established or amended, the selectmen must hold a public hearing. Public notice for this hearing must be given at least seven days in advance by posting and publishing [S2, S4]. Revenue generated from these fees can be deposited into a special fund or a recreation revolving fund, which can accumulate year to year [S1, S2, S3, S4].",
+    "sourceDocumentNames": [
+      "ingest_0cd526e9-dda8-4f55-9701-857eb5ac4541.pdf",
+      "ingest_ca8403ed-0d79-42f0-9401-66712f4dba29.pdf",
+      "ingest_d46d0c08-3803-4204-b18a-24424038d704.pdf",
+      "ingest_e9fe2514-4fbb-41fd-9644-c22e738c907f.pdf",
+      "ingest_b5363f46-c005-497c-8600-2a476c6561bf.pdf",
+      "ingest_60376239-0c96-4ff9-9ce0-72421b986c5c.pdf",
+      "Chapter 35-B PUBLIC RECREATION AND PARKS_ocr.txt",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt",
+      "d83bbb1f36402284667f1f32e84c3d4a",
+      "Chapter 31 POWERS AND DUTIES OF TOWNS_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 6,
+      "stateCount": 4,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 4,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 13615,
+      "localSelected": 6,
+      "stateSelected": 4,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee beach pass cost",
+          "Ossipee beach fees",
+          "Ossipee recreation department beach passes",
+          "Ossipee town ordinances beach access fees"
+        ],
+        "state": [
+          "NH municipal recreation fees",
+          "NH towns setting beach fees"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 8,
+        "localSelected": 6,
+        "stateRetrieved": 6,
+        "stateSelected": 4
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "budg-01",
+    "question": "What is the town budget for Ossipee this year?",
+    "town": "Ossipee",
+    "category": "budget",
+    "answerText": "The most recent comprehensive budget information available for the Town of Ossipee is for the year 2023. Details for \"this year\" or 2026 are not provided in the available documents [L1, L2, L4]. For 2023, the total appropriations recommended by the Selectmen were \\$8,273,801. The Budget Committee recommended a total of \\$8,248,801 [L1, L2, L4]. These appropriations included \\$7,173,801 for the operating budget as recommended by the Selectmen, or \\$7,148,801 by the Budget Committee [L1, L2, L4]. Additionally, \\$660,000 was allocated for special warrant articles and \\$440,000 for individual warrant articles [L1, L2, L4]. Estimated revenues and credits for 2023 were \\$3,033,330 [L1, L2, L4]. The estimated amount of taxes to be raised was \\$5,240,471 as recommended by the Selectmen, and \\$5,215,471 by the Budget Committee [L1, L2, L4].\n\nIn New Hampshire, the municipal budget process is governed by state law, requiring \"gross basis budgeting\" where all proposed appropriations and offsetting revenues are disclosed [S1]. Municipal officers and department heads prepare estimated expenditures and revenues for the governing body [S1]. The Select Board reviews this information and, if a budget committee is established, submits their recommendations to it [S1]. The Budget Committee's role is to oversee and analyze departmental expenditures, providing detailed information to the electorate for informed voting [S1]. This process helps ensure transparency in how town funds are allocated and raised [S1].",
+    "sourceDocumentNames": [
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_c49aed4d-1b7c-41ee-a505-4651fc8987dd.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_d61261e8-3949-4d25-9b95-ea1df164e375.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "62516d2892a3e456c3850fe6f61f2be1",
+      "8fd32cd4e1f7c4eab8036aedd93bd8ce",
+      "d11148ce2bfcf247126adb4398c332be",
+      "0986c3752671c6a045ebf77166366175"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 5,
+      "stateCount": 4,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 4,
+      "distinctLocalDocs": 5
+    },
+    "debug": {
+      "durationMs": 17667,
+      "localSelected": 5,
+      "stateSelected": 4,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee town budget this year",
+          "Ossipee annual report",
+          "Ossipee town meeting warrant budget",
+          "Ossipee proposed budget"
+        ],
+        "state": [
+          "NH municipal budget process",
+          "NH RSA town budgets",
+          "NHMA budget guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 6,
+        "localSelected": 5,
+        "stateRetrieved": 4,
+        "stateSelected": 4
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "budg-02",
+    "question": "How much does Conway spend on schools?",
+    "town": "Conway",
+    "category": "budget",
+    "answerText": "The Conway School District's proposed operating budget is $40,109,103. This amount is intended to be offset by $1,474,500 from various grants [L1]. The School Board recommended this budget by a vote of 4-3. However, the Municipal Budget Committee did not recommend it, with a vote of 4-10 [L1]. If this proposed budget is not approved, the default budget will be $39,002,004 [L1]. This default budget is the same as the previous year, with adjustments required by prior district actions or by law [L1].\n\nThe proposed budget includes some staffing changes, such as a reduction of four elementary teaching staff due to enrollment and the addition of one math instructional coach [L1]. Special Education is identified as the largest increase within the budget [L1]. The district is also undertaking roof replacements at the high school and middle school [L1]. Enrollment has declined from 2,180 students to 1,410, while budgets have been climbing, partly due to a new building [L2]. The Municipal Budget Committee asked the School Board to re-evaluate priorities to reduce the budget request by $2 million, aiming to lower the projected school tax increase [L1].\n\nNew Hampshire law requires the state to support public schools and provide an adequate education for all citizens [S1]. The \"opportunity for an adequate education\" is defined by state statute [S1]. The cost of this adequate education includes universal per-pupil funding and differentiated aid for specific student needs, such as special education students or English language learners [S3].\n\nWord Count: 234",
+    "sourceDocumentNames": [
+      "ingest_4529cce3-338d-4b70-80e6-cf66f2fc6189.pdf",
+      "ingest_bfe75cfe-0142-4753-9619-ecb45b68deab.pdf",
+      "ingest_42ed9f29-a388-4685-be39-604355518112.pdf",
+      "ingest_fd6ad2f5-3e7e-4e1d-a8df-1772f614b1d5.pdf",
+      "ingest_cedcdb86-c2c2-4f12-9d8c-62b465d653e9.pdf",
+      "ingest_d3d82a9d-37ba-4b48-856e-2386e554b71f.pdf",
+      "ingest_256656a5-1f6c-4cea-a908-33de9dac6689.pdf",
+      "ingest_43497f35-5d9b-4b58-a63c-f2ff2f9fbcab.pdf",
+      "ingest_d5572465-1bd1-489f-821c-90f50d9669d1.pdf",
+      "ingest_a20175e4-5330-43d8-b7aa-341e73accb3c.pdf",
+      "63fc273e8627e957804b24af636edfaf",
+      "3f1023f7b6b621bfd754525f3e3c7163",
+      "17bdc0b200df42586bdbbfeaa92088ef"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 10,
+      "stateCount": 3,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 3,
+      "distinctLocalDocs": 10
+    },
+    "debug": {
+      "durationMs": 20770,
+      "localSelected": 10,
+      "stateSelected": 3,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway school budget",
+          "Conway School District annual report",
+          "Conway school expenditures",
+          "Conway School Board financial report"
+        ],
+        "state": [
+          "NH school funding",
+          "NH state aid to education",
+          "RSA school district budget requirements",
+          "NH municipal finance school districts"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 10,
+        "stateRetrieved": 5,
+        "stateSelected": 3
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "budg-03",
+    "question": "Where can I find the town warrant articles?",
+    "town": "Bartlett",
+    "category": "budget",
+    "answerText": "Town warrant articles are public records. You can typically find these documents at the Bartlett town clerk's office. The town clerk is responsible for maintaining various public records and documents, which are generally open for public inspection and examination [L3, L4, L6, L7]. Town officers are not permitted to loan out public records or remove them from their usual keeping place, except for official duties [L3, L4, L6, L7].\n\nA town warrant article is a proposal presented to voters at a town meeting for consideration and action [S3]. The warrant outlines the articles that will be discussed and voted upon [S2]. For example, recent Bartlett warrants have included proposals to raise and appropriate funds for the Benefit Pay ETF, Police Vehicle ETF, and Recreation ETF [L1, L2, L5]. Other articles propose establishing new funds, such as a Technology Expendable Trust Fund or a Rail Trail ETF [L1, L5]. These articles often include recommendations from the Selectmen and Budget Committee [L1, L2, L5]. New Hampshire law requires the board of selectmen to post a warrant at least 14 days before the town meeting [S2]. Every article included in a warrant must be acted upon before the final adjournment of the meeting [S1].\n\nWord Count: 187",
+    "sourceDocumentNames": [
+      "73f56a94df33930378faa65bb8ee6061",
+      "e105b10e11d0213cd35a5fb33834f8c7",
+      "01100a4dbd4bdda1b146aef787cf4525",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt",
+      "ossipeetownreportdigital2024_ocr.txt",
+      "Chapter 33-A DISPOSITION OF MUNICIPAL RECORDS_ocr.txt",
+      "ecfb98678b110faf4807eee39ce46378",
+      "1efa2591d0d4de79db8599a55fa3e100",
+      "18402e21a4d7f338658d0bf2fd0ceb17",
+      "cbc18f9963c5155afabb5c234e0051de",
+      "233e6649c0c43b7281df62cb7cd0c658",
+      "Chapter 40 GOVERNMENT OF TOWN MEETING_ocr.txt"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 25791,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett town warrant articles",
+          "Bartlett annual town meeting documents",
+          "Bartlett town clerk records"
+        ],
+        "state": [
+          "NH town warrant articles law",
+          "RSA municipal warrant articles",
+          "NHMA warrant article guidance",
+          "New Hampshire annual town meeting procedure"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 11,
+        "localSelected": 7,
+        "stateRetrieved": 13,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "budg-04",
+    "question": "What happened with the bond vote last year?",
+    "town": "Madison",
+    "category": "budget",
+    "answerText": "The available documents do not contain specific information about a \"Madison 2023 bond vote\" [USER, L2, L4, L6, L8, L10]. However, records from a December 2022 meeting, which may relate to the 2023 budget cycle, show that the \"Bond Override (RSA 32:18-a), Amount Voted\" was recorded as $0 [L2, L4, L6, L8, L10]. The \"Maximum Allowable Appropriations Voted at Meeting\" was $8,035,306 [L2, L4, L6, L8, L10].\n\nIn New Hampshire, a municipal bond vote is a process for approving borrowing for projects. For any proposed bond issue exceeding $100,000, a public hearing must be held by the governing board [S1]. This hearing occurs between 15 and 60 days before the vote [S1]. Notice of the hearing must be published in a local newspaper at least seven days prior [S1]. Warrant articles for bond issues over $100,000 must appear consecutively and be acted upon early in the meeting [S1]. Polls must remain open for at least one hour after discussion on each bond article, with separate ballot boxes provided [S1].\n\nWord Count: 170",
+    "sourceDocumentNames": [
+      "2024_12_18_bc_mtg._minutes_0_ocr.txt",
+      "final_ms737_202212_ocr.txt",
+      "gemini-1769054293141.pdf",
+      "gemini-1769054988931.pdf",
+      "27255b39960b6fca567f6bbfcd910eae",
+      "44581f3b91e39d5515b07963651d97db",
+      "FY2027_Jan_Budget_Hearing_With_Notes_ocr.txt",
+      "2024_Election_Results_ocr.txt",
+      "73f56a94df33930378faa65bb8ee6061",
+      "ossipeetownreportdigital2024_ocr.txt",
+      "Chapter 33 MUNICIPAL FINANCE ACT_ocr.txt",
+      "a90f6760d831dba392ab313a29da4a9b"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 10,
+      "stateCount": 2,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 2,
+      "distinctLocalDocs": 10
+    },
+    "debug": {
+      "durationMs": 27467,
+      "localSelected": 10,
+      "stateSelected": 2,
+      "auditFlags": [
+        "format_violation:warning",
+        "uncited_rsa:error"
+      ],
+      "repairRan": true,
+      "planQueries": {
+        "local": [
+          "Madison bond vote last year",
+          "Madison 2023 bond vote",
+          "Madison town meeting bond article",
+          "Madison warrant article bond"
+        ],
+        "state": [
+          "NH municipal bond vote process",
+          "NH town meeting bond requirements",
+          "NH municipal finance law"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 13,
+        "localSelected": 10,
+        "stateRetrieved": 4,
+        "stateSelected": 2
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "budg-05",
+    "question": "How is the town budget approved?",
+    "town": "Ossipee",
+    "category": "budget",
+    "answerText": "The town budget approval process is a six-month cycle involving several stages and entities. It begins with department heads monitoring spending and preparing for the upcoming budget cycle [L1]. The Board of Selectmen, Town Administrator, and other financial administrators hold monthly meetings to consistently review the town's financial status [L1]. Department heads are responsible for preparing estimated expenditures and revenue projections, which are then submitted to the governing body [S1].\n\nThe Budget Committee reviews the proposed budget and provides its recommendations [L1, L2]. The Board of Selectmen also makes recommendations for the budget [L1]. Final approval of the budget, including general municipal operations, occurs at the annual Town Meeting [L1]. During this meeting, the Moderator guides attendees through each budget line item for discussion and potential amendments [L1]. A majority vote is required for the approval of each amount and the overall budget article [L1]. Fire Precincts in Ossipee follow this same budget approval process [L1].",
+    "sourceDocumentNames": [
+      "ingest_cfd76e4f-42e4-4463-b22c-f1f01f1eb96f.pdf",
+      "ingest_2560f763-e63d-4498-b848-c82340458967.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_c49aed4d-1b7c-41ee-a505-4651fc8987dd.pdf",
+      "ingest_24243019-180c-4f88-a215-3f652e550ddf.pdf",
+      "ingest_d61261e8-3949-4d25-9b95-ea1df164e375.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_d2c7b31f-1fb6-4ade-88ee-1a2ef45a5d10.pdf",
+      "ingest_7e9cfea9-e478-4d0b-b551-13e2d2902f96.pdf",
+      "d88ae3660749c42c66f4a52a459251cb",
+      "4d9a4a004c5ac50b3d1316f7c0b4743b",
+      "6df10c68037c137b156a2497c55d78e1",
+      "0f45d6dbe6b6540c341e15b1f6c727d4",
+      "8fd32cd4e1f7c4eab8036aedd93bd8ce"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 9,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 9
+    },
+    "debug": {
+      "durationMs": 15792,
+      "localSelected": 9,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee town budget approval process",
+          "Ossipee budget committee role",
+          "Ossipee town meeting budget vote",
+          "Ossipee deliberative session budget"
+        ],
+        "state": [
+          "NH municipal budget approval process",
+          "RSA town meeting budget",
+          "NH budget committee responsibilities",
+          "NH municipal finance law",
+          "NHMA budget process guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 9,
+        "localSelected": 9,
+        "stateRetrieved": 9,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-pub-01",
+    "question": "How do I request public records from the town?",
+    "town": "Ossipee",
+    "category": "records",
+    "answerText": "To request public records from the Town of Ossipee, the process depends on the type of record. For information from the Ossipee Police Department under the Right-to-Know Law, RSA 91-A, you must use their specific \"REQUEST FOR INFORMATION UNDER RIGHT TO KNOW LAW, RSA 91-A\" form [L1, L4]. This form requires the date and location of the incident or arrest, your name, address, phone number, and signature [L1, L4]. Costs include $0.50 per page for reports, $3.00 per photo, and $25.00 for video copies, with an additional $5.00 for mailed reports [L1, L4]. Checks or money orders should be made payable to the Ossipee Police [L1, L4]. The Police Department is located at 7 Dore St., PO Box 307, Center Ossipee, NH 03814 [L4, L7].\n\nAll requests under RSA 91-A are processed within five business days [L1, S1]. If records cannot be provided within this timeframe, you will receive written notification stating the reason, which may include invasion of privacy or confidentiality [L1]. For general public records requests concerning the Town of Ossipee, you can contact the Selectmen's Office at 55 Main Street, PO Box 67, Center Ossipee, NH 03814 [L1]. Their phone number is 603-539-4181, and their office hours are Monday-Friday from 8:00 AM to 4:30 PM [L1].",
+    "sourceDocumentNames": [
+      "ingest_9ba7b34d-dbcf-4987-8d28-8c58b76649e8.pdf",
+      "ingest_f6bc19c1-1c75-4c75-a7f3-e0dca76ac547.pdf",
+      "ingest_d40c6503-766a-4d66-a77f-b54bb4138489.pdf",
+      "ingest_b43f92a2-ce61-49c2-9266-80e2818f5013.pdf",
+      "ingest_6822b33e-7e29-4e07-8bc0-5dad5fd6bc03.pdf",
+      "ingest_3fc8aa64-ea2a-4aeb-ad49-2db16f444ca8.pdf",
+      "ingest_06d85677-6e50-409a-88a5-2c9246d13880.pdf",
+      "6df10c68037c137b156a2497c55d78e1",
+      "84cf6096622ad93e575f08fef33b4f6f",
+      "0f45d6dbe6b6540c341e15b1f6c727d4",
+      "cad737c261db952b3b4858d7711738ee",
+      "9ef480ffdda2c3e089f236a06d6bfe58"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 17302,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee public records request process",
+          "Ossipee Right-to-Know request form",
+          "Ossipee town clerk records request",
+          "Ossipee records access policy"
+        ],
+        "state": [
+          "NH Right-to-Know law",
+          "RSA 91-A public records",
+          "New Hampshire municipal public records request procedure",
+          "NHMA public records guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 7,
+        "stateRetrieved": 7,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-pub-02",
+    "question": "Where can I find meeting minutes from last month?",
+    "town": "Conway",
+    "category": "records",
+    "answerText": "Thank you for your inquiry regarding meeting minutes from last month. The Conway Board of Selectmen held a meeting on January 6, 2026. Minutes from this specific meeting are available for your review [L1, L3, L5, L7, L9]. These records document the proceedings, including the names of members present, the approval of the agenda, and specific actions taken. For example, the minutes detail the acceptance of donations for the Conway Fire Department Equipment Fund [L1].\n\nIn New Hampshire, public meeting minutes serve as the official record of governmental bodies. State law requires that these minutes include the names of members present, persons appearing before the public body, a brief description of the subject matter discussed, and any final decisions made [S1, S4]. Minutes must be promptly recorded and",
+    "sourceDocumentNames": [
+      "ingest_fdd42f1e-89d2-4299-bee3-cfb22c416f60.pdf",
+      "ingest_42ed9f29-a388-4685-be39-604355518112.pdf",
+      "ingest_97514644-3a7f-4e6a-98bf-83786da0a9ae.pdf",
+      "ingest_43497f35-5d9b-4b58-a63c-f2ff2f9fbcab.pdf",
+      "ingest_38a23adc-39c2-4fa2-9410-02f637461749.pdf",
+      "ingest_d5572465-1bd1-489f-821c-90f50d9669d1.pdf",
+      "ingest_279bd97a-9fd6-4581-9059-22f1b33fba46.pdf",
+      "ingest_39337d80-1d1e-4083-956f-b0fabb520bc3.pdf",
+      "ingest_1846ff86-ba5f-48c5-8336-a4e6a35d76f1.pdf",
+      "ingest_45312878-8eeb-42ae-9752-fea232bf06e1.pdf",
+      "6df10c68037c137b156a2497c55d78e1",
+      "0f45d6dbe6b6540c341e15b1f6c727d4",
+      "9ef480ffdda2c3e089f236a06d6bfe58",
+      "cc18b6e8538de9e2fe46602aed5ec532",
+      "f289b2e9223b1e674e1e4652d534b4fb"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Conway",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 10,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 10
+    },
+    "debug": {
+      "durationMs": 19067,
+      "localSelected": 10,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Conway meeting minutes last month",
+          "Conway board meeting minutes",
+          "Conway Town Clerk records",
+          "Conway official documents"
+        ],
+        "state": [
+          "NH public meeting minutes requirements",
+          "NH Right-to-Know law meeting minutes",
+          "NH municipal record retention schedule"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 10,
+        "localSelected": 10,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-pub-03",
+    "question": "How do I get a copy of my property deed?",
+    "town": "Bartlett",
+    "category": "records",
+    "answerText": "To obtain a copy of your property deed, you should contact the Register of Deeds office for the county where your property is located [S1]. This office serves as the official repository for recording various real estate documents in New Hampshire [S2].\n\nThe Bartlett Town Clerk maintains public records related to tax assessments and property inventories [L2]. These records include information such as the owner's name, lot and range numbers, and a description sufficient for identification [L2]. While these records are accessible for public inspection and copying, they are not the original property deeds themselves [L2]. To locate a specific deed at the Register of Deeds, providing details like the full name of the owner, the exact property address, or the date of the transaction can be helpful [L1]. For properties within Bartlett, you would typically contact the Register of Deeds for the relevant county.",
+    "sourceDocumentNames": [
+      "20251225214956189905000000_ocr.txt",
+      "Chapter 76 APPORTIONMENT, ASSESSMENT AND ABATEMENT OF TAXES_ocr.txt",
+      "gemini-1769054325727.pdf",
+      "107d12c49f1d02968b36c68f7336fe3c",
+      "01100a4dbd4bdda1b146aef787cf4525",
+      "Chapter 41 CHOICE AND DUTIES OF TOWN OFFICERS_ocr.txt",
+      "Chapter 33-A DISPOSITION OF MUNICIPAL RECORDS_ocr.txt",
+      "Chapter 53 UNINCORPORATED PLACES_ocr.txt",
+      "7eb3d167d25d9b7f98e30b3cea200fc0",
+      "73a5f5915176a0c8c173adb7ffd11d3d",
+      "gemini-1769572736325.pdf",
+      "e845fc58ab7a387047e1b5beec41d54f"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Bartlett",
+    "recordStrength": {
+      "tier": "C",
+      "localCount": 7,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 7
+    },
+    "debug": {
+      "durationMs": 14181,
+      "localSelected": 7,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Bartlett property deed copy",
+          "Bartlett Town Clerk property records",
+          "Bartlett Registry of Deeds"
+        ],
+        "state": [
+          "New Hampshire property deed copy",
+          "NH Registry of Deeds",
+          "NH public records property",
+          "NHMA property records guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 7,
+        "stateRetrieved": 8,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-pub-04",
+    "question": "Are planning board decisions public record?",
+    "town": "Madison",
+    "category": "records",
+    "answerText": "New Hampshire's Right-to-Know law, RSA 91-A, mandates that government proceedings and records be open and accessible to the public [S1]. This ensures transparency in the actions, discussions, and records of all public bodies, including the Planning Board [S1]. Any communication, including emails, related to public business is considered a \"governmental record\" [S1]. All such governmental records must be kept at the public body's office [S1]. Therefore, decisions made by the Planning Board are public records.\n\nThe primary way these decisions are made public is through approved meeting minutes. Approved Madison Planning Board meeting minutes are required to be made available for public inspection within five business days following the meeting [L2]. If the town maintains a website, these minutes must also be posted in a consistent and easily accessible location [L2]. Additionally, the Planning Board's rules of procedure, which outline how the board operates and conducts public hearings, must be adopted at a regular meeting and filed with the town clerk for public inspection [L1, S1]. These rules should also be available on the municipality's website [L1, S1]. Decisions made by the Planning Board, especially those interpreting zoning ordinances, are administrative decisions that can be appealed, further confirming their public status [S2].",
+    "sourceDocumentNames": [
+      "2025_08_05_pb_minutes-amended_ocr.txt",
+      "2025_01_07_pb_minutes_ocr.txt",
+      "2fde667c3a8a1b8618115981c26dde66",
+      "2df838c97a5296b3ac778bc298298864",
+      "f596fbe2c057a29b753d9368a647a622",
+      "c39b23dd0ebf7dc0038d2de8c0101763",
+      "b818b514dfb6905d86165e92b860e731",
+      "a8c49d21a7026547bba8adec2bbc96c4",
+      "gemini-1769572555586.pdf",
+      "c7ac85c77fe6577718f8500ce9aabfab",
+      "03a47d755f237933ddbf8155112b7919",
+      "84cf6096622ad93e575f08fef33b4f6f"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Madison",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 8,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 1,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 8
+    },
+    "debug": {
+      "durationMs": 16574,
+      "localSelected": 8,
+      "stateSelected": 5,
+      "auditFlags": [
+        "format_violation:warning"
+      ],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Madison planning board public records",
+          "Madison planning board meeting minutes access",
+          "Madison town clerk records access"
+        ],
+        "state": [
+          "NH public records law planning board",
+          "RSA 91-A planning board decisions",
+          "NHMA public records guidance planning board",
+          "New Hampshire municipal records access"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 11,
+        "localSelected": 8,
+        "stateRetrieved": 6,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  },
+  {
+    "questionId": "rec-pub-05",
+    "question": "How long does it take to fulfill a records request?",
+    "town": "Ossipee",
+    "category": "records",
+    "answerText": "For requests made to the Town of Ossipee Police Department under the Right-to-Know Law, RSA 91-A, the local policy states that all requests are to be fulfilled within five days [L1, L3]. A specific form is available for submitting these requests [L1]. If any information is withheld, the person making the request will receive written notification of the reason [L1]. Possible reasons for redaction or withholding include invasion of privacy, juvenile matters, or confidentiality [L1].\n\nNew Hampshire's Right-to-Know law, RSA 91-A, outlines the general requirements for governmental records [S2]. If a record is not immediately available, the public body must respond within five business days of the request [S1]. This response can involve providing the record, denying the request in writing with specific reasons, or acknowledging the request and stating the time reasonably needed to determine whether it will be granted or denied [S1]. An itemized cost estimate must also be included if a charge would be incurred [S1]. The Town of Ossipee Police Department charges $0.50 per page for reports, $3.00 for photos, and $25.00 for video copies [L1]. A $5.00 fee applies for reports sent by US Mail [L1]. Payments are made to Ossipee Police via check or money order [L1].",
+    "sourceDocumentNames": [
+      "ingest_9ba7b34d-dbcf-4987-8d28-8c58b76649e8.pdf",
+      "ingest_3fc8aa64-ea2a-4aeb-ad49-2db16f444ca8.pdf",
+      "ingest_1d25176e-ab2e-41a7-9885-e68cd027c274.pdf",
+      "ingest_58e8a86d-2486-4781-b584-ad08236ed575.pdf",
+      "ingest_794d4393-3c4f-4d19-be74-9c9f455c45b6.pdf",
+      "ingest_f6bc19c1-1c75-4c75-a7f3-e0dca76ac547.pdf",
+      "16f7f92a0e1e9e100034e4fa0afef8cc",
+      "cad737c261db952b3b4858d7711738ee",
+      "6df10c68037c137b156a2497c55d78e1",
+      "0f45d6dbe6b6540c341e15b1f6c727d4",
+      "84cf6096622ad93e575f08fef33b4f6f"
+    ],
+    "docSourceType": "mixed",
+    "docSourceTown": "Ossipee",
+    "recordStrength": {
+      "tier": "B",
+      "localCount": 6,
+      "stateCount": 5,
+      "situationAlignment": 0,
+      "legalTopicCoverage": 0.5,
+      "authoritativeStatePresent": true,
+      "distinctStateDocs": 5,
+      "distinctLocalDocs": 6
+    },
+    "debug": {
+      "durationMs": 15745,
+      "localSelected": 6,
+      "stateSelected": 5,
+      "auditFlags": [],
+      "repairRan": false,
+      "planQueries": {
+        "local": [
+          "Ossipee records request policy",
+          "Ossipee Right-to-Know procedure",
+          "Ossipee public records fulfillment time"
+        ],
+        "state": [
+          "NH Right-to-Know law records request timeline",
+          "RSA 91-A records request fulfillment",
+          "NHMA public records request guidance"
+        ]
+      },
+      "retrievalCounts": {
+        "localRetrieved": 7,
+        "localSelected": 6,
+        "stateRetrieved": 10,
+        "stateSelected": 5
+      }
+    },
+    "passed": true,
+    "failureReasons": []
+  }
+]

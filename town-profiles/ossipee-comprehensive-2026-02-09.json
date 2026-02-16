@@ -1,0 +1,49 @@
+{
+  "town": "Ossipee",
+  "extractedAt": "2026-02-09T03:16:15.621Z",
+  "sourceUrl": "https://www.ossipee.org",
+  "boards": {
+    "select_board": {
+      "name": "Select Board",
+      "location": "Town Hall"
+    },
+    "selectmen_board": {
+      "name": "Selectmen Board",
+      "location": "Town Hall"
+    },
+    "budget_board": {
+      "name": "Budget Board"
+    },
+    "conservation_board": {
+      "name": "Conservation Board"
+    },
+    "planning_board": {
+      "name": "Planning Board"
+    },
+    "zoning_board": {
+      "name": "Zoning Board"
+    }
+  },
+  "departments": {},
+  "pagesExplored": [
+    "https://www.ossipee.org",
+    "https://www.ossipee.org/boards",
+    "https://www.ossipee.org/board-of-selectmen",
+    "https://www.ossipee.org/board-of-healthhealth-officer",
+    "https://www.ossipee.org/board-of-selectmen/pages/ordinances-regulations-forms",
+    "https://www.ossipee.org/board-of-selectmen/links/selectmens-office",
+    "https://www.ossipee.org/budget-committee",
+    "https://www.ossipee.org/budget-committee/pages/budget-information",
+    "https://www.ossipee.org/budget-committee/links/state-of-nh-rsas",
+    "https://www.ossipee.org/planning-board",
+    "https://www.ossipee.org/planning-board/pages/planning-forms",
+    "https://www.ossipee.org/zoning-board-of-adjustment"
+  ],
+  "strategiesUsed": [
+    "Link extraction",
+    "Common URL patterns"
+  ],
+  "townHall": {
+    "phone": "(603) 539-4181"
+  }
+}

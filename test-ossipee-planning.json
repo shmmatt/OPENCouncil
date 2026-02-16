@@ -1,0 +1,36 @@
+[
+  {
+    "id": "ossipee-planning-01",
+    "message": "When does the Ossipee Planning Board meet?",
+    "town": "Ossipee",
+    "category": "planning-board-meetings",
+    "description": "Meeting schedule question",
+    "expectedBehaviors": {
+      "minSources": 1,
+      "minLocalChunks": 2
+    }
+  },
+  {
+    "id": "ossipee-planning-02",
+    "message": "What is the process for getting a site plan approved by the Ossipee Planning Board?",
+    "town": "Ossipee",
+    "category": "planning-board-process",
+    "description": "Procedural question about site plan approval",
+    "expectedBehaviors": {
+      "minSources": 2,
+      "minLocalChunks": 3,
+      "shouldMentionTopics": ["site plan", "application"]
+    }
+  },
+  {
+    "id": "ossipee-planning-03",
+    "message": "Who are the current members of the Ossipee Planning Board?",
+    "town": "Ossipee",
+    "category": "planning-board-members",
+    "description": "Board membership question",
+    "expectedBehaviors": {
+      "minSources": 1,
+      "minLocalChunks": 1
+    }
+  }
+]

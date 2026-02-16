@@ -1,0 +1,358 @@
+[
+  {
+    "name": "Albany",
+    "url": "https://albanynh.org",
+    "success": true,
+    "docsFound": 1249,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [
+      "/documents",
+      "/minutes",
+      "/applications"
+    ],
+    "categories": {
+      "misc": 1039,
+      "minutes": 170,
+      "reports": 17,
+      "budget": 2,
+      "forms": 11,
+      "ordinances": 7,
+      "regulations": 3
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/albany.log"
+  },
+  {
+    "name": "Bartlett",
+    "url": "https://www.townofbartlett.nh.gov",
+    "success": true,
+    "docsFound": 160,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "CivicPlus",
+    "workingPages": [
+      "/DocumentCenter",
+      "/AgendaCenter",
+      "/FormCenter"
+    ],
+    "categories": {
+      "agendas": 99,
+      "minutes": 31,
+      "forms": 11,
+      "misc": 17,
+      "regulations": 1,
+      "ordinances": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/bartlett.log"
+  },
+  {
+    "name": "Brookfield",
+    "url": "https://www.brookfieldnh.gov",
+    "success": true,
+    "docsFound": 0,
+    "strategiesUsed": [
+      "Index Pages"
+    ],
+    "cms": "Custom",
+    "workingPages": [],
+    "categories": {},
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/brookfield.log"
+  },
+  {
+    "name": "Chatham",
+    "url": "https://www.chathamnh.org",
+    "success": true,
+    "docsFound": 253,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [],
+    "categories": {
+      "minutes": 211,
+      "misc": 30,
+      "reports": 8,
+      "forms": 2,
+      "ordinances": 1,
+      "regulations": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/chatham.log"
+  },
+  {
+    "name": "Conway",
+    "url": "https://conwaynh.gov",
+    "success": true,
+    "docsFound": 239,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "Custom",
+    "workingPages": [
+      "/documents"
+    ],
+    "categories": {
+      "misc": 185,
+      "forms": 33,
+      "reports": 19,
+      "regulations": 2
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/conway.log"
+  },
+  {
+    "name": "Eaton",
+    "url": "https://www.eatonnh.gov",
+    "success": true,
+    "docsFound": 65,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [
+      "/applications",
+      "/regulations"
+    ],
+    "categories": {
+      "misc": 42,
+      "forms": 11,
+      "ordinances": 2,
+      "minutes": 10
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/eaton.log"
+  },
+  {
+    "name": "Effingham",
+    "url": "https://effinghamnh.net",
+    "success": true,
+    "docsFound": 262,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "Custom",
+    "workingPages": [
+      "/documents"
+    ],
+    "categories": {
+      "misc": 183,
+      "reports": 32,
+      "forms": 14,
+      "ordinances": 11,
+      "minutes": 11,
+      "agendas": 5,
+      "budget": 4,
+      "regulations": 2
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/effingham.log"
+  },
+  {
+    "name": "Freedom",
+    "url": "https://townoffreedomnh.gov",
+    "success": true,
+    "docsFound": 1594,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [
+      "/boards",
+      "/applications",
+      "/regulations"
+    ],
+    "categories": {
+      "forms": 28,
+      "misc": 1216,
+      "ordinances": 10,
+      "regulations": 1,
+      "minutes": 326,
+      "reports": 9,
+      "agendas": 3,
+      "budget": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/freedom.log"
+  },
+  {
+    "name": "Hart's Location",
+    "url": "https://hartslocation.com",
+    "success": true,
+    "docsFound": 35,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [],
+    "categories": {
+      "misc": 17,
+      "reports": 11,
+      "ordinances": 4,
+      "forms": 2,
+      "regulations": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/hart-s-location.log"
+  },
+  {
+    "name": "Jackson",
+    "url": "https://www.jackson-nh.gov",
+    "success": true,
+    "docsFound": 98,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [],
+    "categories": {
+      "misc": 87,
+      "forms": 7,
+      "ordinances": 1,
+      "regulations": 1,
+      "budget": 1,
+      "reports": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/jackson.log"
+  },
+  {
+    "name": "Madison",
+    "url": "https://madison-nh.org",
+    "success": true,
+    "docsFound": 0,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "WordPress",
+    "workingPages": [],
+    "categories": {},
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/madison.log"
+  },
+  {
+    "name": "Moultonborough",
+    "url": "https://moultonboroughnh.gov",
+    "success": true,
+    "docsFound": 162,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "CivicPlus",
+    "workingPages": [
+      "/AgendaCenter",
+      "/FormCenter"
+    ],
+    "categories": {
+      "agendas": 81,
+      "forms": 47,
+      "minutes": 34
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/moultonborough.log"
+  },
+  {
+    "name": "Ossipee",
+    "url": "https://www.ossipee.org",
+    "success": true,
+    "docsFound": 0,
+    "strategiesUsed": [
+      "Index Pages"
+    ],
+    "cms": "Custom",
+    "workingPages": [],
+    "categories": {},
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/ossipee.log"
+  },
+  {
+    "name": "Sandwich",
+    "url": "https://www.sandwichnh.com",
+    "success": true,
+    "docsFound": 0,
+    "strategiesUsed": [
+      "Index Pages"
+    ],
+    "cms": "Custom",
+    "workingPages": [],
+    "categories": {},
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/sandwich.log"
+  },
+  {
+    "name": "Tamworth",
+    "url": "https://tamworthnh.gov",
+    "success": true,
+    "docsFound": 378,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "CivicPlus",
+    "workingPages": [
+      "/AgendaCenter",
+      "/FormCenter"
+    ],
+    "categories": {
+      "agendas": 277,
+      "minutes": 96,
+      "forms": 4,
+      "misc": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/tamworth.log"
+  },
+  {
+    "name": "Tuftonboro",
+    "url": "https://www.tuftonboronh.gov",
+    "success": true,
+    "docsFound": 0,
+    "strategiesUsed": [
+      "Index Pages"
+    ],
+    "cms": "Custom",
+    "workingPages": [],
+    "categories": {},
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/tuftonboro.log"
+  },
+  {
+    "name": "Wakefield",
+    "url": "https://www.wakefieldnh.gov",
+    "success": true,
+    "docsFound": 7,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "CivicPlus",
+    "workingPages": [],
+    "categories": {
+      "misc": 7
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/wakefield.log"
+  },
+  {
+    "name": "Wolfeboro",
+    "url": "https://www.wolfeboronh.us",
+    "success": true,
+    "docsFound": 120,
+    "strategiesUsed": [
+      "Index Pages",
+      "Navigation Following"
+    ],
+    "cms": "CivicPlus",
+    "workingPages": [
+      "/DocumentCenter",
+      "/AgendaCenter",
+      "/FormCenter"
+    ],
+    "categories": {
+      "forms": 51,
+      "agendas": 42,
+      "minutes": 26,
+      "misc": 1
+    },
+    "logFile": "/home/ubuntu/.openclaw/workspace/OPENCouncil/crawl-logs/wolfeboro.log"
+  }
+]

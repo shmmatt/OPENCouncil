@@ -1,0 +1,28 @@
+
+> rest-express@1.0.0 crawl:universal:v2
+> tsx --env-file=.env scripts/universal-document-crawler-v2.ts --town Sandwich --url https://www.sandwichnh.com --dry-run
+
+
+============================================================
+📄 Universal Document Crawler V2
+🏛️  Town: Sandwich
+🌐 URL: https://www.sandwichnh.com
+📊 Max pages: 200
+============================================================
+
+🗺️  Checking sitemap.xml...
+   Sitemap fetch failed: fetch failed
+   Generated 0 year variants
+
+🏠 Loading homepage...
+   ⚠️  Homepage load failed: page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.sandwichnh.com/", waiting until "domcontentloaded"
+
+   Will rely on sitemap URLs
+
+📋 Building page visit queue...
+   Total pages to visit: 200
+
+📥 Visiting pages and extracting documents...
+✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗✗

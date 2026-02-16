@@ -1,0 +1,71 @@
+{
+  "completedAt": "2026-02-09T17:31:13.563Z",
+  "durationMinutes": 4,
+  "total": 14,
+  "excluded": [
+    "Conway",
+    "Ossipee"
+  ],
+  "successful": 12,
+  "failed": 2,
+  "results": [
+    {
+      "town": "Albany",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Bartlett",
+      "success": true
+    },
+    {
+      "town": "Brookfield",
+      "success": true
+    },
+    {
+      "town": "Chatham",
+      "success": true
+    },
+    {
+      "town": "Eaton",
+      "success": true
+    },
+    {
+      "town": "Effingham",
+      "success": true
+    },
+    {
+      "town": "Freedom",
+      "success": true
+    },
+    {
+      "town": "Jackson",
+      "success": true
+    },
+    {
+      "town": "Madison",
+      "success": false,
+      "error": "Exit code 1"
+    },
+    {
+      "town": "Moultonborough",
+      "success": true
+    },
+    {
+      "town": "Sandwich",
+      "success": true
+    },
+    {
+      "town": "Tuftonboro",
+      "success": true
+    },
+    {
+      "town": "Wakefield",
+      "success": true
+    },
+    {
+      "town": "Wolfeboro",
+      "success": true
+    }
+  ]
+}

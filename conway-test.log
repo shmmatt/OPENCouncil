@@ -1,0 +1,30 @@
+
+> rest-express@1.0.0 crawl:beast
+> tsx --env-file=.env scripts/beast-document-crawler.ts --town Conway --url https://conwaynh.gov --max-docs 10 --dry-run
+
+
+🦁 BEAST DOCUMENT CRAWLER
+Town: Conway
+URL: https://conwaynh.gov
+Max depth: 3
+Max documents: 10
+Dry run: true
+Skip existing: true
+
+🚀 Launching browser...
+
+🔍 PHASE 1: DISCOVERY
+
+📋 Strategy 1: TownCloud API
+  🔍 Checking TownCloud API...
+  ✅ TownCloud API: 10 pages
+
+🏠 Strategy 2: Homepage Analysis
+  Loading homepage...
+  ✅ Found 0 documents on homepage
+
+📍 Strategy 3: Sitemap Parsing
+  🗺️  Checking sitemap...
+  ✅ Sitemap: 17 URLs
+
+🎯 Strategy 4: Common URL Patterns (34 patterns)

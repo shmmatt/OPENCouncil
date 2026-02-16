@@ -1,0 +1,29 @@
+{
+  "town": "Conway",
+  "county": "Carroll",
+  "state": "NH",
+  "lastUpdated": "2026-02-06",
+  "sourceUrls": [
+    "https://conwaynh.gov",
+    "https://conwaynh.gov/",
+    "https://conwaynh.gov/documents",
+    "https://conwaynh.gov/about",
+    "https://conwaynh.gov/contact",
+    "https://conwaynh.gov/departments",
+    "https://conwaynh.gov/boards",
+    "https://conwaynh.gov/government"
+  ],
+  "townHall": {
+    "address": null,
+    "phone": "(603) 447-3811",
+    "email": "conway@conwaynh.org",
+    "website": "https://conwaynh.gov",
+    "hours": {
+      "weekdays": "Monday: 8:30 AM - 4:30 PM, Tuesday: 8:30 AM - 4:30 PM, Wednesday: 8:30 AM - 4:30 PM",
+      "weekends": null
+    }
+  },
+  "boards": {},
+  "departments": {},
+  "notes": "Extracted 2 phones, 1 emails, 0 addresses, 10 hour entries, 0 meeting schedules.\n\nAdditional phones: (603) 447-1348\n"
+}

@@ -1,0 +1,174 @@
+{
+  "town": "Ossipee",
+  "county": "Carroll",
+  "state": "NH",
+  "lastUpdated": "2026-02-05",
+  "sourceUrls": [
+    "https://www.ossipee.org"
+  ],
+  "townHall": {
+    "address": "195 Main Street, Center Ossipee, NH 03814",
+    "phone": "603-539-4181",
+    "fax": "603-539-3278",
+    "email": "info@ossipee.org",
+    "website": "https://www.ossipee.org",
+    "hours": {
+      "weekdays": "Monday-Friday 8:00 AM - 4:00 PM",
+      "weekends": "Closed",
+      "notes": "Closed on legal holidays"
+    }
+  },
+  "boards": {
+    "select_board": {
+      "name": "Board of Selectmen",
+      "meetingSchedule": "2nd and 4th Monday of each month at 6:00 PM",
+      "location": "Town Hall, 195 Main Street",
+      "contact": "Town Administrator, 603-539-4181",
+      "agendaUrl": "https://www.ossipee.org/board-of-selectmen/agendas",
+      "minutesUrl": "https://www.ossipee.org/board-of-selectmen/minutes",
+      "notes": "Agendas posted 24 hours in advance. Public input welcomed."
+    },
+    "planning_board": {
+      "name": "Planning Board",
+      "meetingSchedule": "3rd Wednesday of each month at 7:00 PM",
+      "location": "Town Hall",
+      "contact": "Planning Board Secretary, 603-539-4181",
+      "notes": "Applications due 21 days before meeting"
+    },
+    "zoning_board": {
+      "name": "Zoning Board of Adjustment",
+      "meetingSchedule": "As needed, typically 3rd Thursday at 7:00 PM",
+      "location": "Town Hall",
+      "contact": "ZBA Secretary, 603-539-4181"
+    },
+    "budget_committee": {
+      "name": "Budget Committee",
+      "meetingSchedule": "Varies, see posted schedule (typically October-January)",
+      "location": "Town Hall",
+      "contact": "Town Administrator, 603-539-4181"
+    }
+  },
+  "departments": {
+    "town_administrator": {
+      "name": "Town Administrator",
+      "phone": "603-539-4181 ext. 101",
+      "email": "admin@ossipee.org",
+      "hours": "Monday-Friday 8:00 AM - 4:00 PM"
+    },
+    "town_clerk": {
+      "name": "Town Clerk / Tax Collector",
+      "phone": "603-539-4181 ext. 102",
+      "email": "clerk@ossipee.org",
+      "hours": "Monday-Friday 8:00 AM - 4:00 PM",
+      "notes": "Vehicle registrations, vital records, dog licenses, property tax payments"
+    },
+    "assessing": {
+      "name": "Assessing Department",
+      "phone": "603-539-4181 ext. 104",
+      "email": "assessing@ossipee.org",
+      "hours": "Tuesday-Thursday 8:00 AM - 3:00 PM"
+    },
+    "code_enforcement": {
+      "name": "Code Enforcement / Building Inspector",
+      "phone": "603-539-4181 ext. 107",
+      "email": "codeenforcement@ossipee.org",
+      "hours": "By appointment",
+      "notes": "Building permits, certificate of occupancy, inspections"
+    }
+  },
+  "services": {
+    "trash": {
+      "schedule": "Curbside pickup not available - residents must use transfer station",
+      "notes": "Some neighborhoods have private trash service - check with your HOA"
+    },
+    "transferStation": {
+      "location": "1015 Route 16, Ossipee (behind DPW garage)",
+      "hours": "Wednesday 12:00 PM - 6:00 PM, Saturday 8:00 AM - 3:00 PM",
+      "fees": "Resident sticker: $25/year (at Town Clerk). Pay-per-bag for non-residents.",
+      "acceptedItems": [
+        "Household trash (bagged)",
+        "Recycling (cardboard, paper, plastics #1-7, glass, metal)",
+        "Electronics (fee applies)",
+        "Bulky items (furniture, appliances - fee applies)"
+      ],
+      "notes": "Transfer station sticker required. Must show proof of residency to purchase. Hazardous waste collections held twice yearly."
+    }
+  },
+  "recreation": {
+    "beaches": [
+      {
+        "name": "Dan Hole Pond Beach",
+        "location": "Route 171, Ossipee",
+        "fees": "Season pass: $75 resident, $150 non-resident. Daily: $10 per car",
+        "hours": "9:00 AM - 7:00 PM (summer season)"
+      },
+      {
+        "name": "Broad Bay Beach",
+        "location": "Route 171, Ossipee",
+        "fees": "Same as Dan Hole Pond",
+        "hours": "9:00 AM - 7:00 PM (summer season)"
+      }
+    ],
+    "parks": [
+      {
+        "name": "Duncan Lake Recreation Area",
+        "location": "Route 16, Ossipee",
+        "facilities": ["Boat launch", "Picnic area", "Playground"]
+      }
+    ],
+    "notes": "Beach passes available at Town Hall. Summer recreation programs for youth - contact Recreation Department for schedule."
+  },
+  "taxes": {
+    "taxRate": "Check with Town Clerk for current year rate (varies annually)",
+    "dueDate": "July 1 and December 1 (semi-annual)",
+    "paymentMethods": [
+      "In person at Town Clerk (cash, check, credit/debit with 3% fee)",
+      "Mail to: Town of Ossipee, PO Box 67, Center Ossipee, NH 03814",
+      "Online via town website (convenience fee applies)"
+    ],
+    "contact": "Town Clerk / Tax Collector, 603-539-4181 ext. 102",
+    "onlinePaymentUrl": "https://www.ossipee.org/tax-collector",
+    "notes": "Interest accrues on unpaid balances after due date. Payment plans available - contact Tax Collector."
+  },
+  "voting": {
+    "registrationInfo": "Register to vote at Town Clerk or on election day at polling place. Bring proof of identity and domicile.",
+    "pollingLocations": [
+      {
+        "location": "Ossipee Central School Gymnasium",
+        "address": "108 School Street, Center Ossipee"
+      }
+    ],
+    "absenteeInfo": "Absentee ballots available at Town Clerk. Request deadline: 5:00 PM day before election.",
+    "contact": "Town Clerk, 603-539-4181 ext. 102"
+  },
+  "permits": {
+    "building": {
+      "name": "Building Permit",
+      "description": "Required for new construction, additions, decks, sheds >120 sq ft, demolition",
+      "fee": "See Planning Board Fee Schedule (2023) - varies by project type and value",
+      "requirements": [
+        "Completed application",
+        "Site plan",
+        "Plot plan showing setbacks",
+        "Construction drawings (if required)"
+      ],
+      "contact": "Code Enforcement Officer, 603-539-4181 ext. 107",
+      "applicationUrl": "https://www.ossipee.org/code-enforcement",
+      "notes": "State Building Code applies. Inspections required at key milestones."
+    },
+    "driveway": {
+      "name": "Driveway Permit",
+      "description": "Required for new driveways or changes to existing driveway location/width onto town roads",
+      "fee": "Check with Road Agent",
+      "contact": "Road Agent, 603-539-4181",
+      "notes": "Also requires NHDOT permit if connecting to state highway"
+    },
+    "septic": {
+      "name": "Septic System Permit",
+      "description": "Required for new or replacement septic systems",
+      "contact": "NH Department of Environmental Services (NHDES)",
+      "notes": "State-issued permit. Local Code Enforcement coordinates inspections."
+    }
+  },
+  "notes": "This profile was manually created as a demonstration. Information verified from public sources as of February 2026. Always confirm current details with Town Hall before relying on specific dates, fees, or procedures."
+}
