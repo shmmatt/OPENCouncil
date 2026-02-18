@@ -1,0 +1,72 @@
+{
+  "meetings": [
+    {"id": "meet-01", "message": "When is the next Ossipee Select Board meeting?", "town": "Ossipee", "category": "meetings"},
+    {"id": "meet-02", "message": "What time does the Conway planning board meet?", "town": "Conway", "category": "meetings"},
+    {"id": "meet-03", "message": "Where can I find the agenda for the next Bartlett town meeting?", "town": "Bartlett", "category": "meetings"},
+    {"id": "meet-04", "message": "How do I get on the agenda for the Ossipee Select Board meeting?", "town": "Ossipee", "category": "meetings"},
+    {"id": "meet-05", "message": "Are town meetings in Albany open to the public?", "town": "Albany", "category": "meetings"}
+  ],
+  "contact": [
+    {"id": "cont-01", "message": "What are the office hours for the Conway town clerk?", "town": "Conway", "category": "contact"},
+    {"id": "cont-02", "message": "How do I contact the Ossipee tax collector?", "town": "Ossipee", "category": "contact"},
+    {"id": "cont-03", "message": "What's the phone number for the Madison town office?", "town": "Madison", "category": "contact"},
+    {"id": "cont-04", "message": "Is the Bartlett town hall open on weekends?", "town": "Bartlett", "category": "contact"},
+    {"id": "cont-05", "message": "Who is the current town administrator in Ossipee?", "town": "Ossipee", "category": "contact"}
+  ],
+  "permits": [
+    {"id": "perm-01", "message": "How do I apply for a building permit in Ossipee?", "town": "Ossipee", "category": "permits"},
+    {"id": "perm-02", "message": "What documents do I need for a driveway permit in Conway?", "town": "Conway", "category": "permits"},
+    {"id": "perm-03", "message": "How much does a building permit cost in Bartlett?", "town": "Bartlett", "category": "permits"},
+    {"id": "perm-04", "message": "Do I need a permit to install a shed in my backyard in Ossipee?", "town": "Ossipee", "category": "permits"},
+    {"id": "perm-05", "message": "How long does it take to get a septic permit approved?", "town": "Conway", "category": "permits"}
+  ],
+  "taxes": [
+    {"id": "tax-01", "message": "When are property taxes due in Ossipee?", "town": "Ossipee", "category": "taxes"},
+    {"id": "tax-02", "message": "What is the current tax rate in Conway?", "town": "Conway", "category": "taxes"},
+    {"id": "tax-03", "message": "How do I pay my property taxes online?", "town": "Bartlett", "category": "taxes"},
+    {"id": "tax-04", "message": "Can I set up a payment plan for my property taxes in Madison?", "town": "Madison", "category": "taxes"},
+    {"id": "tax-05", "message": "How do I apply for an abatement on my property taxes?", "town": "Ossipee", "category": "taxes"}
+  ],
+  "voting": [
+    {"id": "vote-01", "message": "How do I register to vote in Carroll County?", "town": "Ossipee", "category": "voting"},
+    {"id": "vote-02", "message": "Where is my polling place in Conway?", "town": "Conway", "category": "voting"},
+    {"id": "vote-03", "message": "Can I vote absentee in the next election?", "town": "Bartlett", "category": "voting"},
+    {"id": "vote-04", "message": "What do I need to bring to register to vote on election day?", "town": "Madison", "category": "voting"},
+    {"id": "vote-05", "message": "When is the deadline to request an absentee ballot?", "town": "Ossipee", "category": "voting"}
+  ],
+  "zoning": [
+    {"id": "zone-01", "message": "What is my property zoned as in Ossipee?", "town": "Ossipee", "category": "zoning"},
+    {"id": "zone-02", "message": "Can I run a business from my home in Conway?", "town": "Conway", "category": "zoning"},
+    {"id": "zone-03", "message": "What are the setback requirements for building in Bartlett?", "town": "Bartlett", "category": "zoning"},
+    {"id": "zone-04", "message": "How do I request a zoning variance in Madison?", "town": "Madison", "category": "zoning"},
+    {"id": "zone-05", "message": "Are there any wetland restrictions on my property?", "town": "Ossipee", "category": "zoning"}
+  ],
+  "services": [
+    {"id": "serv-01", "message": "What day is trash pickup in my neighborhood in Ossipee?", "town": "Ossipee", "category": "services"},
+    {"id": "serv-02", "message": "How do I get a dump sticker in Conway?", "town": "Conway", "category": "services"},
+    {"id": "serv-03", "message": "Does Bartlett have curbside recycling?", "town": "Bartlett", "category": "services"},
+    {"id": "serv-04", "message": "What items can I bring to the transfer station?", "town": "Madison", "category": "services"},
+    {"id": "serv-05", "message": "Is there a hazardous waste collection day coming up?", "town": "Ossipee", "category": "services"}
+  ],
+  "recreation": [
+    {"id": "rec-01", "message": "Where are the public beaches in Ossipee?", "town": "Ossipee", "category": "recreation"},
+    {"id": "rec-02", "message": "How do I register my child for summer camp in Conway?", "town": "Conway", "category": "recreation"},
+    {"id": "rec-03", "message": "Are dogs allowed at town parks in Bartlett?", "town": "Bartlett", "category": "recreation"},
+    {"id": "rec-04", "message": "What hiking trails are maintained by the town of Madison?", "town": "Madison", "category": "recreation"},
+    {"id": "rec-05", "message": "How much does a beach pass cost?", "town": "Ossipee", "category": "recreation"}
+  ],
+  "budget": [
+    {"id": "budg-01", "message": "What is the town budget for Ossipee this year?", "town": "Ossipee", "category": "budget"},
+    {"id": "budg-02", "message": "How much does Conway spend on schools?", "town": "Conway", "category": "budget"},
+    {"id": "budg-03", "message": "Where can I find the town warrant articles?", "town": "Bartlett", "category": "budget"},
+    {"id": "budg-04", "message": "What happened with the bond vote last year?", "town": "Madison", "category": "budget"},
+    {"id": "budg-05", "message": "How is the town budget approved?", "town": "Ossipee", "category": "budget"}
+  ],
+  "records": [
+    {"id": "rec-01", "message": "How do I request public records from the town?", "town": "Ossipee", "category": "records"},
+    {"id": "rec-02", "message": "Where can I find meeting minutes from last month?", "town": "Conway", "category": "records"},
+    {"id": "rec-03", "message": "How do I get a copy of my property deed?", "town": "Bartlett", "category": "records"},
+    {"id": "rec-04", "message": "Are planning board decisions public record?", "town": "Madison", "category": "records"},
+    {"id": "rec-05", "message": "How long does it take to fulfill a records request?", "town": "Ossipee", "category": "records"}
+  ]
+}

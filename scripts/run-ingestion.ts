@@ -1,10 +1,24 @@
 
+import "dotenv/config";
 import { discoverS3Files } from "../server/services/ingestionDiscovery";
 import { processPendingFiles } from "../server/services/ingestionWorker";
 
 async function main() {
   const args = process.argv.slice(2);
-  const mode = args[0] || "all"; // 'discover', 'worker', 'all'
+  let mode = "all";
+  let batchSize = 5;
+  
+  // Parse arguments
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--batch-size" && args[i + 1]) {
+      batchSize = parseInt(args[i + 1]);
+      i++;
+    } else if (!args[i].startsWith("--")) {
+      mode = args[i]; // 'discover', 'worker', 'all'
+    }
+  }
+
+  console.log(`[RunIngestion] Mode: ${mode}, Batch size: ${batchSize}`);
 
   try {
     if (mode === "discover" || mode === "all") {
@@ -19,7 +33,7 @@ async function main() {
       let totalErrors = 0;
       
       while (true) {
-        const result = await processPendingFiles(5); // Small batch
+        const result = await processPendingFiles(batchSize);
         totalProcessed += result.processed;
         totalErrors += result.errors;
 

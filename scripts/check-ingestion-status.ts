@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import "dotenv/config";
 import { db, sql } from '../server/storage/db';
 
 async function main() {

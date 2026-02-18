@@ -1,7 +1,20 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, numeric, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, numeric, unique, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Custom type for pgvector
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType(config) {
+    return `vector(${config?.dimensions ?? 768})`;
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value.slice(1, -1).split(",").map(Number);
+  },
+});
 
 export const admins = pgTable("admins", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -515,6 +528,55 @@ export interface ActorIdentifier {
   userId?: string;
   anonId?: string;
 }
+
+// ============================================================
+// PGVECTOR EMBEDDING TABLES
+// ============================================================
+
+// Document chunks with embeddings for semantic search
+export const documentChunks = pgTable("document_chunks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentVersionId: varchar("document_version_id").notNull().references(() => documentVersions.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(), // 0-based chunk number within document
+  content: text("content").notNull(), // The actual text chunk
+  embedding: vector("embedding", { dimensions: 768 }).notNull(), // Gemini embedding (768 dimensions)
+  town: text("town").notNull(), // Denormalized for filtering
+  category: text("category").notNull(), // Denormalized for filtering
+  board: text("board"), // Denormalized for filtering
+  year: text("year"), // Denormalized for filtering
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Embedding generation jobs (tracks which documents have been embedded)
+export const embeddingJobs = pgTable("embedding_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentVersionId: varchar("document_version_id").notNull().references(() => documentVersions.id, { onDelete: "cascade" }).unique(),
+  status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'
+  chunkCount: integer("chunk_count"), // Number of chunks created
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Insert schemas for embedding tables
+export const insertDocumentChunkSchema = createInsertSchema(documentChunks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertEmbeddingJobSchema = createInsertSchema(embeddingJobs).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for embedding tables
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type InsertDocumentChunk = z.infer<typeof insertDocumentChunkSchema>;
+
+export type EmbeddingJob = typeof embeddingJobs.$inferSelect;
+export type InsertEmbeddingJob = z.infer<typeof insertEmbeddingJobSchema>;
+
+export type EmbeddingJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 // ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
