@@ -11,7 +11,7 @@
 
 import { logDebug, logInfo } from "../utils/logger";
 import { runPlannerV3 } from "./plannerV3";
-import { twoLaneRetrieveWithPlan, type V3RetrievalResult } from "./twoLaneRetrieve";
+import { type V3RetrievalResult } from "./twoLaneRetrieve";
 import { pgvectorTwoLaneRetrieveWithPlan } from "./pgvectorRetrieveAdapter";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
@@ -148,45 +148,36 @@ export async function runChatV3Pipeline(
   // =====================================================
   // STAGE 2: RETRIEVE
   // =====================================================
-  const retrievalBackend = chatConfigV3.RETRIEVAL_BACKEND;
-  let retrievalResult: V3RetrievalResult;
+  logInfo("v3_retrieval_pgvector", {
+    requestId: logContext?.requestId,
+    stage: "v3_retrieval",
+  });
 
-  const retrievalOpts = {
-    townPreference,
-    situationContext: effectiveSituationContext,
-    logContext,
-  };
+  const retrievalResult: V3RetrievalResult = await pgvectorTwoLaneRetrieveWithPlan(
+    retrievalPlan,
+    issueMap,
+    {
+      townPreference,
+      situationContext: effectiveSituationContext,
+      logContext,
+    },
+  );
 
-  if (retrievalBackend === "pgvector" || retrievalBackend === "hybrid") {
-    logInfo("v3_retrieval_using_pgvector", {
+  const totalChunks = retrievalResult.localCount + retrievalResult.stateCount;
+
+  if (totalChunks === 0) {
+    logInfo("v3_retrieval_empty", {
       requestId: logContext?.requestId,
       stage: "v3_retrieval",
-      backend: retrievalBackend,
+      message: "pgvector returned zero chunks — synthesis will rely on general knowledge only",
     });
-    try {
-      retrievalResult = await pgvectorTwoLaneRetrieveWithPlan(
-        retrievalPlan,
-        issueMap,
-        retrievalOpts,
-      );
-
-      if (retrievalBackend === "hybrid" && retrievalResult.localCount + retrievalResult.stateCount < 3) {
-        logInfo("v3_hybrid_fallback_to_gemini", {
-          requestId: logContext?.requestId,
-          stage: "v3_retrieval",
-          reason: "insufficient_pgvector_results",
-        });
-        retrievalResult = await twoLaneRetrieveWithPlan(retrievalPlan, issueMap, retrievalOpts);
-      }
-    } catch (pgError) {
-      logInfo("v3_pgvector_retrieval_failed_fallback_gemini", {
-        requestId: logContext?.requestId,
-        stage: "v3_retrieval",
-      });
-      retrievalResult = await twoLaneRetrieveWithPlan(retrievalPlan, issueMap, retrievalOpts);
-    }
-  } else {
-    retrievalResult = await twoLaneRetrieveWithPlan(retrievalPlan, issueMap, retrievalOpts);
+  } else if (totalChunks < 3) {
+    logInfo("v3_retrieval_thin", {
+      requestId: logContext?.requestId,
+      stage: "v3_retrieval",
+      localCount: retrievalResult.localCount,
+      stateCount: retrievalResult.stateCount,
+    });
   }
 
   logDebug("v3_retrieve_complete", {

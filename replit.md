@@ -7,7 +7,8 @@ OPENCouncil is an AI-powered assistant designed for New Hampshire elected offici
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
-- **2026-02-18**: Migrated retrieval backend from Gemini File Search to pgvector semantic search. Added `RETRIEVAL_BACKEND` env flag for safe switchover (pgvector/gemini/hybrid). Gemini is now used only for answer synthesis.
+- **2026-02-18**: Removed Gemini File Search fallback entirely — pgvector is the sole retrieval backend. Gemini is used only for answer synthesis, embedding generation, and metadata extraction.
+- **2026-02-18**: Added thin/empty retrieval logging so synthesis stage is aware when source material is limited (Tier C handling).
 - **2026-02-18**: Split monolithic `server/routes.ts` (1767 lines) into domain-specific routers under `server/routes/` (admin, ingestion, ocr, storage, chat, preferences).
 - **2026-02-18**: Removed dead Prisma schema and dependencies. Drizzle ORM is the sole ORM.
 - **2026-02-18**: Fixed 20+ LSP type errors across pgvectorRetrieval, storeResolver, twoLaneRetrieve, routes, embeddingStorage.
@@ -41,11 +42,6 @@ Documents are embedded as 768-dimensional vectors (Gemini text-embedding-004) st
 - `server/services/embeddingService.ts` - Embedding generation via Gemini API
 - `server/services/pgvectorRetrieval.ts` - Lower-level pgvector retrieval utilities
 
-**Config**: `RETRIEVAL_BACKEND` env var controls which backend is used:
-- `pgvector` (default) - pgvector semantic search
-- `gemini` - Gemini File Search (legacy)
-- `hybrid` - Both (future)
-
 ### AI Integration
 Google Gemini is used for:
 - **Answer synthesis** (V3 pipeline: Plan → Retrieve → Synthesize → Audit)
@@ -53,13 +49,13 @@ Google Gemini is used for:
 - **Metadata extraction** during document ingestion
 - **Query planning** (V3 planner for multi-query retrieval plans)
 
-Legacy Gemini File Search is still available but pgvector is the default retrieval backend.
+pgvector is the sole retrieval backend. Gemini File Search has been fully removed from the retrieval path.
 
 ### Chat Pipeline (V3)
 The V3 pipeline (`server/chatV2/chatOrchestratorV3.ts`) runs:
 1. **Stage 0**: Situation relevance gating
 2. **Stage 1**: Planning (IssueMap + RetrievalPlanV3)
-3. **Stage 2**: Retrieval (pgvector two-lane search, dispatched via `RETRIEVAL_BACKEND`)
+3. **Stage 2**: Retrieval (pgvector two-lane semantic search)
 4. **Stage 3**: Synthesis (Gemini, with RecordStrength tiering)
 5. **Stage 4**: Audit (format validation, drift detection, repair)
 
