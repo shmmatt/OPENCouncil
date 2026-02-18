@@ -3,6 +3,8 @@
  * Settings specific to the v3 orchestrated pipeline (Plan → Retrieve → Synthesize → Audit)
  */
 
+export type RetrievalBackend = "gemini" | "pgvector" | "hybrid";
+
 export const chatConfigV3 = {
   // =====================================================
   // V3 PIPELINE TOGGLE
@@ -13,6 +15,15 @@ export const chatConfigV3 = {
    * When false, falls back to the unified v2 pipeline
    */
   ENABLE_V3_PIPELINE: true,
+
+  /**
+   * Which retrieval backend to use for document search.
+   * - "gemini": Use Gemini File Search (original)
+   * - "pgvector": Use pgvector semantic search (new)
+   * - "hybrid": Query both and merge results
+   * Set via RETRIEVAL_BACKEND env var. Defaults to "pgvector".
+   */
+  RETRIEVAL_BACKEND: (process.env.RETRIEVAL_BACKEND || "pgvector") as RetrievalBackend,
 
   // =====================================================
   // PLANNER V3 SETTINGS

@@ -22,7 +22,7 @@ import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { getModelForStage } from "../llm/modelRegistry";
 import { chatConfig } from "./chatConfig";
 import { computeSituationMatchScore } from "./situationExtractor";
-import type { PipelineLogContext, ScopeHint } from "./types";
+import type { PipelineLogContext, ScopeHint, DocSourceType } from "./types";
 import type { SituationContext, SessionSource } from "@shared/schema";
 
 /**
@@ -960,7 +960,7 @@ export function classifyTwoLaneDocSource(
   } else if (localChunks > 0) {
     return { type: "local", town: townPreference || null };
   } else if (stateChunks > 0) {
-    return { type: "state", town: null };
+    return { type: "statewide", town: null };
   }
   
   return { type: "none", town: null };

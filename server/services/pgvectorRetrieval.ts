@@ -10,7 +10,6 @@ import { semanticSearch, twoLaneSemanticSearch, type SearchResult } from "./embe
 import { getDocumentVersionById, getLogicalDocumentById } from "../storage/documents";
 import { getFileBlobById } from "../storage/fileBlobs";
 import { logDebug, logError, logInfo } from "../utils/logger";
-import type { ScopeHint } from "../chatV2/types";
 
 export interface PgvectorChunk {
   content: string;
@@ -22,7 +21,6 @@ export interface PgvectorChunk {
     category: string;
     board?: string;
     year?: string;
-    // Extended metadata from document
     canonicalTitle?: string;
     filename?: string;
   };
@@ -36,13 +34,9 @@ export interface PgvectorRetrievalResult {
   avgSimilarity: number;
 }
 
-/**
- * Convert storage SearchResult to PgvectorChunk with enriched metadata
- */
 async function enrichSearchResult(result: SearchResult): Promise<PgvectorChunk> {
   const chunk = result.chunk;
   
-  // Try to get document metadata
   let canonicalTitle: string | undefined;
   let filename: string | undefined;
   
@@ -60,7 +54,7 @@ async function enrichSearchResult(result: SearchResult): Promise<PgvectorChunk> 
       }
     }
   } catch (error) {
-    logError("[pgvectorRetrieval]", "Failed to enrich metadata", error);
+    logError("Failed to enrich metadata", { stage: "pgvectorRetrieval" });
   }
 
   return {
@@ -79,12 +73,9 @@ async function enrichSearchResult(result: SearchResult): Promise<PgvectorChunk> 
   };
 }
 
-/**
- * Perform two-lane retrieval using pgvector
- */
-export async function twoLaneRetrieve(
+export async function pgvectorTwoLaneRetrieve(
   query: string,
-  scopeHint: ScopeHint,
+  town: string,
   options: {
     localLimit?: number;
     statewideLimit?: number;
@@ -100,19 +91,16 @@ export async function twoLaneRetrieve(
   } = options;
 
   try {
-    logInfo("[pgvectorRetrieval]", `Two-lane query: "${query}" (town: ${scopeHint.town})`);
+    logInfo(`Two-lane pgvector query: "${query}" (town: ${town})`, { stage: "pgvectorRetrieval" });
 
-    // Generate query embedding
     const queryEmbedding = await generateQueryEmbedding(query);
     
-    // Perform two-lane search
     const { local, statewide } = await twoLaneSemanticSearch(queryEmbedding, {
-      localTown: scopeHint.town,
+      localTown: town,
       limit: localLimit + statewideLimit,
       similarityThreshold,
     });
 
-    // Enrich results with metadata
     const [localChunks, statewideChunks] = await Promise.all([
       Promise.all(local.map(enrichSearchResult)),
       Promise.all(statewide.map(enrichSearchResult)),
@@ -125,9 +113,8 @@ export async function twoLaneRetrieve(
       : 0;
 
     logInfo(
-      "[pgvectorRetrieval]",
-      `Retrieved ${localChunks.length} local + ${statewideChunks.length} statewide chunks ` +
-      `(avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`
+      `Retrieved ${localChunks.length} local + ${statewideChunks.length} statewide chunks (avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`,
+      { stage: "pgvectorRetrieval" }
     );
 
     return {
@@ -138,14 +125,11 @@ export async function twoLaneRetrieve(
       avgSimilarity,
     };
   } catch (error) {
-    logError("[pgvectorRetrieval]", "Two-lane retrieval failed", error);
+    logError("Two-lane retrieval failed", { stage: "pgvectorRetrieval" });
     throw error;
   }
 }
 
-/**
- * Perform single-lane retrieval (for specific town or statewide only)
- */
 export async function singleLaneRetrieve(
   query: string,
   options: {
@@ -159,19 +143,16 @@ export async function singleLaneRetrieve(
   const startTime = Date.now();
   
   try {
-    logInfo("[pgvectorRetrieval]", `Single-lane query: "${query}"`);
+    logInfo(`Single-lane pgvector query: "${query}"`, { stage: "pgvectorRetrieval" });
 
-    // Generate query embedding
     const queryEmbedding = await generateQueryEmbedding(query);
     
-    // Perform search
     const results = await semanticSearch(queryEmbedding, {
       ...options,
       limit: options.limit || 20,
       similarityThreshold: options.similarityThreshold || 0.5,
     });
 
-    // Enrich results with metadata
     const chunks = await Promise.all(results.map(enrichSearchResult));
 
     const queryTimeMs = Date.now() - startTime;
@@ -180,13 +161,13 @@ export async function singleLaneRetrieve(
       : 0;
 
     logInfo(
-      "[pgvectorRetrieval]",
-      `Retrieved ${chunks.length} chunks (avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`
+      `Retrieved ${chunks.length} chunks (avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`,
+      { stage: "pgvectorRetrieval" }
     );
 
     return chunks;
   } catch (error) {
-    logError("[pgvectorRetrieval]", "Single-lane retrieval failed", error);
+    logError("Single-lane retrieval failed", { stage: "pgvectorRetrieval" });
     throw error;
   }
 }

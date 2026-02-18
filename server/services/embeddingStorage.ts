@@ -51,15 +51,15 @@ export async function getPendingEmbeddingJobs(limit = 10): Promise<EmbeddingJob[
 // ============================================================
 
 export async function insertDocumentChunk(chunk: InsertDocumentChunk): Promise<DocumentChunk> {
-  const [result] = await db.insert(schema.documentChunks).values(chunk).returning();
+  const [result] = await db.insert(schema.documentChunks).values([chunk] as any).returning();
   return result;
 }
 
 export async function insertDocumentChunkBatch(chunks: InsertDocumentChunk[]): Promise<void> {
   if (chunks.length === 0) return;
   
-  await db.insert(schema.documentChunks).values(chunks);
-  logDebug("[embeddingStorage]", `Inserted ${chunks.length} chunks`);
+  await db.insert(schema.documentChunks).values(chunks as any);
+  logDebug(`Inserted ${chunks.length} chunks`, { stage: "embeddingStorage" });
 }
 
 export async function getChunksByDocumentVersion(documentVersionId: string): Promise<DocumentChunk[]> {
@@ -161,13 +161,13 @@ export async function semanticSearch(
       }));
 
     logDebug(
-      "[embeddingStorage]",
-      `Semantic search: ${filtered.length} results (threshold: ${similarityThreshold})`
+      `Semantic search: ${filtered.length} results (threshold: ${similarityThreshold})`,
+      { stage: "embeddingStorage" }
     );
 
     return filtered;
   } catch (error) {
-    logError("[embeddingStorage]", "Semantic search failed", error);
+    logError("Semantic search failed", { stage: "embeddingStorage" });
     throw error;
   }
 }
@@ -199,8 +199,8 @@ export async function twoLaneSemanticSearch(
   ]);
 
   logDebug(
-    "[embeddingStorage]",
-    `Two-lane search: ${local.length} local, ${statewide.length} statewide`
+    `Two-lane search: ${local.length} local, ${statewide.length} statewide`,
+    { stage: "embeddingStorage" }
   );
 
   return { local, statewide };

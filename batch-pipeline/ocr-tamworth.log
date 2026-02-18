@@ -1,14 +1,0 @@
-🔍 OCR Pipeline
-===============
-Limit: 500
-Town: tamworth
-
-📄 Found 1 documents to process
-
-[1/1] tamworth: al-docs/tamworth/agendas/12102025-10.pdf...
-
-✅ OCR Pipeline Complete!
-   Processed: 1
-   Extracted text: 1
-   Chunks embedded: 1
-   Failed: 0

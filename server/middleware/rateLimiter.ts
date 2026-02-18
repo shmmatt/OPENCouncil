@@ -1,22 +1,14 @@
 import rateLimit from "express-rate-limit";
 import type { Request, Response } from "express";
 
-/**
- * Rate limiting middleware to prevent abuse and control costs.
- * 
- * Limits are per IP address by default. In production behind a proxy,
- * ensure trust proxy is set: app.set('trust proxy', 1)
- */
-
-// Key generator that uses anonymous ID if available, falls back to IP
 const keyGenerator = (req: Request): string => {
-  // Use anon ID if available (more accurate than IP for shared networks)
   const anonId = (req as any).anonId;
   if (anonId) {
     return `anon:${anonId}`;
   }
-  // Fall back to IP
-  return req.ip || req.socket.remoteAddress || 'unknown';
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.socket.remoteAddress;
+  return ip || 'unknown';
 };
 
 // Standard error response

@@ -1,92 +1,93 @@
 # OPENCouncil - NH Municipal Governance Assistant
 
 ## Overview
-OPENCouncil is an AI-powered assistant designed for New Hampshire elected officials and municipal workers. It provides instant, accurate answers to governance questions by leveraging Google's Gemini AI with file search capabilities over official municipal documents. The system aims to streamline access to information, eliminate manual document searches, and empower municipal workers with quick, accurate insights. It features a ChatGPT-style chat interface for end-users and a secure admin panel for document management, including an advanced ingestion pipeline with duplicate detection and AI-powered metadata extraction. The project's ambition is to significantly improve efficiency and accessibility of municipal information, setting a new standard for local government support.
+OPENCouncil is an AI-powered assistant designed for New Hampshire elected officials and municipal workers. It provides instant, accurate answers to governance questions by leveraging Google's Gemini AI for answer synthesis, with pgvector-based semantic search over official municipal documents. The system features a ChatGPT-style chat interface for end-users and a secure admin panel for document management, including an advanced ingestion pipeline with duplicate detection and AI-powered metadata extraction.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+- **2026-02-18**: Migrated retrieval backend from Gemini File Search to pgvector semantic search. Added `RETRIEVAL_BACKEND` env flag for safe switchover (pgvector/gemini/hybrid). Gemini is now used only for answer synthesis.
+- **2026-02-18**: Split monolithic `server/routes.ts` (1767 lines) into domain-specific routers under `server/routes/` (admin, ingestion, ocr, storage, chat, preferences).
+- **2026-02-18**: Removed dead Prisma schema and dependencies. Drizzle ORM is the sole ORM.
+- **2026-02-18**: Fixed 20+ LSP type errors across pgvectorRetrieval, storeResolver, twoLaneRetrieve, routes, embeddingStorage.
+- **2026-02-18**: Consolidated crawler-related files (scripts, batch-pipeline, town-profiles, crawl-logs, archive, docs) into `crawler/` directory.
+
 ## System Architecture
 
 ### Frontend
-The frontend is built with React and TypeScript using Vite, `shadcn/ui` (Radix UI primitives), and Tailwind CSS for a professional and accessible design. State management uses TanStack Query, and client-side routing is handled by `wouter`.
+React + TypeScript using Vite, `shadcn/ui` (Radix UI primitives), and Tailwind CSS. State management with TanStack Query, client-side routing via `wouter`.
 
 ### Backend
-An Express.js application written in TypeScript provides a RESTful API. Key features include JWT authentication for admin routes, bcrypt for password hashing, and Multer for file uploads (PDF, DOCX, TXT).
+Express.js (TypeScript) with RESTful API. JWT authentication for admin routes, bcrypt for password hashing, Multer for file uploads (PDF, DOCX, TXT).
+
+**Route Organization** (split into domain routers under `server/routes/`):
+- `admin.ts` - Admin auth, document CRUD, bulk upload
+- `ingestion.ts` - Ingestion job lifecycle (approve, reject, index, batch-index)
+- `ocr.ts` - OCR queue management, status, reprocessing
+- `storage.ts` - Storage migration, S3-Gemini sync
+- `chat.ts` - Chat sessions, messages, config
+- `preferences.ts` - Town preferences, updates/minutes, meta endpoints
 
 ### Data Storage
-PostgreSQL serves as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, and a comprehensive document ingestion system with `fileBlobs`, `logicalDocuments`, `documentVersions`, and `ingestionJobs`. Drizzle Kit manages database migrations.
+PostgreSQL via Neon's serverless driver and **Drizzle ORM** (sole ORM). Schema includes `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (pgvector), and `embeddingJobs`. Drizzle Kit manages migrations.
+
+### Retrieval Backend (pgvector)
+Documents are embedded as 768-dimensional vectors (Gemini text-embedding-004) stored in PostgreSQL via pgvector. The two-lane retrieval system performs parallel local (town-specific) and statewide semantic search.
+
+**Key files**:
+- `server/chatV2/pgvectorRetrieveAdapter.ts` - Adapts pgvector search to the V3 pipeline's `V3RetrievalResult` format
+- `server/services/embeddingStorage.ts` - pgvector CRUD and semantic search queries
+- `server/services/embeddingService.ts` - Embedding generation via Gemini API
+- `server/services/pgvectorRetrieval.ts` - Lower-level pgvector retrieval utilities
+
+**Config**: `RETRIEVAL_BACKEND` env var controls which backend is used:
+- `pgvector` (default) - pgvector semantic search
+- `gemini` - Gemini File Search (legacy)
+- `hybrid` - Both (future)
 
 ### AI Integration
-Google Gemini's File Search feature is integrated to provide AI capabilities, enabling grounded responses with citations from a single, persistent store of municipal documents. Documents are chunked for optimal search relevance.
+Google Gemini is used for:
+- **Answer synthesis** (V3 pipeline: Plan → Retrieve → Synthesize → Audit)
+- **Embedding generation** (text-embedding-004, 768 dimensions)
+- **Metadata extraction** during document ingestion
+- **Query planning** (V3 planner for multi-query retrieval plans)
+
+Legacy Gemini File Search is still available but pgvector is the default retrieval backend.
+
+### Chat Pipeline (V3)
+The V3 pipeline (`server/chatV2/chatOrchestratorV3.ts`) runs:
+1. **Stage 0**: Situation relevance gating
+2. **Stage 1**: Planning (IssueMap + RetrievalPlanV3)
+3. **Stage 2**: Retrieval (pgvector two-lane search, dispatched via `RETRIEVAL_BACKEND`)
+4. **Stage 3**: Synthesis (Gemini, with RecordStrength tiering)
+5. **Stage 4**: Audit (format validation, drift detection, repair)
 
 ### V2 Document Ingestion Pipeline
-This pipeline features a staged workflow: files are uploaded, hashed for duplicate detection, text extracted, and LLM-suggested metadata is generated. Admins review, edit, link, and approve or reject documents before final validation and indexing into Gemini File Search. The pipeline also includes heuristic detection for meeting minutes and enhanced town detection using a three-tier fallback system.
-
-### Simplified Unified Chat Pipeline (Chat v2)
-The chat pipeline was simplified to ensure robust and concise answers. It features:
-- **Two-lane parallel retrieval**: Simultaneous local (town-specific) and statewide (RSA/NHMA) document searches.
-- **Chunk merging**: Deduplication and merging of retrieval results.
-- **Single synthesis**: One LLM call to synthesize answers (targeting 800-1500 characters).
-- **Follow-up generation**: Suggestion of simple follow-up questions.
-This iteration removed complex routing, evidence coverage gates, and character caps for a more direct approach.
-
-### Town Preference & Recent Minutes Updates
-The system supports persistent town preferences for users and chat sessions, with a priority cascade for resolving town context. API endpoints manage town lists, preference updates, and feeds of recently ingested meeting minutes.
-
-### Chat File Upload
-Users can attach documents (PDF, DOCX, TXT up to 25MB) to chat messages for AI analysis. The system extracts text from these files and includes it in the LLM prompt for grounded responses.
-
-### Situation Anchoring & Topic Continuity
-This feature prevents the AI from drifting off-topic during follow-up questions. It extracts entities to track the conversation's context, re-ranks retrieved chunks based on topic relevance, and uses a strict system prompt to maintain continuity. A drift detection mechanism identifies and prompts regeneration for off-topic answers.
-
-### Legal Salience Biasing
-The two-lane retrieval system incorporates legal salience detection. When a query is identified as legally salient, it dynamically adjusts retrieval parameters (e.g., increases state lane K, context cap) and ensures a minimum coverage of state-level documents. The AI prompt is also enhanced to include an "Applicable legal framework" section in responses.
-
-### V3 Pipeline Quality Improvements
-Major improvements focus on answer quality, tiering, and retrieval:
-- **Synthesizer Format Spec**: A new 5-section format with strict length and citation rules, reduced temperature for conciseness, and dynamic section titles.
-- **Situation Relevance Gating**: Prevents "sticky context" leakage by evaluating question-context relevance and clearing conversation history when unrelated.
-- **Anti-bridging Patterns**: Audit detects and repairs phrases that assume unrelated context.
-- **Format Validation & Repair**: Checks answer format against strict rules, with repair attempts and fallback mechanisms.
-- **Tiering Improvements**: Enhanced rubric for answer quality based on distinct state documents and authoritative sources.
-- **Authority Detection**: Robust RSA and NHMA pattern matching for improved legal context.
-- **Early Exit Logic**: Improved conditions for early exit in legal questions, ensuring sufficient state coverage.
-- **State Lane Deduplication**: Ensures accurate distinct state document counts for tiering.
-
-### Build & Deployment
-The application uses Vite for frontend development and esbuild for backend bundling. It is designed for single-server deployment, serving static files and the API, leveraging external managed PostgreSQL and environment variable-based configuration.
+Staged workflow: upload → hash → extract text → LLM metadata suggestion → admin review → approve/reject → index. Includes meeting minutes detection and three-tier town detection.
 
 ### OCR Pipeline
-An automatic OCR detection and processing system is implemented for scanned PDFs. If initial text extraction yields low character counts, documents are flagged for OCR. A background worker uses Tesseract.js to process these documents, converting PDF pages to images for OCR, and storing the extracted text for LLM analysis.
-
-**OCR Re-indexing**: After successful OCR extraction, documents are automatically re-indexed into the Gemini File Search RAG system. The worker checks if the ingestion job is indexed before attempting reindex; if not yet indexed, the document will be picked up by the batch reindex endpoint. The `ocr_reindexed_at` column tracks which documents have been re-indexed. A "Re-index OCR" button in the admin UI allows batch re-indexing of completed OCR documents in batches of 20.
+Automatic OCR for scanned PDFs using Tesseract.js. Background worker detects low-text PDFs, processes via OCR, and triggers re-indexing into the embedding system.
 
 ### Persistent Object Storage
-Document files are stored in Replit Object Storage to ensure persistence across deployments. The system uses a blob storage abstraction layer (`server/services/blobStorage.ts`) that:
-- Saves new uploads directly to object storage with paths starting with `/replit-objstore`
-- Reads from both object storage (for new files) and local filesystem (for backward compatibility)
-- Provides migration functionality to move existing local files to object storage
+Document files stored in Replit Object Storage (`server/services/blobStorage.ts`). Paths starting with `/replit-objstore` use cloud storage; legacy local paths supported for backward compatibility.
 
-**Key Components**:
-- `blobStorage.saveFile()`: Saves files to object storage
-- `blobStorage.readFile()`: Reads from appropriate storage based on path
-- `blobStorage.migrateToObjectStorage()`: Migrates local files to object storage
-
-**Admin Migration**: The admin ingestion page includes a "Migrate to Cloud" button that appears when local files need migration. This button triggers batch migration of existing files to persistent storage.
-
-**Environment Variables**:
-- `PRIVATE_OBJECT_DIR`: Path to private object storage directory (auto-configured by Replit)
-- `PUBLIC_OBJECT_SEARCH_PATHS`: Search paths for public assets
+### Crawler / Data Collection
+All crawler-related code, scripts, logs, and data are organized under `crawler/`:
+- `crawler/scripts/` - Crawling scripts, analysis tools, monitoring
+- `crawler/batch-pipeline/` - Batch embedding and OCR pipeline
+- `crawler/town-profiles/` - Per-town document profiles and crawl results
+- `crawler/crawl-logs/` - Crawl execution logs
+- `crawler/archive/` - Legacy crawlers and migration scripts
 
 ## External Dependencies
 
 ### Third-Party Services
-1.  **Google Gemini API**: Provides core AI capabilities for Q&A and document grounding.
-2.  **Neon PostgreSQL**: Hosts the serverless PostgreSQL database.
-3.  **Google Fonts CDN**: Delivers web fonts (Inter, JetBrains Mono) for consistent typography.
+1. **Google Gemini API**: Answer synthesis, embedding generation, metadata extraction
+2. **Neon PostgreSQL** (with pgvector extension): Database + vector search
+3. **Google Fonts CDN**: Web fonts (Inter, JetBrains Mono)
 
 ### Key NPM Packages
-*   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.
-*   **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`, `tesseract.js`.
-*   **Development**: `vite`, `tsx`, `esbuild`, `drizzle-kit`, `typescript`.
+* **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`
+* **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`, `tesseract.js`
+* **Development**: `vite`, `tsx`, `esbuild`, `drizzle-kit`, `typescript`
