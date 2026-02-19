@@ -7,7 +7,7 @@ import { infoOnlyNotice } from "./scopeUtils";
 import type { ChatNotice } from "@shared/chatNotices";
 import { getModelForStage } from "../llm/modelRegistry";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const CRITIC_SYSTEM_PROMPT = `You are reviewing a draft OpenCouncil answer for quality and accuracy.
 

@@ -41,7 +41,7 @@ async function main() {
   // Step 2: Check if a statewide store already exists
   console.log("\n2. Checking for existing statewide store...");
   
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
   const stores = await ai.files.listStores();
   
   let statewideStore = stores.fileSearchStores.find(s => 

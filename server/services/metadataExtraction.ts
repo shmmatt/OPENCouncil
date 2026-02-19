@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import type { DocumentMetadata, MetadataHints } from "@shared/schema";
 import { ALLOWED_CATEGORIES, NH_TOWNS } from "@shared/schema";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 export interface SuggestedMetadata {
   category: typeof ALLOWED_CATEGORIES[number];

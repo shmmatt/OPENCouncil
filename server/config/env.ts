@@ -9,7 +9,7 @@ interface EnvConfig {
   // Required
   DATABASE_URL: string;
   JWT_SECRET: string;
-  GEMINI_API_KEY: string;
+  GEM_API_KEY: string;
   
   // Optional with defaults
   PORT: number;
@@ -26,7 +26,7 @@ interface EnvConfig {
 const REQUIRED_VARS = [
   'DATABASE_URL',
   'JWT_SECRET', 
-  'GEMINI_API_KEY',
+  'GEM_API_KEY',
 ] as const;
 
 const OPTIONAL_VARS_WITH_DEFAULTS: Record<string, string> = {
@@ -90,7 +90,7 @@ export function getEnvConfig(): EnvConfig {
   return {
     DATABASE_URL: process.env.DATABASE_URL!,
     JWT_SECRET: process.env.JWT_SECRET!,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY!,
+    GEM_API_KEY: process.env.GEM_API_KEY!,
     PORT: parseInt(process.env.PORT || OPTIONAL_VARS_WITH_DEFAULTS.PORT, 10),
     NODE_ENV: (process.env.NODE_ENV || OPTIONAL_VARS_WITH_DEFAULTS.NODE_ENV) as EnvConfig['NODE_ENV'],
     ADMIN_EMAIL: process.env.ADMIN_EMAIL,

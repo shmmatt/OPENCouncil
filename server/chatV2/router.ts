@@ -5,7 +5,7 @@ import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { getModelForStage } from "../llm/modelRegistry";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const NH_TOWNS = [
   "Ossipee", "Conway", "Bartlett", "Madison", "Tamworth", "Freedom", "Effingham",

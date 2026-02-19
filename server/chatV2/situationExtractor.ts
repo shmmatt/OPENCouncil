@@ -18,7 +18,7 @@ import { logDebug, logError } from "../utils/logger";
 import { chatConfig } from "./chatConfig";
 import type { PipelineLogContext } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 export interface SituationExtractionResult {
   shouldUpdate: boolean;

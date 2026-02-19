@@ -12,9 +12,9 @@ const EMBEDDING_DIMENSIONS = 768;
 const MAX_BATCH_SIZE = 100;
 
 function getApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEM_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not found in environment");
+    throw new Error("GEM_API_KEY not found in environment");
   }
   return apiKey;
 }

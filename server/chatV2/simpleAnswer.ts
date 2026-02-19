@@ -22,7 +22,7 @@ import {
   classifyTwoLaneDocSource,
 } from "./twoLaneRetrieve";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const RSA_GENERAL_KNOWLEDGE_SYSTEM_PROMPT = `You are an assistant for New Hampshire municipal officials. The user is asking about New Hampshire Revised Statutes (RSA).
 

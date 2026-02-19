@@ -26,7 +26,7 @@ import type {
   RenderStyle,
 } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 export interface SynthesisV3Options extends SynthesisInputV3 {
   logContext?: PipelineLogContext;

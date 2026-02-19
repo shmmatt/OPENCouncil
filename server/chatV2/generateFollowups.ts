@@ -5,7 +5,7 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import type { PipelineLogContext } from "./types";
 import { getModelForStage } from "../llm/modelRegistry";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const FOLLOWUP_SYSTEM_PROMPT = `You are generating follow-up questions for OpenCouncil.
 

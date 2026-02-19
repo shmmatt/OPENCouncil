@@ -15,7 +15,7 @@ import type { PipelineLogContext, RouterOutput, RetrievalPlan } from "./types";
 import { extractTokenCounts, logLLMCall } from "../llm/callLLMWithLogging";
 import { getModelForStage } from "../llm/modelRegistry";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 /**
  * Question intent types that the gate uses to determine coverage needs

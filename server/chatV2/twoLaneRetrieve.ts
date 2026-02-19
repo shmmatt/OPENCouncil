@@ -639,7 +639,7 @@ async function executeLaneRetrieval(options: {
   });
   
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+    const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
     const response = await ai.models.generateContent({
       model: retrievalModel,
       contents: [{ role: "user", parts: [{ text: query }] }],

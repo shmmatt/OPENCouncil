@@ -22,7 +22,7 @@ import type { InsertS3GeminiSync, S3GeminiSync } from "@shared/schema";
 const S3_BUCKET = process.env.S3_BUCKET || "opencouncil-municipal-docs";
 const S3_REGION = process.env.AWS_REGION || "us-east-1";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const s3 = new S3Client({ region: S3_REGION });
 
 // Town store mapping - pre-configured stores

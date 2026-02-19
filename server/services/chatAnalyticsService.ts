@@ -18,7 +18,7 @@ function getDb() {
   return _db;
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 export interface ChatAnalyticsListItem {
   sessionId: string;

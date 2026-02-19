@@ -5,7 +5,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 
 // Initialize Gemini client with API key
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 export interface DocumentMetadata {
   category: string;

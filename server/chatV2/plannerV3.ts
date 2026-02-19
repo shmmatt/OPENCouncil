@@ -24,7 +24,7 @@ import type {
 } from "./types";
 import type { SessionSource, SituationContext } from "@shared/schema";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const PLANNER_SYSTEM_PROMPT = `You are the planning agent for OpenCouncil's civic research assistant.
 

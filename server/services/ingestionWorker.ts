@@ -11,7 +11,7 @@ import { performOcrOnPdf } from "../workers/ocrWorkerUtils"; // New extracted ut
 
 const S3_BUCKET = process.env.S3_BUCKET || "opencouncil-municipal-docs";
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-east-1" });
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 // Cache for store IDs
 const storeCache = new Map<string, string>();
