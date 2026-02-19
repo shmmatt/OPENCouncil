@@ -15,7 +15,7 @@ import type {
   EmbeddingJob,
   InsertEmbeddingJob,
 } from "@shared/schema";
-import { logDebug, logError } from "../utils/logger";
+import { logDebug, logError, logInfo } from "../utils/logger";
 
 // ============================================================
 // EMBEDDING JOBS
@@ -161,10 +161,19 @@ export async function semanticSearch(
         documentId: r.chunk.documentId,
       }));
 
-    logDebug(
-      `Semantic search: ${filtered.length} results (threshold: ${similarityThreshold})`,
+    logInfo(
+      `Semantic search: ${filtered.length}/${results.length} results passed threshold ${similarityThreshold}`,
       { stage: "embeddingStorage" }
     );
+
+    for (const r of filtered) {
+      const meta = r.chunk.metadata || {};
+      const preview = r.chunk.content.slice(0, 150).replace(/\n/g, " ");
+      logInfo(
+        `  [${r.similarity.toFixed(3)}] town=${meta.town || "?"} type=${meta.documentType || "?"} board=${meta.board || "-"} year=${meta.year || "-"} | "${preview}..."`,
+        { stage: "embeddingStorage" }
+      );
+    }
 
     return filtered;
   } catch (error) {
