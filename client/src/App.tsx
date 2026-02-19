@@ -20,6 +20,7 @@ function Router() {
     <Switch>
       <Route path="/" component={() => <Redirect to="/chat" />} />
       <Route path="/chat" component={Chat} />
+      <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/documents" component={AdminDocuments} />
       <Route path="/admin/bulk-upload" component={AdminBulkUpload} />
