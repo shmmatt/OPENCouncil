@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -92,6 +92,7 @@ interface OcrJob {
 }
 
 interface DiscoveryResult {
+  bucket: string;
   totalInS3: number;
   alreadyTracked: number;
   newDocuments: number;
@@ -250,6 +251,7 @@ function DiscoveryPanel() {
   const [prefix, setPrefix] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [discoveryData, setDiscoveryData] = useState<DiscoveryResult | null>(null);
+  const hasAutoScanned = useRef(false);
 
   const discoverMutation = useMutation({
     mutationFn: async () => {
@@ -258,7 +260,10 @@ function DiscoveryPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prefix: prefix || undefined }),
       });
-      if (!res.ok) throw new Error("Discovery failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `Discovery failed (HTTP ${res.status})`);
+      }
       return res.json();
     },
     onSuccess: (data: DiscoveryResult) => {
@@ -266,13 +271,20 @@ function DiscoveryPanel() {
       setSelectedKeys(new Set());
       toast({
         title: "Discovery Complete",
-        description: `Found ${data.newDocuments} new documents out of ${data.totalInS3} total PDFs.`,
+        description: `Found ${data.newDocuments} new documents out of ${data.totalInS3} total PDFs in ${data.bucket}.`,
       });
     },
     onError: (error: Error) => {
       toast({ title: "Discovery Failed", description: error.message, variant: "destructive" });
     },
   });
+
+  useEffect(() => {
+    if (!hasAutoScanned.current) {
+      hasAutoScanned.current = true;
+      discoverMutation.mutate();
+    }
+  }, []);
 
   const enqueueMutation = useMutation({
     mutationFn: async (keys: string[]) => {
@@ -322,8 +334,19 @@ function DiscoveryPanel() {
             <Search className="w-4 h-4" />
             S3 Bucket Scanner
           </CardTitle>
+          {discoveryData?.bucket && (
+            <p className="text-sm text-muted-foreground" data-testid="text-bucket-name">
+              Bucket: <span className="font-mono">{discoveryData.bucket}</span>
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
+          {discoverMutation.isPending && !discoveryData && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Scanning S3 bucket for documents...
+            </div>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
             <Input
               placeholder="Filter by prefix (e.g. town name)..."
@@ -342,7 +365,7 @@ function DiscoveryPanel() {
               ) : (
                 <ScanLine className="w-4 h-4 mr-2" />
               )}
-              Scan Bucket
+              {discoveryData ? "Re-scan" : "Scan Bucket"}
             </Button>
           </div>
 

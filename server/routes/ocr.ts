@@ -314,6 +314,7 @@ router.get("/textract/all-jobs", authenticateAdmin, async (req, res) => {
 router.post("/textract/discover", authenticateAdmin, async (req, res) => {
   try {
     const { prefix } = req.body || {};
+    const bucket = getDefaultBucket();
     const s3Result = await discoverS3Documents(prefix);
     const trackedKeys = await ocrJobsStore.getTrackedS3Keys();
 
@@ -327,15 +328,20 @@ router.post("/textract/discover", authenticateAdmin, async (req, res) => {
     }
 
     res.json({
+      bucket,
       totalInS3: s3Result.total,
       alreadyTracked: alreadyTracked.length,
       newDocuments: newDocs.length,
       townBreakdown: townCounts,
       documents: newDocs.slice(0, 200),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error discovering S3 documents:", error);
-    res.status(500).json({ message: "Failed to discover S3 documents" });
+    const detail = error?.message || "Unknown error";
+    const code = error?.name || error?.Code || "";
+    res.status(500).json({
+      message: `S3 discovery failed: ${code ? code + " — " : ""}${detail}`,
+    });
   }
 });
 
