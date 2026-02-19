@@ -273,9 +273,6 @@ function buildDisplayName(filename: string, metadata: DocumentMetadata): string 
   return `${prefix}${filename}`;
 }
 
-import * as fs from "fs/promises";
-import * as path from "path";
-
 export interface ReindexOcrResult {
   fileId: string;
   storeId: string;
