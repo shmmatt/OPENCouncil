@@ -13,7 +13,20 @@ import type {
 // FILE BLOBS
 // ============================================================
 
+function parseS3Path(storagePath: string | null | undefined): { s3Bucket: string; s3Key: string } | null {
+  if (!storagePath) return null;
+  const match = storagePath.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  return { s3Bucket: match[1], s3Key: match[2] };
+}
+
 export async function createFileBlob(blob: InsertFileBlob): Promise<FileBlob> {
+  if (blob.storagePath && (!blob.s3Key || !blob.s3Bucket)) {
+    const parsed = parseS3Path(blob.storagePath);
+    if (parsed) {
+      blob = { ...blob, s3Bucket: parsed.s3Bucket, s3Key: parsed.s3Key };
+    }
+  }
   const [result] = await db.insert(schema.fileBlobs).values(blob).returning();
   return result;
 }
@@ -57,6 +70,12 @@ export async function findDuplicateBlobs(rawHash: string, previewHash?: string):
 }
 
 export async function updateFileBlob(id: string, data: Partial<InsertFileBlob>): Promise<void> {
+  if (data.storagePath && (!data.s3Key || !data.s3Bucket)) {
+    const parsed = parseS3Path(data.storagePath);
+    if (parsed) {
+      data = { ...data, s3Bucket: parsed.s3Bucket, s3Key: parsed.s3Key };
+    }
+  }
   await db
     .update(schema.fileBlobs)
     .set(data)
