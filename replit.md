@@ -7,6 +7,9 @@ OPENCouncil is an AI-powered assistant designed for New Hampshire elected offici
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **2026-02-19**: Fixed critical schema mismatch — Drizzle `documentChunks` schema now matches actual DB (serial IDs, `document_id`, JSONB `metadata`). All semantic search uses JSONB path expressions for filtering.
+- **2026-02-19**: Rewired chat route to use V3 pipeline (`runChatV3Pipeline`) instead of old `askQuestionWithFileSearch`. pgvector retrieval is now fully operational end-to-end.
+- **2026-02-19**: Made town filters case-insensitive in embeddingStorage to handle mixed-case data ("Ossipee"/"ossipee", "statewide"/"Statewide").
 - **2026-02-18**: Removed Gemini File Search fallback entirely — pgvector is the sole retrieval backend. Gemini is used only for answer synthesis, embedding generation, and metadata extraction.
 - **2026-02-18**: Added thin/empty retrieval logging so synthesis stage is aware when source material is limited (Tier C handling).
 - **2026-02-18**: Split monolithic `server/routes.ts` (1767 lines) into domain-specific routers under `server/routes/` (admin, ingestion, ocr, storage, chat, preferences).
