@@ -144,6 +144,10 @@ function mapRowToFileBlob(row: any): FileBlob {
     ocrReindexedAt: row.ocr_reindexed_at,
     extractedTextS3Key: row.extracted_text_s3_key,
     extractedTextSha256: row.extracted_text_sha256,
+    contentHash: row.content_hash,
+    embeddingStatus: row.embedding_status,
+    chunkCount: row.chunk_count,
+    embeddedAt: row.embedded_at,
     createdAt: row.created_at,
   };
 }

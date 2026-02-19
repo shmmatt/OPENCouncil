@@ -73,6 +73,11 @@ export const fileBlobs = pgTable("file_blobs", {
   ocrReindexedAt: timestamp("ocr_reindexed_at"), // When OCR text was re-indexed into RAG
   extractedTextS3Key: text("extracted_text_s3_key"), // S3 key for canonical extracted text artifact
   extractedTextSha256: text("extracted_text_sha256"),
+  // Embedding lifecycle tracking
+  contentHash: text("content_hash"), // MD5 of the text used for embedding (for change detection, not crypto)
+  embeddingStatus: text("embedding_status").notNull().default("none"), // 'none' | 'exported' | 'indexed'
+  chunkCount: integer("chunk_count").notNull().default(0),
+  embeddedAt: timestamp("embedded_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -576,6 +581,7 @@ export interface ActorIdentifier {
 export const documentChunks = pgTable("document_chunks", {
   id: serial("id").primaryKey(),
   documentId: varchar("document_id"),
+  fileBlobId: varchar("file_blob_id"),
   chunkIndex: integer("chunk_index").notNull(),
   content: text("content").notNull(),
   embedding: vector("embedding", { dimensions: 768 }),
@@ -586,17 +592,22 @@ export const documentChunks = pgTable("document_chunks", {
     date?: string;
     filename?: string;
     documentType?: string;
+    fileBlobId?: string;
+    contentHash?: string;
   }>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Embedding generation jobs (tracks which documents have been embedded)
+// Embedding generation jobs (tracks batch embedding runs)
 export const embeddingJobs = pgTable("embedding_jobs", {
   id: serial("id").primaryKey(),
   documentId: varchar("document_id"),
+  fileBlobId: varchar("file_blob_id"),
+  batchId: varchar("batch_id"), // groups chunks from a single export run
   status: varchar("status").notNull().default("pending"),
   error: text("error"),
   chunksCount: integer("chunks_count"),
+  fileBlobsProcessed: integer("file_blobs_processed"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),

@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft,
   Loader2,
@@ -25,6 +26,11 @@ import {
   FileText,
   SkipForward,
   Cog,
+  ArrowRight,
+  Database,
+  Globe,
+  Download,
+  Layers,
 } from "lucide-react";
 
 function adminFetch(url: string, options?: RequestInit) {
@@ -358,6 +364,221 @@ function ReconciliationPanel() {
   );
 }
 
+interface PipelineData {
+  pipeline: {
+    discovered: number;
+    downloaded: number;
+    linkedToBlobs: number;
+    totalBlobs: number;
+    textReady: number;
+    ocrCompleted: number;
+    ocrPending: number;
+    ocrFailed: number;
+    readyToExport: number;
+    exported: number;
+    indexed: number;
+    totalIndexedChunks: number;
+    totalChunksInPgvector: number;
+    chunksWithLineage: number;
+    uniqueBlobsInChunks: number;
+    totalLogicalDocs: number;
+    totalVersions: number;
+    currentVersions: number;
+  };
+  breakdowns: {
+    embeddingStatus: Array<{ embedding_status: string; count: number }>;
+    ocrStatus: Array<{ ocr_status: string; count: number }>;
+  };
+  recentJobs: Array<{
+    id: number;
+    batch_id: string;
+    status: string;
+    chunks_count: number;
+    file_blobs_processed: number;
+    started_at: string;
+    completed_at: string;
+  }>;
+}
+
+function PipelineStage({ label, count, total, icon: Icon, color }: { label: string; count: number; total: number; icon: any; color: string }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-[100px]" data-testid={`pipeline-stage-${label.toLowerCase().replace(/\s/g, '-')}`}>
+      <Icon className={`w-5 h-5 ${color}`} />
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-lg font-bold">{count.toLocaleString()}</span>
+      {total > 0 && total !== count && (
+        <span className="text-xs text-muted-foreground">{pct}%</span>
+      )}
+    </div>
+  );
+}
+
+function PipelineStatusPanel() {
+  const { data, isLoading, refetch } = useQuery<PipelineData>({
+    queryKey: ['/api/admin/pipeline-status'],
+    queryFn: async () => {
+      const res = await adminFetch('/api/admin/pipeline-status');
+      if (!res.ok) throw new Error('Failed to fetch pipeline status');
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+        <span>Loading pipeline status...</span>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const p = data.pipeline;
+
+  const stages = [
+    { label: "URLs Discovered", count: p.discovered, total: p.discovered, icon: Globe, color: "text-blue-500" },
+    { label: "Downloaded", count: p.downloaded, total: p.discovered, icon: Download, color: "text-blue-600" },
+    { label: "File Blobs", count: p.totalBlobs, total: p.downloaded, icon: FileText, color: "text-indigo-500" },
+    { label: "Text Ready", count: p.textReady, total: p.totalBlobs, icon: ScanLine, color: "text-purple-500" },
+    { label: "Ready to Export", count: p.readyToExport, total: p.textReady, icon: FolderUp, color: "text-amber-500" },
+    { label: "Exported", count: p.exported, total: p.textReady, icon: Layers, color: "text-orange-500" },
+    { label: "Indexed", count: p.indexed, total: p.textReady, icon: Database, color: "text-green-600" },
+  ];
+
+  const overallPct = p.totalBlobs > 0 ? Math.round((p.indexed / p.totalBlobs) * 100) : 0;
+
+  return (
+    <div className="space-y-4" data-testid="pipeline-status-panel">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Document Lifecycle Pipeline</h3>
+        <Button variant="ghost" size="icon" onClick={() => refetch()} data-testid="button-refresh-pipeline">
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm text-muted-foreground">Overall Progress:</span>
+            <Progress value={overallPct} className="flex-1" />
+            <span className="text-sm font-medium">{overallPct}%</span>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            {stages.map((stage, i) => (
+              <div key={stage.label} className="flex items-center gap-1">
+                <PipelineStage {...stage} />
+                {i < stages.length - 1 && (
+                  <ArrowRight className="w-4 h-4 text-muted-foreground mt-4" />
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">OCR Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.breakdowns.ocrStatus.map((row) => (
+                <div key={row.ocr_status} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">{row.ocr_status}</span>
+                  <span className="text-sm font-medium">{Number(row.count).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Embedding Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.breakdowns.embeddingStatus.map((row) => (
+                <div key={row.embedding_status} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">{row.embedding_status}</span>
+                  <span className="text-sm font-medium">{Number(row.count).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Chunk Stats</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Total in pgvector</span>
+                <span className="text-sm font-medium">{p.totalChunksInPgvector.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">With lineage</span>
+                <span className="text-sm font-medium">{p.chunksWithLineage.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Unique blobs</span>
+                <span className="text-sm font-medium">{p.uniqueBlobsInChunks.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Logical docs</span>
+                <span className="text-sm font-medium">{p.totalLogicalDocs.toLocaleString()}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {data.recentJobs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Recent Embedding Jobs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Batch ID</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Blobs</TableHead>
+                  <TableHead>Chunks</TableHead>
+                  <TableHead>Completed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.recentJobs.map((job) => (
+                  <TableRow key={job.id} data-testid={`row-embedding-job-${job.id}`}>
+                    <TableCell className="font-mono text-xs">{job.batch_id || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={job.status === 'completed' ? 'default' : 'outline'}>
+                        {job.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{job.file_blobs_processed ?? '-'}</TableCell>
+                    <TableCell>{job.chunks_count ?? '-'}</TableCell>
+                    <TableCell>{job.completed_at ? new Date(job.completed_at).toLocaleDateString() : '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function DiscoveryPanel() {
   const { toast } = useToast();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -684,7 +905,7 @@ function DiscoveryPanel() {
 export default function AdminOcrPipeline() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("pipeline");
 
   const { data: stats, isLoading: statsLoading } = useQuery<OcrJobStats>({
     queryKey: ["/api/admin/ocr/textract/stats"],
@@ -811,6 +1032,7 @@ export default function AdminOcrPipeline() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
+            <TabsTrigger value="pipeline" data-testid="tab-pipeline">Pipeline Status</TabsTrigger>
             <TabsTrigger value="overview" data-testid="tab-overview">All Jobs</TabsTrigger>
             <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
             <TabsTrigger value="queued" data-testid="tab-queued">Queued</TabsTrigger>
@@ -820,6 +1042,9 @@ export default function AdminOcrPipeline() {
             <TabsTrigger value="discover" data-testid="tab-discover">Enqueue</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="pipeline">
+            <PipelineStatusPanel />
+          </TabsContent>
           <TabsContent value="overview">
             <JobsTable />
           </TabsContent>

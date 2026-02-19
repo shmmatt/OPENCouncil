@@ -7,6 +7,10 @@ OPENCouncil is an AI-powered assistant designed for New Hampshire elected offici
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **2026-02-19**: Full document lifecycle tracking: Added embedding lifecycle columns to `file_blobs` (`content_hash`, `embedding_status`, `chunk_count`, `embedded_at`). Added `file_blob_id` to `document_chunks` and `crawler_documents` for end-to-end lineage. Backfilled 5,842 crawler_documents→file_blobs links and 3,297 content hashes.
+- **2026-02-19**: Rewrote batch export/ingest scripts to source from `file_blobs` (source of truth), write `file_blob_id` into chunk metadata, update `embedding_status` lifecycle, and log to `embedding_jobs` table.
+- **2026-02-19**: Added version detection script (`crawler/batch-pipeline/version-detect.ts`) for content hash-based change detection and stale chunk cleanup.
+- **2026-02-19**: Added Pipeline Status dashboard tab to admin OCR pipeline page showing end-to-end lifecycle funnel (discovered → downloaded → text extracted → exported → indexed).
 - **2026-02-19**: Fixed critical schema mismatch — Drizzle `documentChunks` schema now matches actual DB (serial IDs, `document_id`, JSONB `metadata`). All semantic search uses JSONB path expressions for filtering.
 - **2026-02-19**: Rewired chat route to use V3 pipeline (`runChatV3Pipeline`) instead of old `askQuestionWithFileSearch`. pgvector retrieval is now fully operational end-to-end.
 - **2026-02-19**: Made town filters case-insensitive in embeddingStorage to handle mixed-case data ("Ossipee"/"ossipee", "statewide"/"Statewide").

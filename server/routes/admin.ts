@@ -377,4 +377,111 @@ router.get("/v2/documents/search", authenticateAdmin, async (req, res) => {
   }
 });
 
+router.get("/pipeline-status", authenticateAdmin, async (_req, res) => {
+  try {
+    const { db, sql: sqlTag } = await import("../storage/db");
+
+    const crawlerResult = await db.execute(sqlTag`
+      SELECT 
+        count(*) as total_discovered,
+        count(file_blob_id) as linked_to_blobs,
+        count(CASE WHEN status = 'uploaded' THEN 1 END) as uploaded
+      FROM crawler_documents
+    `);
+    const crawlerStats = crawlerResult.rows?.[0] || crawlerResult[0] || {};
+
+    const fileBlobResult = await db.execute(sqlTag`
+      SELECT
+        count(*) as total_blobs,
+        count(CASE WHEN ocr_status = 'completed' OR (COALESCE(char_length(preview_text), 0) >= 1000) THEN 1 END) as text_ready,
+        count(CASE WHEN ocr_status = 'completed' THEN 1 END) as ocr_completed,
+        count(CASE WHEN ocr_status = 'processing' OR ocr_status = 'queued' THEN 1 END) as ocr_pending,
+        count(CASE WHEN ocr_status = 'failed' OR ocr_status = 'blocked' THEN 1 END) as ocr_failed,
+        count(CASE WHEN embedding_status = 'none' AND (ocr_text IS NOT NULL OR (preview_text IS NOT NULL AND char_length(preview_text) >= 100)) THEN 1 END) as ready_to_export,
+        count(CASE WHEN embedding_status = 'exported' THEN 1 END) as exported,
+        count(CASE WHEN embedding_status = 'indexed' THEN 1 END) as indexed,
+        COALESCE(sum(CASE WHEN embedding_status = 'indexed' THEN chunk_count ELSE 0 END), 0) as total_indexed_chunks
+      FROM file_blobs
+    `);
+    const fileBlobStats = fileBlobResult.rows?.[0] || fileBlobResult[0] || {};
+
+    const chunkResult = await db.execute(sqlTag`
+      SELECT 
+        count(*) as total_chunks,
+        count(file_blob_id) as chunks_with_lineage,
+        count(DISTINCT file_blob_id) as unique_blobs_in_chunks
+      FROM document_chunks
+    `);
+    const chunkStats = chunkResult.rows?.[0] || chunkResult[0] || {};
+
+    const versionResult = await db.execute(sqlTag`
+      SELECT
+        count(*) as total_versions,
+        count(CASE WHEN is_current = true THEN 1 END) as current_versions
+      FROM document_versions
+    `);
+    const versionStats = versionResult.rows?.[0] || versionResult[0] || {};
+
+    const logicalDocResult = await db.execute(sqlTag`
+      SELECT count(*) as total_logical_docs FROM logical_documents
+    `);
+    const logicalDocStats = logicalDocResult.rows?.[0] || logicalDocResult[0] || {};
+
+    const embeddingJobResult = await db.execute(sqlTag`
+      SELECT id, batch_id, status, chunks_count, file_blobs_processed, started_at, completed_at
+      FROM embedding_jobs
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+    const embeddingJobRows = embeddingJobResult.rows || embeddingJobResult || [];
+
+    const embStatusResult = await db.execute(sqlTag`
+      SELECT embedding_status, count(*) as count
+      FROM file_blobs
+      GROUP BY embedding_status
+      ORDER BY count DESC
+    `);
+    const embeddingStatusBreakdown = embStatusResult.rows || embStatusResult || [];
+
+    const ocrStatusResult = await db.execute(sqlTag`
+      SELECT ocr_status, count(*) as count
+      FROM file_blobs
+      GROUP BY ocr_status
+      ORDER BY count DESC
+    `);
+    const ocrStatusBreakdown = ocrStatusResult.rows || ocrStatusResult || [];
+
+    res.json({
+      pipeline: {
+        discovered: Number(crawlerStats?.total_discovered || 0),
+        downloaded: Number(crawlerStats?.uploaded || 0),
+        linkedToBlobs: Number(crawlerStats?.linked_to_blobs || 0),
+        totalBlobs: Number(fileBlobStats?.total_blobs || 0),
+        textReady: Number(fileBlobStats?.text_ready || 0),
+        ocrCompleted: Number(fileBlobStats?.ocr_completed || 0),
+        ocrPending: Number(fileBlobStats?.ocr_pending || 0),
+        ocrFailed: Number(fileBlobStats?.ocr_failed || 0),
+        readyToExport: Number(fileBlobStats?.ready_to_export || 0),
+        exported: Number(fileBlobStats?.exported || 0),
+        indexed: Number(fileBlobStats?.indexed || 0),
+        totalIndexedChunks: Number(fileBlobStats?.total_indexed_chunks || 0),
+        totalChunksInPgvector: Number(chunkStats?.total_chunks || 0),
+        chunksWithLineage: Number(chunkStats?.chunks_with_lineage || 0),
+        uniqueBlobsInChunks: Number(chunkStats?.unique_blobs_in_chunks || 0),
+        totalLogicalDocs: Number(logicalDocStats?.total_logical_docs || 0),
+        totalVersions: Number(versionStats?.total_versions || 0),
+        currentVersions: Number(versionStats?.current_versions || 0),
+      },
+      breakdowns: {
+        embeddingStatus: embeddingStatusBreakdown,
+        ocrStatus: ocrStatusBreakdown,
+      },
+      recentJobs: embeddingJobRows,
+    });
+  } catch (error) {
+    console.error("Error fetching pipeline status:", error);
+    res.status(500).json({ message: "Failed to fetch pipeline status" });
+  }
+});
+
 export default router;

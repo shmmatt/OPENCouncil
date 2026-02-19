@@ -125,6 +125,7 @@ export const crawlerDocuments = pgTable("crawler_documents", {
   
   // Relations
   s3SyncId: varchar("s3_sync_id"), // FK to s3_gemini_sync (if synced to Gemini)
+  fileBlobId: varchar("file_blob_id"), // FK to file_blobs (linked after download)
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
