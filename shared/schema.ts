@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, numeric, unique, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, serial, boolean, jsonb, numeric, unique, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -535,27 +535,32 @@ export interface ActorIdentifier {
 
 // Document chunks with embeddings for semantic search
 export const documentChunks = pgTable("document_chunks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  documentVersionId: varchar("document_version_id").notNull().references(() => documentVersions.id, { onDelete: "cascade" }),
-  chunkIndex: integer("chunk_index").notNull(), // 0-based chunk number within document
-  content: text("content").notNull(), // The actual text chunk
-  embedding: vector("embedding", { dimensions: 768 }).notNull(), // Gemini embedding (768 dimensions)
-  town: text("town").notNull(), // Denormalized for filtering
-  category: text("category").notNull(), // Denormalized for filtering
-  board: text("board"), // Denormalized for filtering
-  year: text("year"), // Denormalized for filtering
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  id: serial("id").primaryKey(),
+  documentId: varchar("document_id"),
+  chunkIndex: integer("chunk_index").notNull(),
+  content: text("content").notNull(),
+  embedding: vector("embedding", { dimensions: 768 }),
+  metadata: jsonb("metadata").$type<{
+    town?: string;
+    board?: string;
+    year?: number | string;
+    date?: string;
+    filename?: string;
+    documentType?: string;
+  }>(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Embedding generation jobs (tracks which documents have been embedded)
 export const embeddingJobs = pgTable("embedding_jobs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  documentVersionId: varchar("document_version_id").notNull().references(() => documentVersions.id, { onDelete: "cascade" }).unique(),
-  status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'
-  chunkCount: integer("chunk_count"), // Number of chunks created
-  errorMessage: text("error_message"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  id: serial("id").primaryKey(),
+  documentId: varchar("document_id"),
+  status: varchar("status").notNull().default("pending"),
+  error: text("error"),
+  chunksCount: integer("chunks_count"),
+  startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Insert schemas for embedding tables

@@ -7,18 +7,17 @@
 
 import { generateQueryEmbedding } from "./embeddingService";
 import { semanticSearch, twoLaneSemanticSearch, type SearchResult } from "./embeddingStorage";
-import { getDocumentVersionById, getLogicalDocumentById } from "../storage/documents";
-import { getFileBlobById } from "../storage/fileBlobs";
+import { getLogicalDocumentById } from "../storage/documents";
 import { logDebug, logError, logInfo } from "../utils/logger";
 
 export interface PgvectorChunk {
   content: string;
   similarity: number;
   metadata: {
-    documentVersionId: string;
+    documentId: string | null;
     chunkIndex: number;
-    town: string;
-    category: string;
+    town?: string;
+    category?: string;
     board?: string;
     year?: string;
     canonicalTitle?: string;
@@ -36,21 +35,15 @@ export interface PgvectorRetrievalResult {
 
 async function enrichSearchResult(result: SearchResult): Promise<PgvectorChunk> {
   const chunk = result.chunk;
+  const meta = chunk.metadata || {};
   
   let canonicalTitle: string | undefined;
-  let filename: string | undefined;
   
   try {
-    const docVersion = await getDocumentVersionById(chunk.documentVersionId);
-    if (docVersion) {
-      const logicalDoc = await getLogicalDocumentById(docVersion.documentId);
+    if (chunk.documentId) {
+      const logicalDoc = await getLogicalDocumentById(chunk.documentId);
       if (logicalDoc) {
         canonicalTitle = logicalDoc.canonicalTitle;
-      }
-      
-      const fileBlob = await getFileBlobById(docVersion.fileBlobId);
-      if (fileBlob) {
-        filename = fileBlob.originalFilename;
       }
     }
   } catch (error) {
@@ -61,14 +54,14 @@ async function enrichSearchResult(result: SearchResult): Promise<PgvectorChunk> 
     content: chunk.content,
     similarity: result.similarity,
     metadata: {
-      documentVersionId: chunk.documentVersionId,
+      documentId: chunk.documentId,
       chunkIndex: chunk.chunkIndex,
-      town: chunk.town,
-      category: chunk.category,
-      board: chunk.board || undefined,
-      year: chunk.year || undefined,
+      town: meta.town,
+      category: meta.documentType,
+      board: meta.board || undefined,
+      year: meta.year != null ? String(meta.year) : undefined,
       canonicalTitle,
-      filename,
+      filename: meta.filename,
     },
   };
 }
@@ -83,18 +76,15 @@ export async function pgvectorTwoLaneRetrieve(
   } = {}
 ): Promise<PgvectorRetrievalResult> {
   const startTime = Date.now();
-  
   const {
     localLimit = 14,
     statewideLimit = 6,
-    similarityThreshold = 0.5,
+    similarityThreshold = 0.4,
   } = options;
 
   try {
-    logInfo(`Two-lane pgvector query: "${query}" (town: ${town})`, { stage: "pgvectorRetrieval" });
-
     const queryEmbedding = await generateQueryEmbedding(query);
-    
+
     const { local, statewide } = await twoLaneSemanticSearch(queryEmbedding, {
       localTown: town,
       limit: localLimit + statewideLimit,
@@ -106,68 +96,51 @@ export async function pgvectorTwoLaneRetrieve(
       Promise.all(statewide.map(enrichSearchResult)),
     ]);
 
-    const queryTimeMs = Date.now() - startTime;
-    const allSimilarities = [...local, ...statewide].map(r => r.similarity);
-    const avgSimilarity = allSimilarities.length > 0
-      ? allSimilarities.reduce((sum, s) => sum + s, 0) / allSimilarities.length
+    const allChunks = [...localChunks, ...statewideChunks];
+    const avgSimilarity = allChunks.length > 0
+      ? allChunks.reduce((sum, c) => sum + c.similarity, 0) / allChunks.length
       : 0;
 
-    logInfo(
-      `Retrieved ${localChunks.length} local + ${statewideChunks.length} statewide chunks (avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`,
-      { stage: "pgvectorRetrieval" }
-    );
-
-    return {
+    const result: PgvectorRetrievalResult = {
       localChunks,
       statewideChunks,
-      totalChunks: localChunks.length + statewideChunks.length,
-      queryTimeMs,
+      totalChunks: allChunks.length,
+      queryTimeMs: Date.now() - startTime,
       avgSimilarity,
     };
+
+    logInfo(`pgvector retrieval: ${localChunks.length} local + ${statewideChunks.length} statewide chunks (${result.queryTimeMs}ms)`, {
+      stage: "pgvectorRetrieval",
+    });
+
+    return result;
   } catch (error) {
-    logError("Two-lane retrieval failed", { stage: "pgvectorRetrieval" });
+    logError("pgvector retrieval failed", { stage: "pgvectorRetrieval" });
     throw error;
   }
 }
 
-export async function singleLaneRetrieve(
+export async function pgvectorSingleQuery(
   query: string,
   options: {
     town?: string;
-    category?: string;
-    board?: string;
     limit?: number;
     similarityThreshold?: number;
   } = {}
 ): Promise<PgvectorChunk[]> {
-  const startTime = Date.now();
-  
-  try {
-    logInfo(`Single-lane pgvector query: "${query}"`, { stage: "pgvectorRetrieval" });
+  const { town, limit = 20, similarityThreshold = 0.4 } = options;
 
+  try {
     const queryEmbedding = await generateQueryEmbedding(query);
-    
     const results = await semanticSearch(queryEmbedding, {
-      ...options,
-      limit: options.limit || 20,
-      similarityThreshold: options.similarityThreshold || 0.5,
+      town,
+      limit,
+      similarityThreshold,
     });
 
-    const chunks = await Promise.all(results.map(enrichSearchResult));
-
-    const queryTimeMs = Date.now() - startTime;
-    const avgSimilarity = results.length > 0
-      ? results.reduce((sum, r) => sum + r.similarity, 0) / results.length
-      : 0;
-
-    logInfo(
-      `Retrieved ${chunks.length} chunks (avg similarity: ${avgSimilarity.toFixed(3)}, ${queryTimeMs}ms)`,
-      { stage: "pgvectorRetrieval" }
-    );
-
-    return chunks;
+    return await Promise.all(results.map(enrichSearchResult));
   } catch (error) {
-    logError("Single-lane retrieval failed", { stage: "pgvectorRetrieval" });
+    logError("pgvector single query failed", { stage: "pgvectorRetrieval" });
     throw error;
   }
 }

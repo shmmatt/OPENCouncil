@@ -20,15 +20,15 @@ interface PgvectorLaneChunk {
 
 async function enrichResult(result: SearchResult): Promise<{ title: string; content: string }> {
   try {
-    const docVersion = await getDocumentVersionById(result.chunk.documentVersionId);
-    if (docVersion) {
-      const logicalDoc = await getLogicalDocumentById(docVersion.documentId);
+    if (result.chunk.documentId) {
+      const logicalDoc = await getLogicalDocumentById(result.chunk.documentId);
       if (logicalDoc) {
         return { title: logicalDoc.canonicalTitle, content: result.chunk.content };
       }
     }
   } catch {}
-  return { title: `chunk-${result.chunk.chunkIndex}`, content: result.chunk.content };
+  const metaTitle = result.chunk.metadata?.filename || result.chunk.metadata?.documentType;
+  return { title: metaTitle || `chunk-${result.chunk.chunkIndex}`, content: result.chunk.content };
 }
 
 async function executeQueryOnLane(
@@ -50,7 +50,7 @@ async function executeQueryOnLane(
   const enriched = await Promise.all(results.map(async (r, idx) => {
     const { title, content } = await enrichResult(r);
     return {
-      docId: `${lane}_pgv_${idx}_${r.chunk.documentVersionId}`,
+      docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
       title,
       content,
       lane,

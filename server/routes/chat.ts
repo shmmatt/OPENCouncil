@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { askQuestionWithFileSearch } from "../gemini-client";
+import { runChatV3Pipeline } from "../chatV2/chatOrchestratorV3";
 import { chatConfig } from "../chatV2/chatConfig";
 import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLimiter";
 
@@ -78,7 +78,7 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     const chatHistory = allMessages
       .filter(m => m.id !== userMessage.id)
       .map(m => ({
-        role: m.role,
+        role: m.role as "user" | "assistant",
         content: m.content,
       }));
 
@@ -86,12 +86,16 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     let citations: string[];
     
     try {
-      const result = await askQuestionWithFileSearch({
-        question: content.trim(),
-        chatHistory,
+      const townContext = req.body.townContext || session.townPreference || null;
+      const v3Result = await runChatV3Pipeline({
+        userMessage: content.trim(),
+        sessionHistory: chatHistory,
+        townPreference: townContext,
+        situationContext: null,
+        sessionSources: [],
       });
-      answer = result.answer;
-      citations = result.citations;
+      answer = v3Result.answerText;
+      citations = v3Result.sourceDocumentNames || [];
     } catch (aiError) {
       console.error("AI response error:", aiError);
       answer = "An error occurred while processing this question. Please try again in a moment.";

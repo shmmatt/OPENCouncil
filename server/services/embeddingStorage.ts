@@ -3,9 +3,12 @@
  * 
  * Handles database operations for document embeddings using pgvector.
  * Provides semantic search over embedded document chunks.
+ * 
+ * The document_chunks table stores metadata (town, board, year, etc.) in a JSONB column.
+ * Filters use SQL JSONB operators to query against metadata fields.
  */
 
-import { db, schema, eq, and, inArray, sql } from "../storage/db";
+import { db, schema, eq, and, sql } from "../storage/db";
 import type {
   DocumentChunk,
   InsertDocumentChunk,
@@ -23,15 +26,15 @@ export async function createEmbeddingJob(job: InsertEmbeddingJob): Promise<Embed
   return result;
 }
 
-export async function getEmbeddingJobByDocumentVersion(documentVersionId: string): Promise<EmbeddingJob | undefined> {
+export async function getEmbeddingJobByDocumentId(documentId: string): Promise<EmbeddingJob | undefined> {
   const [result] = await db
     .select()
     .from(schema.embeddingJobs)
-    .where(eq(schema.embeddingJobs.documentVersionId, documentVersionId));
+    .where(eq(schema.embeddingJobs.documentId, documentId));
   return result;
 }
 
-export async function updateEmbeddingJob(id: string, data: Partial<InsertEmbeddingJob>): Promise<void> {
+export async function updateEmbeddingJob(id: number, data: Partial<InsertEmbeddingJob>): Promise<void> {
   await db
     .update(schema.embeddingJobs)
     .set(data)
@@ -62,18 +65,18 @@ export async function insertDocumentChunkBatch(chunks: InsertDocumentChunk[]): P
   logDebug(`Inserted ${chunks.length} chunks`, { stage: "embeddingStorage" });
 }
 
-export async function getChunksByDocumentVersion(documentVersionId: string): Promise<DocumentChunk[]> {
+export async function getChunksByDocumentId(documentId: string): Promise<DocumentChunk[]> {
   return await db
     .select()
     .from(schema.documentChunks)
-    .where(eq(schema.documentChunks.documentVersionId, documentVersionId))
+    .where(eq(schema.documentChunks.documentId, documentId))
     .orderBy(schema.documentChunks.chunkIndex);
 }
 
-export async function deleteChunksByDocumentVersion(documentVersionId: string): Promise<void> {
+export async function deleteChunksByDocumentId(documentId: string): Promise<void> {
   await db
     .delete(schema.documentChunks)
-    .where(eq(schema.documentChunks.documentVersionId, documentVersionId));
+    .where(eq(schema.documentChunks.documentId, documentId));
 }
 
 // ============================================================
@@ -82,7 +85,7 @@ export async function deleteChunksByDocumentVersion(documentVersionId: string): 
 
 export interface SearchOptions {
   town?: string;
-  towns?: string[]; // For multi-town queries
+  towns?: string[];
   category?: string;
   board?: string;
   year?: string;
@@ -93,12 +96,12 @@ export interface SearchOptions {
 export interface SearchResult {
   chunk: DocumentChunk;
   similarity: number;
-  documentVersionId: string;
+  documentId: string | null;
 }
 
 /**
- * Perform semantic search over document chunks using cosine similarity
- * Returns chunks ordered by similarity score (highest first)
+ * Perform semantic search over document chunks using cosine similarity.
+ * Filters use JSONB metadata fields (town, board, year, category).
  */
 export async function semanticSearch(
   queryEmbedding: number[],
@@ -114,50 +117,48 @@ export async function semanticSearch(
     similarityThreshold = 0.5,
   } = options;
 
-  // Build filter conditions
   const conditions = [];
-  
+
   if (town) {
-    conditions.push(eq(schema.documentChunks.town, town));
+    conditions.push(sql`lower(metadata->>'town') = ${town.toLowerCase()}`);
   } else if (towns && towns.length > 0) {
-    conditions.push(inArray(schema.documentChunks.town, towns));
-  }
-  
-  if (category) {
-    conditions.push(eq(schema.documentChunks.category, category));
-  }
-  
-  if (board) {
-    conditions.push(eq(schema.documentChunks.board, board));
-  }
-  
-  if (year) {
-    conditions.push(eq(schema.documentChunks.year, year));
+    const townList = towns.map(t => `'${t.replace(/'/g, "''").toLowerCase()}'`).join(",");
+    conditions.push(sql.raw(`lower(metadata->>'town') IN (${townList})`));
   }
 
-  // Convert embedding array to pgvector format
+  if (category) {
+    conditions.push(sql`metadata->>'documentType' = ${category}`);
+  }
+
+  if (board) {
+    conditions.push(sql`metadata->>'board' = ${board}`);
+  }
+
+  if (year) {
+    conditions.push(sql`metadata->>'year' = ${year}`);
+  }
+
   const embeddingStr = `[${queryEmbedding.join(",")}]`;
 
   try {
-    // Perform vector similarity search using cosine distance
-    // 1 - (embedding <=> query) gives us similarity score (0 to 1)
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
     const results = await db
       .select({
         chunk: schema.documentChunks,
         similarity: sql<number>`1 - (embedding <=> ${embeddingStr}::vector)`,
       })
       .from(schema.documentChunks)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(whereClause)
       .orderBy(sql`embedding <=> ${embeddingStr}::vector`)
       .limit(limit);
 
-    // Filter by similarity threshold
     const filtered = results
       .filter(r => r.similarity >= similarityThreshold)
       .map(r => ({
         chunk: r.chunk,
         similarity: r.similarity,
-        documentVersionId: r.chunk.documentVersionId,
+        documentId: r.chunk.documentId,
       }));
 
     logDebug(
@@ -168,6 +169,57 @@ export async function semanticSearch(
     return filtered;
   } catch (error) {
     logError("Semantic search failed", { stage: "embeddingStorage" });
+    throw error;
+  }
+}
+
+async function semanticSearchStatewideOnly(
+  queryEmbedding: number[],
+  options: SearchOptions = {}
+): Promise<SearchResult[]> {
+  const {
+    category,
+    board,
+    year,
+    limit = 6,
+    similarityThreshold = 0.5,
+  } = options;
+
+  const conditions = [];
+  conditions.push(sql`lower(metadata->>'town') = 'statewide'`);
+
+  if (category) {
+    conditions.push(sql`metadata->>'documentType' = ${category}`);
+  }
+  if (board) {
+    conditions.push(sql`metadata->>'board' = ${board}`);
+  }
+  if (year) {
+    conditions.push(sql`metadata->>'year' = ${year}`);
+  }
+
+  const embeddingStr = `[${queryEmbedding.join(",")}]`;
+
+  try {
+    const results = await db
+      .select({
+        chunk: schema.documentChunks,
+        similarity: sql<number>`1 - (embedding <=> ${embeddingStr}::vector)`,
+      })
+      .from(schema.documentChunks)
+      .where(and(...conditions))
+      .orderBy(sql`embedding <=> ${embeddingStr}::vector`)
+      .limit(limit);
+
+    return results
+      .filter(r => r.similarity >= similarityThreshold)
+      .map(r => ({
+        chunk: r.chunk,
+        similarity: r.similarity,
+        documentId: r.chunk.documentId,
+      }));
+  } catch (error) {
+    logError("Statewide semantic search failed", { stage: "embeddingStorage" });
     throw error;
   }
 }
@@ -184,16 +236,14 @@ export async function twoLaneSemanticSearch(
   const localLimit = options.limit ? Math.ceil(options.limit * 0.7) : 14;
   const statewideLimit = options.limit ? Math.floor(options.limit * 0.3) : 6;
 
-  // Execute both searches in parallel
   const [local, statewide] = await Promise.all([
     semanticSearch(queryEmbedding, {
       ...baseOptions,
       town: localTown,
       limit: localLimit,
     }),
-    semanticSearch(queryEmbedding, {
+    semanticSearchStatewideOnly(queryEmbedding, {
       ...baseOptions,
-      town: "statewide",
       limit: statewideLimit,
     }),
   ]);
@@ -220,17 +270,19 @@ export async function getEmbeddingStats(): Promise<{
 }> {
   const chunks = await db
     .select({
-      town: schema.documentChunks.town,
+      town: sql<string>`metadata->>'town'`,
       count: sql<number>`count(*)::int`,
     })
     .from(schema.documentChunks)
-    .groupBy(schema.documentChunks.town);
+    .groupBy(sql`metadata->>'town'`);
 
   const totalChunks = chunks.reduce((sum, row) => sum + row.count, 0);
-  const byTown = Object.fromEntries(chunks.map(row => [row.town, row.count]));
+  const byTown = Object.fromEntries(
+    chunks.filter(row => row.town).map(row => [row.town, row.count])
+  );
 
   const documents = await db
-    .select({ count: sql<number>`count(distinct document_version_id)::int` })
+    .select({ count: sql<number>`count(distinct document_id)::int` })
     .from(schema.documentChunks);
 
   return {
