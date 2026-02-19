@@ -51,6 +51,11 @@ export async function runPrecheckLoop(): Promise<void> {
           lockedAt: null,
           attempts: job.attempts + 1,
         });
+        if (job.fileBlobId) {
+          await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+            ocrFailureReason: `precheck_error: ${msg}`,
+          });
+        }
       }
     } catch (error) {
       console.error("[TextractWorker:Precheck] Loop error:", error);
@@ -70,6 +75,11 @@ async function processPrecheck(job: any): Promise<void> {
       lockedBy: null,
       lockedAt: null,
     });
+    if (job.fileBlobId) {
+      await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+        ocrFailureReason: "no_s3_key: No S3 key provided",
+      });
+    }
     return;
   }
 
@@ -84,6 +94,11 @@ async function processPrecheck(job: any): Promise<void> {
       lockedBy: null,
       lockedAt: null,
     });
+    if (job.fileBlobId) {
+      await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+        ocrFailureReason: "not_pdf: File does not start with %PDF- magic bytes",
+      });
+    }
     return;
   }
 
@@ -165,6 +180,11 @@ async function processPrecheck(job: any): Promise<void> {
       lockedAt: null,
       attempts: job.attempts + 1,
     });
+    if (job.fileBlobId) {
+      await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+        ocrFailureReason: `textract_start_failed: ${msg}`,
+      });
+    }
   }
 }
 
@@ -189,6 +209,11 @@ export async function runPollLoop(): Promise<void> {
           lockedBy: null,
           lockedAt: null,
         });
+        if (job.fileBlobId) {
+          await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+            ocrFailureReason: "no_textract_job_id: No Textract job ID found",
+          });
+        }
         continue;
       }
 
@@ -209,6 +234,11 @@ export async function runPollLoop(): Promise<void> {
             lockedBy: null,
             lockedAt: null,
           });
+          if (job.fileBlobId) {
+            await fileBlobsStore.updateOcrStatus(job.fileBlobId, "failed", {
+              ocrFailureReason: `poll_max_retries: ${msg}`,
+            });
+          }
         } else {
           await ocrJobsStore.updateOcrJob(job.id, {
             lastError: msg,
