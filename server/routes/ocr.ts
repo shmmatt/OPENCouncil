@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { authenticateAdmin } from "../middleware/auth";
 import { reindexOcrDocument } from "../gemini-client";
 import { getOcrConfig } from "../config/ocr";
+import * as ocrJobsStore from "../storage/ocrJobs";
 import type { DocumentMetadata } from "@shared/schema";
 
 const router = Router();
@@ -208,6 +209,77 @@ router.post("/reindex-completed", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error batch re-indexing OCR documents:", error);
     res.status(500).json({ message: "Failed to batch re-index OCR documents" });
+  }
+});
+
+router.get("/textract/stats", authenticateAdmin, async (req, res) => {
+  try {
+    const stats = await ocrJobsStore.getOcrJobStats();
+    res.json(stats);
+  } catch (error) {
+    console.error("Error fetching Textract OCR stats:", error);
+    res.status(500).json({ message: "Failed to fetch Textract OCR stats" });
+  }
+});
+
+router.post("/textract/enqueue", authenticateAdmin, async (req, res) => {
+  try {
+    const { documents } = req.body;
+    if (!Array.isArray(documents) || documents.length === 0) {
+      return res.status(400).json({ message: "Provide an array of documents with documentId, s3Bucket, s3Key" });
+    }
+    const enqueued = await ocrJobsStore.enqueueDocumentsForOcr(documents);
+    res.json({ success: true, enqueued });
+  } catch (error) {
+    console.error("Error enqueuing Textract jobs:", error);
+    res.status(500).json({ message: "Failed to enqueue Textract jobs" });
+  }
+});
+
+router.get("/textract/jobs", authenticateAdmin, async (req, res) => {
+  try {
+    const status = req.query.status as string | undefined;
+    if (status) {
+      const jobs = await ocrJobsStore.getOcrJobsByStatus(status);
+      res.json(jobs);
+    } else {
+      const stats = await ocrJobsStore.getOcrJobStats();
+      res.json(stats);
+    }
+  } catch (error) {
+    console.error("Error fetching Textract jobs:", error);
+    res.status(500).json({ message: "Failed to fetch Textract jobs" });
+  }
+});
+
+router.get("/textract/job/:id", authenticateAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid job ID" });
+    }
+    const job = await ocrJobsStore.getOcrJobById(id);
+    if (!job) {
+      return res.status(404).json({ message: "OCR job not found" });
+    }
+    res.json(job);
+  } catch (error) {
+    console.error("Error fetching Textract job:", error);
+    res.status(500).json({ message: "Failed to fetch Textract job" });
+  }
+});
+
+router.post("/textract/reset-stuck", authenticateAdmin, async (req, res) => {
+  try {
+    const resetCount = await ocrJobsStore.resetStuckOcrJobs();
+    res.json({
+      success: true,
+      message: `Reset ${resetCount} stuck Textract jobs.`,
+      resetCount,
+    });
+  } catch (error) {
+    console.error("Error resetting stuck Textract jobs:", error);
+    res.status(500).json({ message: "Failed to reset stuck Textract jobs" });
   }
 });
 

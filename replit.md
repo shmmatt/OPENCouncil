@@ -65,8 +65,19 @@ The V3 pipeline (`server/chatV2/chatOrchestratorV3.ts`) runs:
 ### V2 Document Ingestion Pipeline
 Staged workflow: upload → hash → extract text → LLM metadata suggestion → admin review → approve/reject → index. Includes meeting minutes detection and three-tier town detection.
 
-### OCR Pipeline
-Automatic OCR for scanned PDFs using Tesseract.js. Background worker detects low-text PDFs, processes via OCR, and triggers re-indexing into the embedding system.
+### OCR Pipeline (Dual-Provider)
+Two OCR providers are supported:
+
+**Tesseract.js (legacy)**: Background worker in `server/workers/ocrWorker.ts` detects low-text PDFs, processes via Tesseract OCR, and triggers re-indexing.
+
+**AWS Textract (primary)**: Production-grade async OCR pipeline for S3-sourced documents:
+- **State machine**: queued → prechecked → textract_running → materialized (or skipped_native / failed)
+- **Worker A (Precheck)**: Claims `queued` jobs via `SKIP LOCKED`, validates PDF magic bytes, extracts native text. If native chars >= 1000, marks `skipped_native`. Otherwise starts Textract async job.
+- **Worker B (Poll + Materialize)**: Polls Textract `GetDocumentTextDetection`, assembles LINE blocks into text, writes gzipped `.txt.gz` artifact to `derived/text/<docId>.txt.gz` in S3, updates `fileBlobs.ocrText` and marks `materialized`.
+- **Key files**: `server/services/textractPipeline.ts`, `server/workers/textractWorker.ts`, `server/storage/ocrJobs.ts`
+- **DB table**: `ocr_jobs` (dedicated job queue with priority, backoff, Textract job ID tracking)
+- **API routes**: `/api/ocr/textract/stats`, `/api/ocr/textract/enqueue`, `/api/ocr/textract/jobs`, `/api/ocr/textract/reset-stuck`
+- **Requires**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` secrets; IAM permissions for `s3:GetObject`, `s3:PutObject`, `textract:Start/GetDocumentTextDetection`
 
 ### Persistent Object Storage
 Document files stored in Replit Object Storage (`server/services/blobStorage.ts`). Paths starting with `/replit-objstore` use cloud storage; legacy local paths supported for backward compatibility.

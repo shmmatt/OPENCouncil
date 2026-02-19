@@ -13,6 +13,7 @@ import { registerRoutes } from "./routes";
 import { ensureAdminExists } from "./init-admin";
 import { attachAnonymousIdentity, attachUserIdentity, authRouter } from "./auth";
 import { startOcrWorker } from "./workers/ocrWorker";
+import { startTextractWorkers } from "./workers/textractWorker";
 import { generalApiLimiter } from "./middleware/rateLimiter";
 import { logInfo, logError, getLogger } from "./utils/logger";
 
@@ -93,8 +94,9 @@ export default async function runApp(
   // Initialize admin account from environment variables
   await ensureAdminExists();
   
-  // Start the OCR background worker
+  // Start the OCR background workers
   startOcrWorker();
+  startTextractWorkers();
 
   // importantly run the final setup after setting up all the other routes so
   // the catch-all route doesn't interfere with the other routes

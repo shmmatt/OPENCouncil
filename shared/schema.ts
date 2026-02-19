@@ -55,10 +55,15 @@ export const fileBlobs = pgTable("file_blobs", {
   originalFilename: text("original_filename").notNull(),
   storagePath: text("storage_path").notNull(), // local path or storage key
   previewText: text("preview_text"), // extracted text for LLM analysis
+  // S3 source tracking
+  s3Bucket: text("s3_bucket"),
+  s3Key: text("s3_key"),
+  fileSha256: text("file_sha256"),
   // OCR-related fields
   extractedTextCharCount: integer("extracted_text_char_count").notNull().default(0),
   needsOcr: boolean("needs_ocr").notNull().default(false),
   ocrStatus: text("ocr_status").notNull().default("none"), // 'none' | 'queued' | 'processing' | 'completed' | 'failed' | 'blocked'
+  ocrProvider: text("ocr_provider"), // 'textract' | 'tesseract' | 'none'
   ocrFailureReason: text("ocr_failure_reason"),
   ocrText: text("ocr_text"),
   ocrTextCharCount: integer("ocr_text_char_count").notNull().default(0),
@@ -66,7 +71,41 @@ export const fileBlobs = pgTable("file_blobs", {
   ocrStartedAt: timestamp("ocr_started_at"),
   ocrCompletedAt: timestamp("ocr_completed_at"),
   ocrReindexedAt: timestamp("ocr_reindexed_at"), // When OCR text was re-indexed into RAG
+  extractedTextS3Key: text("extracted_text_s3_key"), // S3 key for canonical extracted text artifact
+  extractedTextSha256: text("extracted_text_sha256"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// OCR Job Status values for the Textract pipeline state machine
+export const OCR_JOB_STATUS_VALUES = [
+  'queued', 'skipped_native', 'textract_running',
+  'textract_failed', 'materialized', 'failed'
+] as const;
+export type OcrJobStatus = typeof OCR_JOB_STATUS_VALUES[number];
+
+// OcrJobs: Dedicated job queue for Textract OCR pipeline
+export const ocrJobs = pgTable("ocr_jobs", {
+  id: serial("id").primaryKey(),
+  documentId: varchar("document_id").notNull(),
+  fileBlobId: varchar("file_blob_id").references(() => fileBlobs.id),
+  status: text("status").notNull(), // OcrJobStatus
+  priority: integer("priority").notNull().default(0),
+  lockedBy: text("locked_by"),
+  lockedAt: timestamp("locked_at"),
+  availableAt: timestamp("available_at").defaultNow().notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  pageCount: integer("page_count"),
+  nativeTextChars: integer("native_text_chars"),
+  isPdf: boolean("is_pdf"),
+  textractJobId: text("textract_job_id"),
+  textractStartedAt: timestamp("textract_started_at"),
+  textractCompletedAt: timestamp("textract_completed_at"),
+  textractNextToken: text("textract_next_token"),
+  s3Bucket: text("s3_bucket"),
+  s3Key: text("s3_key"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // LogicalDocument: Represents a logical document (e.g., "Conway Zoning Ordinance")
@@ -582,6 +621,16 @@ export type EmbeddingJob = typeof embeddingJobs.$inferSelect;
 export type InsertEmbeddingJob = z.infer<typeof insertEmbeddingJobSchema>;
 
 export type EmbeddingJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+// Insert schema and types for OCR jobs
+export const insertOcrJobSchema = createInsertSchema(ocrJobs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OcrJob = typeof ocrJobs.$inferSelect;
+export type InsertOcrJob = z.infer<typeof insertOcrJobSchema>;
 
 // ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)

@@ -94,30 +94,39 @@ export async function claimNextOcrJob(): Promise<FileBlob | null> {
   `);
   
   if (result.rows && result.rows.length > 0) {
-    const row = result.rows[0] as any;
-    return {
-      id: row.id,
-      rawHash: row.raw_hash,
-      previewHash: row.preview_hash,
-      sizeBytes: row.size_bytes,
-      mimeType: row.mime_type,
-      originalFilename: row.original_filename,
-      storagePath: row.storage_path,
-      previewText: row.preview_text,
-      extractedTextCharCount: row.extracted_text_char_count,
-      needsOcr: row.needs_ocr,
-      ocrStatus: row.ocr_status,
-      ocrFailureReason: row.ocr_failure_reason,
-      ocrText: row.ocr_text,
-      ocrTextCharCount: row.ocr_text_char_count,
-      ocrQueuedAt: row.ocr_queued_at,
-      ocrStartedAt: row.ocr_started_at,
-      ocrCompletedAt: row.ocr_completed_at,
-      ocrReindexedAt: row.ocr_reindexed_at,
-      createdAt: row.created_at,
-    };
+    return mapRowToFileBlob(result.rows[0] as any);
   }
   return null;
+}
+
+function mapRowToFileBlob(row: any): FileBlob {
+  return {
+    id: row.id,
+    rawHash: row.raw_hash,
+    previewHash: row.preview_hash,
+    sizeBytes: row.size_bytes,
+    mimeType: row.mime_type,
+    originalFilename: row.original_filename,
+    storagePath: row.storage_path,
+    previewText: row.preview_text,
+    s3Bucket: row.s3_bucket,
+    s3Key: row.s3_key,
+    fileSha256: row.file_sha256,
+    extractedTextCharCount: row.extracted_text_char_count,
+    needsOcr: row.needs_ocr,
+    ocrStatus: row.ocr_status,
+    ocrProvider: row.ocr_provider,
+    ocrFailureReason: row.ocr_failure_reason,
+    ocrText: row.ocr_text,
+    ocrTextCharCount: row.ocr_text_char_count,
+    ocrQueuedAt: row.ocr_queued_at,
+    ocrStartedAt: row.ocr_started_at,
+    ocrCompletedAt: row.ocr_completed_at,
+    ocrReindexedAt: row.ocr_reindexed_at,
+    extractedTextS3Key: row.extracted_text_s3_key,
+    extractedTextSha256: row.extracted_text_sha256,
+    createdAt: row.created_at,
+  };
 }
 
 export async function updateOcrStatus(
@@ -215,27 +224,7 @@ export async function getOcrCompletedNeedingReindex(): Promise<Array<{ fileBlob:
   `);
   
   return result.rows.map((row: any) => ({
-    fileBlob: {
-      id: row.id,
-      rawHash: row.raw_hash,
-      previewHash: row.preview_hash,
-      sizeBytes: row.size_bytes,
-      mimeType: row.mime_type,
-      originalFilename: row.original_filename,
-      storagePath: row.storage_path,
-      previewText: row.preview_text,
-      extractedTextCharCount: row.extracted_text_char_count,
-      needsOcr: row.needs_ocr,
-      ocrStatus: row.ocr_status,
-      ocrFailureReason: row.ocr_failure_reason,
-      ocrText: row.ocr_text,
-      ocrTextCharCount: row.ocr_text_char_count,
-      ocrQueuedAt: row.ocr_queued_at,
-      ocrStartedAt: row.ocr_started_at,
-      ocrCompletedAt: row.ocr_completed_at,
-      ocrReindexedAt: row.ocr_reindexed_at,
-      createdAt: row.created_at,
-    },
+    fileBlob: mapRowToFileBlob(row),
     metadata: row.final_metadata || row.suggested_metadata || {},
   }));
 }

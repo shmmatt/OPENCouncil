@@ -32,5 +32,8 @@ export * from "./analytics";
 // Temp uploads
 export * from "./tempUploads";
 
+// OCR Jobs (Textract pipeline)
+export * from "./ocrJobs";
+
 // S3 Gemini Sync
 export * from "./s3GeminiSync";
