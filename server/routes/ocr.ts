@@ -333,7 +333,7 @@ router.post("/textract/discover", authenticateAdmin, async (req, res) => {
       alreadyTracked: alreadyTracked.length,
       newDocuments: newDocs.length,
       townBreakdown: townCounts,
-      documents: newDocs.slice(0, 200),
+      documents: newDocs,
     });
   } catch (error: any) {
     console.error("Error discovering S3 documents:", error);
@@ -369,6 +369,40 @@ router.post("/textract/enqueue-discovered", authenticateAdmin, async (req, res) 
   } catch (error) {
     console.error("Error enqueuing discovered documents:", error);
     res.status(500).json({ message: "Failed to enqueue documents" });
+  }
+});
+
+router.post("/textract/enqueue-all-new", authenticateAdmin, async (req, res) => {
+  try {
+    const { prefix } = req.body || {};
+    const bucket = getDefaultBucket();
+    const s3Result = await discoverS3Documents(prefix);
+    const trackedKeys = await ocrJobsStore.getTrackedS3Keys();
+    const newDocs = s3Result.pdfs.filter((p) => !trackedKeys.has(p.key));
+
+    if (newDocs.length === 0) {
+      return res.json({ success: true, message: "No new documents to enqueue.", enqueued: 0, total: s3Result.total });
+    }
+
+    const documents = newDocs.map((doc) => ({
+      documentId: doc.key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
+      s3Bucket: bucket,
+      s3Key: doc.key,
+      priority: 0,
+    }));
+
+    const enqueued = await ocrJobsStore.enqueueDocumentsForOcr(documents);
+    res.json({
+      success: true,
+      message: `Enqueued ${enqueued} new documents out of ${newDocs.length} discovered (${s3Result.total} total in S3).`,
+      enqueued,
+      discovered: newDocs.length,
+      total: s3Result.total,
+    });
+  } catch (error: any) {
+    console.error("Error enqueuing all new documents:", error);
+    const detail = error?.message || "Unknown error";
+    res.status(500).json({ message: `Failed to enqueue all new documents: ${detail}` });
   }
 });
 

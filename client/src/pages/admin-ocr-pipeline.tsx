@@ -251,7 +251,9 @@ function DiscoveryPanel() {
   const [prefix, setPrefix] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [discoveryData, setDiscoveryData] = useState<DiscoveryResult | null>(null);
+  const [docPage, setDocPage] = useState(0);
   const hasAutoScanned = useRef(false);
+  const DOCS_PER_PAGE = 100;
 
   const discoverMutation = useMutation({
     mutationFn: async () => {
@@ -269,6 +271,7 @@ function DiscoveryPanel() {
     onSuccess: (data: DiscoveryResult) => {
       setDiscoveryData(data);
       setSelectedKeys(new Set());
+      setDocPage(0);
       toast({
         title: "Discovery Complete",
         description: `Found ${data.newDocuments} new documents out of ${data.totalInS3} total PDFs in ${data.bucket}.`,
@@ -293,7 +296,10 @@ function DiscoveryPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keys }),
       });
-      if (!res.ok) throw new Error("Enqueue failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Enqueue failed");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -305,6 +311,31 @@ function DiscoveryPanel() {
     },
     onError: (error: Error) => {
       toast({ title: "Enqueue Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const enqueueAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/ocr/textract/enqueue-all-new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: prefix || undefined }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Enqueue all failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Enqueued All", description: data.message });
+      setSelectedKeys(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/all-jobs"] });
+      discoverMutation.mutate();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Enqueue All Failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -407,9 +438,23 @@ function DiscoveryPanel() {
                 </div>
               )}
 
-              {discoveryData.documents.length > 0 && (
+              {discoveryData.newDocuments > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => enqueueAllMutation.mutate()}
+                        disabled={enqueueAllMutation.isPending}
+                        data-testid="button-enqueue-all"
+                      >
+                        {enqueueAllMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <FolderUp className="w-4 h-4 mr-2" />
+                        )}
+                        Enqueue All New ({discoveryData.newDocuments})
+                      </Button>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Checkbox
                         checked={selectedKeys.size === discoveryData.documents.length && discoveryData.documents.length > 0}
@@ -419,60 +464,91 @@ function DiscoveryPanel() {
                       <span className="text-sm text-muted-foreground">
                         {selectedKeys.size} of {discoveryData.documents.length} selected
                       </span>
+                      <Button
+                        variant="outline"
+                        onClick={() => enqueueMutation.mutate(Array.from(selectedKeys))}
+                        disabled={selectedKeys.size === 0 || enqueueMutation.isPending}
+                        data-testid="button-enqueue-selected"
+                      >
+                        {enqueueMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <FolderUp className="w-4 h-4 mr-2" />
+                        )}
+                        Enqueue Selected ({selectedKeys.size})
+                      </Button>
                     </div>
-                    <Button
-                      onClick={() => enqueueMutation.mutate(Array.from(selectedKeys))}
-                      disabled={selectedKeys.size === 0 || enqueueMutation.isPending}
-                      data-testid="button-enqueue-selected"
-                    >
-                      {enqueueMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <FolderUp className="w-4 h-4 mr-2" />
-                      )}
-                      Enqueue Selected ({selectedKeys.size})
-                    </Button>
                   </div>
 
-                  <ScrollArea className="h-[300px] w-full rounded border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8" />
-                          <TableHead>S3 Key</TableHead>
-                          <TableHead>Town</TableHead>
-                          <TableHead>Size</TableHead>
-                          <TableHead>Last Modified</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {discoveryData.documents.map((doc) => (
-                          <TableRow key={doc.key} data-testid={`row-discovered-${doc.key}`}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedKeys.has(doc.key)}
-                                onCheckedChange={() => toggleKey(doc.key)}
-                              />
-                            </TableCell>
-                            <TableCell className="font-mono text-xs max-w-[300px] truncate" title={doc.key}>
-                              {doc.key}
-                            </TableCell>
-                            <TableCell>
-                              {doc.town ? <Badge variant="secondary">{doc.town}</Badge> : "-"}
-                            </TableCell>
-                            <TableCell className="text-xs">{formatBytes(doc.size)}</TableCell>
-                            <TableCell className="text-xs">{formatDate(doc.lastModified)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-
-                  {discoveryData.newDocuments > discoveryData.documents.length && (
-                    <div className="text-sm text-muted-foreground">
-                      Showing {discoveryData.documents.length} of {discoveryData.newDocuments} new documents
-                    </div>
-                  )}
+                  {(() => {
+                    const totalDocs = discoveryData.documents.length;
+                    const totalPages = Math.ceil(totalDocs / DOCS_PER_PAGE);
+                    const pagedDocs = discoveryData.documents.slice(docPage * DOCS_PER_PAGE, (docPage + 1) * DOCS_PER_PAGE);
+                    return (
+                      <>
+                        <ScrollArea className="h-[400px] w-full rounded border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-8" />
+                                <TableHead>S3 Key</TableHead>
+                                <TableHead>Town</TableHead>
+                                <TableHead>Size</TableHead>
+                                <TableHead>Last Modified</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {pagedDocs.map((doc) => (
+                                <TableRow key={doc.key} data-testid={`row-discovered-${doc.key}`}>
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={selectedKeys.has(doc.key)}
+                                      onCheckedChange={() => toggleKey(doc.key)}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs max-w-[300px] truncate" title={doc.key}>
+                                    {doc.key}
+                                  </TableCell>
+                                  <TableCell>
+                                    {doc.town ? <Badge variant="secondary">{doc.town}</Badge> : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-xs">{formatBytes(doc.size)}</TableCell>
+                                  <TableCell className="text-xs">{formatDate(doc.lastModified)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-muted-foreground">
+                              Page {docPage + 1} of {totalPages} ({totalDocs} documents)
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDocPage((p) => Math.max(0, p - 1))}
+                                disabled={docPage === 0}
+                                data-testid="button-doc-prev"
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDocPage((p) => Math.min(totalPages - 1, p + 1))}
+                                disabled={docPage >= totalPages - 1}
+                                data-testid="button-doc-next"
+                              >
+                                Next
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
