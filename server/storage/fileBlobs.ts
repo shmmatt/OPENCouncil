@@ -290,6 +290,108 @@ export async function getFileBlobsNeedingOcrQueue(minCharThreshold: number): Pro
     .orderBy(asc(schema.fileBlobs.createdAt));
 }
 
+export async function getFileBlobsWithS3Keys(): Promise<Array<{
+  id: string;
+  s3Bucket: string | null;
+  s3Key: string | null;
+  originalFilename: string;
+  ocrStatus: string;
+  extractedTextCharCount: number;
+  extractedTextS3Key: string | null;
+  sizeBytes: number;
+  createdAt: Date | null;
+}>> {
+  const result = await db.execute(sql`
+    SELECT id, s3_bucket, s3_key, original_filename, ocr_status,
+           extracted_text_char_count, extracted_text_s3_key, size_bytes, created_at
+    FROM file_blobs
+    WHERE s3_key IS NOT NULL AND s3_key != ''
+    ORDER BY created_at ASC
+  `);
+  return (result.rows as any[]).map((r) => ({
+    id: r.id,
+    s3Bucket: r.s3_bucket,
+    s3Key: r.s3_key,
+    originalFilename: r.original_filename,
+    ocrStatus: r.ocr_status || "none",
+    extractedTextCharCount: r.extracted_text_char_count || 0,
+    extractedTextS3Key: r.extracted_text_s3_key,
+    sizeBytes: r.size_bytes || 0,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function getFileBlobsNeedingTextract(): Promise<Array<{
+  id: string;
+  s3Bucket: string;
+  s3Key: string;
+  originalFilename: string;
+  ocrStatus: string;
+  sizeBytes: number;
+}>> {
+  const result = await db.execute(sql`
+    SELECT fb.id, fb.s3_bucket, fb.s3_key, fb.original_filename, fb.ocr_status, fb.size_bytes
+    FROM file_blobs fb
+    WHERE fb.s3_key IS NOT NULL
+      AND fb.s3_key != ''
+      AND fb.ocr_status IN ('none', 'queued')
+      AND NOT EXISTS (
+        SELECT 1 FROM ocr_jobs oj WHERE oj.file_blob_id = fb.id
+          AND oj.status NOT IN ('failed', 'textract_failed')
+      )
+    ORDER BY fb.created_at ASC
+  `);
+  return (result.rows as any[]).map((r) => ({
+    id: r.id,
+    s3Bucket: r.s3_bucket || "opencouncil-municipal-docs",
+    s3Key: r.s3_key,
+    originalFilename: r.original_filename,
+    ocrStatus: r.ocr_status || "none",
+    sizeBytes: r.size_bytes || 0,
+  }));
+}
+
+export async function getReconciliationReport(): Promise<{
+  totalFileBlobs: number;
+  withS3Key: number;
+  ocrNone: number;
+  ocrCompleted: number;
+  ocrFailed: number;
+  ocrProcessing: number;
+  ocrQueued: number;
+  withExtractedText: number;
+  withOcrText: number;
+  withTextArtifact: number;
+}> {
+  const result = await db.execute(sql`
+    SELECT
+      COUNT(*) as total,
+      COUNT(CASE WHEN s3_key IS NOT NULL AND s3_key != '' THEN 1 END) as with_s3_key,
+      COUNT(CASE WHEN ocr_status = 'none' THEN 1 END) as ocr_none,
+      COUNT(CASE WHEN ocr_status = 'completed' THEN 1 END) as ocr_completed,
+      COUNT(CASE WHEN ocr_status IN ('failed') THEN 1 END) as ocr_failed,
+      COUNT(CASE WHEN ocr_status = 'processing' THEN 1 END) as ocr_processing,
+      COUNT(CASE WHEN ocr_status = 'queued' THEN 1 END) as ocr_queued,
+      COUNT(CASE WHEN extracted_text_char_count > 0 THEN 1 END) as with_extracted_text,
+      COUNT(CASE WHEN ocr_text IS NOT NULL AND ocr_text != '' THEN 1 END) as with_ocr_text,
+      COUNT(CASE WHEN extracted_text_s3_key IS NOT NULL THEN 1 END) as with_text_artifact
+    FROM file_blobs
+  `);
+  const r = result.rows[0] as any;
+  return {
+    totalFileBlobs: Number(r.total),
+    withS3Key: Number(r.with_s3_key),
+    ocrNone: Number(r.ocr_none),
+    ocrCompleted: Number(r.ocr_completed),
+    ocrFailed: Number(r.ocr_failed),
+    ocrProcessing: Number(r.ocr_processing),
+    ocrQueued: Number(r.ocr_queued),
+    withExtractedText: Number(r.with_extracted_text),
+    withOcrText: Number(r.with_ocr_text),
+    withTextArtifact: Number(r.with_text_artifact),
+  };
+}
+
 export async function getOcrQueueStats(): Promise<{
   queued: number;
   processing: number;

@@ -201,6 +201,20 @@ export async function getTrackedS3Keys(): Promise<Set<string>> {
   return new Set((result.rows as any[]).map((r) => r.s3_key));
 }
 
+export async function getOcrJobsWithoutFileBlobCount(): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT COUNT(*) as count FROM ocr_jobs WHERE file_blob_id IS NULL
+  `);
+  return Number((result.rows[0] as any)?.count || 0);
+}
+
+export async function getOcrJobsWithFileBlobCount(): Promise<number> {
+  const result = await db.execute(sql`
+    SELECT COUNT(*) as count FROM ocr_jobs WHERE file_blob_id IS NOT NULL
+  `);
+  return Number((result.rows[0] as any)?.count || 0);
+}
+
 export async function enqueueDocumentsForOcr(
   documents: Array<{
     documentId: string;

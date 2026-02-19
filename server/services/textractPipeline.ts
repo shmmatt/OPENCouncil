@@ -130,8 +130,10 @@ export async function extractNativeText(pdfBuffer: Buffer): Promise<{
   pageCount: number;
 }> {
   try {
-    const pdfParseModule = await import("pdf-parse");
-    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+    // Use direct path to avoid pdf-parse trying to load test files
+    // @ts-ignore - pdf-parse types don't include this path but it works at runtime
+    const mod = await import("pdf-parse/lib/pdf-parse.js");
+    const pdfParse = (mod as any).default || mod;
     const result = await pdfParse(pdfBuffer);
     return {
       text: result.text || "",

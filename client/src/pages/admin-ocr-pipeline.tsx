@@ -93,16 +93,45 @@ interface OcrJob {
 
 interface DiscoveryResult {
   bucket: string;
-  totalInS3: number;
-  alreadyTracked: number;
+  totalFileBlobs: number;
+  withS3Key: number;
+  alreadyProcessed: number;
   newDocuments: number;
   townBreakdown: Record<string, number>;
   documents: Array<{
+    fileBlobId: string;
     key: string;
+    filename: string;
     size: number;
-    lastModified: string | null;
+    ocrStatus: string;
     town: string | null;
   }>;
+}
+
+interface ReconciliationReport {
+  fileBlobs: {
+    totalFileBlobs: number;
+    withS3Key: number;
+    ocrNone: number;
+    ocrCompleted: number;
+    ocrFailed: number;
+    ocrProcessing: number;
+    ocrQueued: number;
+    withExtractedText: number;
+    withOcrText: number;
+    withTextArtifact: number;
+  };
+  ocrJobs: {
+    queued: number;
+    skipped_native: number;
+    textract_running: number;
+    textract_failed: number;
+    materialized: number;
+    failed: number;
+    total: number;
+    linkedToFileBlob: number;
+    orphaned: number;
+  };
 }
 
 function StatsCards({ stats }: { stats: OcrJobStats | undefined }) {
@@ -246,10 +275,92 @@ function JobsTable({ statusFilter }: { statusFilter?: string }) {
   );
 }
 
+function ReconciliationPanel() {
+  const { data, isLoading } = useQuery<ReconciliationReport>({
+    queryKey: ["/api/admin/ocr/textract/reconciliation"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/ocr/textract/reconciliation");
+      if (!res.ok) throw new Error("Failed to fetch reconciliation");
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const fb = data.fileBlobs;
+  const oj = data.ocrJobs;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">File Blobs (Source of Truth)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              { label: "Total Blobs", value: fb.totalFileBlobs },
+              { label: "With S3 Key", value: fb.withS3Key },
+              { label: "OCR: None", value: fb.ocrNone, color: "text-muted-foreground" },
+              { label: "OCR: Completed", value: fb.ocrCompleted, color: "text-green-600" },
+              { label: "OCR: Failed", value: fb.ocrFailed, color: "text-red-600" },
+              { label: "OCR: Processing", value: fb.ocrProcessing, color: "text-blue-600" },
+              { label: "OCR: Queued", value: fb.ocrQueued, color: "text-orange-600" },
+              { label: "Has Extracted Text", value: fb.withExtractedText, color: "text-green-600" },
+              { label: "Has OCR Text", value: fb.withOcrText, color: "text-green-600" },
+              { label: "Has Text Artifact", value: fb.withTextArtifact, color: "text-teal-600" },
+            ].map((item) => (
+              <div key={item.label} className="p-2">
+                <div className="text-xs text-muted-foreground">{item.label}</div>
+                <div className={`text-lg font-bold ${item.color || ""}`} data-testid={`text-recon-${item.label.toLowerCase().replace(/[: ]+/g, "-")}`}>
+                  {item.value.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">OCR Jobs (Work Queue)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              { label: "Total Jobs", value: oj.total },
+              { label: "Linked to Blob", value: oj.linkedToFileBlob, color: "text-green-600" },
+              { label: "Orphaned (no blob)", value: oj.orphaned, color: oj.orphaned > 0 ? "text-orange-600" : "" },
+              { label: "Queued", value: oj.queued, color: "text-orange-600" },
+              { label: "Running", value: oj.textract_running, color: "text-blue-600" },
+              { label: "Materialized", value: oj.materialized, color: "text-green-600" },
+              { label: "Skipped (Native)", value: oj.skipped_native, color: "text-teal-600" },
+              { label: "Failed", value: oj.failed + oj.textract_failed, color: "text-red-600" },
+            ].map((item) => (
+              <div key={item.label} className="p-2">
+                <div className="text-xs text-muted-foreground">{item.label}</div>
+                <div className={`text-lg font-bold ${item.color || ""}`} data-testid={`text-recon-oj-${item.label.toLowerCase().replace(/[: ()]+/g, "-")}`}>
+                  {item.value.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function DiscoveryPanel() {
   const { toast } = useToast();
-  const [prefix, setPrefix] = useState("");
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [discoveryData, setDiscoveryData] = useState<DiscoveryResult | null>(null);
   const [docPage, setDocPage] = useState(0);
   const hasAutoScanned = useRef(false);
@@ -260,7 +371,7 @@ function DiscoveryPanel() {
       const res = await adminFetch("/api/admin/ocr/textract/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix: prefix || undefined }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -270,11 +381,11 @@ function DiscoveryPanel() {
     },
     onSuccess: (data: DiscoveryResult) => {
       setDiscoveryData(data);
-      setSelectedKeys(new Set());
+      setSelectedIds(new Set());
       setDocPage(0);
       toast({
         title: "Discovery Complete",
-        description: `Found ${data.newDocuments} new documents out of ${data.totalInS3} total PDFs in ${data.bucket}.`,
+        description: `Found ${data.newDocuments} file blobs needing Textract (${data.totalFileBlobs} total blobs, ${data.withS3Key} with S3 keys).`,
       });
     },
     onError: (error: Error) => {
@@ -290,11 +401,11 @@ function DiscoveryPanel() {
   }, []);
 
   const enqueueMutation = useMutation({
-    mutationFn: async (keys: string[]) => {
+    mutationFn: async (fileBlobIds: string[]) => {
       const res = await adminFetch("/api/admin/ocr/textract/enqueue-discovered", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keys }),
+        body: JSON.stringify({ fileBlobIds }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -304,9 +415,10 @@ function DiscoveryPanel() {
     },
     onSuccess: (data) => {
       toast({ title: "Enqueued", description: data.message });
-      setSelectedKeys(new Set());
+      setSelectedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/all-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/reconciliation"] });
       discoverMutation.mutate();
     },
     onError: (error: Error) => {
@@ -319,7 +431,7 @@ function DiscoveryPanel() {
       const res = await adminFetch("/api/admin/ocr/textract/enqueue-all-new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix: prefix || undefined }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -329,9 +441,10 @@ function DiscoveryPanel() {
     },
     onSuccess: (data) => {
       toast({ title: "Enqueued All", description: data.message });
-      setSelectedKeys(new Set());
+      setSelectedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/all-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ocr/textract/reconciliation"] });
       discoverMutation.mutate();
     },
     onError: (error: Error) => {
@@ -339,21 +452,21 @@ function DiscoveryPanel() {
     },
   });
 
-  const toggleKey = (key: string) => {
-    setSelectedKeys((prev) => {
+  const toggleId = (id: string) => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const toggleAll = () => {
     if (!discoveryData) return;
-    if (selectedKeys.size === discoveryData.documents.length) {
-      setSelectedKeys(new Set());
+    if (selectedIds.size === discoveryData.documents.length) {
+      setSelectedIds(new Set());
     } else {
-      setSelectedKeys(new Set(discoveryData.documents.map((d) => d.key)));
+      setSelectedIds(new Set(discoveryData.documents.map((d) => d.fileBlobId)));
     }
   };
 
@@ -363,69 +476,66 @@ function DiscoveryPanel() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Search className="w-4 h-4" />
-            S3 Bucket Scanner
+            File Blobs Needing OCR
           </CardTitle>
-          {discoveryData?.bucket && (
-            <p className="text-sm text-muted-foreground" data-testid="text-bucket-name">
-              Bucket: <span className="font-mono">{discoveryData.bucket}</span>
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            Source of truth: <span className="font-mono">file_blobs</span> with valid S3 keys that haven't been processed yet
+          </p>
         </CardHeader>
         <CardContent className="space-y-3">
           {discoverMutation.isPending && !discoveryData && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Scanning S3 bucket for documents...
+              Scanning file_blobs for unprocessed documents...
             </div>
           )}
           <div className="flex items-center gap-2 flex-wrap">
-            <Input
-              placeholder="Filter by prefix (e.g. town name)..."
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value)}
-              className="max-w-xs"
-              data-testid="input-discovery-prefix"
-            />
             <Button
               onClick={() => discoverMutation.mutate()}
               disabled={discoverMutation.isPending}
-              data-testid="button-scan-bucket"
+              data-testid="button-scan-blobs"
             >
               {discoverMutation.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <ScanLine className="w-4 h-4 mr-2" />
               )}
-              {discoveryData ? "Re-scan" : "Scan Bucket"}
+              {discoveryData ? "Re-scan" : "Scan File Blobs"}
             </Button>
           </div>
 
           {discoveryData && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <Card>
                   <CardContent className="p-3">
-                    <div className="text-sm text-muted-foreground">Total PDFs in S3</div>
-                    <div className="text-xl font-bold" data-testid="text-total-s3">{discoveryData.totalInS3}</div>
+                    <div className="text-sm text-muted-foreground">Total File Blobs</div>
+                    <div className="text-xl font-bold" data-testid="text-total-blobs">{discoveryData.totalFileBlobs.toLocaleString()}</div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="p-3">
-                    <div className="text-sm text-muted-foreground">Already Tracked</div>
-                    <div className="text-xl font-bold" data-testid="text-already-tracked">{discoveryData.alreadyTracked}</div>
+                    <div className="text-sm text-muted-foreground">With S3 Key</div>
+                    <div className="text-xl font-bold" data-testid="text-with-s3">{discoveryData.withS3Key.toLocaleString()}</div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="p-3">
-                    <div className="text-sm text-muted-foreground">New (Unprocessed)</div>
-                    <div className="text-xl font-bold text-orange-600" data-testid="text-new-docs">{discoveryData.newDocuments}</div>
+                    <div className="text-sm text-muted-foreground">Already Processed</div>
+                    <div className="text-xl font-bold" data-testid="text-already-processed">{discoveryData.alreadyProcessed.toLocaleString()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="text-sm text-muted-foreground">Need Processing</div>
+                    <div className="text-xl font-bold text-orange-600" data-testid="text-need-processing">{discoveryData.newDocuments.toLocaleString()}</div>
                   </CardContent>
                 </Card>
               </div>
 
               {Object.keys(discoveryData.townBreakdown).length > 0 && (
                 <div>
-                  <div className="text-sm font-medium mb-2">New Documents by Town</div>
+                  <div className="text-sm font-medium mb-2">Unprocessed by Town</div>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(discoveryData.townBreakdown)
                       .sort((a, b) => b[1] - a[1])
@@ -452,22 +562,22 @@ function DiscoveryPanel() {
                         ) : (
                           <FolderUp className="w-4 h-4 mr-2" />
                         )}
-                        Enqueue All New ({discoveryData.newDocuments})
+                        Enqueue All ({discoveryData.newDocuments})
                       </Button>
                     </div>
                     <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={selectedKeys.size === discoveryData.documents.length && discoveryData.documents.length > 0}
+                        checked={selectedIds.size === discoveryData.documents.length && discoveryData.documents.length > 0}
                         onCheckedChange={toggleAll}
                         data-testid="checkbox-select-all"
                       />
                       <span className="text-sm text-muted-foreground">
-                        {selectedKeys.size} of {discoveryData.documents.length} selected
+                        {selectedIds.size} of {discoveryData.documents.length} selected
                       </span>
                       <Button
                         variant="outline"
-                        onClick={() => enqueueMutation.mutate(Array.from(selectedKeys))}
-                        disabled={selectedKeys.size === 0 || enqueueMutation.isPending}
+                        onClick={() => enqueueMutation.mutate(Array.from(selectedIds))}
+                        disabled={selectedIds.size === 0 || enqueueMutation.isPending}
                         data-testid="button-enqueue-selected"
                       >
                         {enqueueMutation.isPending ? (
@@ -475,7 +585,7 @@ function DiscoveryPanel() {
                         ) : (
                           <FolderUp className="w-4 h-4 mr-2" />
                         )}
-                        Enqueue Selected ({selectedKeys.size})
+                        Enqueue Selected ({selectedIds.size})
                       </Button>
                     </div>
                   </div>
@@ -491,29 +601,35 @@ function DiscoveryPanel() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead className="w-8" />
+                                <TableHead>Filename</TableHead>
                                 <TableHead>S3 Key</TableHead>
                                 <TableHead>Town</TableHead>
                                 <TableHead>Size</TableHead>
-                                <TableHead>Last Modified</TableHead>
+                                <TableHead>Status</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {pagedDocs.map((doc) => (
-                                <TableRow key={doc.key} data-testid={`row-discovered-${doc.key}`}>
+                                <TableRow key={doc.fileBlobId} data-testid={`row-blob-${doc.fileBlobId}`}>
                                   <TableCell>
                                     <Checkbox
-                                      checked={selectedKeys.has(doc.key)}
-                                      onCheckedChange={() => toggleKey(doc.key)}
+                                      checked={selectedIds.has(doc.fileBlobId)}
+                                      onCheckedChange={() => toggleId(doc.fileBlobId)}
                                     />
                                   </TableCell>
-                                  <TableCell className="font-mono text-xs max-w-[300px] truncate" title={doc.key}>
+                                  <TableCell className="text-xs max-w-[200px] truncate" title={doc.filename}>
+                                    {doc.filename}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs max-w-[250px] truncate" title={doc.key}>
                                     {doc.key}
                                   </TableCell>
                                   <TableCell>
                                     {doc.town ? <Badge variant="secondary">{doc.town}</Badge> : "-"}
                                   </TableCell>
                                   <TableCell className="text-xs">{formatBytes(doc.size)}</TableCell>
-                                  <TableCell className="text-xs">{formatDate(doc.lastModified)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">{doc.ocrStatus}</Badge>
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -553,8 +669,8 @@ function DiscoveryPanel() {
               )}
 
               {discoveryData.newDocuments === 0 && (
-                <div className="text-center text-muted-foreground py-4" data-testid="text-all-tracked">
-                  All S3 documents are already tracked in the pipeline.
+                <div className="text-center text-muted-foreground py-4" data-testid="text-all-processed">
+                  All file blobs with S3 keys have been processed or are in the pipeline.
                 </div>
               )}
             </div>
@@ -696,15 +812,19 @@ export default function AdminOcrPipeline() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="overview" data-testid="tab-overview">All Jobs</TabsTrigger>
+            <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
             <TabsTrigger value="queued" data-testid="tab-queued">Queued</TabsTrigger>
             <TabsTrigger value="textract_running" data-testid="tab-running">Running</TabsTrigger>
             <TabsTrigger value="materialized" data-testid="tab-materialized">Materialized</TabsTrigger>
             <TabsTrigger value="failed" data-testid="tab-failed">Failed</TabsTrigger>
-            <TabsTrigger value="discover" data-testid="tab-discover">Discover</TabsTrigger>
+            <TabsTrigger value="discover" data-testid="tab-discover">Enqueue</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
             <JobsTable />
+          </TabsContent>
+          <TabsContent value="reconciliation">
+            <ReconciliationPanel />
           </TabsContent>
           <TabsContent value="queued">
             <JobsTable statusFilter="queued" />

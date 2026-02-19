@@ -4,7 +4,8 @@ import { authenticateAdmin } from "../middleware/auth";
 import { reindexOcrDocument } from "../gemini-client";
 import { getOcrConfig } from "../config/ocr";
 import * as ocrJobsStore from "../storage/ocrJobs";
-import { discoverS3Documents, getDefaultBucket } from "../services/textractPipeline";
+import * as fileBlobsStore from "../storage/fileBlobs";
+import { discoverS3Documents, getDefaultBucket, s3ObjectExists } from "../services/textractPipeline";
 import type { DocumentMetadata } from "@shared/schema";
 
 const router = Router();
@@ -311,59 +312,101 @@ router.get("/textract/all-jobs", authenticateAdmin, async (req, res) => {
   }
 });
 
-router.post("/textract/discover", authenticateAdmin, async (req, res) => {
+router.get("/textract/reconciliation", authenticateAdmin, async (req, res) => {
   try {
-    const { prefix } = req.body || {};
-    const bucket = getDefaultBucket();
-    const s3Result = await discoverS3Documents(prefix);
-    const trackedKeys = await ocrJobsStore.getTrackedS3Keys();
+    const report = await fileBlobsStore.getReconciliationReport();
+    const ocrJobStats = await ocrJobsStore.getOcrJobStats();
 
-    const newDocs = s3Result.pdfs.filter((p) => !trackedKeys.has(p.key));
-    const alreadyTracked = s3Result.pdfs.filter((p) => trackedKeys.has(p.key));
-
-    const townCounts: Record<string, number> = {};
-    for (const doc of newDocs) {
-      const t = doc.town || "unknown";
-      townCounts[t] = (townCounts[t] || 0) + 1;
-    }
+    const ocrJobsWithoutBlob = await ocrJobsStore.getOcrJobsWithoutFileBlobCount();
+    const ocrJobsWithBlob = await ocrJobsStore.getOcrJobsWithFileBlobCount();
 
     res.json({
-      bucket,
-      totalInS3: s3Result.total,
-      alreadyTracked: alreadyTracked.length,
-      newDocuments: newDocs.length,
-      townBreakdown: townCounts,
-      documents: newDocs,
+      fileBlobs: report,
+      ocrJobs: {
+        ...ocrJobStats,
+        total: Object.values(ocrJobStats).reduce((a, b) => a + b, 0),
+        linkedToFileBlob: ocrJobsWithBlob,
+        orphaned: ocrJobsWithoutBlob,
+      },
     });
   } catch (error: any) {
-    console.error("Error discovering S3 documents:", error);
-    const detail = error?.message || "Unknown error";
-    const code = error?.name || error?.Code || "";
-    res.status(500).json({
-      message: `S3 discovery failed: ${code ? code + " — " : ""}${detail}`,
+    console.error("Error generating reconciliation report:", error);
+    res.status(500).json({ message: `Reconciliation failed: ${error?.message || "Unknown"}` });
+  }
+});
+
+router.post("/textract/discover", authenticateAdmin, async (req, res) => {
+  try {
+    const blobs = await fileBlobsStore.getFileBlobsNeedingTextract();
+
+    const townCounts: Record<string, number> = {};
+    for (const blob of blobs) {
+      const parts = (blob.s3Key || "").split("/");
+      const town = parts.length > 1 ? parts[0] : "unknown";
+      townCounts[town] = (townCounts[town] || 0) + 1;
+    }
+
+    const report = await fileBlobsStore.getReconciliationReport();
+
+    res.json({
+      bucket: getDefaultBucket(),
+      totalFileBlobs: report.totalFileBlobs,
+      withS3Key: report.withS3Key,
+      alreadyProcessed: report.ocrCompleted + report.ocrProcessing,
+      newDocuments: blobs.length,
+      townBreakdown: townCounts,
+      documents: blobs.map((b) => ({
+        fileBlobId: b.id,
+        key: b.s3Key,
+        filename: b.originalFilename,
+        size: b.sizeBytes,
+        ocrStatus: b.ocrStatus,
+        town: (b.s3Key || "").split("/")[0] || null,
+      })),
     });
+  } catch (error: any) {
+    console.error("Error discovering file_blobs for Textract:", error);
+    const detail = error?.message || "Unknown error";
+    res.status(500).json({ message: `Discovery failed: ${detail}` });
   }
 });
 
 router.post("/textract/enqueue-discovered", authenticateAdmin, async (req, res) => {
   try {
-    const { keys } = req.body;
-    if (!Array.isArray(keys) || keys.length === 0) {
-      return res.status(400).json({ message: "Provide an array of S3 keys to enqueue" });
+    const { fileBlobIds } = req.body;
+    if (!Array.isArray(fileBlobIds) || fileBlobIds.length === 0) {
+      return res.status(400).json({ message: "Provide an array of fileBlobIds to enqueue" });
     }
 
     const bucket = getDefaultBucket();
-    const documents = keys.map((key: string) => ({
-      documentId: key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
-      s3Bucket: bucket,
-      s3Key: key,
-      priority: 0,
-    }));
+    let enqueued = 0;
 
-    const enqueued = await ocrJobsStore.enqueueDocumentsForOcr(documents);
+    for (const blobId of fileBlobIds) {
+      const blob = await fileBlobsStore.getFileBlobById(blobId);
+      if (!blob || !blob.s3Key) continue;
+
+      const documentId = blob.s3Key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const count = await ocrJobsStore.enqueueDocumentsForOcr([{
+        documentId,
+        fileBlobId: blob.id,
+        s3Bucket: blob.s3Bucket || bucket,
+        s3Key: blob.s3Key,
+        priority: 0,
+      }]);
+
+      if (count > 0) {
+        await fileBlobsStore.updateFileBlob(blob.id, {
+          ocrStatus: "queued",
+          ocrQueuedAt: new Date(),
+          needsOcr: true,
+        } as any);
+        enqueued++;
+      }
+    }
+
     res.json({
       success: true,
-      message: `Enqueued ${enqueued} documents for Textract processing.`,
+      message: `Enqueued ${enqueued} file blobs for Textract processing.`,
       enqueued,
     });
   } catch (error) {
@@ -374,35 +417,41 @@ router.post("/textract/enqueue-discovered", authenticateAdmin, async (req, res) 
 
 router.post("/textract/enqueue-all-new", authenticateAdmin, async (req, res) => {
   try {
-    const { prefix } = req.body || {};
     const bucket = getDefaultBucket();
-    const s3Result = await discoverS3Documents(prefix);
-    const trackedKeys = await ocrJobsStore.getTrackedS3Keys();
-    const newDocs = s3Result.pdfs.filter((p) => !trackedKeys.has(p.key));
+    const blobs = await fileBlobsStore.getFileBlobsNeedingTextract();
 
-    if (newDocs.length === 0) {
-      return res.json({ success: true, message: "No new documents to enqueue.", enqueued: 0, total: s3Result.total });
+    if (blobs.length === 0) {
+      return res.json({ success: true, message: "No file blobs need Textract processing.", enqueued: 0 });
     }
 
-    const documents = newDocs.map((doc) => ({
-      documentId: doc.key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
-      s3Bucket: bucket,
-      s3Key: doc.key,
+    const documents = blobs.map((b) => ({
+      documentId: b.s3Key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
+      fileBlobId: b.id,
+      s3Bucket: b.s3Bucket || bucket,
+      s3Key: b.s3Key,
       priority: 0,
     }));
 
     const enqueued = await ocrJobsStore.enqueueDocumentsForOcr(documents);
+
+    for (const blob of blobs) {
+      await fileBlobsStore.updateFileBlob(blob.id, {
+        ocrStatus: "queued",
+        ocrQueuedAt: new Date(),
+        needsOcr: true,
+      } as any);
+    }
+
     res.json({
       success: true,
-      message: `Enqueued ${enqueued} new documents out of ${newDocs.length} discovered (${s3Result.total} total in S3).`,
+      message: `Enqueued ${enqueued} file blobs for Textract processing.`,
       enqueued,
-      discovered: newDocs.length,
-      total: s3Result.total,
+      total: blobs.length,
     });
   } catch (error: any) {
-    console.error("Error enqueuing all new documents:", error);
+    console.error("Error enqueuing all new file blobs:", error);
     const detail = error?.message || "Unknown error";
-    res.status(500).json({ message: `Failed to enqueue all new documents: ${detail}` });
+    res.status(500).json({ message: `Failed to enqueue: ${detail}` });
   }
 });
 
