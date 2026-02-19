@@ -1036,12 +1036,6 @@ export default function AdminIngestion() {
                 OCR: {ocrStats.queued} queued, {ocrStats.processing} processing
               </Badge>
             )}
-            <Link href="/admin/ocr-pipeline">
-              <Button variant="outline" size="sm" data-testid="button-ocr-pipeline">
-                <ScanLine className="w-4 h-4 mr-2" />
-                Textract Pipeline
-              </Button>
-            </Link>
             <Button 
               variant="outline" 
               size="sm" 
@@ -1120,6 +1114,12 @@ export default function AdminIngestion() {
                 Migrate to Cloud ({migrationCount.count})
               </Button>
             )}
+            <Button variant="outline" size="sm" asChild data-testid="button-ocr-pipeline">
+              <Link href="/admin/ocr-pipeline">
+                <ScanLine className="w-4 h-4 mr-2" />
+                Textract Pipeline
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-v2-docs">
               <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
