@@ -158,6 +158,49 @@ export async function resetStuckOcrJobs(staleMinutes: number = 15): Promise<numb
   return result.rows?.length || 0;
 }
 
+export async function retryFailedOcrJobs(): Promise<number> {
+  const result = await db.execute(sql`
+    UPDATE ocr_jobs
+    SET status = 'queued',
+        locked_by = NULL,
+        locked_at = NULL,
+        last_error = NULL,
+        attempts = 0,
+        available_at = NOW(),
+        updated_at = NOW()
+    WHERE status IN ('failed', 'textract_failed')
+    RETURNING id
+  `);
+  return result.rows?.length || 0;
+}
+
+export async function getAllOcrJobs(
+  limit: number = 100,
+  offset: number = 0,
+  statusFilter?: string
+): Promise<{ jobs: OcrJob[]; total: number }> {
+  const countResult = await db.execute(
+    statusFilter
+      ? sql`SELECT COUNT(*) as count FROM ocr_jobs WHERE status = ${statusFilter}`
+      : sql`SELECT COUNT(*) as count FROM ocr_jobs`
+  );
+  const total = Number((countResult.rows[0] as any)?.count || 0);
+
+  const jobsResult = await db.execute(
+    statusFilter
+      ? sql`SELECT * FROM ocr_jobs WHERE status = ${statusFilter} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
+      : sql`SELECT * FROM ocr_jobs ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
+  );
+
+  const jobs = (jobsResult.rows as any[]).map(mapRowToOcrJob);
+  return { jobs, total };
+}
+
+export async function getTrackedS3Keys(): Promise<Set<string>> {
+  const result = await db.execute(sql`SELECT s3_key FROM ocr_jobs WHERE s3_key IS NOT NULL`);
+  return new Set((result.rows as any[]).map((r) => r.s3_key));
+}
+
 export async function enqueueDocumentsForOcr(
   documents: Array<{
     documentId: string;

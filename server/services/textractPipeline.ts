@@ -130,7 +130,8 @@ export async function extractNativeText(pdfBuffer: Buffer): Promise<{
   pageCount: number;
 }> {
   try {
-    const pdfParse = (await import("pdf-parse")).default;
+    const pdfParseModule = await import("pdf-parse");
+    const pdfParse = (pdfParseModule as any).default || pdfParseModule;
     const result = await pdfParse(pdfBuffer);
     return {
       text: result.text || "",
@@ -265,4 +266,51 @@ export function computeBackoffMs(attempts: number): number {
   const baseMs = 30_000;
   const maxMs = 120_000;
   return Math.min(baseMs * Math.pow(2, attempts), maxMs);
+}
+
+export interface DiscoveredS3Object {
+  key: string;
+  size: number;
+  lastModified: string | null;
+  etag: string | null;
+  town: string | null;
+}
+
+export async function discoverS3Documents(prefix?: string): Promise<{
+  total: number;
+  pdfs: DiscoveredS3Object[];
+}> {
+  const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+  const s3 = getS3Client();
+  const bucket = getDefaultBucket();
+  const pdfs: DiscoveredS3Object[] = [];
+
+  let continuationToken: string | undefined;
+  do {
+    const res = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix || "",
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    if (res.Contents) {
+      for (const obj of res.Contents) {
+        if (!obj.Key || !obj.Key.toLowerCase().endsWith(".pdf")) continue;
+        const parts = obj.Key.split("/");
+        const town = parts.length > 1 ? parts[0] : null;
+        pdfs.push({
+          key: obj.Key,
+          size: obj.Size || 0,
+          lastModified: obj.LastModified?.toISOString() || null,
+          etag: obj.ETag || null,
+          town,
+        });
+      }
+    }
+    continuationToken = res.NextContinuationToken;
+  } while (continuationToken);
+
+  return { total: pdfs.length, pdfs };
 }

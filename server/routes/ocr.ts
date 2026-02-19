@@ -4,6 +4,7 @@ import { authenticateAdmin } from "../middleware/auth";
 import { reindexOcrDocument } from "../gemini-client";
 import { getOcrConfig } from "../config/ocr";
 import * as ocrJobsStore from "../storage/ocrJobs";
+import { discoverS3Documents, getDefaultBucket } from "../services/textractPipeline";
 import type { DocumentMetadata } from "@shared/schema";
 
 const router = Router();
@@ -280,6 +281,88 @@ router.post("/textract/reset-stuck", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error resetting stuck Textract jobs:", error);
     res.status(500).json({ message: "Failed to reset stuck Textract jobs" });
+  }
+});
+
+router.post("/textract/retry-failed", authenticateAdmin, async (req, res) => {
+  try {
+    const retried = await ocrJobsStore.retryFailedOcrJobs();
+    res.json({
+      success: true,
+      message: `Reset ${retried} failed Textract jobs back to queued.`,
+      retried,
+    });
+  } catch (error) {
+    console.error("Error retrying failed Textract jobs:", error);
+    res.status(500).json({ message: "Failed to retry failed Textract jobs" });
+  }
+});
+
+router.get("/textract/all-jobs", authenticateAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string | undefined;
+    const result = await ocrJobsStore.getAllOcrJobs(limit, offset, status);
+    res.json(result);
+  } catch (error) {
+    console.error("Error fetching all Textract jobs:", error);
+    res.status(500).json({ message: "Failed to fetch Textract jobs" });
+  }
+});
+
+router.post("/textract/discover", authenticateAdmin, async (req, res) => {
+  try {
+    const { prefix } = req.body || {};
+    const s3Result = await discoverS3Documents(prefix);
+    const trackedKeys = await ocrJobsStore.getTrackedS3Keys();
+
+    const newDocs = s3Result.pdfs.filter((p) => !trackedKeys.has(p.key));
+    const alreadyTracked = s3Result.pdfs.filter((p) => trackedKeys.has(p.key));
+
+    const townCounts: Record<string, number> = {};
+    for (const doc of newDocs) {
+      const t = doc.town || "unknown";
+      townCounts[t] = (townCounts[t] || 0) + 1;
+    }
+
+    res.json({
+      totalInS3: s3Result.total,
+      alreadyTracked: alreadyTracked.length,
+      newDocuments: newDocs.length,
+      townBreakdown: townCounts,
+      documents: newDocs.slice(0, 200),
+    });
+  } catch (error) {
+    console.error("Error discovering S3 documents:", error);
+    res.status(500).json({ message: "Failed to discover S3 documents" });
+  }
+});
+
+router.post("/textract/enqueue-discovered", authenticateAdmin, async (req, res) => {
+  try {
+    const { keys } = req.body;
+    if (!Array.isArray(keys) || keys.length === 0) {
+      return res.status(400).json({ message: "Provide an array of S3 keys to enqueue" });
+    }
+
+    const bucket = getDefaultBucket();
+    const documents = keys.map((key: string) => ({
+      documentId: key.replace(/\.pdf$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
+      s3Bucket: bucket,
+      s3Key: key,
+      priority: 0,
+    }));
+
+    const enqueued = await ocrJobsStore.enqueueDocumentsForOcr(documents);
+    res.json({
+      success: true,
+      message: `Enqueued ${enqueued} documents for Textract processing.`,
+      enqueued,
+    });
+  } catch (error) {
+    console.error("Error enqueuing discovered documents:", error);
+    res.status(500).json({ message: "Failed to enqueue documents" });
   }
 });
 

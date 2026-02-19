@@ -1036,6 +1036,12 @@ export default function AdminIngestion() {
                 OCR: {ocrStats.queued} queued, {ocrStats.processing} processing
               </Badge>
             )}
+            <Link href="/admin/ocr-pipeline">
+              <Button variant="outline" size="sm" data-testid="button-ocr-pipeline">
+                <ScanLine className="w-4 h-4 mr-2" />
+                Textract Pipeline
+              </Button>
+            </Link>
             <Button 
               variant="outline" 
               size="sm" 
