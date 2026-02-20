@@ -32,7 +32,7 @@ export async function mapFileSearchDocumentsToCitations(
         if (docVersion.fileBlobId) {
           try {
             const crawledUrl = await storage.getCrawledUrlByFileBlobId(docVersion.fileBlobId);
-            if (crawledUrl && crawledUrl.startsWith("http")) {
+            if (crawledUrl) {
               sourceUrl = crawledUrl;
             }
           } catch {
