@@ -2,13 +2,24 @@ import { storage } from "../storage";
 import type { SourceCitation } from "./types";
 
 const BLOB_PREFIX_REGEX = /^\[blob:([^\]]+)\]\s*(.+)$/;
+const FILE_PREFIX_REGEX = /^\[file:([^:]+):([^\]]+)\]\s*(.+)$/;
 
-function parseBlobPrefix(docName: string): { fileBlobId: string | null; title: string } {
-  const match = docName.match(BLOB_PREFIX_REGEX);
-  if (match) {
-    return { fileBlobId: match[1], title: match[2] };
+interface ParsedDocName {
+  fileBlobId: string | null;
+  filenameTown: { town: string; filename: string } | null;
+  title: string;
+}
+
+function parseBlobPrefix(docName: string): ParsedDocName {
+  const blobMatch = docName.match(BLOB_PREFIX_REGEX);
+  if (blobMatch) {
+    return { fileBlobId: blobMatch[1], filenameTown: null, title: blobMatch[2] };
   }
-  return { fileBlobId: null, title: docName };
+  const fileMatch = docName.match(FILE_PREFIX_REGEX);
+  if (fileMatch) {
+    return { fileBlobId: null, filenameTown: { town: fileMatch[1], filename: fileMatch[2] }, title: fileMatch[3] };
+  }
+  return { fileBlobId: null, filenameTown: null, title: docName };
 }
 
 export async function mapFileSearchDocumentsToCitations(
@@ -24,7 +35,7 @@ export async function mapFileSearchDocumentsToCitations(
 
   for (const docName of uniqueNames) {
     try {
-      const { fileBlobId: parsedBlobId, title: parsedTitle } = parseBlobPrefix(docName);
+      const { fileBlobId: parsedBlobId, filenameTown, title: parsedTitle } = parseBlobPrefix(docName);
 
       if (parsedBlobId) {
         if (seenIds.has(parsedBlobId)) continue;
@@ -52,6 +63,28 @@ export async function mapFileSearchDocumentsToCitations(
           year: meta?.year,
           category: meta?.category,
           meetingDate: meta?.meetingDate,
+        });
+        continue;
+      }
+
+      if (filenameTown) {
+        const dedupeKey = `${filenameTown.town}:${filenameTown.filename}`;
+        if (seenIds.has(dedupeKey)) continue;
+        seenIds.add(dedupeKey);
+
+        let sourceUrl: string | undefined = undefined;
+        try {
+          const crawledUrl = await storage.getCrawledUrlByFilenameAndTown(filenameTown.filename, filenameTown.town);
+          if (crawledUrl) {
+            sourceUrl = crawledUrl;
+          }
+        } catch {}
+
+        citations.push({
+          id: dedupeKey,
+          title: parsedTitle,
+          url: sourceUrl,
+          town: filenameTown.town,
         });
         continue;
       }

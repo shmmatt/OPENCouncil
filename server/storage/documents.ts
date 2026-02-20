@@ -2,7 +2,7 @@
  * Document storage operations (legacy + v2 pipeline)
  */
 
-import { db, schema, eq, desc, and } from "./db";
+import { db, schema, eq, desc, and, sql } from "./db";
 import type { 
   Document, 
   InsertDocument,
@@ -250,6 +250,8 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
   const [result] = await db
     .select({
       url: schema.crawlerDocuments.url,
+      filename: schema.crawlerDocuments.filename,
+      townId: schema.crawlerDocuments.townId,
     })
     .from(schema.crawlerDocuments)
     .where(eq(schema.crawlerDocuments.fileBlobId, fileBlobId))
@@ -261,7 +263,66 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
     return result.url;
   }
 
+  if (result.filename && result.townId) {
+    const fallback = await db.execute(sql`
+      SELECT url FROM crawler_documents
+      WHERE town_id = ${result.townId}
+        AND filename = ${result.filename}
+        AND url LIKE 'http%'
+      LIMIT 1
+    `);
+    const row = fallback.rows?.[0] as { url: string } | undefined;
+    if (row?.url) return row.url;
+
+    const resolved = await resolveUrlByStemCandidates(result.filename, result.townId);
+    if (resolved) return resolved;
+  }
+
   return null;
+}
+
+async function resolveUrlByStemCandidates(filename: string, townIdOrName: string): Promise<string | null> {
+  const stem = filename.replace(/\.[^.]+$/, "");
+  if (!stem) return null;
+
+  const candidates = [...new Set([stem, stem.replace(/_\d+$/, "")])];
+  const isTownId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(townIdOrName);
+
+  for (const candidate of candidates) {
+    const q = isTownId
+      ? sql`
+          SELECT url FROM crawler_documents
+          WHERE town_id = ${townIdOrName}
+            AND url LIKE 'http%'
+            AND url LIKE ${"%" + candidate}
+          LIMIT 1`
+      : sql`
+          SELECT cd.url FROM crawler_documents cd
+          JOIN crawler_towns ct ON cd.town_id = ct.id
+          WHERE ct.name ILIKE ${townIdOrName}
+            AND cd.url LIKE 'http%'
+            AND cd.url LIKE ${"%" + candidate}
+          LIMIT 1`;
+    const r = await db.execute(q);
+    const row = r.rows?.[0] as { url: string } | undefined;
+    if (row?.url) return row.url;
+  }
+  return null;
+}
+
+export async function getCrawledUrlByFilenameAndTown(filename: string, town: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT cd.url FROM crawler_documents cd
+    JOIN crawler_towns ct ON cd.town_id = ct.id
+    WHERE ct.name ILIKE ${town}
+      AND cd.filename = ${filename}
+      AND cd.url LIKE 'http%'
+    LIMIT 1
+  `);
+  const row = result.rows?.[0] as { url: string } | undefined;
+  if (row?.url) return row.url;
+
+  return resolveUrlByStemCandidates(filename, town);
 }
 
 // ============================================================

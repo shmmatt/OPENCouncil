@@ -22,6 +22,7 @@ interface EnrichedResult {
   title: string;
   content: string;
   fileBlobId?: string;
+  filename?: string;
   town?: string;
   board?: string;
   year?: string;
@@ -31,6 +32,7 @@ interface EnrichedResult {
 async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
   const meta = result.chunk.metadata;
   const fileBlobId = meta?.fileBlobId || undefined;
+  const filename = meta?.filename || undefined;
   const town = meta?.town || undefined;
   const board = meta?.board || undefined;
   const year = meta?.year != null ? String(meta.year) : undefined;
@@ -44,6 +46,7 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
           title: logicalDoc.canonicalTitle,
           content: result.chunk.content,
           fileBlobId,
+          filename,
           town: logicalDoc.town || town,
           board: logicalDoc.board || board,
           year: year,
@@ -57,6 +60,7 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
     title: metaTitle || `chunk-${result.chunk.chunkIndex}`,
     content: result.chunk.content,
     fileBlobId,
+    filename,
     town,
     board,
     year,
@@ -82,9 +86,15 @@ async function executeQueryOnLane(
 
   const enriched = await Promise.all(results.map(async (r, idx) => {
     const enrichedResult = await enrichResult(r);
-    const docName = enrichedResult.fileBlobId
-      ? `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`
-      : enrichedResult.title;
+    let docName: string;
+    if (enrichedResult.fileBlobId) {
+      docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
+    } else if (enrichedResult.filename && enrichedResult.town) {
+      docName = `[file:${enrichedResult.town}:${enrichedResult.filename}] ${enrichedResult.title}`;
+    } else {
+      docName = enrichedResult.title;
+    }
+    console.log(`[pgvector-docName] ${docName.slice(0, 120)}`);
     return {
       docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
       title: enrichedResult.title,
