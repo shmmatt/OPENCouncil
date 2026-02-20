@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3, Link2, Copy, Check, ScanLine } from "lucide-react";
+import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3, Link2, Copy, Check, ScanLine, Globe } from "lucide-react";
 import type { Document } from "@shared/schema";
 
 const CATEGORY_OPTIONS = [
@@ -256,6 +256,12 @@ export default function AdminDocuments() {
             <Button variant="outline" size="sm" asChild data-testid="link-chat-analytics">
               <Link href="/admin/chat-analytics">
                 Chat Reviews
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-crawler">
+              <Link href="/admin/crawler">
+                <Globe className="w-4 h-4 mr-2" />
+                Crawler
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">

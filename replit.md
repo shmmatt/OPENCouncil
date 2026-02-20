@@ -7,6 +7,7 @@ OPENCouncil is an AI-powered assistant designed for New Hampshire elected offici
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **2026-02-20**: Added Crawler Management admin page (`/admin/crawler`) with town dashboard, document/URL inventory browser, run history, town profile editor, and crawl triggering. Backend: `server/storage/crawler.ts` + `server/routes/crawler.ts`. Frontend: `client/src/pages/admin-crawler.tsx`. Added Crawler nav link to admin documents page.
 - **2026-02-19**: Full document lifecycle tracking: Added embedding lifecycle columns to `file_blobs` (`content_hash`, `embedding_status`, `chunk_count`, `embedded_at`). Added `file_blob_id` to `document_chunks` and `crawler_documents` for end-to-end lineage. Backfilled 5,842 crawler_documents→file_blobs links and 3,297 content hashes.
 - **2026-02-19**: Rewrote batch export/ingest scripts to source from `file_blobs` (source of truth), write `file_blob_id` into chunk metadata, update `embedding_status` lifecycle, and log to `embedding_jobs` table.
 - **2026-02-19**: Added version detection script (`crawler/batch-pipeline/version-detect.ts`) for content hash-based change detection and stale chunk cleanup.
@@ -93,6 +94,14 @@ All crawler-related code, scripts, logs, and data are organized under `crawler/`
 - `crawler/town-profiles/` - Per-town document profiles and crawl results
 - `crawler/crawl-logs/` - Crawl execution logs
 - `crawler/archive/` - Legacy crawlers and migration scripts
+
+**Admin Crawler Management** (`/admin/crawler`):
+- Full admin panel for managing crawl jobs, viewing town state, and triggering crawls
+- Schema in `shared/crawler-schema.ts`: `crawlerTowns`, `crawlerRuns`, `crawlerDocuments`, `crawlerUrls`, `crawlerSitemaps`
+- Storage layer: `server/storage/crawler.ts`
+- API routes: `server/routes/crawler.ts` (mounted at `/api/admin/crawler/`)
+- Frontend: `client/src/pages/admin-crawler.tsx`
+- Features: Town dashboard with stats, document/URL inventory browser, run history, town profile editor (CMS type, custom paths, max pages), crawl triggering
 
 ## External Dependencies
 
