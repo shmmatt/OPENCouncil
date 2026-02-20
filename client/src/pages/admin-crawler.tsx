@@ -1160,11 +1160,18 @@ function CoverageTab({ townId, townName }: { townId: string; townName: string })
 
   const runAssessment = useMutation({
     mutationFn: async () => {
-      const res = await adminFetch(`/api/admin/crawler/assessments/${townId}/run`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error((await res.json()).message);
-      return res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300_000);
+      try {
+        const res = await adminFetch(`/api/admin/crawler/assessments/${townId}/run`, {
+          method: "POST",
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error((await res.json()).message);
+        return res.json();
+      } finally {
+        clearTimeout(timeoutId);
+      }
     },
     onSuccess: () => {
       toast({ title: "Assessment Complete", description: `Coverage analysis for ${townName} is ready` });

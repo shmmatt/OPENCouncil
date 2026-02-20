@@ -226,6 +226,7 @@ router.get("/assessments/:townId/history", async (req, res) => {
 });
 
 router.post("/assessments/:townId/run", async (req, res) => {
+  req.setTimeout(300_000);
   try {
     const town = await crawlerStorage.getCrawlerTownById(req.params.townId);
     if (!town) return res.status(404).json({ message: "Town not found" });

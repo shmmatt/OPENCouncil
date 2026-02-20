@@ -111,25 +111,49 @@ export function predictDocumentCounts(population: number): CategoryCounts {
 // PRONG 2: LLM FILENAME ANALYSIS
 // ============================================================
 
+export interface LLMAnalysisResult {
+  counts: CategoryCounts;
+  totalBatches: number;
+  successfulBatches: number;
+  partial: boolean;
+}
+
 export async function analyzeFilenamesWithLLM(
   townName: string,
   filenames: string[]
-): Promise<CategoryCounts> {
+): Promise<LLMAnalysisResult> {
   if (filenames.length === 0) {
-    return emptyCategories();
+    return { counts: emptyCategories(), totalBatches: 0, successfulBatches: 0, partial: false };
   }
 
-  const BATCH_SIZE = 500;
+  const BATCH_SIZE = 1500;
+  const MAX_CONCURRENT = 2;
   const batches: string[][] = [];
   for (let i = 0; i < filenames.length; i += BATCH_SIZE) {
     batches.push(filenames.slice(i, i + BATCH_SIZE));
   }
 
   const allCounts: CategoryCounts[] = [];
+  let failedCount = 0;
 
-  for (const batch of batches) {
-    const result = await analyzeBatch(townName, batch, filenames.length);
-    allCounts.push(result);
+  for (let i = 0; i < batches.length; i += MAX_CONCURRENT) {
+    const chunk = batches.slice(i, i + MAX_CONCURRENT);
+    const results = await Promise.allSettled(
+      chunk.map((batch) => analyzeBatch(townName, batch, filenames.length))
+    );
+
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        allCounts.push(r.value);
+      } else {
+        failedCount++;
+        console.error(`[CrawlAssessment] Batch failed for ${townName}:`, r.reason);
+      }
+    }
+  }
+
+  if (allCounts.length === 0) {
+    throw new Error("All LLM analysis batches failed");
   }
 
   const merged = emptyCategories();
@@ -139,7 +163,12 @@ export async function analyzeFilenamesWithLLM(
     }
   }
 
-  return merged;
+  return {
+    counts: merged,
+    totalBatches: batches.length,
+    successfulBatches: allCounts.length,
+    partial: failedCount > 0,
+  };
 }
 
 async function analyzeBatch(
@@ -303,8 +332,12 @@ export async function runAssessment(townId: string): Promise<CrawlAssessment> {
   const filenames = (filenameRows.rows as any[]).map((r) => r.filename);
 
   const predicted = predictDocumentCounts(population);
-  const estimated = await analyzeFilenamesWithLLM(town.name, filenames);
-  const { categoryScores, overallScore } = computeScores(predicted, estimated);
+  const llmResult = await analyzeFilenamesWithLLM(town.name, filenames);
+  const { categoryScores, overallScore } = computeScores(predicted, llmResult.counts);
+
+  const notes = llmResult.partial
+    ? `Partial result: ${llmResult.successfulBatches}/${llmResult.totalBatches} batches succeeded`
+    : null;
 
   const [assessment] = await db
     .insert(schema.crawlAssessments)
@@ -313,11 +346,12 @@ export async function runAssessment(townId: string): Promise<CrawlAssessment> {
       assessedAt: new Date(),
       population,
       predicted,
-      estimated,
+      estimated: llmResult.counts,
       categoryScores,
       overallScore: String(overallScore),
       totalFilesAnalyzed: filenames.length,
       llmModel: "gemini-2.5-flash",
+      notes,
     })
     .returning();
 
