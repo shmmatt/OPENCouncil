@@ -250,10 +250,8 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
   const [result] = await db
     .select({
       url: schema.crawlerDocuments.url,
-      townUrl: schema.crawlerTowns.url,
     })
     .from(schema.crawlerDocuments)
-    .leftJoin(schema.crawlerTowns, eq(schema.crawlerDocuments.townId, schema.crawlerTowns.id))
     .where(eq(schema.crawlerDocuments.fileBlobId, fileBlobId))
     .limit(1);
 
@@ -261,12 +259,6 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
 
   if (result.url.startsWith("http://") || result.url.startsWith("https://")) {
     return result.url;
-  }
-
-  if (result.townUrl) {
-    const base = result.townUrl.replace(/\/+$/, "");
-    const path = result.url.replace(/^\/+/, "");
-    return `${base}/${path}`;
   }
 
   return null;
