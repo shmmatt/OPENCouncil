@@ -7,6 +7,7 @@ OPENCouncil is an AI-powered assistant designed for New Hampshire elected offici
 Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
+- **2026-02-20**: Clickable source citations in chat: pgvectorRetrieveAdapter encodes `fileBlobId` in `[blob:uuid]` prefix format, sources.ts resolves crawled URLs via crawler_documents+crawler_towns join with relative URL normalization, and displays canonical titles from logical_documents. Local docs link to original town website URLs; statewide docs show titles without links.
 - **2026-02-20**: Added Crawler Management admin page (`/admin/crawler`) with town dashboard, document/URL inventory browser, run history, town profile editor, and crawl triggering. Backend: `server/storage/crawler.ts` + `server/routes/crawler.ts`. Frontend: `client/src/pages/admin-crawler.tsx`. Added Crawler nav link to admin documents page.
 - **2026-02-19**: Full document lifecycle tracking: Added embedding lifecycle columns to `file_blobs` (`content_hash`, `embedding_status`, `chunk_count`, `embedded_at`). Added `file_blob_id` to `document_chunks` and `crawler_documents` for end-to-end lineage. Backfilled 5,842 crawler_documents→file_blobs links and 3,297 content hashes.
 - **2026-02-19**: Rewrote batch export/ingest scripts to source from `file_blobs` (source of truth), write `file_blob_id` into chunk metadata, update `embedding_status` lifecycle, and log to `embedding_jobs` table.
