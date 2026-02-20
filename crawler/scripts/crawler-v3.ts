@@ -19,6 +19,7 @@ import type { Page, Browser } from 'playwright';
 // State tracking integration
 import { ensureTown, slugify, extractFilename } from '../server/services/crawlerStateExtensions';
 import { recordDocument, hashUrl, createRun, completeRun } from '../server/services/crawlerState';
+import { classifyError, type FailureType, type CrawlRunSummary } from '../shared/crawler-schema';
 
 chromium.use(StealthPlugin());
 
@@ -205,7 +206,13 @@ async function extractAllLinks(page: Page): Promise<string[]> {
   return links;
 }
 
-async function crawlPageForLinks(page: Page, url: string, baseHostname: string): Promise<{ docs: string[], nav: string[] }> {
+interface PageCrawlResult {
+  docs: string[];
+  nav: string[];
+  error?: { url: string; error: string; failureType: FailureType };
+}
+
+async function crawlPageForLinks(page: Page, url: string, baseHostname: string): Promise<PageCrawlResult> {
   const docs: string[] = [];
   const nav: string[] = [];
   
@@ -216,7 +223,9 @@ async function crawlPageForLinks(page: Page, url: string, baseHostname: string):
     });
     
     if (!response || response.status() >= 400) {
-      return { docs, nav };
+      const status = response?.status() || 0;
+      const failureType = classifyError(`HTTP ${status}`);
+      return { docs, nav, error: { url, error: `HTTP ${status}`, failureType } };
     }
     
     // Wait a bit for JS to render
@@ -240,8 +249,11 @@ async function crawlPageForLinks(page: Page, url: string, baseHostname: string):
     console.log(`      Links: ${allLinks.length} total | Docs: ${docs.length} | Nav: ${nav.length}`);
     
   } catch (error) {
+    const failureType = classifyError(error);
+    const errMsg = error instanceof Error ? error.message : 'Unknown';
     console.log(`   ${url}`);
-    console.log(`      Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    console.log(`      Error [${failureType}]: ${errMsg}`);
+    return { docs, nav, error: { url, error: errMsg, failureType } };
   }
   
   return { docs, nav };
@@ -350,6 +362,8 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
   const discoveredDocs = new Set<string>();
   const visitedUrls = new Set<string>();
   const toVisit = new Set<string>();
+  const pageErrors: Array<{ url: string; error: string; failureType: FailureType }> = [];
+  const failureCounts: Partial<Record<FailureType, number>> = {};
   
   const strategyStats = {
     sitemap: 0,
@@ -402,16 +416,21 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
       if (visitedUrls.has(currentUrl)) continue;
       visitedUrls.add(currentUrl);
       
-      const { docs, nav } = await crawlPageForLinks(page, currentUrl, baseHostname);
+      const result = await crawlPageForLinks(page, currentUrl, baseHostname);
       
-      docs.forEach(doc => {
+      if (result.error) {
+        pageErrors.push(result.error);
+        failureCounts[result.error.failureType] = (failureCounts[result.error.failureType] || 0) + 1;
+      }
+      
+      result.docs.forEach(doc => {
         if (!discoveredDocs.has(doc)) {
           discoveredDocs.add(doc);
           strategyStats.crawl++;
         }
       });
       
-      nav.forEach(navUrl => {
+      result.nav.forEach(navUrl => {
         if (!visitedUrls.has(navUrl) && !toVisit.has(navUrl)) {
           toVisit.add(navUrl);
           urlQueue.push(navUrl);
@@ -424,16 +443,24 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
     }
   } catch (crawlError) {
     const errorMsg = crawlError instanceof Error ? crawlError.message : String(crawlError);
-    console.error(`\nCrawl failed with error: ${errorMsg}`);
+    const fatalType = classifyError(crawlError);
+    console.error(`\nCrawl failed [${fatalType}]: ${errorMsg}`);
+    
+    failureCounts[fatalType] = (failureCounts[fatalType] || 0) + 1;
     
     if (runId) {
-      await completeRun(runId, 'failed', {
+      const summary: CrawlRunSummary = {
+        byCategory: {},
+        byBoard: {},
+        newDocuments: 0,
+        duplicates: 0,
+        errors: pageErrors.slice(0, 100),
+        failuresByType: Object.keys(failureCounts).length > 0 ? (failureCounts as Record<FailureType, number>) : undefined,
         pagesVisited: visitedUrls.size,
         documentsDiscovered: discoveredDocs.size,
-        newDocuments: 0,
-        documentCategoryBreakdown: {},
-        averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0
-      }, errorMsg);
+        averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0,
+      };
+      await completeRun(runId, 'failed', summary, errorMsg);
       activeRunId = null;
       console.log(`   Run ${runId} marked as failed\n`);
     }
@@ -458,6 +485,14 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
   console.log(`   Sitemap: ${strategyStats.sitemap}`);
   console.log(`   Known Paths: ${strategyStats.knownPaths}`);
   console.log(`   Breadth-First Crawl: ${strategyStats.crawl}`);
+  
+  if (pageErrors.length > 0) {
+    console.log(`\n⚠️  Page Errors: ${pageErrors.length}`);
+    const sortedTypes = Object.entries(failureCounts).sort((a, b) => b[1] - a[1]);
+    for (const [type, count] of sortedTypes) {
+      console.log(`   ${type}: ${count}`);
+    }
+  }
   
   // ==================== STATE TRACKING: RECORD DOCUMENTS ====================
   if (townRecord && runId) {
@@ -495,13 +530,18 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
       console.log(`   ⏭️  Skipped ${skipped} (already in database)`);
     }
     
-    await completeRun(runId, 'completed', {
+    const runSummary: CrawlRunSummary = {
+      byCategory: {},
+      byBoard: {},
+      newDocuments: recorded,
+      duplicates: skipped,
+      errors: pageErrors.slice(0, 100),
+      failuresByType: Object.keys(failureCounts).length > 0 ? failureCounts as Record<FailureType, number> : undefined,
       pagesVisited: visitedUrls.size,
       documentsDiscovered: discoveredDocs.size,
-      newDocuments: recorded,
-      documentCategoryBreakdown: {},
-      averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0
-    });
+      averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0,
+    };
+    await completeRun(runId, 'completed', runSummary);
     activeRunId = null;
     
     console.log(`   ✓ Run completed: ${runId}\n`);

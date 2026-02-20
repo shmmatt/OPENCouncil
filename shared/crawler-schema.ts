@@ -244,12 +244,69 @@ export interface SitemapUrl {
   docCount: number;
 }
 
+export const FAILURE_TYPES = [
+  "http_404",
+  "http_403",
+  "http_5xx",
+  "timeout",
+  "connection_refused",
+  "ssl_error",
+  "dns_error",
+  "parse_error",
+  "download_failed",
+  "captcha_blocked",
+  "too_large",
+  "unsupported_format",
+  "unknown",
+] as const;
+
+export type FailureType = typeof FAILURE_TYPES[number];
+
+export const FAILURE_LABELS: Record<FailureType, string> = {
+  http_404: "Not Found (404)",
+  http_403: "Forbidden (403)",
+  http_5xx: "Server Error (5xx)",
+  timeout: "Timeout",
+  connection_refused: "Connection Refused",
+  ssl_error: "SSL/TLS Error",
+  dns_error: "DNS Resolution Failed",
+  parse_error: "Parse Error",
+  download_failed: "Download Failed",
+  captcha_blocked: "CAPTCHA/Bot Blocked",
+  too_large: "File Too Large",
+  unsupported_format: "Unsupported Format",
+  unknown: "Unknown Error",
+};
+
+export function classifyError(error: string | Error | unknown): FailureType {
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  if (msg.includes("404") || msg.includes("not found")) return "http_404";
+  if (msg.includes("403") || msg.includes("forbidden")) return "http_403";
+  if (msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("server error") || msg.includes("internal error")) return "http_5xx";
+  if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("etimedout") || msg.includes("navigation timeout")) return "timeout";
+  if (msg.includes("econnrefused") || msg.includes("connection refused")) return "connection_refused";
+  if (msg.includes("ssl") || msg.includes("tls") || msg.includes("cert") || msg.includes("certificate")) return "ssl_error";
+  if (msg.includes("enotfound") || msg.includes("dns") || msg.includes("getaddrinfo")) return "dns_error";
+  if (msg.includes("parse") || msg.includes("syntax") || msg.includes("unexpected token") || msg.includes("invalid json")) return "parse_error";
+  if (msg.includes("download") || msg.includes("fetch") || msg.includes("econnreset") || msg.includes("socket hang up")) return "download_failed";
+  if (msg.includes("captcha") || msg.includes("bot") || msg.includes("challenge") || msg.includes("cloudflare")) return "captcha_blocked";
+  if (msg.includes("too large") || msg.includes("content-length") || msg.includes("payload too large")) return "too_large";
+  if (msg.includes("unsupported") || msg.includes("format")) return "unsupported_format";
+
+  return "unknown";
+}
+
 export interface CrawlRunSummary {
   byCategory: Record<string, number>;
   byBoard: Record<string, number>;
   newDocuments: number;
   duplicates: number;
-  errors: Array<{ url: string; error: string }>;
+  errors: Array<{ url: string; error: string; failureType?: FailureType }>;
+  failuresByType?: Record<FailureType, number>;
+  pagesVisited?: number;
+  documentsDiscovered?: number;
+  averageDocsPerPage?: number;
 }
 
 // Insert schemas

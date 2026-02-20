@@ -39,6 +39,7 @@ import {
   Target,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { FAILURE_LABELS } from "@shared/crawler-schema";
 
 function adminFetch(url: string, options?: RequestInit) {
   const token = localStorage.getItem("adminToken");
@@ -191,6 +192,36 @@ interface CrawlerUrl {
   documentCount: number;
   status: string;
   errorMessage: string | null;
+}
+
+function FailureBreakdown({ summary, allRuns, runId }: { summary: any; allRuns: CrawlerRun[]; runId: string }) {
+  if (!summary?.failuresByType || Object.keys(summary.failuresByType).length === 0) return null;
+
+  const sortedRuns = [...allRuns].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  const currentIdx = sortedRuns.findIndex(r => r.id === runId);
+  const prevRun = currentIdx >= 0 && currentIdx < sortedRuns.length - 1 ? sortedRuns[currentIdx + 1] : null;
+  const prevTypes = prevRun?.summary?.failuresByType ? Object.keys(prevRun.summary.failuresByType) : [];
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      {Object.entries(summary.failuresByType as Record<string, number>)
+        .sort(([, a], [, b]) => (b as number) - (a as number))
+        .map(([type, count]) => {
+          const isRepeat = prevTypes.includes(type);
+          const label = (FAILURE_LABELS as Record<string, string>)[type] || type;
+          return (
+            <div key={type} className="flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap">
+              <span>{label}: {count as number}</span>
+              {isRepeat && (
+                <Badge variant="destructive" className="text-[8px] px-1 py-0 h-3 leading-none no-default-hover-elevate no-default-active-elevate">
+                  repeat
+                </Badge>
+              )}
+            </div>
+          );
+        })}
+    </div>
+  );
 }
 
 function StatsOverview({ stats }: { stats: CrawlerStats | undefined }) {
@@ -763,6 +794,7 @@ function TownDetail({
                           <TableCell className="text-green-600 font-medium">{run.documentsUploaded}</TableCell>
                           <TableCell className={run.documentsFailed > 0 ? "text-red-600" : ""}>
                             {run.documentsFailed}
+                            <FailureBreakdown summary={run.summary} allRuns={runsData?.runs || []} runId={run.id} />
                           </TableCell>
                           <TableCell className="text-xs">
                             {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
