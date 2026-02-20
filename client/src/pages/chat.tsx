@@ -28,6 +28,8 @@ interface SourceCitation {
   year?: string;
   category?: string;
   url?: string;
+  meetingDate?: string;
+  board?: string;
 }
 
 interface V2Metadata {
@@ -395,6 +397,46 @@ function MessageBubble({
           </div>
         )}
         
+        {/* Source documents collapsible */}
+        {!isUser && sources.length > 0 && (
+          <Collapsible data-testid={`sources-collapsible-${message.id}`}>
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid={`button-sources-toggle-${message.id}`}>
+              <FileText className="w-3 h-3" />
+              <span>Sources ({sources.length})</span>
+              <ChevronDown className="w-3 h-3 transition-transform [[data-state=open]_&]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-1 space-y-1 pl-1">
+                {sources.map((source, idx) => (
+                  <div key={source.id || idx} className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid={`source-item-${idx}`}>
+                    <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    {source.url ? (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                        data-testid={`link-source-${idx}`}
+                      >
+                        {source.title}
+                        {source.meetingDate ? ` (${source.meetingDate})` : source.year ? ` (${source.year})` : ""}
+                        {source.board ? ` - ${source.board}` : ""}
+                      </a>
+                    ) : (
+                      <span data-testid={`text-source-${idx}`}>
+                        {source.title}
+                        {source.meetingDate ? ` (${source.meetingDate})` : source.year ? ` (${source.year})` : ""}
+                        {source.board ? ` - ${source.board}` : ""}
+                      </span>
+                    )}
+                    {source.url && <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-50" />}
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {/* Suggested follow-up questions */}
         {suggestedFollowUps.length > 0 && onFollowUpClick && (
           <div className="flex flex-wrap gap-2 mt-1">

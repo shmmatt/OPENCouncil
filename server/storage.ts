@@ -127,6 +127,7 @@ export interface IStorage {
   getCurrentVersionForDocument(documentId: string): Promise<DocumentVersionWithBlob | undefined>;
   setCurrentVersion(documentId: string, versionId: string): Promise<void>;
   getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined>;
+  getCrawledUrlByFileBlobId(fileBlobId: string): Promise<string | null>;
 
   // IngestionJob operations
   createIngestionJob(job: InsertIngestionJob): Promise<IngestionJob>;
@@ -270,6 +271,7 @@ export class DatabaseStorage implements IStorage {
   getCurrentVersionForDocument = documents.getCurrentVersionForDocument;
   setCurrentVersion = documents.setCurrentVersion;
   getDocumentVersionByFileSearchName = documents.getDocumentVersionByFileSearchName;
+  getCrawledUrlByFileBlobId = documents.getCrawledUrlByFileBlobId;
 
   // Minutes updates
   getRecentMinutesUpdates = documents.getRecentMinutesUpdates;

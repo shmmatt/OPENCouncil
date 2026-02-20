@@ -28,13 +28,24 @@ export async function mapFileSearchDocumentsToCitations(
               : String(docVersion.meetingDate))
           : undefined;
           
+        let sourceUrl: string | undefined = undefined;
+        if (docVersion.fileBlobId) {
+          try {
+            const crawledUrl = await storage.getCrawledUrlByFileBlobId(docVersion.fileBlobId);
+            if (crawledUrl && crawledUrl.startsWith("http")) {
+              sourceUrl = crawledUrl;
+            }
+          } catch {
+          }
+        }
+
         citations.push({
           id: docVersion.id,
           title: logicalDoc?.canonicalTitle || extractTitleFromName(docName),
           town: logicalDoc?.town || undefined,
           year: docVersion.year || undefined,
           category: logicalDoc?.category || undefined,
-          url: `/admin/documents/${docVersion.documentId}/view`,
+          url: sourceUrl,
           meetingDate: meetingDateStr,
           board: logicalDoc?.board || undefined,
         });

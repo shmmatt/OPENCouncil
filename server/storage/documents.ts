@@ -206,6 +206,15 @@ export async function getDocumentVersionByFileSearchName(fileSearchDocumentName:
   return result;
 }
 
+export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<string | null> {
+  const [result] = await db
+    .select({ url: schema.crawlerDocuments.url })
+    .from(schema.crawlerDocuments)
+    .where(eq(schema.crawlerDocuments.fileBlobId, fileBlobId))
+    .limit(1);
+  return result?.url || null;
+}
+
 // ============================================================
 // RECENT MINUTES UPDATES
 // ============================================================
