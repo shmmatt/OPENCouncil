@@ -27,7 +27,8 @@ interface CrawlConfig {
   url: string;
   maxPages?: number;
   timeout?: number;
-  enableStateTracking?: boolean; // New: optional state tracking
+  enableStateTracking?: boolean;
+  existingRunId?: string;
 }
 
 interface CrawlResult {
@@ -248,9 +249,48 @@ async function crawlPageForLinks(page: Page, url: string, baseHostname: string):
 
 // ==================== MAIN CRAWLER ====================
 
+let activeRunId: string | null = null;
+
+async function markRunFailed(reason: string): Promise<void> {
+  if (activeRunId) {
+    try {
+      await completeRun(activeRunId, 'failed', undefined, reason);
+      console.log(`   Run ${activeRunId} marked as failed: ${reason}`);
+    } catch (e) {
+      console.error(`   Could not mark run ${activeRunId} as failed:`, e);
+    }
+    activeRunId = null;
+  }
+}
+
+process.on('SIGINT', async () => {
+  console.log('\nReceived SIGINT');
+  await markRunFailed('Process interrupted (SIGINT)');
+  process.exit(1);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\nReceived SIGTERM');
+  await markRunFailed('Process terminated (SIGTERM)');
+  process.exit(1);
+});
+
+process.on('uncaughtException', async (err) => {
+  console.error('\nUncaught exception:', err);
+  await markRunFailed(`Uncaught exception: ${err.message}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason) => {
+  console.error('\nUnhandled rejection:', reason);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  await markRunFailed(`Unhandled rejection: ${msg}`);
+  process.exit(1);
+});
+
 async function crawl(config: CrawlConfig): Promise<CrawlResult> {
   const startTime = Date.now();
-  const { town, url: baseUrl, maxPages = 200, timeout = 30, enableStateTracking = true } = config;
+  const { town, url: baseUrl, maxPages = 200, timeout = 30, enableStateTracking = true, existingRunId } = config;
   
   console.log('\n' + '='.repeat(70));
   console.log(`🏛️  ${town}`);
@@ -258,6 +298,9 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
   console.log(`📄 Max pages: ${maxPages}`);
   if (enableStateTracking) {
     console.log(`💾 State tracking: ENABLED`);
+  }
+  if (existingRunId) {
+    console.log(`💾 Using existing run: ${existingRunId}`);
   }
   console.log('='.repeat(70) + '\n');
   
@@ -273,35 +316,37 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
         slug: slugify(town),
         url: baseUrl,
         status: 'active',
-        county: 'Carroll' // Default for current batch
+        county: 'Carroll'
       });
       
-      const run = await createRun({
-        townId: townRecord.id,
-        mode: 'full',
-        triggerType: 'manual',
-        startedAt: new Date(),
-        status: 'running'
-      });
-      runId = run.id;
-      
-      console.log(`   ✓ Town: ${townRecord.slug} (${townRecord.id})`);
-      console.log(`   ✓ Run: ${runId}\n`);
+      if (existingRunId) {
+        runId = existingRunId;
+        activeRunId = runId;
+        console.log(`   ✓ Town: ${townRecord.slug} (${townRecord.id})`);
+        console.log(`   ✓ Run (existing): ${runId}\n`);
+      } else {
+        const run = await createRun({
+          townId: townRecord.id,
+          mode: 'full',
+          triggerType: 'manual',
+          startedAt: new Date(),
+          status: 'running'
+        });
+        runId = run.id;
+        activeRunId = runId;
+        console.log(`   ✓ Town: ${townRecord.slug} (${townRecord.id})`);
+        console.log(`   ✓ Run (new): ${runId}\n`);
+      }
     } catch (error) {
       console.error('⚠️  State tracking initialization failed:', error);
       console.log('   Continuing without state tracking...\n');
       townRecord = null;
       runId = null;
+      activeRunId = null;
     }
   }
   
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    viewport: { width: 1920, height: 1080 }
-  });
-  
-  const baseHostname = new URL(baseUrl).hostname;
+  let browser: Browser | null = null;
   const discoveredDocs = new Set<string>();
   const visitedUrls = new Set<string>();
   const toVisit = new Set<string>();
@@ -312,69 +357,93 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
     knownPaths: 0
   };
   
-  // ==================== STRATEGY 1: SITEMAP ====================
-  console.log('📍 Strategy 1: Sitemap Discovery');
-  const sitemapUrls = await discoverViaSitemap(baseUrl);
-  sitemapUrls.forEach(u => toVisit.add(u));
-  
-  // ==================== STRATEGY 2: KNOWN PATHS ====================
-  console.log('\n📍 Strategy 2: Known Document Paths');
-  const knownPathUrls = await discoverViaKnownPaths(baseUrl, page);
-  knownPathUrls.forEach(u => toVisit.add(u));
-  strategyStats.knownPaths = knownPathUrls.length;
-  
-  // ==================== STRATEGY 3: BREADTH-FIRST CRAWL ====================
-  console.log('\n📍 Strategy 3: Breadth-First Link Crawl');
-  
-  // PRIORITIZE: Put known document hubs first in queue
-  const priorityUrls: string[] = [];
-  const regularUrls: string[] = [];
-  
-  Array.from(toVisit).forEach(url => {
-    const lower = url.toLowerCase();
-    if (lower.includes('agenda') || lower.includes('document') || lower.includes('form') || 
-        lower.includes('meeting') || lower.includes('minute') || lower.includes('board')) {
-      priorityUrls.push(url);
-    } else {
-      regularUrls.push(url);
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      viewport: { width: 1920, height: 1080 }
+    });
+    
+    const baseHostname = new URL(baseUrl).hostname;
+    
+    // ==================== STRATEGY 1: SITEMAP ====================
+    console.log('📍 Strategy 1: Sitemap Discovery');
+    const sitemapUrls = await discoverViaSitemap(baseUrl);
+    sitemapUrls.forEach(u => toVisit.add(u));
+    
+    // ==================== STRATEGY 2: KNOWN PATHS ====================
+    console.log('\n📍 Strategy 2: Known Document Paths');
+    const knownPathUrls = await discoverViaKnownPaths(baseUrl, page);
+    knownPathUrls.forEach(u => toVisit.add(u));
+    strategyStats.knownPaths = knownPathUrls.length;
+    
+    // ==================== STRATEGY 3: BREADTH-FIRST CRAWL ====================
+    console.log('\n📍 Strategy 3: Breadth-First Link Crawl');
+    
+    const priorityUrls: string[] = [];
+    const regularUrls: string[] = [];
+    
+    Array.from(toVisit).forEach(url => {
+      const lower = url.toLowerCase();
+      if (lower.includes('agenda') || lower.includes('document') || lower.includes('form') || 
+          lower.includes('meeting') || lower.includes('minute') || lower.includes('board')) {
+        priorityUrls.push(url);
+      } else {
+        regularUrls.push(url);
+      }
+    });
+    
+    const urlQueue = [baseUrl, ...priorityUrls, ...regularUrls];
+    let queueIndex = 0;
+    
+    while (queueIndex < urlQueue.length && visitedUrls.size < maxPages) {
+      const currentUrl = urlQueue[queueIndex++];
+      
+      if (visitedUrls.has(currentUrl)) continue;
+      visitedUrls.add(currentUrl);
+      
+      const { docs, nav } = await crawlPageForLinks(page, currentUrl, baseHostname);
+      
+      docs.forEach(doc => {
+        if (!discoveredDocs.has(doc)) {
+          discoveredDocs.add(doc);
+          strategyStats.crawl++;
+        }
+      });
+      
+      nav.forEach(navUrl => {
+        if (!visitedUrls.has(navUrl) && !toVisit.has(navUrl)) {
+          toVisit.add(navUrl);
+          urlQueue.push(navUrl);
+        }
+      });
+      
+      if (visitedUrls.size % 20 === 0) {
+        console.log(`\n   Progress: ${visitedUrls.size}/${maxPages} pages | ${discoveredDocs.size} docs`);
+      }
     }
-  });
-  
-  // Start with homepage, then priority URLs, then regular
-  const urlQueue = [baseUrl, ...priorityUrls, ...regularUrls];
-  let queueIndex = 0;
-  
-  while (queueIndex < urlQueue.length && visitedUrls.size < maxPages) {
-    const currentUrl = urlQueue[queueIndex++];
+  } catch (crawlError) {
+    const errorMsg = crawlError instanceof Error ? crawlError.message : String(crawlError);
+    console.error(`\nCrawl failed with error: ${errorMsg}`);
     
-    if (visitedUrls.has(currentUrl)) continue;
-    visitedUrls.add(currentUrl);
+    if (runId) {
+      await completeRun(runId, 'failed', {
+        pagesVisited: visitedUrls.size,
+        documentsDiscovered: discoveredDocs.size,
+        newDocuments: 0,
+        documentCategoryBreakdown: {},
+        averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0
+      }, errorMsg);
+      activeRunId = null;
+      console.log(`   Run ${runId} marked as failed\n`);
+    }
     
-    const { docs, nav } = await crawlPageForLinks(page, currentUrl, baseHostname);
-    
-    // Add discovered documents
-    docs.forEach(doc => {
-      if (!discoveredDocs.has(doc)) {
-        discoveredDocs.add(doc);
-        strategyStats.crawl++;
-      }
-    });
-    
-    // Add navigation links to queue
-    nav.forEach(navUrl => {
-      if (!visitedUrls.has(navUrl) && !toVisit.has(navUrl)) {
-        toVisit.add(navUrl);
-        urlQueue.push(navUrl);
-      }
-    });
-    
-    // Progress update every 20 pages
-    if (visitedUrls.size % 20 === 0) {
-      console.log(`\n   Progress: ${visitedUrls.size}/${maxPages} pages | ${discoveredDocs.size} docs`);
+    throw crawlError;
+  } finally {
+    if (browser) {
+      try { await browser.close(); } catch {}
     }
   }
-  
-  await browser.close();
   
   const duration = (Date.now() - startTime) / 1000;
   
@@ -407,7 +476,7 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
           urlHash: hashUrl(docUrl),
           filename,
           discoveredAt: new Date(),
-          discoveredFrom: baseUrl, // Could be more specific, but good enough
+          discoveredFrom: baseUrl,
           status: 'discovered'
         });
         
@@ -417,7 +486,6 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
           console.log(`   Recorded ${recorded}/${discoveredDocs.size} documents...`);
         }
       } catch (error) {
-        // Skip duplicates silently (urlHash conflict)
         skipped++;
       }
     }
@@ -427,7 +495,6 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
       console.log(`   ⏭️  Skipped ${skipped} (already in database)`);
     }
     
-    // Complete the run
     await completeRun(runId, 'completed', {
       pagesVisited: visitedUrls.size,
       documentsDiscovered: discoveredDocs.size,
@@ -435,6 +502,7 @@ async function crawl(config: CrawlConfig): Promise<CrawlResult> {
       documentCategoryBreakdown: {},
       averageDocsPerPage: visitedUrls.size > 0 ? discoveredDocs.size / visitedUrls.size : 0
     });
+    activeRunId = null;
     
     console.log(`   ✓ Run completed: ${runId}\n`);
   }
@@ -489,24 +557,47 @@ async function verifyAgainstS3(town: string, discovered: number): Promise<void> 
 
 // ==================== CLI ====================
 
-async function main() {
-  const args = process.argv.slice(2);
+function parseArgs(argv: string[]): { town: string; url: string; maxPages: number; runId?: string; mode?: string } {
+  const args = argv.slice(2);
   
-  if (args.length < 2) {
-    console.log('Usage: crawler-v3.ts <town-name> <url> [max-pages]');
-    console.log('Example: crawler-v3.ts Moultonborough https://moultonboroughnh.gov 200');
+  const named: Record<string, string> = {};
+  const positional: string[] = [];
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('--') && i + 1 < args.length) {
+      const key = args[i].slice(2);
+      named[key] = args[++i];
+    } else {
+      positional.push(args[i]);
+    }
+  }
+  
+  const town = named['town'] || positional[0];
+  const url = named['url'] || positional[1];
+  const maxPages = parseInt(named['max-pages'] || positional[2] || '200');
+  const runId = named['run-id'];
+  const mode = named['mode'];
+  
+  if (!town || !url) {
+    console.log('Usage: crawler-v3.ts --town <name> --url <url> [--max-pages N] [--run-id ID] [--mode full|incremental]');
+    console.log('   or: crawler-v3.ts <town-name> <url> [max-pages]');
     process.exit(1);
   }
   
-  const [town, url, maxPagesStr] = args;
-  const maxPages = maxPagesStr ? parseInt(maxPagesStr) : 200;
+  return { town, url, maxPages, runId, mode };
+}
+
+async function main() {
+  const { town, url, maxPages, runId: existingRunId } = parseArgs(process.argv);
   
-  const result = await crawl({ town, url, maxPages });
+  if (existingRunId) {
+    activeRunId = existingRunId;
+  }
   
-  // Verify against known baseline
+  const result = await crawl({ town, url, maxPages, existingRunId });
+  
   await verifyAgainstS3(town, result.documentsFound);
   
-  // Save results
   const resultsDir = path.join(process.cwd(), 'crawl-logs');
   await fs.mkdir(resultsDir, { recursive: true });
   
@@ -518,7 +609,8 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch(async (err) => {
   console.error('Fatal error:', err);
+  await markRunFailed(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

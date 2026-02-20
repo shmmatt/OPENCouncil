@@ -143,10 +143,10 @@ router.get("/urls", async (req, res) => {
   }
 });
 
-router.post("/reset-stuck", async (req, res) => {
+router.post("/reset-orphaned", async (req, res) => {
   try {
-    const count = await crawlerStorage.resetStuckRuns();
-    res.json({ message: `Reset ${count} stuck runs`, count });
+    const count = await crawlerStorage.resetOrphanedRuns();
+    res.json({ message: `Reset ${count} orphaned runs`, count });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

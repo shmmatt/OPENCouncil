@@ -1289,9 +1289,9 @@ export default function AdminCrawler() {
     refetchInterval: 30000,
   });
 
-  const resetStuck = useMutation({
+  const resetOrphaned = useMutation({
     mutationFn: async () => {
-      const res = await adminFetch("/api/admin/crawler/reset-stuck", { method: "POST" });
+      const res = await adminFetch("/api/admin/crawler/reset-orphaned", { method: "POST" });
       if (!res.ok) throw new Error((await res.json()).message);
       return res.json();
     },
@@ -1327,12 +1327,12 @@ export default function AdminCrawler() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => resetStuck.mutate()}
-                disabled={resetStuck.isPending}
-                data-testid="button-reset-stuck"
+                onClick={() => resetOrphaned.mutate()}
+                disabled={resetOrphaned.isPending}
+                data-testid="button-reset-orphaned"
               >
                 <RotateCcw className="w-3 h-3 mr-1" />
-                Reset Stuck
+                Reset Orphaned
               </Button>
               <Button
                 variant="outline"

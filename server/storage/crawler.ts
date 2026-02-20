@@ -219,14 +219,13 @@ export async function getRunComparison(runId: string): Promise<{
   };
 }
 
-export async function resetStuckRuns(): Promise<number> {
+export async function resetOrphanedRuns(): Promise<number> {
   const result = await db.execute(sql`
     UPDATE crawler_runs
     SET status = 'failed',
-        error_message = 'Reset by admin - was stuck in running state',
+        error_message = 'Process exited without reporting final status',
         completed_at = NOW()
     WHERE status = 'running'
-      AND started_at < NOW() - INTERVAL '2 hours'
   `);
   return result.rowCount || 0;
 }
