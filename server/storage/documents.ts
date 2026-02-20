@@ -257,25 +257,38 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
     .where(eq(schema.crawlerDocuments.fileBlobId, fileBlobId))
     .limit(1);
 
-  if (!result?.url) return null;
+  if (result?.url) {
+    if (result.url.startsWith("http://") || result.url.startsWith("https://")) {
+      return result.url;
+    }
 
-  if (result.url.startsWith("http://") || result.url.startsWith("https://")) {
-    return result.url;
+    if (result.filename && result.townId) {
+      const fallback = await db.execute(sql`
+        SELECT url FROM crawler_documents
+        WHERE town_id = ${result.townId}
+          AND filename = ${result.filename}
+          AND url LIKE 'http%'
+        LIMIT 1
+      `);
+      const row = fallback.rows?.[0] as { url: string } | undefined;
+      if (row?.url) return row.url;
+
+      const resolved = await resolveUrlByStemCandidates(result.filename, result.townId);
+      if (resolved) return resolved;
+    }
   }
 
-  if (result.filename && result.townId) {
-    const fallback = await db.execute(sql`
-      SELECT url FROM crawler_documents
-      WHERE town_id = ${result.townId}
-        AND filename = ${result.filename}
-        AND url LIKE 'http%'
-      LIMIT 1
-    `);
-    const row = fallback.rows?.[0] as { url: string } | undefined;
-    if (row?.url) return row.url;
-
-    const resolved = await resolveUrlByStemCandidates(result.filename, result.townId);
-    if (resolved) return resolved;
+  const fbResult = await db.execute(sql`
+    SELECT fb.original_filename, ld.town
+    FROM file_blobs fb
+    JOIN document_versions dv ON dv.file_blob_id = fb.id
+    JOIN logical_documents ld ON dv.document_id = ld.id
+    WHERE fb.id = ${fileBlobId}
+    LIMIT 1
+  `);
+  const fbRow = fbResult.rows?.[0] as { original_filename: string; town: string } | undefined;
+  if (fbRow?.original_filename && fbRow?.town) {
+    return resolveUrlByStemCandidates(fbRow.original_filename, fbRow.town);
   }
 
   return null;

@@ -94,7 +94,6 @@ async function executeQueryOnLane(
     } else {
       docName = enrichedResult.title;
     }
-    console.log(`[pgvector-docName] ${docName.slice(0, 120)}`);
     return {
       docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
       title: enrichedResult.title,
