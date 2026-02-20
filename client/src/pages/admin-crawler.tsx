@@ -35,7 +35,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  BarChart3,
+  Target,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 function adminFetch(url: string, options?: RequestInit) {
   const token = localStorage.getItem("adminToken");
@@ -547,6 +550,9 @@ function TownDetail({
           <TabsTrigger value="runs" data-testid="tab-runs">
             <Activity className="w-3 h-3 mr-1" />Run History
           </TabsTrigger>
+          <TabsTrigger value="coverage" data-testid="tab-coverage">
+            <Target className="w-3 h-3 mr-1" />Coverage
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="documents" className="space-y-3">
@@ -778,7 +784,258 @@ function TownDetail({
             </>
           )}
         </TabsContent>
+
+        <TabsContent value="coverage">
+          <CoverageTab townId={town.id} townName={town.name} />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+interface AssessmentData {
+  id: string;
+  townId: string;
+  assessedAt: string;
+  population: number;
+  predicted: Record<string, number>;
+  estimated: Record<string, number>;
+  categoryScores: Record<string, {
+    predicted: number;
+    estimated: number;
+    score: number;
+    rating: string;
+  }>;
+  overallScore: number;
+  totalFilesAnalyzed: number;
+  llmModel: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  meeting_minutes: "Meeting Minutes",
+  agendas: "Agendas",
+  ordinances: "Ordinances & Regulations",
+  budgets: "Budgets & Financial",
+  annual_reports: "Annual/Town Reports",
+  forms_applications: "Forms & Applications",
+  newsletters: "Newsletters & Notices",
+  zoning: "Zoning Documents",
+  plans_studies: "Plans & Studies",
+  policies_procedures: "Policies & Procedures",
+  elections: "Elections & Voting",
+  other: "Other Documents",
+};
+
+const CATEGORY_ORDER = [
+  "meeting_minutes",
+  "agendas",
+  "ordinances",
+  "budgets",
+  "annual_reports",
+  "forms_applications",
+  "newsletters",
+  "zoning",
+  "plans_studies",
+  "policies_procedures",
+  "elections",
+  "other",
+];
+
+function getRatingBadge(rating: string) {
+  switch (rating) {
+    case "excellent":
+      return <Badge variant="outline" className="text-green-600 border-green-600">Excellent</Badge>;
+    case "good":
+      return <Badge variant="outline" className="text-blue-600 border-blue-600">Good</Badge>;
+    case "fair":
+      return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Fair</Badge>;
+    case "poor":
+      return <Badge variant="outline" className="text-orange-600 border-orange-600">Poor</Badge>;
+    case "missing":
+      return <Badge variant="outline" className="text-red-600 border-red-600">Missing</Badge>;
+    default:
+      return <Badge variant="outline">{rating}</Badge>;
+  }
+}
+
+function getOverallRating(score: number): { label: string; color: string } {
+  if (score >= 80) return { label: "Excellent", color: "text-green-600" };
+  if (score >= 60) return { label: "Good", color: "text-blue-600" };
+  if (score >= 40) return { label: "Fair", color: "text-yellow-600" };
+  if (score >= 20) return { label: "Poor", color: "text-orange-600" };
+  return { label: "Minimal", color: "text-red-600" };
+}
+
+function CoverageTab({ townId, townName }: { townId: string; townName: string }) {
+  const { toast } = useToast();
+
+  const { data: assessment, isLoading } = useQuery<AssessmentData | null>({
+    queryKey: ["/api/admin/crawler/assessments", townId],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/assessments/${townId}`);
+      if (!res.ok) throw new Error("Failed to fetch assessment");
+      return res.json();
+    },
+    enabled: true,
+  });
+
+  const runAssessment = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/assessments/${townId}/run`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Assessment Complete", description: `Coverage analysis for ${townName} is ready` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/assessments", townId] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Assessment Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!assessment) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center space-y-4">
+          <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground" />
+          <div>
+            <h3 className="text-lg font-medium">No Coverage Assessment Yet</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Run an analysis to compare expected documents against what we've actually found for {townName}.
+            </p>
+          </div>
+          <Button
+            onClick={() => runAssessment.mutate()}
+            disabled={runAssessment.isPending}
+            data-testid="button-run-assessment"
+          >
+            {runAssessment.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing...</>
+            ) : (
+              <><BarChart3 className="w-4 h-4 mr-2" />Run Coverage Analysis</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const overallScore = Number(assessment.overallScore);
+  const { label: overallLabel, color: overallColor } = getOverallRating(overallScore);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div>
+            <div className="text-sm text-muted-foreground">Overall Completeness</div>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-3xl font-bold ${overallColor}`} data-testid="text-overall-score">
+                {Math.round(overallScore)}%
+              </span>
+              <span className={`text-sm font-medium ${overallColor}`}>{overallLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-right text-sm text-muted-foreground">
+            <div>{assessment.totalFilesAnalyzed} files analyzed</div>
+            <div>Pop. {formatNumber(assessment.population)}</div>
+            <div>Assessed {formatDateShort(assessment.assessedAt)}</div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runAssessment.mutate()}
+            disabled={runAssessment.isPending}
+            data-testid="button-refresh-assessment"
+          >
+            {runAssessment.isPending ? (
+              <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Analyzing...</>
+            ) : (
+              <><RefreshCw className="w-3 h-3 mr-1" />Re-Analyze</>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Expected</TableHead>
+                <TableHead className="text-right">Found</TableHead>
+                <TableHead className="w-[200px]">Completeness</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead>Rating</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CATEGORY_ORDER.map((cat) => {
+                const scores = assessment.categoryScores[cat];
+                if (!scores) return null;
+                const progressColor = scores.score >= 80
+                  ? "[&>div]:bg-green-500"
+                  : scores.score >= 50
+                  ? "[&>div]:bg-blue-500"
+                  : scores.score >= 25
+                  ? "[&>div]:bg-yellow-500"
+                  : scores.score > 0
+                  ? "[&>div]:bg-orange-500"
+                  : "[&>div]:bg-red-500";
+                return (
+                  <TableRow key={cat} data-testid={`row-category-${cat}`}>
+                    <TableCell>
+                      <span className="font-medium">{CATEGORY_LABELS[cat] || cat}</span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{scores.predicted}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{scores.estimated}</TableCell>
+                    <TableCell>
+                      <Progress value={Math.min(scores.score, 100)} className={`h-2 ${progressColor}`} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{scores.score}%</TableCell>
+                    <TableCell>{getRatingBadge(scores.rating)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <h4 className="text-sm font-medium mb-2">How This Works</h4>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>
+              <strong>Expected (Predicted):</strong> Based on {townName}'s population of {formatNumber(assessment.population)},
+              we estimate how many documents of each type a well-documented town website would have.
+              This includes years of meeting minutes, budgets, annual reports, and more.
+            </p>
+            <p>
+              <strong>Found (Estimated):</strong> An AI analysis of the {assessment.totalFilesAnalyzed} successfully
+              downloaded filenames, classifying each into document categories.
+            </p>
+            <p>
+              <strong>Score:</strong> The percentage of expected documents we've found. Categories are weighted
+              by importance (minutes and budgets count more than newsletters). Overall score is a weighted average.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

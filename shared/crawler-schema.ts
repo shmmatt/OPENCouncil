@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,6 +19,7 @@ export const crawlerTowns = pgTable("crawler_towns", {
   cms: text("cms"), // "CivicPlus" | "WordPress" | "Revize" | "Custom" | null
   county: text("county"), // "Carroll", "Strafford", etc.
   state: text("state").notNull().default("NH"),
+  population: integer("population"),
   
   // Crawl status
   status: text("status").notNull().default("active"), // "active" | "failed" | "paused" | "disabled"
@@ -167,9 +168,73 @@ export const crawlerRuns = pgTable("crawler_runs", {
   logPath: text("log_path"), // Path to detailed log file
 });
 
+/**
+ * Crawl Assessments: Cached quality/completeness scores per town
+ * Compares predicted document counts (based on population) against
+ * LLM-estimated counts (from analyzing downloaded filenames)
+ */
+export const crawlAssessments = pgTable("crawl_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  townId: varchar("town_id").notNull().references(() => crawlerTowns.id, { onDelete: "cascade" }),
+  assessedAt: timestamp("assessed_at").defaultNow().notNull(),
+
+  population: integer("population"),
+
+  predicted: jsonb("predicted").notNull().default({}).$type<CategoryCounts>(),
+  estimated: jsonb("estimated").notNull().default({}).$type<CategoryCounts>(),
+  categoryScores: jsonb("category_scores").notNull().default({}).$type<CategoryScores>(),
+  overallScore: numeric("overall_score", { precision: 5, scale: 2 }).notNull().default("0"),
+
+  totalFilesAnalyzed: integer("total_files_analyzed").notNull().default(0),
+  llmModel: text("llm_model"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ============================================================
 // TYPES & SCHEMAS
 // ============================================================
+
+export const DOCUMENT_CATEGORIES = [
+  "meeting_minutes",
+  "agendas",
+  "ordinances",
+  "budgets",
+  "annual_reports",
+  "forms_applications",
+  "newsletters",
+  "zoning",
+  "plans_studies",
+  "policies_procedures",
+  "elections",
+  "other",
+] as const;
+
+export type DocumentCategory = typeof DOCUMENT_CATEGORIES[number];
+
+export const CATEGORY_LABELS: Record<DocumentCategory, string> = {
+  meeting_minutes: "Meeting Minutes",
+  agendas: "Agendas",
+  ordinances: "Ordinances & Regulations",
+  budgets: "Budgets & Financial",
+  annual_reports: "Annual/Town Reports",
+  forms_applications: "Forms & Applications",
+  newsletters: "Newsletters & Notices",
+  zoning: "Zoning Documents",
+  plans_studies: "Plans & Studies",
+  policies_procedures: "Policies & Procedures",
+  elections: "Elections & Voting",
+  other: "Other Documents",
+};
+
+export type CategoryCounts = Record<DocumentCategory, number>;
+export type CategoryScores = Record<DocumentCategory, {
+  predicted: number;
+  estimated: number;
+  score: number;
+  rating: "excellent" | "good" | "fair" | "poor" | "missing";
+}>;
 
 export interface SitemapUrl {
   url: string;
@@ -217,7 +282,15 @@ export const insertCrawlerRunSchema = createInsertSchema(crawlerRuns).omit({
   startedAt: true,
 });
 
+export const insertCrawlAssessmentSchema = createInsertSchema(crawlAssessments).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
+export type CrawlAssessment = typeof crawlAssessments.$inferSelect;
+export type InsertCrawlAssessment = z.infer<typeof insertCrawlAssessmentSchema>;
+
 export type CrawlerTown = typeof crawlerTowns.$inferSelect;
 export type InsertCrawlerTown = z.infer<typeof insertCrawlerTownSchema>;
 

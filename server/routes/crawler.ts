@@ -2,6 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { authenticateAdmin } from "../middleware/auth";
 import * as crawlerStorage from "../storage/crawler";
+import {
+  runAssessment,
+  getLatestAssessment,
+  getAssessmentHistory,
+  predictDocumentCounts,
+} from "../services/crawlAssessment";
 
 const router = Router();
 
@@ -190,6 +196,48 @@ router.post("/trigger", async (req, res) => {
       runId: run.id,
       pid: child.pid,
     });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/assessments/:townId", async (req, res) => {
+  try {
+    const assessment = await getLatestAssessment(req.params.townId);
+    if (!assessment) return res.json(null);
+    res.json(assessment);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/assessments/:townId/history", async (req, res) => {
+  try {
+    const history = await getAssessmentHistory(req.params.townId);
+    res.json(history);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/assessments/:townId/run", async (req, res) => {
+  try {
+    const town = await crawlerStorage.getCrawlerTownById(req.params.townId);
+    if (!town) return res.status(404).json({ message: "Town not found" });
+    const assessment = await runAssessment(req.params.townId);
+    res.json(assessment);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/assessments/:townId/preview", async (req, res) => {
+  try {
+    const town = await crawlerStorage.getCrawlerTownById(req.params.townId);
+    if (!town) return res.status(404).json({ message: "Town not found" });
+    const population = town.population || 1000;
+    const predicted = predictDocumentCounts(population);
+    res.json({ population, predicted });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
