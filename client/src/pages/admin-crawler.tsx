@@ -553,6 +553,9 @@ function TownDetail({
           <TabsTrigger value="coverage" data-testid="tab-coverage">
             <Target className="w-3 h-3 mr-1" />Coverage
           </TabsTrigger>
+          <TabsTrigger value="gaps" data-testid="tab-gaps">
+            <AlertTriangle className="w-3 h-3 mr-1" />Gaps
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="documents" className="space-y-3">
@@ -788,6 +791,10 @@ function TownDetail({
         <TabsContent value="coverage">
           <CoverageTab townId={town.id} townName={town.name} />
         </TabsContent>
+
+        <TabsContent value="gaps">
+          <GapAnalysisTab townId={town.id} townName={town.name} townUrl={town.url} />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -864,6 +871,278 @@ function getOverallRating(score: number): { label: string; color: string } {
   if (score >= 40) return { label: "Fair", color: "text-yellow-600" };
   if (score >= 20) return { label: "Poor", color: "text-orange-600" };
   return { label: "Minimal", color: "text-red-600" };
+}
+
+interface GapTarget {
+  category: string;
+  label: string;
+  priority: "critical" | "high" | "medium" | "low";
+  predicted: number;
+  found: number;
+  deficit: number;
+  score: number;
+  rating: string;
+  searchHints: Array<{
+    strategy: string;
+    patterns: string[];
+    description: string;
+  }>;
+}
+
+interface GapAnalysisData {
+  townId: string;
+  townName: string;
+  cms: string | null;
+  overallScore: number;
+  assessedAt: string;
+  gaps: GapTarget[];
+  topPriority: string | null;
+  targetPaths?: string[];
+  linkPatterns?: string[];
+}
+
+function getPriorityColor(priority: string) {
+  switch (priority) {
+    case "critical": return "text-red-600 dark:text-red-400";
+    case "high": return "text-orange-600 dark:text-orange-400";
+    case "medium": return "text-yellow-600 dark:text-yellow-400";
+    case "low": return "text-muted-foreground";
+    default: return "";
+  }
+}
+
+function getPriorityBadgeVariant(priority: string): "destructive" | "secondary" | "outline" | "default" {
+  switch (priority) {
+    case "critical": return "destructive";
+    case "high": return "default";
+    case "medium": return "secondary";
+    default: return "outline";
+  }
+}
+
+function GapAnalysisTab({ townId, townName, townUrl }: { townId: string; townName: string; townUrl: string }) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
+  const { data: gapData, isLoading, error } = useQuery<GapAnalysisData>({
+    queryKey: ["/api/admin/crawler/gaps", townId],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/crawler/gaps/${townId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("adminToken")}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to load gap analysis");
+      }
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+        <span className="text-sm text-muted-foreground">Analyzing coverage gaps...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <AlertTriangle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground mb-2">
+            {(error as Error).message}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Run a coverage assessment first from the Coverage tab.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!gapData || gapData.gaps.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
+          <p className="text-sm font-medium">No significant coverage gaps detected</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            All document categories have adequate coverage (score &gt; 80).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const criticalCount = gapData.gaps.filter(g => g.priority === "critical").length;
+  const highCount = gapData.gaps.filter(g => g.priority === "high").length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="text-sm font-medium">Gap Analysis for {townName}</h3>
+          <p className="text-xs text-muted-foreground">
+            Based on assessment from {new Date(gapData.assessedAt).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {criticalCount > 0 && (
+            <Badge variant="destructive" data-testid="badge-critical-gaps">
+              {criticalCount} critical
+            </Badge>
+          )}
+          {highCount > 0 && (
+            <Badge variant="default" data-testid="badge-high-gaps">
+              {highCount} high priority
+            </Badge>
+          )}
+          <Badge variant="secondary" data-testid="badge-overall-score">
+            Overall: {gapData.overallScore}/100
+          </Badge>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {gapData.gaps.map((gap) => (
+          <Card key={gap.category} data-testid={`card-gap-${gap.category}`}>
+            <CardContent className="p-3">
+              <div
+                className="flex items-center justify-between gap-2 flex-wrap cursor-pointer"
+                onClick={() => setExpandedCategory(
+                  expandedCategory === gap.category ? null : gap.category
+                )}
+                data-testid={`button-expand-gap-${gap.category}`}
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant={getPriorityBadgeVariant(gap.priority)}>
+                    {gap.priority}
+                  </Badge>
+                  <span className="text-sm font-medium">{gap.label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    Found {gap.found} of ~{gap.predicted} expected
+                  </div>
+                  <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        gap.score <= 10 ? "bg-red-500" :
+                        gap.score <= 25 ? "bg-orange-500" :
+                        gap.score <= 50 ? "bg-yellow-500" :
+                        "bg-green-500"
+                      }`}
+                      style={{ width: `${Math.min(100, gap.score)}%` }}
+                    />
+                  </div>
+                  <span className={`text-xs font-mono ${getPriorityColor(gap.priority)}`}>
+                    {gap.score}%
+                  </span>
+                  <ChevronRight
+                    className={`w-4 h-4 text-muted-foreground transition-transform ${
+                      expandedCategory === gap.category ? "rotate-90" : ""
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {expandedCategory === gap.category && (
+                <div className="mt-3 pt-3 border-t space-y-3">
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Expected:</span>{" "}
+                      <span className="font-medium">~{gap.predicted} docs</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Found:</span>{" "}
+                      <span className="font-medium">{gap.found} docs</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Deficit:</span>{" "}
+                      <span className="font-medium text-red-600 dark:text-red-400">{gap.deficit} docs</span>
+                    </div>
+                  </div>
+
+                  {gap.searchHints.length > 0 && (
+                    <div>
+                      <div className="text-xs font-medium mb-1 text-muted-foreground">
+                        Suggested search strategies:
+                      </div>
+                      {gap.searchHints.map((hint, i) => (
+                        <div key={i} className="mb-2">
+                          <div className="text-xs text-muted-foreground italic mb-0.5">
+                            {hint.description}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {hint.patterns.slice(0, 8).map((p, j) => (
+                              <Badge
+                                key={j}
+                                variant="outline"
+                                className="text-xs font-mono"
+                              >
+                                {hint.strategy === "path_patterns" ? (
+                                  <a
+                                    href={`${townUrl.replace(/\/$/, "")}${p}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {p}
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                ) : (
+                                  p
+                                )}
+                              </Badge>
+                            ))}
+                            {hint.patterns.length > 8 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{hint.patterns.length - 8} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {gapData.targetPaths && gapData.targetPaths.length > 0 && (
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-xs font-medium mb-1 text-muted-foreground">
+              Priority target URLs ({gapData.targetPaths.length})
+            </div>
+            <ScrollArea className="h-32">
+              <div className="space-y-0.5">
+                {gapData.targetPaths.map((url, i) => (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-mono text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                    data-testid={`link-target-url-${i}`}
+                  >
+                    {url.replace(townUrl, "")}
+                    <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                  </a>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 function CoverageTab({ townId, townName }: { townId: string; townName: string }) {

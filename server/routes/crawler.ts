@@ -8,6 +8,11 @@ import {
   getAssessmentHistory,
   predictDocumentCounts,
 } from "../services/crawlAssessment";
+import {
+  analyzeGaps,
+  getTargetPathsForGaps,
+  getLinkTextPatternsForGaps,
+} from "../services/gapAnalysis";
 
 const router = Router();
 
@@ -240,6 +245,23 @@ router.get("/assessments/:townId/preview", async (req, res) => {
     res.json({ population, predicted });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/gaps/:townId", async (req, res) => {
+  try {
+    const result = await analyzeGaps(req.params.townId);
+    const town = await crawlerStorage.getCrawlerTownById(req.params.townId);
+    if (town) {
+      const targetPaths = getTargetPathsForGaps(result.gaps, town.url);
+      const linkPatterns = getLinkTextPatternsForGaps(result.gaps);
+      res.json({ ...result, targetPaths, linkPatterns });
+    } else {
+      res.json(result);
+    }
+  } catch (error: any) {
+    const status = error.message?.includes("not found") || error.message?.includes("No coverage assessment") ? 404 : 500;
+    res.status(status).json({ message: error.message });
   }
 });
 
