@@ -18,17 +18,50 @@ interface PgvectorLaneChunk {
   documentNames: string[];
 }
 
-async function enrichResult(result: SearchResult): Promise<{ title: string; content: string }> {
+interface EnrichedResult {
+  title: string;
+  content: string;
+  fileBlobId?: string;
+  town?: string;
+  board?: string;
+  year?: string;
+  category?: string;
+}
+
+async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
+  const meta = result.chunk.metadata;
+  const fileBlobId = meta?.fileBlobId || undefined;
+  const town = meta?.town || undefined;
+  const board = meta?.board || undefined;
+  const year = meta?.year != null ? String(meta.year) : undefined;
+  const category = meta?.documentType || undefined;
+
   try {
     if (result.chunk.documentId) {
       const logicalDoc = await getLogicalDocumentById(result.chunk.documentId);
       if (logicalDoc) {
-        return { title: logicalDoc.canonicalTitle, content: result.chunk.content };
+        return {
+          title: logicalDoc.canonicalTitle,
+          content: result.chunk.content,
+          fileBlobId,
+          town: logicalDoc.town || town,
+          board: logicalDoc.board || board,
+          year: year,
+          category: logicalDoc.category || category,
+        };
       }
     }
   } catch {}
-  const metaTitle = result.chunk.metadata?.filename || result.chunk.metadata?.documentType;
-  return { title: metaTitle || `chunk-${result.chunk.chunkIndex}`, content: result.chunk.content };
+  const metaTitle = meta?.filename || meta?.documentType;
+  return {
+    title: metaTitle || `chunk-${result.chunk.chunkIndex}`,
+    content: result.chunk.content,
+    fileBlobId,
+    town,
+    board,
+    year,
+    category,
+  };
 }
 
 async function executeQueryOnLane(
@@ -48,14 +81,17 @@ async function executeQueryOnLane(
   });
 
   const enriched = await Promise.all(results.map(async (r, idx) => {
-    const { title, content } = await enrichResult(r);
+    const enrichedResult = await enrichResult(r);
+    const docName = enrichedResult.fileBlobId
+      ? `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`
+      : enrichedResult.title;
     return {
       docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
-      title,
-      content,
+      title: enrichedResult.title,
+      content: enrichedResult.content,
       lane,
       score: r.similarity,
-      documentNames: [title],
+      documentNames: [docName],
     } as PgvectorLaneChunk;
   }));
 

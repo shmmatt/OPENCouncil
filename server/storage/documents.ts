@@ -206,6 +206,46 @@ export async function getDocumentVersionByFileSearchName(fileSearchDocumentName:
   return result;
 }
 
+export async function getDocumentMetadataByFileBlobId(fileBlobId: string): Promise<{
+  canonicalTitle?: string;
+  town?: string;
+  board?: string;
+  year?: string;
+  category?: string;
+  meetingDate?: string;
+} | null> {
+  const [result] = await db
+    .select({
+      canonicalTitle: schema.logicalDocuments.canonicalTitle,
+      town: schema.logicalDocuments.town,
+      board: schema.logicalDocuments.board,
+      category: schema.logicalDocuments.category,
+      year: schema.documentVersions.year,
+      meetingDate: schema.documentVersions.meetingDate,
+    })
+    .from(schema.documentVersions)
+    .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
+    .where(eq(schema.documentVersions.fileBlobId, fileBlobId))
+    .limit(1);
+
+  if (!result) return null;
+
+  const meetingDateStr = result.meetingDate
+    ? (result.meetingDate instanceof Date
+      ? result.meetingDate.toISOString().split('T')[0]
+      : String(result.meetingDate))
+    : undefined;
+
+  return {
+    canonicalTitle: result.canonicalTitle || undefined,
+    town: result.town || undefined,
+    board: result.board || undefined,
+    year: result.year || undefined,
+    category: result.category || undefined,
+    meetingDate: meetingDateStr,
+  };
+}
+
 export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<string | null> {
   const [result] = await db
     .select({

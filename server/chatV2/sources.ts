@@ -1,6 +1,16 @@
 import { storage } from "../storage";
 import type { SourceCitation } from "./types";
 
+const BLOB_PREFIX_REGEX = /^\[blob:([^\]]+)\]\s*(.+)$/;
+
+function parseBlobPrefix(docName: string): { fileBlobId: string | null; title: string } {
+  const match = docName.match(BLOB_PREFIX_REGEX);
+  if (match) {
+    return { fileBlobId: match[1], title: match[2] };
+  }
+  return { fileBlobId: null, title: docName };
+}
+
 export async function mapFileSearchDocumentsToCitations(
   documentNames: string[]
 ): Promise<SourceCitation[]> {
@@ -14,6 +24,38 @@ export async function mapFileSearchDocumentsToCitations(
 
   for (const docName of uniqueNames) {
     try {
+      const { fileBlobId: parsedBlobId, title: parsedTitle } = parseBlobPrefix(docName);
+
+      if (parsedBlobId) {
+        if (seenIds.has(parsedBlobId)) continue;
+        seenIds.add(parsedBlobId);
+
+        let sourceUrl: string | undefined = undefined;
+        try {
+          const crawledUrl = await storage.getCrawledUrlByFileBlobId(parsedBlobId);
+          if (crawledUrl) {
+            sourceUrl = crawledUrl;
+          }
+        } catch {}
+
+        let meta: { canonicalTitle?: string; town?: string; board?: string; year?: string; category?: string; meetingDate?: string } | null = null;
+        try {
+          meta = await storage.getDocumentMetadataByFileBlobId(parsedBlobId);
+        } catch {}
+
+        citations.push({
+          id: parsedBlobId,
+          title: meta?.canonicalTitle || parsedTitle,
+          url: sourceUrl,
+          town: meta?.town,
+          board: meta?.board,
+          year: meta?.year,
+          category: meta?.category,
+          meetingDate: meta?.meetingDate,
+        });
+        continue;
+      }
+
       const docVersion = await storage.getDocumentVersionByFileSearchName(docName);
 
       if (docVersion) {
