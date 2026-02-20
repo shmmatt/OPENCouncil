@@ -10,6 +10,7 @@ import { uploadDocumentToFileStore } from "../gemini-client";
 import { extractPreviewText, suggestMetadataFromContent } from "../bulk-upload-helper";
 import { documentMetadataSchema } from "@shared/schema";
 import type { DocumentMetadata } from "@shared/schema";
+import { startPipeline, getProgress, requestStop, isRunning } from "../services/embeddingPipeline";
 
 const router = Router();
 
@@ -481,6 +482,59 @@ router.get("/pipeline-status", authenticateAdmin, async (_req, res) => {
   } catch (error) {
     console.error("Error fetching pipeline status:", error);
     res.status(500).json({ message: "Failed to fetch pipeline status" });
+  }
+});
+
+router.post("/embedding/start", authenticateAdmin, async (req, res) => {
+  try {
+    if (isRunning()) {
+      return res.status(409).json({ message: "Embedding pipeline is already running" });
+    }
+
+    const { limit, town } = req.body || {};
+
+    startPipeline({
+      limit: limit ? Number(limit) : undefined,
+      town: town || undefined,
+    }).catch(err => {
+      console.error("Embedding pipeline background error:", err);
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const progress = getProgress();
+
+    res.json({
+      message: "Embedding pipeline started",
+      batchId: progress.batchId,
+      progress,
+    });
+  } catch (error: any) {
+    console.error("Error starting embedding pipeline:", error);
+    res.status(500).json({ message: error.message || "Failed to start embedding pipeline" });
+  }
+});
+
+router.get("/embedding/status", authenticateAdmin, async (_req, res) => {
+  try {
+    const progress = getProgress();
+    res.json(progress);
+  } catch (error) {
+    console.error("Error fetching embedding status:", error);
+    res.status(500).json({ message: "Failed to fetch embedding status" });
+  }
+});
+
+router.post("/embedding/stop", authenticateAdmin, async (_req, res) => {
+  try {
+    const stopped = requestStop();
+    if (stopped) {
+      res.json({ message: "Stop requested. Pipeline will finish current batch and stop." });
+    } else {
+      res.status(400).json({ message: "Pipeline is not currently running" });
+    }
+  } catch (error) {
+    console.error("Error stopping embedding pipeline:", error);
+    res.status(500).json({ message: "Failed to stop embedding pipeline" });
   }
 });
 

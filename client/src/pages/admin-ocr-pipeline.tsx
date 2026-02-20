@@ -31,6 +31,9 @@ import {
   Globe,
   Download,
   Layers,
+  Play,
+  Square,
+  Zap,
 } from "lucide-react";
 
 function adminFetch(url: string, options?: RequestInit) {
@@ -414,6 +417,261 @@ function PipelineStage({ label, count, total, icon: Icon, color }: { label: stri
   );
 }
 
+interface EmbeddingProgress {
+  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  totalDocuments: number;
+  processedDocuments: number;
+  totalChunks: number;
+  insertedChunks: number;
+  errorCount: number;
+  errors: string[];
+  startedAt: string | null;
+  completedAt: string | null;
+  batchId: string | null;
+  currentDocument: string | null;
+  estimatedTimeRemaining: number | null;
+}
+
+function EmbeddingPipelineControls() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [limitInput, setLimitInput] = useState("");
+
+  const { data: progress, isLoading } = useQuery<EmbeddingProgress>({
+    queryKey: ["/api/admin/embedding/status"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/status");
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("adminToken");
+          setLocation("/admin/login");
+          throw new Error("Session expired");
+        }
+        throw new Error("Failed to fetch embedding status");
+      }
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "running" || status === "stopping") return 2000;
+      return 15000;
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, any> = {};
+      if (limitInput && parseInt(limitInput, 10) > 0) {
+        body.limit = parseInt(limitInput, 10);
+      }
+      const res = await adminFetch("/api/admin/embedding/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to start pipeline");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Pipeline Started", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/embedding/status"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Start Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/stop", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to stop pipeline");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Stop Requested", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/embedding/status"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Stop Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const isActive = progress?.status === "running" || progress?.status === "stopping";
+  const docPct = progress && progress.totalDocuments > 0
+    ? Math.round((progress.processedDocuments / progress.totalDocuments) * 100)
+    : 0;
+
+  function formatEta(seconds: number | null): string {
+    if (!seconds || seconds <= 0) return "-";
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+    return `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+  }
+
+  function getStatusBadge(status: string) {
+    switch (status) {
+      case "idle":
+        return <Badge variant="outline">Idle</Badge>;
+      case "running":
+        return <Badge variant="default" className="bg-blue-600"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Running</Badge>;
+      case "stopping":
+        return <Badge variant="outline" className="text-orange-600 border-orange-600"><Clock className="w-3 h-3 mr-1" />Stopping</Badge>;
+      case "completed":
+        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
+      case "failed":
+        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Failed</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card data-testid="embedding-pipeline-controls">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-500" />
+            <CardTitle className="text-sm">Embedding Pipeline</CardTitle>
+            {progress && getStatusBadge(progress.status)}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isActive && (
+              <>
+                <Input
+                  type="number"
+                  placeholder="Limit (optional)"
+                  className="w-32"
+                  value={limitInput}
+                  onChange={(e) => setLimitInput(e.target.value)}
+                  data-testid="input-embedding-limit"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => startMutation.mutate()}
+                  disabled={startMutation.isPending}
+                  data-testid="button-start-embedding"
+                >
+                  {startMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-1" />
+                  )}
+                  Start Embedding
+                </Button>
+              </>
+            )}
+            {isActive && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => stopMutation.mutate()}
+                disabled={stopMutation.isPending || progress?.status === "stopping"}
+                data-testid="button-stop-embedding"
+              >
+                {stopMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Square className="w-4 h-4 mr-1" />
+                )}
+                Stop Pipeline
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {progress && (isActive || progress.status === "completed" || progress.status === "failed") && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">Documents</span>
+                <span className="text-sm font-medium">
+                  {progress.processedDocuments.toLocaleString()} / {progress.totalDocuments.toLocaleString()} ({docPct}%)
+                </span>
+              </div>
+              <Progress value={docPct} data-testid="progress-embedding" />
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Chunks Created</span>
+                <div className="text-lg font-bold" data-testid="text-chunks-created">{progress.insertedChunks.toLocaleString()}</div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Total Chunks</span>
+                <div className="text-lg font-bold">{progress.totalChunks.toLocaleString()}</div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Errors</span>
+                <div className={`text-lg font-bold ${progress.errorCount > 0 ? "text-red-600" : ""}`} data-testid="text-embedding-errors">{progress.errorCount}</div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">ETA</span>
+                <div className="text-lg font-bold" data-testid="text-embedding-eta">{formatEta(progress.estimatedTimeRemaining)}</div>
+              </div>
+            </div>
+
+            {progress.currentDocument && isActive && (
+              <div className="text-xs text-muted-foreground truncate" data-testid="text-current-document">
+                Processing: {progress.currentDocument}
+              </div>
+            )}
+
+            {progress.batchId && (
+              <div className="text-xs text-muted-foreground">
+                Batch: <span className="font-mono">{progress.batchId}</span>
+              </div>
+            )}
+
+            {progress.startedAt && (
+              <div className="text-xs text-muted-foreground">
+                Started: {new Date(progress.startedAt).toLocaleString()}
+                {progress.completedAt && ` | Finished: ${new Date(progress.completedAt).toLocaleString()}`}
+              </div>
+            )}
+
+            {progress.errors.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-red-600">Recent Errors:</span>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {progress.errors.slice(-5).map((err, i) => (
+                    <div key={i} className="text-xs text-red-500 font-mono bg-red-50 dark:bg-red-950/20 p-1 rounded">
+                      {err}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {progress?.status === "idle" && (
+          <div className="text-sm text-muted-foreground text-center py-2" data-testid="text-embedding-idle">
+            Ready to embed documents. Click "Start Embedding" to begin generating embeddings for all documents with text ready.
+            Use the limit field to process a specific number of documents.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PipelineStatusPanel() {
   const { data, isLoading, refetch } = useQuery<PipelineData>({
     queryKey: ['/api/admin/pipeline-status'],
@@ -539,6 +797,8 @@ function PipelineStatusPanel() {
           </CardContent>
         </Card>
       </div>
+
+      <EmbeddingPipelineControls />
 
       {data.recentJobs.length > 0 && (
         <Card>
