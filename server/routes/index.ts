@@ -12,6 +12,7 @@ import { registerChatV2Routes } from "../chatV2/chatV2Route";
 import { registerAdminUsageRoutes } from "./adminUsageRoutes";
 import { registerAdminChatAnalyticsRoutes } from "./adminChatAnalyticsRoutes";
 import crawlerRouter from "./crawler";
+import crawlerIntelRouter from "./crawlerIntel";
 
 export {
   adminRouter,
@@ -31,6 +32,7 @@ export function registerAllRoutes(app: Express): void {
   app.use("/api/admin/ingestion", ingestionRouter);
   app.use("/api/admin/ocr", ocrRouter);
   app.use("/api/admin/crawler", crawlerRouter);
+  app.use("/api/crawler-intel", crawlerIntelRouter);
   app.use("/api/admin", storageRouter);
 
   app.use("/api/chat", chatRouter);
