@@ -19,8 +19,21 @@ import { FAILURE_LABELS, type FailureType } from "../../shared/crawler-schema";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 
 const router = Router();
+
+router.get("/spec", (_req, res) => {
+  const specPath = path.resolve(process.cwd(), "crawler/CRAWLER-INTEL-API.md");
+  try {
+    const content = fs.readFileSync(specPath, "utf-8");
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.send(content);
+  } catch {
+    res.status(404).json({ error: { code: "SPEC_NOT_FOUND", message: "API spec file not found", retryable: false } });
+  }
+});
 
 interface ApiError {
   error: {
