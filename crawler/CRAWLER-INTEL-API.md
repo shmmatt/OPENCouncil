@@ -648,6 +648,269 @@ List discovered documents for a town.
 - `failed` — Crawl encountered a fatal error
 - `timeout` — Crawl exceeded time limit
 
+---
+
+## State Source Endpoints
+
+State sources represent state-level agency websites that provide statewide documents (RSAs, regulations, guidance docs, etc.) for the statewide retrieval lane.
+
+### Workflow: State Source Management
+
+1. **Register Source** — `POST /state-sources` to add a new state agency source
+2. **Configure** — `PATCH /state-sources/:slug` to set target paths, link patterns, doc categories
+3. **Trigger Crawl** — `POST /state-sources/:slug/crawl` to start collecting documents
+4. **Monitor** — `GET /state-sources/:slug/runs` to check crawl progress
+5. **Review** — `GET /state-sources/:slug` for full source profile with doc stats
+
+---
+
+### GET /state-sources
+
+List all registered state sources with overview stats.
+
+**Response:**
+```json
+{
+  "sources": [
+    {
+      "id": "uuid",
+      "name": "NH Dept of Revenue Administration",
+      "slug": "nh-dra",
+      "agency": "Department of Revenue Administration",
+      "agencyAbbrev": "DRA",
+      "state": "NH",
+      "baseUrl": "https://www.revenue.nh.gov",
+      "description": "Municipal budget guidance...",
+      "docCategories": ["guidance", "budgetary", "forms"],
+      "updateCadence": "quarterly",
+      "scope": "statewide",
+      "status": "active",
+      "totalDocuments": 0,
+      "totalUploaded": 0,
+      "consecutiveFailures": 0,
+      "lastRunStatus": null,
+      "lastRunDate": null,
+      "documentsByStatus": {}
+    }
+  ]
+}
+```
+
+---
+
+### POST /state-sources
+
+Register a new state agency source.
+
+**Request Body:**
+```json
+{
+  "name": "NH Dept of Revenue Administration",
+  "agency": "Department of Revenue Administration",
+  "agencyAbbrev": "DRA",
+  "state": "NH",
+  "baseUrl": "https://www.revenue.nh.gov",
+  "description": "Municipal budget guidance...",
+  "docCategories": ["guidance", "budgetary", "forms"],
+  "targetPaths": ["/mun-prop/", "/municipal-services/"],
+  "linkPatterns": ["budget", "municipal", "tax rate"],
+  "excludePatterns": ["/careers/", "/contact/"],
+  "updateCadence": "quarterly",
+  "maxPages": 300,
+  "notes": "Updates concentrated around budget season"
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "State source 'NH Dept of Revenue Administration' registered successfully",
+  "source": {
+    "id": "uuid",
+    "name": "NH Dept of Revenue Administration",
+    "slug": "nh-dra",
+    "agency": "Department of Revenue Administration",
+    "state": "NH",
+    "baseUrl": "https://www.revenue.nh.gov",
+    "docCategories": ["guidance", "budgetary", "forms"],
+    "status": "active"
+  }
+}
+```
+
+**Error (409):** `SOURCE_EXISTS` — source with that slug already registered.
+
+---
+
+### GET /state-sources/:sourceSlug
+
+Full source profile with document stats and recent runs.
+
+**Response:**
+```json
+{
+  "source": {
+    "id": "uuid",
+    "name": "NH Dept of Revenue Administration",
+    "slug": "nh-dra",
+    "agency": "Department of Revenue Administration",
+    "agencyAbbrev": "DRA",
+    "baseUrl": "https://www.revenue.nh.gov",
+    "description": "...",
+    "docCategories": ["guidance", "budgetary"],
+    "targetPaths": ["/mun-prop/", "/municipal-services/"],
+    "linkPatterns": ["budget", "municipal"],
+    "excludePatterns": ["/careers/"],
+    "updateCadence": "quarterly",
+    "maxPages": 300,
+    "scope": "statewide",
+    "status": "active",
+    "totalDocuments": 45,
+    "totalUploaded": 42,
+    "consecutiveFailures": 0,
+    "lastCrawlDate": "2026-02-20T...",
+    "notes": "..."
+  },
+  "documentStats": {
+    "totalTracked": 45,
+    "byCategory": {
+      "guidance": 20,
+      "budgetary": 15,
+      "forms": 10
+    }
+  },
+  "recentRuns": [...]
+}
+```
+
+---
+
+### PATCH /state-sources/:sourceSlug
+
+Update source profile fields.
+
+**Request Body** (all fields optional):
+```json
+{
+  "targetPaths": ["/new-path/"],
+  "linkPatterns": ["new pattern"],
+  "maxPages": 500,
+  "status": "paused",
+  "updateCadence": "monthly"
+}
+```
+
+**Editable fields:** `name`, `agency`, `agencyAbbrev`, `baseUrl`, `description`, `docCategories`, `targetPaths`, `linkPatterns`, `excludePatterns`, `updateCadence`, `maxPages`, `status`, `notes`
+
+---
+
+### POST /state-sources/:sourceSlug/crawl
+
+Trigger a crawl for a state source. Uses source's configured targetPaths/linkPatterns by default; overrides via request body.
+
+**Request Body** (all optional):
+```json
+{
+  "mode": "full",
+  "maxPages": 300,
+  "targetPaths": ["/specific/path/"],
+  "linkPatterns": ["specific pattern"],
+  "callbackUrl": "https://bot.example.com/webhook"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "State source crawl started for NH DRA (Department of Revenue Administration)",
+  "runId": "uuid",
+  "sourceId": "uuid",
+  "mode": "full",
+  "triggerType": "bot",
+  "targetPaths": [...],
+  "linkPatterns": [...],
+  "scope": "statewide"
+}
+```
+
+---
+
+### GET /state-sources/:sourceSlug/documents
+
+Paginated document inventory for a source.
+
+**Query params:** `limit` (default 100, max 500), `offset`, `status`, `search`
+
+---
+
+### GET /state-sources/:sourceSlug/runs
+
+Paginated run history for a source.
+
+**Query params:** `limit` (default 20, max 100), `offset`
+
+---
+
+### Fleet Summary (updated)
+
+`GET /fleet/summary` now includes a `stateSources` section:
+
+```json
+{
+  "overview": { "totalTowns": 18, ... },
+  "stateSources": {
+    "totalSources": 6,
+    "totalDocuments": 0,
+    "totalUploaded": 0,
+    "totalFailed": 0,
+    "activeRuns": 0
+  },
+  "coverage": { ... },
+  "recentFailures": [...]
+}
+```
+
+---
+
+## State Document Categories
+
+| Category | Label |
+|----------|-------|
+| `rsas` | Revised Statutes Annotated (RSAs) |
+| `session_laws` | Session Laws |
+| `administrative_rules` | Administrative Rules |
+| `regulations` | Regulations |
+| `guidance` | Guidance Documents |
+| `budgetary` | Budgetary & Financial |
+| `model_documents` | Model Documents & Templates |
+| `forms` | Forms & Applications |
+| `bulletins` | Bulletins & Notices |
+| `manuals` | Manuals & Handbooks |
+| `opinions` | Opinions & Advisories |
+| `other` | Other Documents |
+
+## Update Cadences
+
+| Cadence | Description |
+|---------|-------------|
+| `annual` | Once per year (e.g., RSAs after legislative session) |
+| `semi_annual` | Twice per year |
+| `quarterly` | Four times per year |
+| `monthly` | Monthly |
+| `weekly` | Weekly |
+| `as_needed` | Irregular, monitor for changes |
+
+## Initial NH State Sources (Seeded)
+
+| Slug | Agency | Key Document Types |
+|------|--------|-------------------|
+| `nh-rsas` | NH General Court | RSAs, session laws |
+| `nh-dra` | Dept of Revenue Admin | Budget guidance, tax forms, model docs |
+| `nh-des` | Dept of Environmental Services | Septic regs, wetland rules, permits |
+| `nh-osi` | Office of Strategic Initiatives | Model ordinances, planning guides |
+| `nh-admin-rules` | Secretary of State | Administrative rules by agency |
+| `nh-muni-assoc` | NH Municipal Association | Handbooks, legal Q&A, model policies |
+
 ### CMS Types
 
 Known CMS platforms that affect crawl strategy:

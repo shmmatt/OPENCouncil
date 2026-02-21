@@ -309,6 +309,137 @@ export interface CrawlRunSummary {
   averageDocsPerPage?: number;
 }
 
+// ============================================================
+// STATE SOURCE TABLES
+// ============================================================
+
+export const STATE_DOC_CATEGORIES = [
+  "rsas",
+  "session_laws",
+  "administrative_rules",
+  "regulations",
+  "guidance",
+  "budgetary",
+  "model_documents",
+  "forms",
+  "bulletins",
+  "manuals",
+  "opinions",
+  "other",
+] as const;
+
+export type StateDocCategory = typeof STATE_DOC_CATEGORIES[number];
+
+export const STATE_DOC_CATEGORY_LABELS: Record<StateDocCategory, string> = {
+  rsas: "Revised Statutes Annotated (RSAs)",
+  session_laws: "Session Laws",
+  administrative_rules: "Administrative Rules",
+  regulations: "Regulations",
+  guidance: "Guidance Documents",
+  budgetary: "Budgetary & Financial",
+  model_documents: "Model Documents & Templates",
+  forms: "Forms & Applications",
+  bulletins: "Bulletins & Notices",
+  manuals: "Manuals & Handbooks",
+  opinions: "Opinions & Advisories",
+  other: "Other Documents",
+};
+
+export const UPDATE_CADENCES = [
+  "annual",
+  "semi_annual",
+  "quarterly",
+  "monthly",
+  "weekly",
+  "as_needed",
+] as const;
+
+export type UpdateCadence = typeof UPDATE_CADENCES[number];
+
+export const crawlerStateSources = pgTable("crawler_state_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  agency: text("agency").notNull(),
+  agencyAbbrev: text("agency_abbrev"),
+  state: text("state").notNull().default("NH"),
+  baseUrl: text("base_url").notNull(),
+  description: text("description"),
+
+  docCategories: jsonb("doc_categories").notNull().$type<StateDocCategory[]>().default([]),
+  targetPaths: jsonb("target_paths").notNull().$type<string[]>().default([]),
+  linkPatterns: jsonb("link_patterns").notNull().$type<string[]>().default([]),
+  excludePatterns: jsonb("exclude_patterns").notNull().$type<string[]>().default([]),
+
+  updateCadence: text("update_cadence").notNull().default("quarterly"),
+  maxPages: integer("max_pages"),
+  scope: text("scope").notNull().default("statewide"),
+
+  status: text("status").notNull().default("active"),
+  lastCrawlDate: timestamp("last_crawl_date"),
+  nextScheduledCrawl: timestamp("next_scheduled_crawl"),
+  totalDocuments: integer("total_documents").notNull().default(0),
+  totalUploaded: integer("total_uploaded").notNull().default(0),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const crawlerStateSourceRuns = pgTable("crawler_state_source_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => crawlerStateSources.id, { onDelete: "cascade" }),
+
+  mode: text("mode").notNull(),
+  triggerType: text("trigger_type").notNull(),
+
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  status: text("status").notNull().default("running"),
+
+  pagesVisited: integer("pages_visited").notNull().default(0),
+  documentsDiscovered: integer("documents_discovered").notNull().default(0),
+  documentsDownloaded: integer("documents_downloaded").notNull().default(0),
+  documentsUploaded: integer("documents_uploaded").notNull().default(0),
+  documentsFailed: integer("documents_failed").notNull().default(0),
+
+  maxPagesLimit: integer("max_pages_limit"),
+  errorMessage: text("error_message"),
+  summary: jsonb("summary"),
+});
+
+export const crawlerStateDocuments = pgTable("crawler_state_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => crawlerStateSources.id, { onDelete: "cascade" }),
+
+  url: text("url").notNull(),
+  urlHash: text("url_hash").notNull().unique(),
+  filename: text("filename").notNull(),
+
+  category: text("category"),
+  subcategory: text("subcategory"),
+  title: text("title"),
+  rsaChapter: text("rsa_chapter"),
+
+  sizeBytes: integer("size_bytes"),
+  mimeType: text("mime_type"),
+
+  s3Key: text("s3_key"),
+  s3UploadedAt: timestamp("s3_uploaded_at"),
+
+  discoveredAt: timestamp("discovered_at").defaultNow().notNull(),
+  discoveredFrom: text("discovered_from"),
+  status: text("status").notNull().default("discovered"),
+  errorMessage: text("error_message"),
+
+  fileBlobId: varchar("file_blob_id"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertCrawlerTownSchema = createInsertSchema(crawlerTowns).omit({
   id: true,
@@ -344,6 +475,24 @@ export const insertCrawlAssessmentSchema = createInsertSchema(crawlAssessments).
   createdAt: true,
 });
 
+export const insertStateSourceSchema = createInsertSchema(crawlerStateSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStateSourceRunSchema = createInsertSchema(crawlerStateSourceRuns).omit({
+  id: true,
+  startedAt: true,
+});
+
+export const insertStateDocumentSchema = createInsertSchema(crawlerStateDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  discoveredAt: true,
+});
+
 // Types
 export type CrawlAssessment = typeof crawlAssessments.$inferSelect;
 export type InsertCrawlAssessment = z.infer<typeof insertCrawlAssessmentSchema>;
@@ -363,11 +512,20 @@ export type InsertCrawlerDocument = z.infer<typeof insertCrawlerDocumentSchema>;
 export type CrawlerRun = typeof crawlerRuns.$inferSelect;
 export type InsertCrawlerRun = z.infer<typeof insertCrawlerRunSchema>;
 
+export type CrawlerStateSource = typeof crawlerStateSources.$inferSelect;
+export type InsertCrawlerStateSource = z.infer<typeof insertStateSourceSchema>;
+
+export type CrawlerStateSourceRun = typeof crawlerStateSourceRuns.$inferSelect;
+export type InsertCrawlerStateSourceRun = z.infer<typeof insertStateSourceRunSchema>;
+
+export type CrawlerStateDocument = typeof crawlerStateDocuments.$inferSelect;
+export type InsertCrawlerStateDocument = z.infer<typeof insertStateDocumentSchema>;
+
 // Status types
 export type TownStatus = "active" | "failed" | "paused" | "disabled";
 export type DocumentStatus = "discovered" | "downloaded" | "uploaded" | "failed";
 export type RunStatus = "running" | "completed" | "failed" | "timeout";
 export type CrawlMode = "full" | "incremental" | "manual";
-export type TriggerType = "scheduled" | "manual" | "retry";
+export type TriggerType = "scheduled" | "manual" | "retry" | "bot";
 export type UrlSource = "sitemap" | "navigation" | "custom" | "deep_link";
 export type Priority = "high" | "medium" | "low";

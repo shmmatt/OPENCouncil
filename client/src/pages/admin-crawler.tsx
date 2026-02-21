@@ -39,7 +39,8 @@ import {
   Target,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { FAILURE_LABELS } from "@shared/crawler-schema";
+import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
+import type { StateDocCategory, UpdateCadence } from "@shared/crawler-schema";
 
 function adminFetch(url: string, options?: RequestInit) {
   const token = localStorage.getItem("adminToken");
@@ -1584,9 +1585,568 @@ function RunHistoryGlobal() {
   );
 }
 
+interface StateSource {
+  id: string;
+  name: string;
+  slug: string;
+  agency: string;
+  agencyAbbrev: string | null;
+  baseUrl: string;
+  description: string | null;
+  docCategories: StateDocCategory[];
+  targetPaths: string[];
+  linkPatterns: string[];
+  excludePatterns: string[];
+  updateCadence: string;
+  maxPages: number | null;
+  status: string;
+  lastCrawlDate: string | null;
+  totalDocuments: number;
+  totalUploaded: number;
+  consecutiveFailures: number;
+  notes: string | null;
+}
+
+function getSourceStatusBadge(status: string) {
+  switch (status) {
+    case "active":
+      return <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>;
+    case "failed":
+      return <Badge variant="outline" className="text-red-600 border-red-600">Failed</Badge>;
+    case "paused":
+      return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Paused</Badge>;
+    case "disabled":
+      return <Badge variant="outline" className="text-muted-foreground">Disabled</Badge>;
+    default:
+      return <Badge variant="outline">{status}</Badge>;
+  }
+}
+
+function StateSourceProfileEditor({
+  source,
+  onSave,
+  saving,
+}: {
+  source: StateSource;
+  onSave: (updates: any) => void;
+  saving: boolean;
+}) {
+  const [name, setName] = useState(source.name);
+  const [agency, setAgency] = useState(source.agency);
+  const [baseUrl, setBaseUrl] = useState(source.baseUrl);
+  const [description, setDescription] = useState(source.description || "");
+  const [docCategories, setDocCategories] = useState((source.docCategories || []).join(", "));
+  const [targetPaths, setTargetPaths] = useState((source.targetPaths || []).join("\n"));
+  const [linkPatterns, setLinkPatterns] = useState((source.linkPatterns || []).join("\n"));
+  const [excludePatterns, setExcludePatterns] = useState((source.excludePatterns || []).join("\n"));
+  const [updateCadence, setUpdateCadence] = useState(source.updateCadence || "quarterly");
+  const [maxPages, setMaxPages] = useState(source.maxPages?.toString() || "");
+  const [notes, setNotes] = useState(source.notes || "");
+  const [status, setStatus] = useState(source.status);
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Edit {source.name}</DialogTitle>
+      </DialogHeader>
+      <ScrollArea className="max-h-[60vh]">
+        <div className="space-y-4 py-2 pr-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="input-source-name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Agency</Label>
+              <Input value={agency} onChange={(e) => setAgency(e.target.value)} data-testid="input-source-agency" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Base URL</Label>
+            <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} data-testid="input-source-url" />
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} data-testid="input-source-description" />
+          </div>
+          <div className="space-y-2">
+            <Label>Doc Categories (comma-separated)</Label>
+            <Input value={docCategories} onChange={(e) => setDocCategories(e.target.value)} placeholder="rsas, regulations, guidance" data-testid="input-source-categories" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger data-testid="select-source-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Update Cadence</Label>
+              <Select value={updateCadence} onValueChange={setUpdateCadence}>
+                <SelectTrigger data-testid="select-source-cadence">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UPDATE_CADENCES.map((c) => (
+                    <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Max Pages</Label>
+            <Input type="number" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="No limit" data-testid="input-source-maxpages" />
+          </div>
+          <div className="space-y-2">
+            <Label>Target Paths (one per line)</Label>
+            <Textarea value={targetPaths} onChange={(e) => setTargetPaths(e.target.value)} rows={3} data-testid="input-source-target-paths" />
+          </div>
+          <div className="space-y-2">
+            <Label>Link Patterns (one per line)</Label>
+            <Textarea value={linkPatterns} onChange={(e) => setLinkPatterns(e.target.value)} rows={2} data-testid="input-source-link-patterns" />
+          </div>
+          <div className="space-y-2">
+            <Label>Exclude Patterns (one per line)</Label>
+            <Textarea value={excludePatterns} onChange={(e) => setExcludePatterns(e.target.value)} rows={2} data-testid="input-source-exclude-patterns" />
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} data-testid="input-source-notes" />
+          </div>
+        </div>
+      </ScrollArea>
+      <DialogFooter>
+        <Button
+          onClick={() => onSave({
+            name, agency, baseUrl, description: description || null,
+            docCategories: docCategories.split(",").map(s => s.trim()).filter(Boolean),
+            targetPaths: targetPaths.trim() ? targetPaths.trim().split("\n").filter(Boolean) : [],
+            linkPatterns: linkPatterns.trim() ? linkPatterns.trim().split("\n").filter(Boolean) : [],
+            excludePatterns: excludePatterns.trim() ? excludePatterns.trim().split("\n").filter(Boolean) : [],
+            updateCadence, status,
+            maxPages: maxPages ? parseInt(maxPages) : null,
+            notes: notes || null,
+          })}
+          disabled={saving}
+          data-testid="button-save-source"
+        >
+          {saving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+          Save Changes
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function StateSourceDetail({
+  source,
+  onBack,
+}: {
+  source: StateSource;
+  onBack: () => void;
+}) {
+  const [tab, setTab] = useState("overview");
+  const [editOpen, setEditOpen] = useState(false);
+  const [docPage, setDocPage] = useState(0);
+  const [runPage, setRunPage] = useState(0);
+  const { toast } = useToast();
+  const limit = 50;
+
+  const { data: detailData } = useQuery<{ source: StateSource; documentStats: any; recentRuns: any[] }>({
+    queryKey: ["/api/crawler-intel/state-sources", source.slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: docsData } = useQuery<{ documents: any[]; total: number }>({
+    queryKey: ["/api/crawler-intel/state-sources", source.slug, "documents", docPage],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(docPage * limit) });
+      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/documents?${params}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: tab === "documents",
+  });
+
+  const { data: runsData } = useQuery<{ runs: any[]; total: number }>({
+    queryKey: ["/api/crawler-intel/state-sources", source.slug, "runs", runPage],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(runPage * limit) });
+      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/runs?${params}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: tab === "runs",
+  });
+
+  const triggerCrawl = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/crawl`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "full" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Crawl Started", description: data.message || "Crawl triggered" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/state-sources"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateSource = useMutation({
+    mutationFn: async (updates: any) => {
+      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Updated", description: "Source profile saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/state-sources"] });
+      setEditOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const src = detailData?.source || source;
+  const stats = detailData?.documentStats;
+  const totalDocPages = Math.ceil((docsData?.total || 0) / limit);
+  const totalRunPages = Math.ceil((runsData?.total || 0) / limit);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={onBack} data-testid="button-back-sources">
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Globe className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-xl font-bold">{src.name}</h2>
+          {getSourceStatusBadge(src.status)}
+          {src.agencyAbbrev && <Badge variant="secondary">{src.agencyAbbrev}</Badge>}
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={src.baseUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground flex items-center gap-1">
+            {src.baseUrl} <ExternalLink className="w-3 h-3" />
+          </a>
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-edit-source">
+                <Settings className="w-3 h-3 mr-1" />Edit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <StateSourceProfileEditor source={src} onSave={(updates) => updateSource.mutate(updates)} saving={updateSource.isPending} />
+            </DialogContent>
+          </Dialog>
+          <Button
+            size="sm"
+            onClick={() => triggerCrawl.mutate()}
+            disabled={triggerCrawl.isPending}
+            data-testid="button-trigger-source-crawl"
+          >
+            <Play className="w-3 h-3 mr-1" />
+            {triggerCrawl.isPending ? "Starting..." : "Trigger Crawl"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Total Docs</div>
+            <div className="text-lg font-bold" data-testid="text-source-total-docs">{formatNumber(src.totalDocuments)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Uploaded</div>
+            <div className="text-lg font-bold text-green-600" data-testid="text-source-uploaded">{formatNumber(src.totalUploaded)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Cadence</div>
+            <div className="text-sm font-medium">{(src.updateCadence || "").replace(/_/g, " ")}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Last Crawl</div>
+            <div className="text-sm font-medium">{formatDateShort(src.lastCrawlDate)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="overview" data-testid="tab-source-overview">
+            <Globe className="w-3 h-3 mr-1" />Overview
+          </TabsTrigger>
+          <TabsTrigger value="documents" data-testid="tab-source-documents">
+            <FileText className="w-3 h-3 mr-1" />Documents
+          </TabsTrigger>
+          <TabsTrigger value="runs" data-testid="tab-source-runs">
+            <Activity className="w-3 h-3 mr-1" />Run History
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {src.description && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Description</div>
+                <p className="text-sm">{src.description}</p>
+              </CardContent>
+            </Card>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Doc Categories</div>
+                <div className="flex flex-wrap gap-1">
+                  {(src.docCategories || []).map((cat) => (
+                    <Badge key={cat} variant="secondary">
+                      {(STATE_DOC_CATEGORY_LABELS as Record<string, string>)[cat] || cat}
+                    </Badge>
+                  ))}
+                  {(!src.docCategories || src.docCategories.length === 0) && <span className="text-xs text-muted-foreground">None configured</span>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Target Paths</div>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {(src.targetPaths || []).map((p, i) => (
+                    <div key={i} className="text-xs font-mono text-muted-foreground">{p}</div>
+                  ))}
+                  {(!src.targetPaths || src.targetPaths.length === 0) && <span className="text-xs text-muted-foreground">None</span>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {stats && Object.keys(stats).length > 0 && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Document Stats by Category</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.entries(stats as Record<string, number>).map(([cat, count]) => (
+                    <div key={cat} className="flex items-center justify-between gap-2">
+                      <span className="text-xs truncate">{(STATE_DOC_CATEGORY_LABELS as Record<string, string>)[cat] || cat}</span>
+                      <span className="text-xs font-bold">{count as number}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-3">
+          <ScrollArea className="w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Filename</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Discovered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(docsData?.documents || []).map((doc: any) => (
+                  <TableRow key={doc.id} data-testid={`row-state-doc-${doc.id}`}>
+                    <TableCell>
+                      <div className="max-w-[300px] truncate text-sm" title={doc.url}>{doc.filename}</div>
+                    </TableCell>
+                    <TableCell>
+                      {doc.category ? (
+                        <Badge variant="secondary">
+                          {(STATE_DOC_CATEGORY_LABELS as Record<string, string>)[doc.category] || doc.category}
+                        </Badge>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell>{getDocStatusBadge(doc.status)}</TableCell>
+                    <TableCell className="text-xs">{formatDateShort(doc.discoveredAt)}</TableCell>
+                  </TableRow>
+                ))}
+                {(docsData?.documents || []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">No documents found</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          <Pagination page={docPage} totalPages={totalDocPages} onPageChange={setDocPage} total={docsData?.total || 0} />
+        </TabsContent>
+
+        <TabsContent value="runs" className="space-y-3">
+          <ScrollArea className="w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Started</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pages</TableHead>
+                  <TableHead>Discovered</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead>Failed</TableHead>
+                  <TableHead>Duration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(runsData?.runs || detailData?.recentRuns || []).map((run: any) => {
+                  const duration = run.completedAt
+                    ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+                    : null;
+                  return (
+                    <TableRow key={run.id} data-testid={`row-state-run-${run.id}`}>
+                      <TableCell className="text-xs">{formatDateShort(run.startedAt)}</TableCell>
+                      <TableCell><Badge variant="secondary">{run.mode}</Badge></TableCell>
+                      <TableCell>{getRunStatusBadge(run.status)}</TableCell>
+                      <TableCell>{run.pagesVisited}</TableCell>
+                      <TableCell>{run.documentsDiscovered}</TableCell>
+                      <TableCell className="text-green-600 font-medium">{run.documentsUploaded}</TableCell>
+                      <TableCell className={run.documentsFailed > 0 ? "text-red-600" : ""}>{run.documentsFailed}</TableCell>
+                      <TableCell className="text-xs">
+                        {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(runsData?.runs || detailData?.recentRuns || []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No runs yet</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          <Pagination page={runPage} totalPages={totalRunPages} onPageChange={setRunPage} total={runsData?.total || 0} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function StateSourcesDashboard({
+  onSelectSource,
+}: {
+  onSelectSource: (source: StateSource) => void;
+}) {
+  const { data, isLoading } = useQuery<{ sources: StateSource[] }>({
+    queryKey: ["/api/crawler-intel/state-sources"],
+    queryFn: async () => {
+      const res = await fetch("/api/crawler-intel/state-sources");
+      if (!res.ok) throw new Error("Failed to fetch state sources");
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const sources = data?.sources || [];
+
+  return (
+    <ScrollArea className="w-full">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Source</TableHead>
+            <TableHead>Agency</TableHead>
+            <TableHead>Categories</TableHead>
+            <TableHead>Cadence</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Documents</TableHead>
+            <TableHead>Last Crawl</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {sources.map((src) => (
+            <TableRow
+              key={src.id}
+              className="hover-elevate cursor-pointer"
+              onClick={() => onSelectSource(src)}
+              data-testid={`row-state-source-${src.slug}`}
+            >
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">{src.name}</div>
+                    <div className="text-xs text-muted-foreground truncate max-w-[200px]">{src.baseUrl}</div>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className="text-sm">{src.agencyAbbrev || src.agency}</TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {(src.docCategories || []).slice(0, 3).map((cat) => (
+                    <Badge key={cat} variant="secondary" className="text-xs">
+                      {(STATE_DOC_CATEGORY_LABELS as Record<string, string>)[cat] || cat}
+                    </Badge>
+                  ))}
+                  {(src.docCategories || []).length > 3 && (
+                    <span className="text-xs text-muted-foreground">+{src.docCategories.length - 3}</span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm">{(src.updateCadence || "").replace(/_/g, " ")}</TableCell>
+              <TableCell>{getSourceStatusBadge(src.status)}</TableCell>
+              <TableCell>
+                <span className="text-green-600 font-medium">{src.totalUploaded}</span>
+                <span className="text-muted-foreground"> / {src.totalDocuments}</span>
+              </TableCell>
+              <TableCell className="text-xs">{formatDateShort(src.lastCrawlDate)}</TableCell>
+            </TableRow>
+          ))}
+          {sources.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No state sources configured</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </ScrollArea>
+  );
+}
+
 export default function AdminCrawler() {
   const [, setLocation] = useLocation();
   const [selectedTown, setSelectedTown] = useState<TownOverview | null>(null);
+  const [selectedSource, setSelectedSource] = useState<StateSource | null>(null);
   const [activeTab, setActiveTab] = useState("towns");
   const { toast } = useToast();
 
@@ -1673,6 +2233,8 @@ export default function AdminCrawler() {
 
         {selectedTown ? (
           <TownDetail town={selectedTown} onBack={() => setSelectedTown(null)} />
+        ) : selectedSource ? (
+          <StateSourceDetail source={selectedSource} onBack={() => setSelectedSource(null)} />
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
@@ -1682,6 +2244,9 @@ export default function AdminCrawler() {
               <TabsTrigger value="runs" data-testid="tab-all-runs">
                 <Activity className="w-3 h-3 mr-1" />All Runs
               </TabsTrigger>
+              <TabsTrigger value="state-sources" data-testid="tab-state-sources">
+                <Globe className="w-3 h-3 mr-1" />State Sources
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="towns">
@@ -1690,6 +2255,10 @@ export default function AdminCrawler() {
 
             <TabsContent value="runs">
               <RunHistoryGlobal />
+            </TabsContent>
+
+            <TabsContent value="state-sources">
+              <StateSourcesDashboard onSelectSource={setSelectedSource} />
             </TabsContent>
           </Tabs>
         )}

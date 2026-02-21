@@ -518,6 +518,332 @@ router.post("/towns", async (req, res) => {
   }
 });
 
+// ============================================================
+// STATE SOURCE ENDPOINTS
+// ============================================================
+
+async function resolveStateSource(slugOrId: string) {
+  let source = await crawlerStorage.getStateSourceBySlug(slugOrId.toLowerCase());
+  if (!source) {
+    source = await crawlerStorage.getStateSourceById(slugOrId);
+  }
+  return source;
+}
+
+router.get("/state-sources", async (_req, res) => {
+  try {
+    const sources = await crawlerStorage.getStateSourceOverviews();
+    res.json({
+      sources: sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        agency: s.agency,
+        agencyAbbrev: s.agencyAbbrev,
+        state: s.state,
+        baseUrl: s.baseUrl,
+        description: s.description,
+        docCategories: s.docCategories,
+        updateCadence: s.updateCadence,
+        scope: s.scope,
+        status: s.status,
+        totalDocuments: s.totalDocuments,
+        totalUploaded: s.totalUploaded,
+        consecutiveFailures: s.consecutiveFailures,
+        lastRunStatus: s.lastRunStatus,
+        lastRunDate: s.lastRunDate,
+        documentsByStatus: s.documentsByStatus,
+      })),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const registerStateSourceSchema = z.object({
+  name: z.string().min(1).max(200),
+  agency: z.string().min(1).max(200),
+  agencyAbbrev: z.string().max(20).optional(),
+  state: z.string().length(2).default("NH"),
+  baseUrl: z.string().url(),
+  description: z.string().optional(),
+  docCategories: z.array(z.string()).default([]),
+  targetPaths: z.array(z.string()).default([]),
+  linkPatterns: z.array(z.string()).default([]),
+  excludePatterns: z.array(z.string()).default([]),
+  updateCadence: z.enum(["annual", "semi_annual", "quarterly", "monthly", "weekly", "as_needed"]).default("quarterly"),
+  maxPages: z.number().int().positive().optional(),
+  notes: z.string().optional(),
+});
+
+router.post("/state-sources", async (req, res) => {
+  try {
+    const parsed = registerStateSourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+    const existing = await crawlerStorage.getStateSourceBySlug(slug);
+    if (existing) {
+      return apiError(res, 409, "SOURCE_EXISTS", `State source '${data.name}' already registered with slug '${slug}'`);
+    }
+
+    const [source] = await db
+      .insert(crawlerSchema.crawlerStateSources)
+      .values({
+        name: data.name,
+        slug,
+        agency: data.agency,
+        agencyAbbrev: data.agencyAbbrev || null,
+        state: data.state,
+        baseUrl: data.baseUrl.replace(/\/$/, ""),
+        description: data.description || null,
+        docCategories: data.docCategories as any,
+        targetPaths: data.targetPaths as any,
+        linkPatterns: data.linkPatterns as any,
+        excludePatterns: data.excludePatterns as any,
+        updateCadence: data.updateCadence,
+        maxPages: data.maxPages || null,
+        notes: data.notes || null,
+        status: "active",
+      })
+      .returning();
+
+    res.status(201).json({
+      message: `State source '${data.name}' registered successfully`,
+      source: {
+        id: source.id,
+        name: source.name,
+        slug: source.slug,
+        agency: source.agency,
+        agencyAbbrev: source.agencyAbbrev,
+        state: source.state,
+        baseUrl: source.baseUrl,
+        docCategories: source.docCategories,
+        status: source.status,
+      },
+    });
+  } catch (error: any) {
+    if (error.message?.includes("unique") || error.code === "23505") {
+      return apiError(res, 409, "SOURCE_EXISTS", "A state source with that name already exists");
+    }
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/state-sources/:sourceSlug", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const [runsResult, docsResult] = await Promise.all([
+      crawlerStorage.getStateSourceRuns(source.id, 10, 0),
+      crawlerStorage.getStateDocuments(source.id, undefined, 1, 0),
+    ]);
+
+    const docsByCategory = await db.execute(sql`
+      SELECT category, COUNT(*) as count
+      FROM crawler_state_documents
+      WHERE source_id = ${source.id}
+      GROUP BY category
+    `);
+    const categoryBreakdown: Record<string, number> = {};
+    for (const row of docsByCategory.rows as any[]) {
+      categoryBreakdown[row.category || "uncategorized"] = parseInt(row.count);
+    }
+
+    res.json({
+      source: {
+        id: source.id,
+        name: source.name,
+        slug: source.slug,
+        agency: source.agency,
+        agencyAbbrev: source.agencyAbbrev,
+        state: source.state,
+        baseUrl: source.baseUrl,
+        description: source.description,
+        docCategories: source.docCategories,
+        targetPaths: source.targetPaths,
+        linkPatterns: source.linkPatterns,
+        excludePatterns: source.excludePatterns,
+        updateCadence: source.updateCadence,
+        maxPages: source.maxPages,
+        scope: source.scope,
+        status: source.status,
+        totalDocuments: source.totalDocuments,
+        totalUploaded: source.totalUploaded,
+        consecutiveFailures: source.consecutiveFailures,
+        lastCrawlDate: source.lastCrawlDate,
+        notes: source.notes,
+      },
+      documentStats: {
+        totalTracked: docsResult.total,
+        byCategory: categoryBreakdown,
+      },
+      recentRuns: runsResult.runs.map((run) => ({
+        id: run.id,
+        mode: run.mode,
+        triggerType: run.triggerType,
+        status: run.status,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        pagesVisited: run.pagesVisited,
+        documentsDiscovered: run.documentsDiscovered,
+        documentsUploaded: run.documentsUploaded,
+        documentsFailed: run.documentsFailed,
+        errorMessage: run.errorMessage,
+      })),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.patch("/state-sources/:sourceSlug", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const allowedFields = [
+      "name", "agency", "agencyAbbrev", "baseUrl", "description",
+      "docCategories", "targetPaths", "linkPatterns", "excludePatterns",
+      "updateCadence", "maxPages", "status", "notes",
+    ];
+    const updates: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return apiError(res, 400, "NO_UPDATES", "No valid fields provided to update");
+    }
+
+    const updated = await crawlerStorage.updateStateSource(source.id, updates as any);
+    res.json({
+      message: `State source '${source.name}' updated`,
+      source: updated,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/state-sources/:sourceSlug/documents", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    const result = await crawlerStorage.getStateDocuments(source.id, status, limit, offset, search);
+
+    res.json({
+      documents: result.documents,
+      total: result.total,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/state-sources/:sourceSlug/runs", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const result = await crawlerStorage.getStateSourceRuns(source.id, limit, offset);
+
+    res.json({
+      runs: result.runs,
+      total: result.total,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const stateSourceCrawlSchema = z.object({
+  mode: z.enum(["full", "incremental", "manual"]).default("full"),
+  maxPages: z.number().int().positive().optional(),
+  targetPaths: z.array(z.string()).optional(),
+  linkPatterns: z.array(z.string()).optional(),
+  callbackUrl: z.string().url().optional(),
+});
+
+router.post("/state-sources/:sourceSlug/crawl", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    if (source.status === "disabled") {
+      return apiError(res, 409, "SOURCE_DISABLED", `State source '${source.name}' is disabled`);
+    }
+
+    const parsed = stateSourceCrawlSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const { mode, maxPages, targetPaths, linkPatterns, callbackUrl } = parsed.data;
+
+    const effectiveTargetPaths = targetPaths && targetPaths.length > 0
+      ? targetPaths
+      : (source.targetPaths as string[]) || [];
+
+    const effectiveLinkPatterns = linkPatterns && linkPatterns.length > 0
+      ? linkPatterns
+      : (source.linkPatterns as string[]) || [];
+
+    const run = await crawlerStorage.createStateSourceRun(
+      source.id,
+      mode,
+      "bot",
+      maxPages || source.maxPages || undefined
+    );
+
+    res.json({
+      message: `State source crawl started for ${source.name} (${source.agency})`,
+      runId: run.id,
+      sourceId: source.id,
+      mode,
+      maxPages: maxPages || source.maxPages || "default",
+      triggerType: "bot",
+      targetPaths: effectiveTargetPaths,
+      linkPatterns: effectiveLinkPatterns,
+      scope: source.scope,
+      hint: `Poll GET /state-sources/${source.slug}/runs for status updates`,
+      ...(callbackUrl ? { callbackUrl } : {}),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "CRAWL_START_FAILED", error.message, true, 60);
+  }
+});
+
+// ============================================================
+// FLEET ENDPOINTS (Towns + State Sources)
+// ============================================================
+
 router.get("/fleet/status", async (_req, res) => {
   try {
     const towns = await crawlerStorage.getTownOverviews();
@@ -608,6 +934,8 @@ router.get("/fleet/summary", async (_req, res) => {
       LIMIT 10
     `);
 
+    const stateSourceStats = await crawlerStorage.getStateSourceStats();
+
     res.json({
       overview: {
         totalTowns: stats.totalTowns,
@@ -616,6 +944,13 @@ router.get("/fleet/summary", async (_req, res) => {
         totalFailed: stats.totalFailed,
         totalUrls: stats.totalUrls,
         activeRuns: stats.activeRuns,
+      },
+      stateSources: {
+        totalSources: stateSourceStats.totalSources,
+        totalDocuments: stateSourceStats.totalDocuments,
+        totalUploaded: stateSourceStats.totalUploaded,
+        totalFailed: stateSourceStats.totalFailed,
+        activeRuns: stateSourceStats.activeRuns,
       },
       coverage: {
         townsAssessed,
