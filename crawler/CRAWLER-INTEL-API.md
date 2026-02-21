@@ -918,3 +918,469 @@ Known CMS platforms that affect crawl strategy:
 - `WordPress` — Standard WP paths
 - `Revize` — Revize CMS patterns
 - `Custom` — Custom/unknown platform
+
+---
+
+# Bot Integration Guide
+
+This section documents the complete workflow for an external crawler bot that runs in its own repo/environment, crawls town/state-agency websites, uploads documents to S3, and reports results back to the OPENCouncil API.
+
+## Architecture
+
+```
+┌─────────────────┐          ┌──────────────────────┐          ┌─────────────┐
+│  Crawler Bot    │          │  OPENCouncil API     │          │  AWS S3     │
+│  (separate repo)│          │  /api/crawler-intel  │          │             │
+│                 │          │                      │          │             │
+│  1. Get work    │──GET────▶│  /fleet/next-batch   │          │             │
+│                 │◀─────────│  (priority queue)    │          │             │
+│                 │          │                      │          │             │
+│  2. Get briefing│──GET────▶│  /:town/briefing     │          │             │
+│                 │◀─────────│  (town state)        │          │             │
+│                 │          │                      │          │             │
+│  3. Get upload  │──POST───▶│  /:town/upload-url   │          │             │
+│     URL         │◀─────────│  (presigned S3 URL)  │          │             │
+│                 │          │                      │          │             │
+│  4. Upload doc  │──PUT────────────────────────────────────▶│  /{s3Key}   │
+│                 │          │                      │          │             │
+│  5. Register doc│──POST───▶│  /:town/documents    │          │             │
+│                 │◀─────────│  (record in DB)      │          │             │
+│                 │          │                      │          │             │
+│  6. Report run  │──POST───▶│  /:town/runs/report  │          │             │
+│                 │◀─────────│  (crawl summary)     │          │             │
+└─────────────────┘          └──────────────────────┘          └─────────────┘
+```
+
+## Bot Workflow
+
+### Step 1: Get Work (pick what to crawl)
+
+```
+GET /api/crawler-intel/fleet/next-batch?limit=5
+```
+
+Returns towns ordered by crawl priority (stalest first). Each town includes `stalenessScore`, `daysSinceLastCrawl`, and coverage data.
+
+### Step 2: Get Town Briefing
+
+```
+GET /api/crawler-intel/{townSlug}/briefing
+```
+
+Returns current state: document counts, latest assessment scores, gap analysis, recent runs. Use this to understand what the town has and what's missing.
+
+### Step 3: Request Presigned Upload URL
+
+For each document the bot wants to upload:
+
+```
+POST /api/crawler-intel/{townSlug}/upload-url
+Content-Type: application/json
+
+{
+  "filename": "2024-selectmen-minutes-jan.pdf",
+  "contentType": "application/pdf",
+  "category": "meeting_minutes",
+  "board": "Board_of_Selectmen",
+  "year": "2024"
+}
+```
+
+**Response:**
+```json
+{
+  "uploadUrl": "https://opencouncil-municipal-docs.s3.amazonaws.com/ossipee/meeting_minutes/Board_of_Selectmen/2024/2024-selectmen-minutes-jan.pdf?X-Amz-...",
+  "s3Key": "ossipee/meeting_minutes/Board_of_Selectmen/2024/2024-selectmen-minutes-jan.pdf",
+  "bucket": "opencouncil-municipal-docs",
+  "expiresIn": 3600,
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "application/pdf"
+  }
+}
+```
+
+**Parameters:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `filename` | yes | Document filename |
+| `contentType` | no | MIME type (default: `application/pdf`) |
+| `category` | no | Document category (see categories below) |
+| `board` | no | Board/committee name |
+| `year` | no | Document year |
+| `s3KeyOverride` | no | Full S3 key if you want to control the path directly |
+
+### Step 4: Upload to S3
+
+Use the presigned URL to upload the file directly:
+
+```bash
+curl -X PUT "${uploadUrl}" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @document.pdf
+```
+
+The bot uploads directly to S3 — no data passes through the API server.
+
+### Step 5: Register the Document
+
+After upload, tell the API about the document:
+
+```
+POST /api/crawler-intel/{townSlug}/documents
+Content-Type: application/json
+
+{
+  "url": "https://ossipee.org/selectmen/2024/jan-minutes.pdf",
+  "filename": "2024-selectmen-minutes-jan.pdf",
+  "s3Key": "ossipee/meeting_minutes/Board_of_Selectmen/2024/2024-selectmen-minutes-jan.pdf",
+  "category": "meeting_minutes",
+  "board": "Board_of_Selectmen",
+  "year": "2024",
+  "sizeBytes": 145200,
+  "mimeType": "application/pdf",
+  "discoveredFrom": "https://ossipee.org/selectmen/minutes/"
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "Document registered successfully",
+  "documentId": "uuid",
+  "s3Key": "ossipee/meeting_minutes/.../file.pdf",
+  "duplicate": false
+}
+```
+
+**Response (200 — duplicate):**
+```json
+{
+  "message": "Document already registered",
+  "documentId": "uuid",
+  "duplicate": true
+}
+```
+
+Duplicates are detected by URL hash. Re-registering the same URL returns the existing document ID.
+
+**Document fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | yes | Source URL where doc was found |
+| `filename` | yes | Document filename |
+| `s3Key` | yes | S3 key where doc was uploaded |
+| `category` | no | Document category |
+| `board` | no | Board/committee name |
+| `year` | no | Document year |
+| `title` | no | Document title (if extracted) |
+| `sizeBytes` | no | File size in bytes |
+| `mimeType` | no | MIME type (default: `application/pdf`) |
+| `discoveredFrom` | no | URL of the page where this doc link was found |
+| `contentHash` | no | SHA-256 hash of file content |
+
+### Step 5b: Batch Document Registration
+
+For efficiency, register multiple documents in one call (up to 100):
+
+```
+POST /api/crawler-intel/{townSlug}/documents/batch
+Content-Type: application/json
+
+{
+  "documents": [
+    {
+      "url": "https://ossipee.org/doc1.pdf",
+      "filename": "doc1.pdf",
+      "s3Key": "ossipee/minutes/2024/doc1.pdf",
+      "category": "meeting_minutes"
+    },
+    {
+      "url": "https://ossipee.org/doc2.pdf",
+      "filename": "doc2.pdf",
+      "s3Key": "ossipee/budgets/2024/doc2.pdf",
+      "category": "budgets"
+    }
+  ]
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "Batch registration complete: 2 new, 0 duplicates, 0 errors",
+  "total": 2,
+  "registered": 2,
+  "duplicates": 0,
+  "errors": 0,
+  "results": [
+    { "url": "https://...", "documentId": "uuid", "duplicate": false },
+    { "url": "https://...", "documentId": "uuid", "duplicate": false }
+  ]
+}
+```
+
+### Step 6: Report Crawl Run
+
+After finishing a crawl session, submit a summary:
+
+```
+POST /api/crawler-intel/{townSlug}/runs/report
+Content-Type: application/json
+
+{
+  "mode": "full",
+  "status": "completed",
+  "pagesVisited": 150,
+  "documentsDiscovered": 45,
+  "documentsDownloaded": 42,
+  "documentsUploaded": 40,
+  "documentsFailed": 2,
+  "durationSeconds": 300,
+  "errors": [
+    {
+      "url": "https://ossipee.org/bad-link.pdf",
+      "error": "404 Not Found",
+      "failureType": "http_404"
+    },
+    {
+      "url": "https://ossipee.org/large.pdf",
+      "error": "File exceeds 50MB limit",
+      "failureType": "too_large"
+    }
+  ],
+  "summary": {
+    "categoryCounts": {
+      "meeting_minutes": 20,
+      "budgets": 10,
+      "ordinances": 5,
+      "other": 5
+    },
+    "newDocsFound": 12,
+    "duplicatesSkipped": 8
+  }
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "Run report recorded",
+  "runId": "uuid",
+  "townSlug": "ossipee",
+  "status": "completed",
+  "documentsUploaded": 40,
+  "documentsFailed": 2
+}
+```
+
+**Run report fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `mode` | no | `full`, `incremental`, or `manual` (default: `full`) |
+| `status` | no | `completed`, `failed`, or `timeout` (default: `completed`) |
+| `pagesVisited` | no | Number of pages crawled |
+| `documentsDiscovered` | no | Total documents found |
+| `documentsDownloaded` | no | Documents successfully downloaded |
+| `documentsUploaded` | no | Documents uploaded to S3 |
+| `documentsFailed` | no | Documents that failed |
+| `startedAt` | no | ISO 8601 datetime when crawl started |
+| `completedAt` | no | ISO 8601 datetime when crawl ended |
+| `durationSeconds` | no | Total crawl duration in seconds |
+| `maxPagesLimit` | no | Max pages limit used |
+| `errorMessage` | no | Overall error message if crawl failed |
+| `errors` | no | Array of per-document errors with `url`, `error`, `failureType` |
+| `summary` | no | Arbitrary JSON with additional stats |
+
+The API automatically:
+- Creates a run record with `triggerType: "bot"`
+- On `completed` status: updates `lastFullCrawl` timestamp, resets `consecutiveFailures`
+- On `failed` status: increments `consecutiveFailures`
+- Aggregates error failure types for pattern analysis
+
+---
+
+## S3 Path Convention
+
+### Town Documents
+
+```
+{town_slug}/{category}/[{board}/][{year}/]{filename}
+```
+
+**Examples:**
+```
+ossipee/meeting_minutes/Board_of_Selectmen/2024/jan-minutes.pdf
+conway/budgets/2025/town-budget-2025.pdf
+ossipee/ordinances/zoning-ordinance-2024.pdf
+conway/annual_reports/2023/annual-report-2023.pdf
+```
+
+### State Documents
+
+```
+statewide/{source_slug}/{category}/{filename}
+```
+
+**Examples:**
+```
+statewide/nh-dra/guidance/municipal-budget-guide-2025.pdf
+statewide/nh-rsas/rsas/rsa-91-a-right-to-know.pdf
+statewide/nh-des/regulations/septic-system-rules.pdf
+```
+
+### S3 Bucket
+
+- **Bucket**: `opencouncil-municipal-docs` (or value of `S3_BUCKET` env var)
+- **Region**: `us-east-1` (or value of `AWS_REGION` env var)
+
+---
+
+## Town Document Categories
+
+| Category | Description |
+|----------|-------------|
+| `meeting_minutes` | Board/committee meeting minutes |
+| `agendas` | Meeting agendas |
+| `ordinances` | Town ordinances and bylaws |
+| `budgets` | Budget documents and financial reports |
+| `annual_reports` | Annual town reports |
+| `forms_applications` | Forms and applications |
+| `newsletters` | Town newsletters |
+| `zoning` | Zoning maps, regulations, and amendments |
+| `plans_studies` | Master plans, capital plans, studies |
+| `policies_procedures` | Town policies and procedures |
+| `elections` | Election-related documents |
+| `other` | Uncategorized documents |
+
+---
+
+## State Source Bot Integration
+
+State source endpoints mirror town endpoints with slight field differences.
+
+### Presigned Upload URL
+
+```
+POST /api/crawler-intel/state-sources/{sourceSlug}/upload-url
+```
+Same schema as town upload-url. S3 key defaults to `statewide/{sourceSlug}/{category}/{filename}`.
+
+### Document Registration
+
+```
+POST /api/crawler-intel/state-sources/{sourceSlug}/documents
+```
+
+**Additional fields for state documents:**
+
+| Field | Description |
+|-------|-------------|
+| `subcategory` | Sub-classification within category |
+| `title` | Document title |
+| `rsaChapter` | RSA chapter reference (e.g., "91-A") |
+
+### Batch Document Registration
+
+```
+POST /api/crawler-intel/state-sources/{sourceSlug}/documents/batch
+```
+Same as town batch but uses state document fields. Max 100 docs per call.
+
+### Run Reporting
+
+```
+POST /api/crawler-intel/state-sources/{sourceSlug}/runs/report
+```
+Same schema as town run reporting.
+
+---
+
+## Failure Types (for error reporting)
+
+Use these standard failure type codes in the `failureType` field of error objects:
+
+| Code | Label |
+|------|-------|
+| `http_404` | Not Found (404) |
+| `http_403` | Forbidden (403) |
+| `http_500` | Server Error (5xx) |
+| `timeout` | Request Timeout |
+| `dns_failure` | DNS Resolution Failed |
+| `ssl_error` | SSL/TLS Error |
+| `captcha_blocked` | CAPTCHA or Bot Block |
+| `parse_error` | HTML Parse Error |
+| `empty_page` | Empty or No-Content Page |
+| `redirect_loop` | Redirect Loop |
+| `too_large` | File Too Large |
+| `unsupported_format` | Unsupported Format |
+| `unknown` | Unknown Error |
+
+---
+
+## Complete Bot Example (pseudocode)
+
+```python
+API = "https://your-app.replit.app/api/crawler-intel"
+HEADERS = {"Authorization": "Bearer YOUR_BOT_KEY", "Content-Type": "application/json"}
+
+# 1. Get next town to crawl
+batch = GET(f"{API}/fleet/next-batch?limit=1")
+town = batch["towns"][0]
+slug = town["slug"]
+
+# 2. Understand current state
+briefing = GET(f"{API}/{slug}/briefing")
+gaps = GET(f"{API}/{slug}/gaps")
+print(f"Town {slug}: score={briefing['assessment']['overallScore']}")
+print(f"Top gap: {gaps['gaps'][0]['category']}")
+
+# 3. Crawl the website (bot's own logic)
+documents = crawl_website(town["url"], gaps)
+
+# 4. For each document found:
+for doc in documents:
+    # Get presigned upload URL
+    upload_info = POST(f"{API}/{slug}/upload-url", {
+        "filename": doc.filename,
+        "category": doc.category,
+        "board": doc.board,
+        "year": doc.year,
+    })
+    
+    # Upload to S3 directly
+    PUT(upload_info["uploadUrl"], data=doc.content,
+        headers={"Content-Type": doc.mime_type})
+    
+    # Register the document
+    POST(f"{API}/{slug}/documents", {
+        "url": doc.source_url,
+        "filename": doc.filename,
+        "s3Key": upload_info["s3Key"],
+        "category": doc.category,
+        "board": doc.board,
+        "year": doc.year,
+        "sizeBytes": doc.size,
+        "discoveredFrom": doc.found_on_page,
+    })
+
+# 5. Report the crawl run
+POST(f"{API}/{slug}/runs/report", {
+    "mode": "full",
+    "status": "completed",
+    "pagesVisited": crawler.pages_visited,
+    "documentsDiscovered": len(documents),
+    "documentsUploaded": crawler.uploaded_count,
+    "documentsFailed": crawler.failed_count,
+    "durationSeconds": crawler.duration,
+    "errors": crawler.errors,
+    "summary": {"categoryCounts": crawler.category_counts},
+})
+
+# 6. Verify results
+updated_briefing = GET(f"{API}/{slug}/briefing")
+print(f"Updated score: {updated_briefing['assessment']['overallScore']}")
+```

@@ -16,6 +16,9 @@ import {
   type GapAnalysisResult,
 } from "../services/gapAnalysis";
 import { FAILURE_LABELS, type FailureType } from "../../shared/crawler-schema";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import * as crypto from "crypto";
 
 const router = Router();
 
@@ -1069,5 +1072,718 @@ function extractFailurePatterns(runs: any[]) {
     totalRunsAnalyzed: runs.length,
   };
 }
+
+// ============================================================
+// BOT INTEGRATION ENDPOINTS
+// S3 upload, document registration, run reporting
+// ============================================================
+
+const S3_BUCKET = process.env.S3_BUCKET || "opencouncil-municipal-docs";
+const S3_REGION = process.env.AWS_REGION || "us-east-1";
+
+function getS3Client(): S3Client | null {
+  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+    return null;
+  }
+  return new S3Client({
+    region: S3_REGION,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+  });
+}
+
+const uploadUrlSchema = z.object({
+  filename: z.string().min(1).max(500),
+  contentType: z.string().default("application/pdf"),
+  category: z.string().optional(),
+  board: z.string().optional(),
+  year: z.string().optional(),
+  s3KeyOverride: z.string().optional(),
+});
+
+router.post("/:townSlug/upload-url", async (req, res) => {
+  try {
+    const town = await resolveTown(req.params.townSlug);
+    if (!town) {
+      return apiError(res, 404, "TOWN_NOT_FOUND", `Town '${req.params.townSlug}' not found`);
+    }
+
+    const s3 = getS3Client();
+    if (!s3) {
+      return apiError(res, 503, "S3_NOT_CONFIGURED", "AWS credentials not configured", true, 60);
+    }
+
+    const parsed = uploadUrlSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const { filename, contentType, category, board, year, s3KeyOverride } = parsed.data;
+
+    let s3Key: string;
+    if (s3KeyOverride) {
+      const sanitizedOverride = s3KeyOverride.replace(/\.\.\//g, "").replace(/^\//, "");
+      if (!sanitizedOverride.startsWith(`${town.slug}/`)) {
+        return apiError(res, 400, "INVALID_S3_KEY", `s3KeyOverride must start with '${town.slug}/'`);
+      }
+      s3Key = sanitizedOverride;
+    } else {
+      const parts = [town.slug];
+      if (category) parts.push(category);
+      if (board) parts.push(board);
+      if (year) parts.push(year);
+      const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      parts.push(sanitized);
+      s3Key = parts.join("/");
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      ContentType: contentType,
+    });
+
+    const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+    res.json({
+      uploadUrl: presignedUrl,
+      s3Key,
+      bucket: S3_BUCKET,
+      expiresIn: 3600,
+      method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+      },
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const registerDocSchema = z.object({
+  url: z.string().min(1),
+  filename: z.string().min(1),
+  s3Key: z.string().min(1),
+  category: z.string().optional(),
+  board: z.string().optional(),
+  year: z.string().optional(),
+  title: z.string().optional(),
+  sizeBytes: z.number().int().positive().optional(),
+  mimeType: z.string().optional(),
+  discoveredFrom: z.string().optional(),
+  contentHash: z.string().optional(),
+});
+
+router.post("/:townSlug/documents", async (req, res) => {
+  try {
+    const town = await resolveTown(req.params.townSlug);
+    if (!town) {
+      return apiError(res, 404, "TOWN_NOT_FOUND", `Town '${req.params.townSlug}' not found`);
+    }
+
+    const parsed = registerDocSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+    const urlHash = crypto.createHash("sha256").update(data.url).digest("hex");
+
+    const existing = await db.execute(
+      sql`SELECT id FROM crawler_documents WHERE url_hash = ${urlHash}`
+    );
+    if (existing.rows.length > 0) {
+      return res.status(200).json({
+        message: "Document already registered",
+        documentId: (existing.rows[0] as any).id,
+        duplicate: true,
+      });
+    }
+
+    const [doc] = await db
+      .insert(crawlerSchema.crawlerDocuments)
+      .values({
+        townId: town.id,
+        url: data.url,
+        urlHash,
+        filename: data.filename,
+        category: data.category || null,
+        board: data.board || null,
+        year: data.year || null,
+        sizeBytes: data.sizeBytes || null,
+        mimeType: data.mimeType || "application/pdf",
+        s3Key: data.s3Key,
+        s3UploadedAt: new Date(),
+        discoveredFrom: data.discoveredFrom || null,
+        status: "uploaded",
+      })
+      .returning();
+
+    await db.execute(sql`
+      UPDATE crawler_towns 
+      SET total_documents = total_documents + 1,
+          total_uploaded = total_uploaded + 1,
+          updated_at = NOW()
+      WHERE id = ${town.id}
+    `);
+
+    res.status(201).json({
+      message: "Document registered successfully",
+      documentId: doc.id,
+      s3Key: data.s3Key,
+      duplicate: false,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const batchRegisterDocsSchema = z.object({
+  documents: z.array(registerDocSchema).min(1).max(100),
+});
+
+router.post("/:townSlug/documents/batch", async (req, res) => {
+  try {
+    const town = await resolveTown(req.params.townSlug);
+    if (!town) {
+      return apiError(res, 404, "TOWN_NOT_FOUND", `Town '${req.params.townSlug}' not found`);
+    }
+
+    const parsed = batchRegisterDocsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const results: Array<{ url: string; documentId: string; duplicate: boolean; error?: string }> = [];
+    let newCount = 0;
+
+    for (const docData of parsed.data.documents) {
+      try {
+        const urlHash = crypto.createHash("sha256").update(docData.url).digest("hex");
+
+        const existing = await db.execute(
+          sql`SELECT id FROM crawler_documents WHERE url_hash = ${urlHash}`
+        );
+
+        if (existing.rows.length > 0) {
+          results.push({
+            url: docData.url,
+            documentId: (existing.rows[0] as any).id,
+            duplicate: true,
+          });
+          continue;
+        }
+
+        const [doc] = await db
+          .insert(crawlerSchema.crawlerDocuments)
+          .values({
+            townId: town.id,
+            url: docData.url,
+            urlHash,
+            filename: docData.filename,
+            category: docData.category || null,
+            board: docData.board || null,
+            year: docData.year || null,
+            sizeBytes: docData.sizeBytes || null,
+            mimeType: docData.mimeType || "application/pdf",
+            s3Key: docData.s3Key,
+            s3UploadedAt: new Date(),
+            discoveredFrom: docData.discoveredFrom || null,
+            status: "uploaded",
+          })
+          .returning();
+
+        results.push({
+          url: docData.url,
+          documentId: doc.id,
+          duplicate: false,
+        });
+        newCount++;
+      } catch (err: any) {
+        results.push({
+          url: docData.url,
+          documentId: "",
+          duplicate: false,
+          error: err.message,
+        });
+      }
+    }
+
+    if (newCount > 0) {
+      await db.execute(sql`
+        UPDATE crawler_towns 
+        SET total_documents = total_documents + ${newCount},
+            total_uploaded = total_uploaded + ${newCount},
+            updated_at = NOW()
+        WHERE id = ${town.id}
+      `);
+    }
+
+    res.status(201).json({
+      message: `Batch registration complete: ${newCount} new, ${results.filter(r => r.duplicate).length} duplicates, ${results.filter(r => r.error).length} errors`,
+      total: parsed.data.documents.length,
+      registered: newCount,
+      duplicates: results.filter(r => r.duplicate).length,
+      errors: results.filter(r => r.error).length,
+      results,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const runReportSchema = z.object({
+  mode: z.enum(["full", "incremental", "manual"]).default("full"),
+  status: z.enum(["completed", "failed", "timeout"]).default("completed"),
+  pagesVisited: z.number().int().min(0).default(0),
+  documentsDiscovered: z.number().int().min(0).default(0),
+  documentsDownloaded: z.number().int().min(0).default(0),
+  documentsUploaded: z.number().int().min(0).default(0),
+  documentsFailed: z.number().int().min(0).default(0),
+  startedAt: z.string().datetime().optional(),
+  completedAt: z.string().datetime().optional(),
+  durationSeconds: z.number().int().min(0).optional(),
+  maxPagesLimit: z.number().int().positive().optional(),
+  errorMessage: z.string().optional(),
+  summary: z.record(z.any()).optional(),
+  errors: z.array(z.object({
+    url: z.string(),
+    error: z.string(),
+    failureType: z.string().optional(),
+  })).optional(),
+});
+
+router.post("/:townSlug/runs/report", async (req, res) => {
+  try {
+    const town = await resolveTown(req.params.townSlug);
+    if (!town) {
+      return apiError(res, 404, "TOWN_NOT_FOUND", `Town '${req.params.townSlug}' not found`);
+    }
+
+    const parsed = runReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+
+    const startedAt = data.startedAt ? new Date(data.startedAt) : (
+      data.durationSeconds && data.completedAt
+        ? new Date(new Date(data.completedAt).getTime() - data.durationSeconds * 1000)
+        : new Date()
+    );
+    const completedAt = data.completedAt ? new Date(data.completedAt) : new Date();
+
+    const summaryData = {
+      ...(data.summary || {}),
+      ...(data.errors?.length ? {
+        errors: data.errors,
+        failuresByType: data.errors.reduce((acc: Record<string, number>, e) => {
+          const ft = e.failureType || "unknown";
+          acc[ft] = (acc[ft] || 0) + 1;
+          return acc;
+        }, {}),
+      } : {}),
+      reportedBy: "bot",
+    };
+
+    const [run] = await db
+      .insert(crawlerSchema.crawlerRuns)
+      .values({
+        townId: town.id,
+        mode: data.mode,
+        triggerType: "bot",
+        startedAt,
+        completedAt,
+        status: data.status,
+        pagesVisited: data.pagesVisited,
+        documentsDiscovered: data.documentsDiscovered,
+        documentsDownloaded: data.documentsDownloaded,
+        documentsUploaded: data.documentsUploaded,
+        documentsFailed: data.documentsFailed,
+        maxPagesLimit: data.maxPagesLimit || null,
+        errorMessage: data.errorMessage || null,
+        summary: summaryData,
+      })
+      .returning();
+
+    if (data.status === "completed") {
+      const updateParts = [
+        sql`consecutive_failures = 0`,
+        sql`last_crawl_docs_found = ${data.documentsDiscovered}`,
+        sql`updated_at = NOW()`,
+      ];
+      if (data.mode === "full") {
+        updateParts.push(sql`last_full_crawl = ${completedAt}`);
+      } else {
+        updateParts.push(sql`last_incremental_crawl = ${completedAt}`);
+      }
+      await db.execute(sql`
+        UPDATE crawler_towns 
+        SET ${sql.join(updateParts, sql`, `)}
+        WHERE id = ${town.id}
+      `);
+    } else if (data.status === "failed") {
+      await db.execute(sql`
+        UPDATE crawler_towns 
+        SET consecutive_failures = consecutive_failures + 1,
+            updated_at = NOW()
+        WHERE id = ${town.id}
+      `);
+    }
+
+    res.status(201).json({
+      message: "Run report recorded",
+      runId: run.id,
+      townSlug: town.slug,
+      status: data.status,
+      documentsUploaded: data.documentsUploaded,
+      documentsFailed: data.documentsFailed,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+// ============================================================
+// STATE SOURCE BOT INTEGRATION ENDPOINTS
+// ============================================================
+
+router.post("/state-sources/:sourceSlug/upload-url", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const s3 = getS3Client();
+    if (!s3) {
+      return apiError(res, 503, "S3_NOT_CONFIGURED", "AWS credentials not configured", true, 60);
+    }
+
+    const parsed = uploadUrlSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const { filename, contentType, category, s3KeyOverride } = parsed.data;
+
+    let s3Key: string;
+    if (s3KeyOverride) {
+      const sanitizedOverride = s3KeyOverride.replace(/\.\.\//g, "").replace(/^\//, "");
+      if (!sanitizedOverride.startsWith(`statewide/${source.slug}/`)) {
+        return apiError(res, 400, "INVALID_S3_KEY", `s3KeyOverride must start with 'statewide/${source.slug}/'`);
+      }
+      s3Key = sanitizedOverride;
+    } else {
+      const parts = ["statewide", source.slug];
+      if (category) parts.push(category);
+      const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      parts.push(sanitized);
+      s3Key = parts.join("/");
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      ContentType: contentType,
+    });
+
+    const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+    res.json({
+      uploadUrl: presignedUrl,
+      s3Key,
+      bucket: S3_BUCKET,
+      expiresIn: 3600,
+      method: "PUT",
+      headers: {
+        "Content-Type": contentType,
+      },
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const registerStateDocSchema = z.object({
+  url: z.string().min(1),
+  filename: z.string().min(1),
+  s3Key: z.string().min(1),
+  category: z.string().optional(),
+  subcategory: z.string().optional(),
+  title: z.string().optional(),
+  rsaChapter: z.string().optional(),
+  sizeBytes: z.number().int().positive().optional(),
+  mimeType: z.string().optional(),
+  discoveredFrom: z.string().optional(),
+});
+
+router.post("/state-sources/:sourceSlug/documents", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const parsed = registerStateDocSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+    const urlHash = crypto.createHash("sha256").update(data.url).digest("hex");
+
+    const existing = await db.execute(
+      sql`SELECT id FROM crawler_state_documents WHERE url_hash = ${urlHash}`
+    );
+    if (existing.rows.length > 0) {
+      return res.status(200).json({
+        message: "Document already registered",
+        documentId: (existing.rows[0] as any).id,
+        duplicate: true,
+      });
+    }
+
+    const [doc] = await db
+      .insert(crawlerSchema.crawlerStateDocuments)
+      .values({
+        sourceId: source.id,
+        url: data.url,
+        urlHash,
+        filename: data.filename,
+        category: data.category || null,
+        subcategory: data.subcategory || null,
+        title: data.title || null,
+        rsaChapter: data.rsaChapter || null,
+        sizeBytes: data.sizeBytes || null,
+        mimeType: data.mimeType || "application/pdf",
+        s3Key: data.s3Key,
+        s3UploadedAt: new Date(),
+        discoveredFrom: data.discoveredFrom || null,
+        status: "uploaded",
+      })
+      .returning();
+
+    await db.execute(sql`
+      UPDATE crawler_state_sources 
+      SET total_documents = total_documents + 1,
+          total_uploaded = total_uploaded + 1,
+          updated_at = NOW()
+      WHERE id = ${source.id}
+    `);
+
+    res.status(201).json({
+      message: "State document registered successfully",
+      documentId: doc.id,
+      s3Key: data.s3Key,
+      duplicate: false,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const batchRegisterStateDocsSchema = z.object({
+  documents: z.array(registerStateDocSchema).min(1).max(100),
+});
+
+router.post("/state-sources/:sourceSlug/documents/batch", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const parsed = batchRegisterStateDocsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const results: Array<{ url: string; documentId: string; duplicate: boolean; error?: string }> = [];
+    let newCount = 0;
+
+    for (const docData of parsed.data.documents) {
+      try {
+        const urlHash = crypto.createHash("sha256").update(docData.url).digest("hex");
+
+        const existing = await db.execute(
+          sql`SELECT id FROM crawler_state_documents WHERE url_hash = ${urlHash}`
+        );
+
+        if (existing.rows.length > 0) {
+          results.push({
+            url: docData.url,
+            documentId: (existing.rows[0] as any).id,
+            duplicate: true,
+          });
+          continue;
+        }
+
+        const [doc] = await db
+          .insert(crawlerSchema.crawlerStateDocuments)
+          .values({
+            sourceId: source.id,
+            url: docData.url,
+            urlHash,
+            filename: docData.filename,
+            category: docData.category || null,
+            subcategory: docData.subcategory || null,
+            title: docData.title || null,
+            rsaChapter: docData.rsaChapter || null,
+            sizeBytes: docData.sizeBytes || null,
+            mimeType: docData.mimeType || "application/pdf",
+            s3Key: docData.s3Key,
+            s3UploadedAt: new Date(),
+            discoveredFrom: docData.discoveredFrom || null,
+            status: "uploaded",
+          })
+          .returning();
+
+        results.push({
+          url: docData.url,
+          documentId: doc.id,
+          duplicate: false,
+        });
+        newCount++;
+      } catch (err: any) {
+        results.push({
+          url: docData.url,
+          documentId: "",
+          duplicate: false,
+          error: err.message,
+        });
+      }
+    }
+
+    if (newCount > 0) {
+      await db.execute(sql`
+        UPDATE crawler_state_sources 
+        SET total_documents = total_documents + ${newCount},
+            total_uploaded = total_uploaded + ${newCount},
+            updated_at = NOW()
+        WHERE id = ${source.id}
+      `);
+    }
+
+    res.status(201).json({
+      message: `Batch registration complete: ${newCount} new, ${results.filter(r => r.duplicate).length} duplicates, ${results.filter(r => r.error).length} errors`,
+      total: parsed.data.documents.length,
+      registered: newCount,
+      duplicates: results.filter(r => r.duplicate).length,
+      errors: results.filter(r => r.error).length,
+      results,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const stateRunReportSchema = z.object({
+  mode: z.enum(["full", "incremental", "manual"]).default("full"),
+  status: z.enum(["completed", "failed", "timeout"]).default("completed"),
+  pagesVisited: z.number().int().min(0).default(0),
+  documentsDiscovered: z.number().int().min(0).default(0),
+  documentsDownloaded: z.number().int().min(0).default(0),
+  documentsUploaded: z.number().int().min(0).default(0),
+  documentsFailed: z.number().int().min(0).default(0),
+  startedAt: z.string().datetime().optional(),
+  completedAt: z.string().datetime().optional(),
+  durationSeconds: z.number().int().min(0).optional(),
+  maxPagesLimit: z.number().int().positive().optional(),
+  errorMessage: z.string().optional(),
+  summary: z.record(z.any()).optional(),
+  errors: z.array(z.object({
+    url: z.string(),
+    error: z.string(),
+    failureType: z.string().optional(),
+  })).optional(),
+});
+
+router.post("/state-sources/:sourceSlug/runs/report", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const parsed = stateRunReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+
+    const startedAt = data.startedAt ? new Date(data.startedAt) : (
+      data.durationSeconds && data.completedAt
+        ? new Date(new Date(data.completedAt).getTime() - data.durationSeconds * 1000)
+        : new Date()
+    );
+    const completedAt = data.completedAt ? new Date(data.completedAt) : new Date();
+
+    const summaryData = {
+      ...(data.summary || {}),
+      ...(data.errors?.length ? {
+        errors: data.errors,
+        failuresByType: data.errors.reduce((acc: Record<string, number>, e) => {
+          const ft = e.failureType || "unknown";
+          acc[ft] = (acc[ft] || 0) + 1;
+          return acc;
+        }, {}),
+      } : {}),
+      reportedBy: "bot",
+    };
+
+    const [run] = await db
+      .insert(crawlerSchema.crawlerStateSourceRuns)
+      .values({
+        sourceId: source.id,
+        mode: data.mode,
+        triggerType: "bot",
+        startedAt,
+        completedAt,
+        status: data.status,
+        pagesVisited: data.pagesVisited,
+        documentsDiscovered: data.documentsDiscovered,
+        documentsDownloaded: data.documentsDownloaded,
+        documentsUploaded: data.documentsUploaded,
+        documentsFailed: data.documentsFailed,
+        maxPagesLimit: data.maxPagesLimit || null,
+        errorMessage: data.errorMessage || null,
+        summary: summaryData,
+      })
+      .returning();
+
+    if (data.status === "completed") {
+      await db.execute(sql`
+        UPDATE crawler_state_sources 
+        SET last_crawl_date = ${completedAt},
+            consecutive_failures = 0,
+            updated_at = NOW()
+        WHERE id = ${source.id}
+      `);
+    } else if (data.status === "failed") {
+      await db.execute(sql`
+        UPDATE crawler_state_sources 
+        SET consecutive_failures = consecutive_failures + 1,
+            updated_at = NOW()
+        WHERE id = ${source.id}
+      `);
+    }
+
+    res.status(201).json({
+      message: "Run report recorded",
+      runId: run.id,
+      sourceSlug: source.slug,
+      status: data.status,
+      documentsUploaded: data.documentsUploaded,
+      documentsFailed: data.documentsFailed,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
 
 export default router;
