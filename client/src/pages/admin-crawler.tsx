@@ -1948,12 +1948,12 @@ function StateSourceDetail({
               </CardContent>
             </Card>
           </div>
-          {stats && Object.keys(stats).length > 0 && (
+          {stats?.byCategory && Object.keys(stats.byCategory).length > 0 && (
             <Card>
               <CardContent className="p-4">
                 <div className="text-sm text-muted-foreground mb-2">Document Stats by Category</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {Object.entries(stats as Record<string, number>).map(([cat, count]) => (
+                  {Object.entries(stats.byCategory as Record<string, number>).map(([cat, count]) => (
                     <div key={cat} className="flex items-center justify-between gap-2">
                       <span className="text-xs truncate">{(STATE_DOC_CATEGORY_LABELS as Record<string, string>)[cat] || cat}</span>
                       <span className="text-xs font-bold">{count as number}</span>
