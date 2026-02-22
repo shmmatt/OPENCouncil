@@ -21,6 +21,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import * as schema from "../../shared/schema";
 
 const router = Router();
 
@@ -1107,6 +1108,41 @@ function getS3Client(): S3Client | null {
   });
 }
 
+async function ensureFileBlobForBotDoc(opts: {
+  s3Key: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<string> {
+  const rawHash = `s3:${opts.s3Key}`;
+  const existing = await db.execute(
+    sql`SELECT id FROM file_blobs WHERE raw_hash = ${rawHash}`
+  );
+  if (existing.rows.length > 0) {
+    return (existing.rows[0] as any).id;
+  }
+
+  const storagePath = `s3://${S3_BUCKET}/${opts.s3Key}`;
+  const [blob] = await db
+    .insert(schema.fileBlobs)
+    .values({
+      rawHash,
+      sizeBytes: opts.sizeBytes || 0,
+      mimeType: opts.mimeType || "application/pdf",
+      originalFilename: opts.filename || opts.s3Key.split("/").pop() || "unknown.pdf",
+      storagePath,
+      s3Bucket: S3_BUCKET,
+      s3Key: opts.s3Key,
+      needsOcr: true,
+      ocrStatus: "none",
+      extractedTextCharCount: 0,
+      embeddingStatus: "none",
+    })
+    .returning();
+
+  return blob.id;
+}
+
 const uploadUrlSchema = z.object({
   filename: z.string().min(1).max(500),
   contentType: z.string().default("application/pdf"),
@@ -1234,6 +1270,17 @@ router.post("/:townSlug/documents", async (req, res) => {
       })
       .returning();
 
+    const fileBlobId = await ensureFileBlobForBotDoc({
+      s3Key: data.s3Key,
+      filename: data.filename,
+      mimeType: data.mimeType || "application/pdf",
+      sizeBytes: data.sizeBytes || 0,
+    });
+
+    await db.execute(sql`
+      UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${doc.id}
+    `);
+
     await db.execute(sql`
       UPDATE crawler_towns 
       SET total_documents = total_documents + 1,
@@ -1245,6 +1292,7 @@ router.post("/:townSlug/documents", async (req, res) => {
     res.status(201).json({
       message: "Document registered successfully",
       documentId: doc.id,
+      fileBlobId,
       s3Key: data.s3Key,
       duplicate: false,
     });
@@ -1307,6 +1355,17 @@ router.post("/:townSlug/documents/batch", async (req, res) => {
             status: "uploaded",
           })
           .returning();
+
+        const fileBlobId = await ensureFileBlobForBotDoc({
+          s3Key: docData.s3Key,
+          filename: docData.filename,
+          mimeType: docData.mimeType || "application/pdf",
+          sizeBytes: docData.sizeBytes || 0,
+        });
+
+        await db.execute(sql`
+          UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${doc.id}
+        `);
 
         results.push({
           url: docData.url,
@@ -1580,6 +1639,17 @@ router.post("/state-sources/:sourceSlug/documents", async (req, res) => {
       })
       .returning();
 
+    const fileBlobId = await ensureFileBlobForBotDoc({
+      s3Key: data.s3Key,
+      filename: data.filename,
+      mimeType: data.mimeType || "application/pdf",
+      sizeBytes: data.sizeBytes || 0,
+    });
+
+    await db.execute(sql`
+      UPDATE crawler_state_documents SET file_blob_id = ${fileBlobId} WHERE id = ${doc.id}
+    `);
+
     await db.execute(sql`
       UPDATE crawler_state_sources 
       SET total_documents = total_documents + 1,
@@ -1591,6 +1661,7 @@ router.post("/state-sources/:sourceSlug/documents", async (req, res) => {
     res.status(201).json({
       message: "State document registered successfully",
       documentId: doc.id,
+      fileBlobId,
       s3Key: data.s3Key,
       duplicate: false,
     });
@@ -1654,6 +1725,17 @@ router.post("/state-sources/:sourceSlug/documents/batch", async (req, res) => {
             status: "uploaded",
           })
           .returning();
+
+        const fileBlobId = await ensureFileBlobForBotDoc({
+          s3Key: docData.s3Key,
+          filename: docData.filename,
+          mimeType: docData.mimeType || "application/pdf",
+          sizeBytes: docData.sizeBytes || 0,
+        });
+
+        await db.execute(sql`
+          UPDATE crawler_state_documents SET file_blob_id = ${fileBlobId} WHERE id = ${doc.id}
+        `);
 
         results.push({
           url: docData.url,
