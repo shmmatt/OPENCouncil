@@ -22,6 +22,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as schema from "../../shared/schema";
+import jwt from "jsonwebtoken";
 
 const router = Router();
 
@@ -62,27 +63,39 @@ function apiError(
   res.status(status).json(body);
 }
 
-function requireBotAuth(req: any, res: any, next: any) {
+function isBotAuth(req: any): boolean {
   const authHeader = req.headers.authorization;
   const expectedKey = process.env.CRAWLER_BOT_API_KEY;
-
-  if (!expectedKey) {
-    return next();
-  }
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return apiError(res, 401, "AUTH_MISSING", "Missing Authorization header. Use Bearer <CRAWLER_BOT_API_KEY>");
-  }
-
-  const token = authHeader.slice(7);
-  if (token !== expectedKey) {
-    return apiError(res, 403, "AUTH_INVALID", "Invalid API key");
-  }
-
-  next();
+  if (!expectedKey) return true;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
+  return authHeader.slice(7) === expectedKey;
 }
 
-router.use(requireBotAuth);
+function isAdminAuth(req: any): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7);
+  try {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) return false;
+    jwt.verify(token, jwtSecret);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requireBotAuth(req: any, res: any, next: any) {
+  if (isBotAuth(req)) return next();
+  return apiError(res, 401, "AUTH_MISSING", "Missing or invalid Authorization header. Use Bearer <CRAWLER_BOT_API_KEY>");
+}
+
+function requireBotOrAdminAuth(req: any, res: any, next: any) {
+  if (isBotAuth(req) || isAdminAuth(req)) return next();
+  return apiError(res, 401, "AUTH_MISSING", "Missing or invalid Authorization. Use bot API key or admin JWT.");
+}
+
+router.use(requireBotOrAdminAuth);
 
 async function resolveTown(slugOrName: string) {
   let town = await crawlerStorage.getCrawlerTownBySlug(slugOrName.toLowerCase());

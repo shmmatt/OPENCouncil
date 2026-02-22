@@ -47,6 +47,7 @@ interface FileBlobRow {
   board: string | null;
   category: string | null;
   year: string | null;
+  s3_key: string | null;
 }
 
 async function main() {
@@ -77,7 +78,7 @@ async function main() {
 
   if (townArg) {
     params.push(townArg);
-    conditions.push(`LOWER(COALESCE(ld.town, 'unknown')) = LOWER($${params.length})`);
+    conditions.push(`LOWER(COALESCE(ld.town, SPLIT_PART(fb.s3_key, '/', 1), 'unknown')) = LOWER($${params.length})`);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -92,8 +93,9 @@ async function main() {
       fb.ocr_text,
       fb.original_filename,
       fb.content_hash,
+      fb.s3_key,
       ld.canonical_title as title,
-      ld.town,
+      COALESCE(ld.town, SPLIT_PART(fb.s3_key, '/', 1)) as town,
       ld.board,
       ld.category,
       dv.year
