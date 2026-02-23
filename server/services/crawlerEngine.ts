@@ -1135,16 +1135,38 @@ async function executeCrawl(
 
     if (page.html && detectProtection(page.html)) {
       const protType = detectProtection(page.html)!;
-      markDomainProtected(pageUrl, protType);
-      if (summary.protectionStats) {
-        summary.protectionStats.detected = true;
-        summary.protectionStats.blockedPages++;
-        if (!summary.protectionStats.types.includes(protType)) {
-          summary.protectionStats.types.push(protType);
+      let bypassed = false;
+      if (!useBrowserMode) {
+        const browserAvail = await isBrowserAvailable();
+        if (browserAvail) {
+          addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} — trying browser fallback`);
+          const browserPage = await fetchPageViaBrowser(pageUrl);
+          if (browserPage && browserPage.html.length > 100 && !detectProtection(browserPage.html)) {
+            page = browserPage;
+            useBrowserMode = true;
+            bypassed = true;
+            addLog(progress, `BROWSER MODE: Protection bypassed via headless browser. Switching to browser-based crawling.`);
+          }
+        }
+      } else {
+        const browserPage = await fetchPageViaBrowser(pageUrl);
+        if (browserPage && browserPage.html.length > 100 && !detectProtection(browserPage.html)) {
+          page = browserPage;
+          bypassed = true;
         }
       }
-      addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} (adaptive delay enabled)`);
-      continue;
+      if (!bypassed) {
+        markDomainProtected(pageUrl, protType);
+        if (summary.protectionStats) {
+          summary.protectionStats.detected = true;
+          summary.protectionStats.blockedPages++;
+          if (!summary.protectionStats.types.includes(protType)) {
+            summary.protectionStats.types.push(protType);
+          }
+        }
+        addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} (blocked, browser fallback failed)`);
+        continue;
+      }
     }
 
     progress.pagesVisited++;
