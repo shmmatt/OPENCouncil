@@ -139,7 +139,7 @@ export interface CrawlProgress {
   runId: string;
   townId: string;
   townName: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'completed_with_errors' | 'failed';
   pagesVisited: number;
   pagesQueued: number;
   documentsDiscovered: number;
@@ -703,6 +703,7 @@ async function updateRunProgress(runId: string, progress: CrawlProgress) {
       documentsDiscovered: progress.documentsDiscovered,
       documentsUploaded: progress.documentsDownloaded,
       documentsFailed: progress.documentsFailed,
+      logs: progress.log || [],
     })
     .where(eq(crawlerRuns.id, runId));
 }
@@ -776,10 +777,29 @@ export async function startCrawl(
   const job: CrawlJob = { progress, abortController };
   activeCrawls.set(runId, job);
 
-  executeCrawl(town, run, job, options).catch(err => {
+  executeCrawl(town, run, job, options).catch(async (err) => {
     progress.status = 'failed';
     progress.errorMessage = err.message;
-    addLog(progress, `FATAL: ${err.message}`);
+    addLog(progress, `FATAL: Unhandled exception — ${err.message}`);
+    addLog(progress, `FATAL: Stack — ${err.stack?.split('\n').slice(0, 3).join(' | ') || 'no stack'}`);
+
+    try {
+      await db.update(crawlerRuns)
+        .set({
+          status: 'failed',
+          completedAt: new Date(),
+          pagesVisited: progress.pagesVisited,
+          documentsDiscovered: progress.documentsDiscovered,
+          documentsUploaded: progress.documentsDownloaded,
+          documentsFailed: progress.documentsFailed,
+          errorMessage: `CRASH: ${err.message}`,
+          logs: progress.log || [],
+        })
+        .where(eq(crawlerRuns.id, run.id));
+    } catch (dbErr: any) {
+      addLog(progress, `FATAL: Could not persist crash state to DB — ${dbErr.message}`);
+    }
+
     setTimeout(() => activeCrawls.delete(runId), 300000);
   });
 
@@ -1478,20 +1498,99 @@ async function executeCrawl(
     await new Promise(r => setTimeout(r, delay));
   }
 
-  progress.status = 'completed';
   progress.completedAt = new Date();
   progress.currentUrl = '';
 
-  const finalStats = `Pages: ${progress.pagesVisited}, Docs found: ${progress.documentsDiscovered}, Downloaded: ${progress.documentsDownloaded}, Failed: ${progress.documentsFailed}, Duplicates: ${progress.duplicatesSkipped}`;
-  addLog(progress, `Crawl complete. ${finalStats}`);
-  addLog(progress, `Strategy: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}`);
+  const durationMs = progress.completedAt.getTime() - progress.startedAt.getTime();
+  const durationSec = Math.round(durationMs / 1000);
+  const durationStr = durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`;
 
-  const finalStatus = progress.documentsFailed > 0 && progress.documentsDownloaded === 0 ? 'failed' : 'completed';
+  const attemptedDownloads = progress.documentsDownloaded + progress.documentsFailed;
+  const downloadSuccessRate = attemptedDownloads > 0
+    ? ((progress.documentsDownloaded / attemptedDownloads) * 100).toFixed(1)
+    : 'N/A';
+  const coverageRate = progress.documentsDiscovered > 0
+    ? ((progress.duplicatesSkipped / progress.documentsDiscovered) * 100).toFixed(1)
+    : '0';
 
-  if (heavyLaneDomains.size > 0) {
-    addLog(progress, `Heavy Lane domains flagged: ${Array.from(heavyLaneDomains).join(', ')}`);
+  const failureSummaryParts: string[] = [];
+  if (summary.failuresByType) {
+    for (const [type, count] of Object.entries(summary.failuresByType)) {
+      failureSummaryParts.push(`${count}x ${type}`);
+    }
   }
-  addLog(progress, `Requests: Fast Lane=${fastLaneRequests}, Heavy Lane=${heavyLaneRequests}, Interstitials Bypassed=${interstitialsBypassed}`);
+  const failureSummaryStr = failureSummaryParts.length > 0 ? failureSummaryParts.join(', ') : 'none';
+
+  let finalStatus: 'completed' | 'completed_with_errors' | 'failed';
+  let statusReason: string;
+
+  const blockedPages = summary.protectionStats?.blockedPages || 0;
+  const blockedDocs = summary.protectionStats?.blockedDocuments || 0;
+  const siteCompletelyBlocked = progress.pagesVisited <= 2 && blockedPages > 10;
+  const highFailureRate = attemptedDownloads > 0 && (progress.documentsFailed / attemptedDownloads) > 0.5;
+  const allNewFailed = attemptedDownloads > 0 && progress.documentsDownloaded === 0 && progress.documentsFailed > 0;
+  const significantDocFailures = blockedDocs > 5;
+
+  if (siteCompletelyBlocked) {
+    finalStatus = 'failed';
+    statusReason = `Site completely blocked — only ${progress.pagesVisited} pages visited, ${blockedPages} pages blocked by protection`;
+  } else if (allNewFailed) {
+    finalStatus = 'completed_with_errors';
+    if (progress.duplicatesSkipped > 0) {
+      statusReason = `All ${progress.documentsFailed} new download attempts failed (${failureSummaryStr}), but ${progress.duplicatesSkipped} existing docs confirmed`;
+    } else {
+      statusReason = `All ${progress.documentsFailed} download attempts failed (${failureSummaryStr})`;
+    }
+  } else if (highFailureRate && attemptedDownloads >= 5) {
+    finalStatus = 'completed_with_errors';
+    statusReason = `High failure rate: ${progress.documentsFailed} of ${attemptedDownloads} downloads failed (${downloadSuccessRate}% success). Failures: ${failureSummaryStr}`;
+  } else if (significantDocFailures) {
+    finalStatus = 'completed_with_errors';
+    statusReason = `${blockedDocs} documents blocked by site protection (${failureSummaryStr})`;
+  } else {
+    finalStatus = 'completed';
+    if (progress.documentsDownloaded > 0) {
+      statusReason = `${progress.documentsDownloaded} new docs uploaded, ${progress.duplicatesSkipped} duplicates confirmed`;
+      if (progress.documentsFailed > 0) {
+        statusReason += `. ${progress.documentsFailed} stale links returned errors (${failureSummaryStr})`;
+      }
+    } else if (progress.duplicatesSkipped > 0) {
+      statusReason = `No new docs — all ${progress.duplicatesSkipped} discovered docs already in database (${coverageRate}% coverage)`;
+      if (progress.documentsFailed > 0) {
+        statusReason += `. ${progress.documentsFailed} stale links returned errors (${failureSummaryStr})`;
+      }
+    } else if (progress.documentsDiscovered > 0) {
+      statusReason = `${progress.documentsDiscovered} docs discovered but none were new or downloadable`;
+    } else {
+      statusReason = `No documents discovered on this site`;
+    }
+  }
+
+  progress.status = finalStatus === 'completed_with_errors' ? 'completed_with_errors' : finalStatus;
+
+  const errorMessageForDb = finalStatus === 'completed' ? null
+    : finalStatus === 'completed_with_errors' ? statusReason
+    : statusReason;
+
+  addLog(progress, `=== CRAWL SUMMARY ===`);
+  addLog(progress, `STATUS: ${finalStatus} — ${statusReason}`);
+  addLog(progress, `DURATION: ${durationStr}`);
+  addLog(progress, `PAGES: ${progress.pagesVisited} visited, ${blockedPages} blocked by protection`);
+  addLog(progress, `DISCOVERY: ${progress.documentsDiscovered} docs found — Strategy: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}`);
+  addLog(progress, `DUPLICATES: ${progress.duplicatesSkipped} of ${progress.documentsDiscovered} docs already in database (${coverageRate}% prior coverage)`);
+  addLog(progress, `DOWNLOADS: ${progress.documentsDownloaded} succeeded, ${progress.documentsFailed} failed of ${attemptedDownloads} attempted (${downloadSuccessRate}% success rate)`);
+  if (progress.documentsFailed > 0) {
+    addLog(progress, `FAILURES: ${failureSummaryStr}`);
+  }
+  addLog(progress, `REQUESTS: Fast Lane=${fastLaneRequests}, Heavy Lane=${heavyLaneRequests}, Interstitials Bypassed=${interstitialsBypassed}`);
+  if (heavyLaneDomains.size > 0) {
+    addLog(progress, `HEAVY LANE DOMAINS: ${Array.from(heavyLaneDomains).join(', ')}`);
+  }
+  if (summary.protectionStats?.detected) {
+    const protTypes = summary.protectionStats.types?.join(', ') || 'unknown';
+    addLog(progress, `PROTECTION: ${protTypes} detected, ${blockedPages} pages blocked, ${blockedDocs} docs blocked`);
+  }
+  addLog(progress, `=== END SUMMARY ===`);
 
   (summary as any).strategyStats = stats;
   (summary as any).detectedCms = detectedCms;
@@ -1499,6 +1598,7 @@ async function executeCrawl(
   (summary as any).fastLaneRequests = fastLaneRequests;
   (summary as any).heavyLaneRequests = heavyLaneRequests;
   (summary as any).interstitialsBypassed = interstitialsBypassed;
+  (summary as any).statusReason = statusReason;
 
   await db.update(crawlerRuns)
     .set({
@@ -1508,6 +1608,7 @@ async function executeCrawl(
       documentsDiscovered: progress.documentsDiscovered,
       documentsUploaded: progress.documentsDownloaded,
       documentsFailed: progress.documentsFailed,
+      errorMessage: errorMessageForDb,
       summary,
       logs: progress.log || [],
     })

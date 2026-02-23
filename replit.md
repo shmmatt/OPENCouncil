@@ -57,6 +57,8 @@ A comprehensive crawler system is in place for data collection (`server/services
 - **Stale run cleanup**: On server startup, crawl runs stuck as "running" for over 30 minutes are automatically marked as failed. Admin panel has "Force Clear" buttons for manually clearing stale runs.
 - **Hardened fetching**: 3-attempt retry with backoff, www/non-www fallback, protection detection (Cloudflare/Akamai/CAPTCHA)
 - **Attribution tracking**: Each discovered document tracked with source page and discovery strategy via Map-based deduplication
+- **Run status taxonomy**: Three-tier status system: `completed` (clean run or negligible errors), `completed_with_errors` (amber — high failure rate, all downloads failed, or many docs blocked by protection), `failed` (red — site completely blocked or unhandled crash). Status reason persisted in `summary.statusReason` and `error_message` column. Rich end-of-crawl summary logs with duration, coverage rate, download success rate, failure breakdown, protection stats.
+- **Crash resilience**: Unhandled exceptions in the crawl loop are caught, logged with stack trace, and persisted to the DB with `CRASH:` prefix in `error_message`. Periodic progress updates also persist logs to DB, so even mid-crawl crashes preserve diagnostic data.
 - **Log persistence**: Crawl logs stored in `crawler_runs.logs` jsonb column (up to 2000 entries), viewable via expandable run rows in admin UI
 - **Batch operations**: "Crawl All Towns" button triggers all active towns with staggered start
 - **Analytics dashboard**: Document coverage, CMS distribution, strategy breakdown, per-town bar charts

@@ -91,6 +91,8 @@ function getRunStatusBadge(status: string) {
       return <Badge variant="outline" className="text-blue-600 border-blue-600"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Running</Badge>;
     case "completed":
       return <Badge variant="outline" className="text-green-600 border-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
+    case "completed_with_errors":
+      return <Badge variant="outline" className="text-amber-600 border-amber-600"><AlertTriangle className="w-3 h-3 mr-1" />Partial</Badge>;
     case "failed":
       return <Badge variant="outline" className="text-red-600 border-red-600"><XCircle className="w-3 h-3 mr-1" />Failed</Badge>;
     case "timeout":
@@ -406,7 +408,7 @@ interface CrawlProgress {
   runId: string;
   townId: string;
   townName: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'completed_with_errors' | 'failed';
   pagesVisited: number;
   pagesQueued: number;
   documentsDiscovered: number;
@@ -475,7 +477,7 @@ function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: 
   const elapsedStr = elapsed > 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
 
   return (
-    <Card className={isRunning ? "border-blue-500/50" : progress.status === 'completed' ? "border-green-500/50" : "border-red-500/50"}>
+    <Card className={isRunning ? "border-blue-500/50" : progress.status === 'completed' ? "border-green-500/50" : progress.status === 'completed_with_errors' ? "border-amber-500/50" : "border-red-500/50"}>
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
@@ -483,11 +485,13 @@ function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: 
               <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
             ) : progress.status === 'completed' ? (
               <CheckCircle2 className="w-4 h-4 text-green-600" />
+            ) : progress.status === 'completed_with_errors' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
             ) : (
               <XCircle className="w-4 h-4 text-red-600" />
             )}
             <span className="font-semibold" data-testid="text-crawl-status">
-              {isRunning ? 'Crawling...' : progress.status === 'completed' ? 'Crawl Complete' : 'Crawl Failed'}
+              {isRunning ? 'Crawling...' : progress.status === 'completed' ? 'Crawl Complete' : progress.status === 'completed_with_errors' ? 'Completed with Errors' : 'Crawl Failed'}
             </span>
             <span className="text-sm text-muted-foreground">{elapsedStr}</span>
           </div>
@@ -568,7 +572,11 @@ function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: 
         )}
 
         {progress.errorMessage && (
-          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded" data-testid="text-crawl-error">
+          <div className={`text-sm p-2 rounded ${
+            progress.status === 'failed' ? "text-red-600 bg-red-50 dark:bg-red-950/20" :
+            progress.status === 'completed_with_errors' ? "text-amber-600 bg-amber-50 dark:bg-amber-950/20" :
+            "text-muted-foreground bg-muted/50"
+          }`} data-testid="text-crawl-error">
             {progress.errorMessage}
           </div>
         )}
@@ -1037,8 +1045,14 @@ function TownDetail({
                           <TableCell className="text-xs">
                             {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
                           </TableCell>
-                          <TableCell className="max-w-[150px] truncate text-xs text-red-600" title={run.errorMessage || ""}>
-                            {run.errorMessage || "-"}
+                          <TableCell className="max-w-[200px] text-xs" title={run.errorMessage || run.summary?.statusReason || ""}>
+                            <span className={
+                              run.status === 'failed' ? "text-red-600" :
+                              run.status === 'completed_with_errors' ? "text-amber-600" :
+                              "text-muted-foreground"
+                            }>
+                              {run.errorMessage || run.summary?.statusReason || "-"}
+                            </span>
                           </TableCell>
                         </TableRow>
                       );
@@ -1780,6 +1794,12 @@ function RunLogViewer({ runId }: { runId: string }) {
 
   return (
     <div className="space-y-3">
+      {summary?.statusReason && (
+        <div className="text-sm px-3 py-2 rounded bg-muted/50 border border-muted" data-testid="text-status-reason">
+          <span className="font-medium text-muted-foreground">Result: </span>
+          {summary.statusReason}
+        </div>
+      )}
       {summary?.strategyStats && (
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary">Sitemap: {summary.strategyStats?.sitemap ?? 0}</Badge>
@@ -2544,7 +2564,7 @@ function CrawlAnalyticsDashboard() {
 
   const allTowns = towns || [];
   const allRuns = runsData?.runs || [];
-  const completedRuns = allRuns.filter(r => r.status === 'completed');
+  const completedRuns = allRuns.filter(r => r.status === 'completed' || r.status === 'completed_with_errors');
 
   const totalDocs = allTowns.reduce((sum, t) => {
     const total = Object.values(t.documentsByStatus).reduce((a, b) => a + b, 0);
