@@ -79,6 +79,62 @@ export async function fetchPageViaAPI(
   }
 }
 
+export interface RedirectResolveResult {
+  finalUrl: string;
+  cookies: string[];
+}
+
+export async function resolveRedirectViaAPI(
+  url: string
+): Promise<RedirectResolveResult | null> {
+  if (!isScrapingApiConfigured()) return null;
+
+  try {
+    const params = new URLSearchParams({
+      apikey: SCRAPING_API_KEY,
+      url,
+      js_render: 'true',
+      wait: '2000',
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(`${SCRAPING_API_BASE}?${params.toString()}`, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+      },
+    });
+    clearTimeout(timeoutId);
+
+    const finalUrl = response.headers.get('zr-final-url') || '';
+
+    const cookies: string[] = [];
+    const setCookieHeader = response.headers.get('set-cookie');
+    if (setCookieHeader) {
+      cookies.push(...setCookieHeader.split(',').map(c => c.trim().split(';')[0]));
+    }
+    const zenrowsCookies = response.headers.get('Zr-Cookies');
+    if (zenrowsCookies) {
+      try {
+        const parsed = JSON.parse(zenrowsCookies);
+        if (Array.isArray(parsed)) {
+          cookies.push(...parsed.map((c: any) => `${c.name}=${c.value}`));
+        }
+      } catch {}
+    }
+
+    try { controller.abort(); } catch {}
+
+    if (!finalUrl || finalUrl === url) return null;
+    return { finalUrl, cookies };
+  } catch (e: any) {
+    console.error(`[ScrapingAPI] Error resolving redirect for ${url}: ${e.message}`);
+    return null;
+  }
+}
+
 export async function fetchDocumentViaAPI(
   url: string,
   cookies?: string[]

@@ -11,7 +11,7 @@ import {
   extractDocumentMetadata,
 } from './crawlerStateExtensions';
 import { hashUrl, recordDocument } from './crawlerState';
-import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial } from './scrapingApiClient';
+import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial, resolveRedirectViaAPI } from './scrapingApiClient';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -234,7 +234,13 @@ function isDocumentUrl(url: string): boolean {
   if (lower.includes('/blobserver/')) return true;
   if (lower.includes('getfile') || lower.includes('viewdocument')) return true;
 
+  if (/\/(minutes|agenda)\/(minutes|agenda)-\d+/i.test(lower)) return true;
+
   return false;
+}
+
+function isCivicPlusRedirectUrl(url: string): boolean {
+  return /\/(minutes|agenda)\/(minutes|agenda)-\d+/i.test(url.toLowerCase());
 }
 
 function isExternalDocumentLink(url: string): boolean {
@@ -393,6 +399,7 @@ function getKnownPathsForCms(cms: CmsType): string[] {
     '/library',
     '/recreation',
     '/public-works',
+    '/minutes-and-agendas',
   ];
 
   const civicPlusPaths = [
@@ -787,7 +794,7 @@ async function executeCrawl(
 ) {
   const { progress, abortController } = job;
   const signal = abortController.signal;
-  const maxPages = options.maxPages || town.maxPages || 500;
+  const maxPages = options.maxPages || town.maxPages || 1000;
   const baseUrl = town.url.replace(/\/$/, '');
   const baseHostname = new URL(baseUrl).hostname;
 
@@ -1111,7 +1118,7 @@ async function executeCrawl(
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
   let consecutiveEmptyPages = 0;
-  const MAX_CONSECUTIVE_EMPTY = Math.max(40, Math.min(queue.length, 80));
+  const MAX_CONSECUTIVE_EMPTY = Math.max(80, Math.min(queue.length, 150));
 
   while (queue.length > 0 && progress.pagesVisited < maxPages) {
     if (signal.aborted) {
@@ -1238,6 +1245,22 @@ async function executeCrawl(
       }
     }
 
+    const nodeMinutesMatch = pageUrl.match(/\/node\/(\d+)\/(minutes|agenda)$/i);
+    if (nodeMinutesMatch) {
+      const currentYear = new Date().getFullYear();
+      let yearPagesQueued = 0;
+      for (let year = 2013; year <= currentYear; year++) {
+        const yearUrl = `${pageUrl}/${year}`;
+        if (!visited.has(yearUrl)) {
+          queue.push({ url: yearUrl, depth: depth + 1, priority: 1 });
+          yearPagesQueued++;
+        }
+      }
+      if (yearPagesQueued > 0) {
+        addLog(progress, `MINUTES ARCHIVE: ${pageUrl.substring(baseUrl.length)} → queued ${yearPagesQueued} year pages`);
+      }
+    }
+
     if (pageDocsFound > 0) {
       consecutiveEmptyPages = 0;
       addLog(progress, `Page ${progress.pagesVisited}: ${pageDocsFound} docs on ${pageUrl.substring(baseUrl.length) || '/'}`);
@@ -1322,16 +1345,39 @@ async function executeCrawl(
         continue;
       }
 
-      fastLaneRequests++;
-      let doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage).catch(async (e: any) => {
-        if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
-          heavyLaneRequests++;
-          addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
-          const apiDoc = await fetchDocumentViaAPI(docUrl);
-          if (apiDoc) return { ...apiDoc, isInterstitial: false };
+      let doc: FetchDocumentResult | null = null;
+
+      if (isCivicPlusRedirectUrl(docUrl) && isScrapingApiConfigured()) {
+        heavyLaneRequests++;
+        const resolved = await resolveRedirectViaAPI(docUrl);
+        if (resolved) {
+          const finalPdfUrl = resolved.finalUrl.startsWith('http')
+            ? resolved.finalUrl
+            : new URL(resolved.finalUrl, docUrl).href;
+          addLog(progress, `REDIRECT RESOLVE: ${filename} → ${finalPdfUrl.substring(finalPdfUrl.lastIndexOf('/') + 1)}`);
+          const localDoc = await fetchDocumentWithCookies(finalPdfUrl, resolved.cookies, signal);
+          if (localDoc) {
+            doc = { ...localDoc, isInterstitial: false };
+            interstitialsBypassed++;
+          }
         }
-        throw e;
-      });
+        if (!doc) {
+          addLog(progress, `REDIRECT RESOLVE failed for: ${filename} — falling back to direct fetch`);
+        }
+      }
+
+      if (!doc) {
+        fastLaneRequests++;
+        doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage).catch(async (e: any) => {
+          if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
+            heavyLaneRequests++;
+            addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
+            const apiDoc = await fetchDocumentViaAPI(docUrl);
+            if (apiDoc) return { ...apiDoc, isInterstitial: false };
+          }
+          throw e;
+        });
+      }
 
       if (doc && doc.isInterstitial) {
         addLog(progress, `INTERSTITIAL detected for: ${filename}`);

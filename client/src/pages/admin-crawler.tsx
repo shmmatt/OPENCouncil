@@ -1646,11 +1646,32 @@ function TownProfileEditor({
         </div>
         <div className="space-y-2">
           <Label>Max Pages per Crawl</Label>
+          <div className="flex items-center gap-2 flex-wrap">
+            {[500, 1000, 1500, 2000].map(preset => (
+              <Button
+                key={preset}
+                size="sm"
+                variant={maxPages === String(preset) ? "default" : "outline"}
+                onClick={() => setMaxPages(String(preset))}
+                data-testid={`button-maxpages-${preset}`}
+              >
+                {preset}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              variant={!maxPages ? "default" : "outline"}
+              onClick={() => setMaxPages("")}
+              data-testid="button-maxpages-default"
+            >
+              Default (1000)
+            </Button>
+          </div>
           <Input
             type="number"
             value={maxPages}
             onChange={(e) => setMaxPages(e.target.value)}
-            placeholder="Default (no limit)"
+            placeholder="Default (1000)"
             data-testid="input-max-pages"
           />
         </div>
