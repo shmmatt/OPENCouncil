@@ -396,6 +396,15 @@ interface CrawlProgress {
   startedAt: string;
   completedAt?: string;
   errorMessage?: string;
+  detectedCms?: string;
+  protectionDetected?: string;
+  strategyStats?: {
+    sitemap: number;
+    knownPaths: number;
+    breadthFirst: number;
+    external: number;
+    iframe: number;
+  };
 }
 
 function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: () => void }) {
@@ -505,6 +514,30 @@ function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: 
             <div className="text-lg font-bold text-muted-foreground" data-testid="text-progress-duplicates">{progress.duplicatesSkipped}</div>
           </div>
         </div>
+
+        {(progress.detectedCms || progress.protectionDetected || progress.strategyStats) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {progress.detectedCms && (
+              <Badge variant="secondary" data-testid="text-detected-cms">
+                CMS: {progress.detectedCms}
+              </Badge>
+            )}
+            {progress.protectionDetected && (
+              <Badge variant="destructive" data-testid="text-protection">
+                {progress.protectionDetected}
+              </Badge>
+            )}
+            {progress.strategyStats && (
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span>Sitemap: {progress.strategyStats.sitemap}</span>
+                <span>Paths: {progress.strategyStats.knownPaths}</span>
+                <span>BFS: {progress.strategyStats.breadthFirst}</span>
+                {progress.strategyStats.external > 0 && <span>External: {progress.strategyStats.external}</span>}
+                {progress.strategyStats.iframe > 0 && <span>Embed: {progress.strategyStats.iframe}</span>}
+              </div>
+            )}
+          </div>
+        )}
 
         {isRunning && progress.currentUrl && (
           <div className="text-xs text-muted-foreground truncate" data-testid="text-current-url">
