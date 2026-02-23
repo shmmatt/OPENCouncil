@@ -298,6 +298,18 @@ function TownsDashboard({
     },
   });
 
+  const forceClearRun = async (runId: string) => {
+    try {
+      const res = await adminFetch(`/api/admin/crawler/runs/${runId}/abort`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).message);
+      toast({ title: "Run Cleared", description: "Stale crawl run has been cleared" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/towns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/stats"] });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -355,9 +367,19 @@ function TownsDashboard({
                 <TableCell>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     {town.activeRunId ? (
-                      <Badge variant="outline" className="text-blue-600 border-blue-600">
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />Running
-                      </Badge>
+                      <>
+                        <Badge variant="outline" className="text-blue-600 border-blue-600">
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />Running
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => forceClearRun(town.activeRunId!)}
+                          data-testid={`button-force-clear-${town.slug}`}
+                        >
+                          <XCircle className="w-3 h-3 mr-1" />Clear
+                        </Button>
+                      </>
                     ) : (
                       <Button
                         size="sm"
@@ -722,6 +744,26 @@ function TownDetail({
             <Play className="w-3 h-3 mr-1" />
             {activeRunId ? "Running..." : "Run Crawl"}
           </Button>
+          {activeRunId && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  const res = await adminFetch(`/api/admin/crawler/runs/${activeRunId}/abort`, { method: "POST" });
+                  if (!res.ok) throw new Error((await res.json()).message);
+                  toast({ title: "Run Cleared", description: "Stale crawl run has been cleared" });
+                  setActiveRunId(null);
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+                } catch (error: any) {
+                  toast({ title: "Error", description: error.message, variant: "destructive" });
+                }
+              }}
+              data-testid="button-force-clear-detail"
+            >
+              <XCircle className="w-3 h-3 mr-1" />Force Clear
+            </Button>
+          )}
         </div>
       </div>
 

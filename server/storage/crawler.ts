@@ -1,4 +1,4 @@
-import { db, schema, eq, desc, and, sql, asc } from "./db";
+import { db, schema, eq, desc, and, sql, asc, lt } from "./db";
 import type {
   CrawlerTown,
   CrawlerRun,
@@ -537,4 +537,35 @@ export async function getStateSourceStats(): Promise<{
     totalFailed: parseInt(docRow.failed || "0"),
     activeRuns: Number(activeCount.count),
   };
+}
+
+export async function cleanupStaleCrawlRuns(maxAgeMinutes = 30): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeMinutes * 60 * 1000);
+  const result = await db.update(schema.crawlerRuns)
+    .set({
+      status: 'failed',
+      completedAt: new Date(),
+      errorMessage: 'Stale: server restarted or crawl timed out',
+    } as any)
+    .where(and(
+      eq(schema.crawlerRuns.status, 'running'),
+      lt(schema.crawlerRuns.startedAt, cutoff)
+    ))
+    .returning({ id: schema.crawlerRuns.id });
+  return result.length;
+}
+
+export async function forceFailCrawlRun(runId: string): Promise<boolean> {
+  const result = await db.update(schema.crawlerRuns)
+    .set({
+      status: 'failed',
+      completedAt: new Date(),
+      errorMessage: 'Aborted by admin (stale run)',
+    } as any)
+    .where(and(
+      eq(schema.crawlerRuns.id, runId),
+      eq(schema.crawlerRuns.status, 'running')
+    ))
+    .returning({ id: schema.crawlerRuns.id });
+  return result.length > 0;
 }

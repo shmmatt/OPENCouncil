@@ -22,6 +22,14 @@ import {
 
 const router = Router();
 
+crawlerStorage.cleanupStaleCrawlRuns(30).then(count => {
+  if (count > 0) {
+    console.log(`[Crawler] Cleaned up ${count} stale crawl run(s) on startup`);
+  }
+}).catch(err => {
+  console.error(`[Crawler] Failed to cleanup stale runs:`, err.message);
+});
+
 router.use(authenticateAdmin);
 
 const triggerSchema = z.object({
@@ -306,10 +314,13 @@ router.post("/runs/:id/abort", async (req, res) => {
   try {
     const aborted = abortCrawl(req.params.id);
     if (aborted) {
-      res.json({ message: "Crawl aborted" });
-    } else {
-      res.status(404).json({ message: "No active crawl found with this ID" });
+      return res.json({ message: "Crawl aborted" });
     }
+    const dbAborted = await crawlerStorage.forceFailCrawlRun(req.params.id);
+    if (dbAborted) {
+      return res.json({ message: "Stale crawl cleared" });
+    }
+    res.status(404).json({ message: "No active crawl found with this ID" });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
