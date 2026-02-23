@@ -13,6 +13,12 @@ import {
   getTargetPathsForGaps,
   getLinkTextPatternsForGaps,
 } from "../services/gapAnalysis";
+import {
+  startCrawl,
+  getCrawlProgress,
+  getActiveCrawls,
+  abortCrawl,
+} from "../services/crawlerEngine";
 
 const router = Router();
 
@@ -168,6 +174,11 @@ router.post("/trigger", async (req, res) => {
     const town = await crawlerStorage.getCrawlerTownById(townId);
     if (!town) return res.status(404).json({ message: "Town not found" });
 
+    const existingActive = getActiveCrawls().find(c => c.townId === townId && c.status === 'running');
+    if (existingActive) {
+      return res.status(409).json({ message: `Crawl already running for ${town.name}`, runId: existingActive.runId });
+    }
+
     const run = await crawlerStorage.createCrawlerRun(
       townId,
       mode,
@@ -175,32 +186,67 @@ router.post("/trigger", async (req, res) => {
       maxPages || town.maxPages || undefined
     );
 
-    const { spawn } = await import("child_process");
-    const child = spawn(
-      "npx",
-      [
-        "tsx",
-        "crawler/scripts/crawler-v3.ts",
-        "--town", town.name,
-        "--url", town.url,
-        "--mode", mode,
-        "--run-id", run.id,
-        ...(maxPages || town.maxPages ? ["--max-pages", String(maxPages || town.maxPages)] : []),
-      ],
-      {
-        cwd: process.cwd(),
-        stdio: "ignore",
-        detached: true,
-        env: { ...process.env },
-      }
-    );
-    child.unref();
+    const runId = await startCrawl(town, run, {
+      maxPages: maxPages || town.maxPages || undefined,
+      mode,
+    });
 
     res.json({
       message: `Crawl started for ${town.name}`,
-      runId: run.id,
-      pid: child.pid,
+      runId,
     });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/runs/:id/progress", async (req, res) => {
+  try {
+    const progress = getCrawlProgress(req.params.id);
+    if (progress) {
+      return res.json(progress);
+    }
+    const run = await crawlerStorage.getCrawlerRunById(req.params.id);
+    if (!run) return res.status(404).json({ message: "Run not found" });
+    res.json({
+      runId: run.id,
+      townId: run.townId,
+      townName: '',
+      status: run.status,
+      pagesVisited: run.pagesVisited,
+      pagesQueued: 0,
+      documentsDiscovered: run.documentsDiscovered,
+      documentsDownloaded: run.documentsUploaded,
+      documentsFailed: run.documentsFailed,
+      duplicatesSkipped: 0,
+      currentUrl: '',
+      log: [],
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      errorMessage: run.errorMessage,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/active-crawls", async (_req, res) => {
+  try {
+    const crawls = getActiveCrawls();
+    res.json(crawls);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/runs/:id/abort", async (req, res) => {
+  try {
+    const aborted = abortCrawl(req.params.id);
+    if (aborted) {
+      res.json({ message: "Crawl aborted" });
+    } else {
+      res.status(404).json({ message: "No active crawl found with this ID" });
+    }
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

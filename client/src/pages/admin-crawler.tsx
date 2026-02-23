@@ -380,6 +380,156 @@ function TownsDashboard({
   );
 }
 
+interface CrawlProgress {
+  runId: string;
+  townId: string;
+  townName: string;
+  status: 'running' | 'completed' | 'failed';
+  pagesVisited: number;
+  pagesQueued: number;
+  documentsDiscovered: number;
+  documentsDownloaded: number;
+  documentsFailed: number;
+  duplicatesSkipped: number;
+  currentUrl: string;
+  log: string[];
+  startedAt: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: () => void }) {
+  const [showLog, setShowLog] = useState(false);
+  const completedRef = useState(false);
+
+  const { data: progress } = useQuery<CrawlProgress>({
+    queryKey: ["/api/admin/crawler/runs", runId, "progress"],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/runs/${runId}/progress`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && data.status !== 'running') return false;
+      return 2000;
+    },
+  });
+
+  const { toast } = useToast();
+
+  const isComplete = progress && progress.status !== 'running';
+  const effectRef = completedRef;
+  if (isComplete && !effectRef[0]) {
+    effectRef[1](true);
+    setTimeout(onComplete, 2000);
+  }
+
+  const abortMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/runs/${runId}/abort`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Crawl Aborted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+    },
+  });
+
+  if (!progress) return null;
+
+  const isRunning = progress.status === 'running';
+  const elapsed = Math.round((Date.now() - new Date(progress.startedAt).getTime()) / 1000);
+  const elapsedStr = elapsed > 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+
+  return (
+    <Card className={isRunning ? "border-blue-500/50" : progress.status === 'completed' ? "border-green-500/50" : "border-red-500/50"}>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            {isRunning ? (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+            ) : progress.status === 'completed' ? (
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+            ) : (
+              <XCircle className="w-4 h-4 text-red-600" />
+            )}
+            <span className="font-semibold" data-testid="text-crawl-status">
+              {isRunning ? 'Crawling...' : progress.status === 'completed' ? 'Crawl Complete' : 'Crawl Failed'}
+            </span>
+            <span className="text-sm text-muted-foreground">{elapsedStr}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLog(!showLog)}
+              data-testid="button-toggle-log"
+            >
+              {showLog ? 'Hide Log' : 'Show Log'}
+            </Button>
+            {isRunning && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => abortMutation.mutate()}
+                disabled={abortMutation.isPending}
+                data-testid="button-abort-crawl"
+              >
+                Abort
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div>
+            <div className="text-xs text-muted-foreground">Pages Visited</div>
+            <div className="text-lg font-bold" data-testid="text-progress-pages">{progress.pagesVisited}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Docs Found</div>
+            <div className="text-lg font-bold" data-testid="text-progress-found">{progress.documentsDiscovered}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Downloaded</div>
+            <div className="text-lg font-bold text-green-600" data-testid="text-progress-downloaded">{progress.documentsDownloaded}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Failed</div>
+            <div className="text-lg font-bold text-red-600" data-testid="text-progress-failed">{progress.documentsFailed}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Duplicates</div>
+            <div className="text-lg font-bold text-muted-foreground" data-testid="text-progress-duplicates">{progress.duplicatesSkipped}</div>
+          </div>
+        </div>
+
+        {isRunning && progress.currentUrl && (
+          <div className="text-xs text-muted-foreground truncate" data-testid="text-current-url">
+            Crawling: {progress.currentUrl}
+          </div>
+        )}
+
+        {progress.errorMessage && (
+          <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded" data-testid="text-crawl-error">
+            {progress.errorMessage}
+          </div>
+        )}
+
+        {showLog && progress.log.length > 0 && (
+          <ScrollArea className="h-48 rounded border bg-muted/30 p-2">
+            <pre className="text-xs font-mono whitespace-pre-wrap" data-testid="text-crawl-log">
+              {progress.log.slice(-100).join('\n')}
+            </pre>
+          </ScrollArea>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TownDetail({
   town,
   onBack,
@@ -395,6 +545,7 @@ function TownDetail({
   const [urlPage, setUrlPage] = useState(0);
   const [runPage, setRunPage] = useState(0);
   const [editOpen, setEditOpen] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(town.activeRunId);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const limit = 50;
@@ -469,6 +620,7 @@ function TownDetail({
     },
     onSuccess: (data) => {
       toast({ title: "Crawl Started", description: data.message });
+      setActiveRunId(data.runId);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
     },
     onError: (error: Error) => {
@@ -531,11 +683,11 @@ function TownDetail({
           <Button
             size="sm"
             onClick={() => triggerCrawl.mutate("full")}
-            disabled={triggerCrawl.isPending || !!town.activeRunId}
+            disabled={triggerCrawl.isPending || !!activeRunId}
             data-testid="button-trigger-crawl"
           >
             <Play className="w-3 h-3 mr-1" />
-            {town.activeRunId ? "Running..." : "Run Crawl"}
+            {activeRunId ? "Running..." : "Run Crawl"}
           </Button>
         </div>
       </div>
@@ -570,6 +722,16 @@ function TownDetail({
           </CardContent>
         </Card>
       </div>
+
+      {activeRunId && (
+        <CrawlProgressPanel
+          runId={activeRunId}
+          onComplete={() => {
+            setActiveRunId(null);
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+          }}
+        />
+      )}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
