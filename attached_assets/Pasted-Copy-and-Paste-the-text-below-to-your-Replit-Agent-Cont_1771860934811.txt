@@ -1,0 +1,51 @@
+Copy and Paste the text below to your Replit Agent:
+Context & Objective:
+We are completely overhauling the fallback architecture of our civic crawler. The current Playwright/Chromium implementation is crashing our server due to out-of-memory (OOM) errors and is failing to bypass Cloudflare Turnstile on heavily protected towns (like Ossipee, Tuftonboro, and Wakefield).
+
+We are moving to a Hybrid Architecture. We will use standard HTTP fetches (Node fetch/axios) for unprotected sites (the "Fast Lane") and seamlessly route protected sites or interstitial pages to a third-party Web Scraping API (the "Heavy Lane") like ZenRows.
+
+Please execute the following tasks in order:
+
+Task 1: Eliminate Playwright/Chromium
+
+Remove all Playwright, Puppeteer, and Chromium dependencies from the project (package.json, install scripts, etc.).
+
+Delete the browserFetcher module and any functions like fetchPageViaBrowser or browserFetchDocument.
+
+Clean up the server code so we are strictly using lightweight HTTP requests originating from the Replit server.
+
+Task 2: Implement the "Smart Router" (Fast Lane vs. Heavy Lane)
+
+In the main crawler engine, introduce a dynamic routing logic.
+
+By default, attempt to fetch a page using our standard enriched-header fetch function (Fast Lane).
+
+If the Fast Lane request returns a 403, 429, or if the HTML contains known CAPTCHA/protection markers (like Revize or Cloudflare Turnstile), immediately flag that domain as requires_heavy_lane.
+
+Create a new fetchViaScrapingAPI(url) function. When a domain is flagged, all subsequent requests to that domain must route through this function instead of our local fetch.
+
+Note: Stub out fetchViaScrapingAPI using standard REST API patterns. I will provide the specific ZenRows/Scrapfly API key in the environment variables later.
+
+Task 3: Implement Interstitial & Download Quality Control
+
+We are currently falling into "interstitial traps" where we download the HTML of a "Your download will begin shortly" page instead of the actual PDF.
+
+Update the fetchDocument function to strictly check the HTTP Content-Type header of the response BEFORE downloading the buffer.
+
+If the URL ends in a document extension (e.g., .pdf) but the Content-Type is text/html, do not save it. Treat this as an interstitial page.
+
+Task 4: The "Extract & Toss" Interstitial Bypass
+
+When an interstitial is detected in Task 3, pass that URL to the fetchViaScrapingAPI(url, { js_render: true }) function.
+
+The API will execute the JavaScript on the interstitial. Parse the API's response to extract the Final Generated Download URL and any required session cookies.
+
+Once the Final URL and cookies are extracted, pass them back to our local Replit fetch function to perform the heavy binary download (so we don't waste API bandwidth on heavy PDFs).
+
+Task 5: Error Handling & Logging
+
+Update the Admin Dashboard Analytics to reflect these new metrics: Fast Lane Requests, Heavy Lane Requests, and Interstitials Bypassed.
+
+Ensure that if the Scraping API fails, the document is marked as Failed in the database, allowing the crawler to continue without crashing.
+
+Please review this plan and begin with Task 1. Let me know when you are ready to implement the fetchViaScrapingAPI function so I can provide the exact API syntax.
