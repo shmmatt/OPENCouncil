@@ -1,125 +1,63 @@
 # OPENCouncil - NH Municipal Governance Assistant
 
 ## Overview
-OPENCouncil is an AI-powered assistant designed for New Hampshire elected officials and municipal workers. It provides instant, accurate answers to governance questions by leveraging Google's Gemini AI for answer synthesis, with pgvector-based semantic search over official municipal documents. The system features a ChatGPT-style chat interface for end-users and a secure admin panel for document management, including an advanced ingestion pipeline with duplicate detection and AI-powered metadata extraction.
+OPENCouncil is an AI-powered assistant for New Hampshire elected officials and municipal workers. It delivers instant, accurate answers to governance questions by utilizing Google's Gemini AI for answer synthesis and pgvector-based semantic search over official municipal documents. The system provides a ChatGPT-style chat interface for end-users and a secure admin panel for document management, featuring an advanced ingestion pipeline with duplicate detection and AI-powered metadata extraction.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes
-- **2026-02-23**: Brought crawling in-house: Replaced external bot/CLI-based crawler with a unified server-side crawler engine (`server/services/crawlerEngine.ts`) that runs discovery + download in one pipeline from the admin panel. Uses `fetch` for standard sites with S3 upload, document categorization, and dedup. New features: live crawl progress panel with real-time stats (pages, docs found/downloaded/failed/duplicates), log viewer, abort button. New API endpoints: `GET /api/admin/crawler/runs/:id/progress`, `GET /api/admin/crawler/active-crawls`, `POST /api/admin/crawler/runs/:id/abort`. Admin trigger (`POST /api/admin/crawler/trigger`) now runs crawls as async in-process tasks instead of spawning detached child processes.
-- **2026-02-22**: Fixed state source pipeline integration: (1) Added dual auth (bot API key OR admin JWT) to `/api/crawler-intel` routes so admin panel can access state source endpoints. (2) Fixed batch export pipeline to derive `town: 'statewide'` from S3 key path (`COALESCE(ld.town, SPLIT_PART(fb.s3_key, '/', 1))`) for state source docs without logical_documents entries. (3) Reset 1,285 state source file_blobs OCR status so they're enqueue-able from Textract panel. Auth: `server/routes/crawlerIntel.ts`. Export: `crawler/batch-pipeline/export-to-jsonl.ts`.
-- **2026-02-21**: Added Bot Integration endpoints for external crawler bots. New endpoints: `POST /:townSlug/upload-url` (presigned S3 upload URLs), `POST /:townSlug/documents` (single doc registration), `POST /:townSlug/documents/batch` (batch registration up to 100 docs), `POST /:townSlug/runs/report` (crawl run summary reporting). Same endpoints mirrored for state sources under `/state-sources/:slug/`. Includes S3 path convention docs, duplicate detection by URL hash, automatic town stats updates, and complete bot workflow guide with pseudocode example. API spec updated at `crawler/CRAWLER-INTEL-API.md` with full Bot Integration Guide section.
-- **2026-02-21**: Added State Source system for statewide document crawling. New schema: `crawler_state_sources`, `crawler_state_source_runs`, `crawler_state_documents` tables. Full CRUD API at `/api/crawler-intel/state-sources` with source registration, profile editing, crawl triggering, document/run history. Fleet summary now includes state source stats. Seeded 6 NH state sources: General Court (RSAs), DRA (budget guidance), DES (environmental regs), OSI (planning guidance), SOS (admin rules), NHMA (municipal handbooks). Admin UI: new "State Sources" tab in Crawler Management with source dashboard, detail view, profile editor, and crawl triggering. API spec updated at `crawler/CRAWLER-INTEL-API.md`.
-- **2026-02-21**: Enhanced Crawler Intelligence API with fleet automation, focused crawls, and structured errors. New endpoints: `GET /fleet/status` (all towns ranked by staleness), `GET /fleet/summary` (aggregate stats), `GET /fleet/next-batch` (priority-ordered crawl queue), `POST /towns` (register new towns), `GET /:townSlug/quick-check` (lightweight reassessment check). Extended `POST /:townSlug/crawl` with `targetPaths`, `linkPatterns` (for gap-driven focused crawls), and `callbackUrl` (webhook on completion). All errors now use structured format: `{ error: { code, message, retryable, retryAfterSeconds } }`.
-- **2026-02-21**: Added Crawler Intelligence API (`/api/crawler-intel`) for bot-driven crawl automation. Endpoints: town briefing (consolidated state), coverage assessment trigger, gap analysis, bot-triggered crawls (triggerType: "bot"), run history with failure breakdowns, document inventory. API spec at `crawler/CRAWLER-INTEL-API.md`. Route: `server/routes/crawlerIntel.ts`. Optional auth via `CRAWLER_BOT_API_KEY` env var.
-- **2026-02-21**: Added structured failure tracking to crawler: FailureType classification (http_404, timeout, captcha_blocked, etc.), per-page error collection, failure counts by type in run summaries, repeat-failure flagging in admin UI. Schema: `shared/crawler-schema.ts`, Crawler: `crawler/scripts/crawler-v3.ts`, UI: `client/src/pages/admin-crawler.tsx`.
-- **2026-02-20**: Crawler document deduplication: consolidated 20,356 crawler_documents rows down to 14,593 by merging absolute URLs onto file_blob_id-linked rows and removing redundant duplicates. Fixed UUID vs town-name detection bug in `resolveUrlByStemCandidates`. Added file_blobs fallback in `getCrawledUrlByFileBlobId` for blobs without crawler_document entries. Pagination suffix stripping (`_N`) enables stem-based URL matching across document pages.
-- **2026-02-20**: Clickable source citations in chat: pgvectorRetrieveAdapter encodes `fileBlobId` in `[blob:uuid]` prefix format, sources.ts resolves crawled URLs via crawler_documents+crawler_towns join with relative URL normalization, and displays canonical titles from logical_documents. Local docs link to original town website URLs; statewide docs show titles without links.
-- **2026-02-20**: Added Crawler Management admin page (`/admin/crawler`) with town dashboard, document/URL inventory browser, run history, town profile editor, and crawl triggering. Backend: `server/storage/crawler.ts` + `server/routes/crawler.ts`. Frontend: `client/src/pages/admin-crawler.tsx`. Added Crawler nav link to admin documents page.
-- **2026-02-19**: Full document lifecycle tracking: Added embedding lifecycle columns to `file_blobs` (`content_hash`, `embedding_status`, `chunk_count`, `embedded_at`). Added `file_blob_id` to `document_chunks` and `crawler_documents` for end-to-end lineage. Backfilled 5,842 crawler_documents→file_blobs links and 3,297 content hashes.
-- **2026-02-19**: Rewrote batch export/ingest scripts to source from `file_blobs` (source of truth), write `file_blob_id` into chunk metadata, update `embedding_status` lifecycle, and log to `embedding_jobs` table.
-- **2026-02-19**: Added version detection script (`crawler/batch-pipeline/version-detect.ts`) for content hash-based change detection and stale chunk cleanup.
-- **2026-02-19**: Added Pipeline Status dashboard tab to admin OCR pipeline page showing end-to-end lifecycle funnel (discovered → downloaded → text extracted → exported → indexed).
-- **2026-02-19**: Fixed critical schema mismatch — Drizzle `documentChunks` schema now matches actual DB (serial IDs, `document_id`, JSONB `metadata`). All semantic search uses JSONB path expressions for filtering.
-- **2026-02-19**: Rewired chat route to use V3 pipeline (`runChatV3Pipeline`) instead of old `askQuestionWithFileSearch`. pgvector retrieval is now fully operational end-to-end.
-- **2026-02-19**: Made town filters case-insensitive in embeddingStorage to handle mixed-case data ("Ossipee"/"ossipee", "statewide"/"Statewide").
-- **2026-02-18**: Removed Gemini File Search fallback entirely — pgvector is the sole retrieval backend. Gemini is used only for answer synthesis, embedding generation, and metadata extraction.
-- **2026-02-18**: Added thin/empty retrieval logging so synthesis stage is aware when source material is limited (Tier C handling).
-- **2026-02-18**: Split monolithic `server/routes.ts` (1767 lines) into domain-specific routers under `server/routes/` (admin, ingestion, ocr, storage, chat, preferences).
-- **2026-02-18**: Removed dead Prisma schema and dependencies. Drizzle ORM is the sole ORM.
-- **2026-02-18**: Fixed 20+ LSP type errors across pgvectorRetrieval, storeResolver, twoLaneRetrieve, routes, embeddingStorage.
-- **2026-02-18**: Consolidated crawler-related files (scripts, batch-pipeline, town-profiles, crawl-logs, archive, docs) into `crawler/` directory.
-
 ## System Architecture
 
 ### Frontend
-React + TypeScript using Vite, `shadcn/ui` (Radix UI primitives), and Tailwind CSS. State management with TanStack Query, client-side routing via `wouter`.
+The frontend is built with React and TypeScript, using Vite for tooling. It leverages `shadcn/ui` (built on Radix UI primitives) and Tailwind CSS for styling. State management is handled by TanStack Query, and client-side routing uses `wouter`.
 
 ### Backend
-Express.js (TypeScript) with RESTful API. JWT authentication for admin routes, bcrypt for password hashing, Multer for file uploads (PDF, DOCX, TXT).
-
-**Route Organization** (split into domain routers under `server/routes/`):
-- `admin.ts` - Admin auth, document CRUD, bulk upload
-- `ingestion.ts` - Ingestion job lifecycle (approve, reject, index, batch-index)
-- `ocr.ts` - OCR queue management, status, reprocessing
-- `storage.ts` - Storage migration, S3-Gemini sync
-- `chat.ts` - Chat sessions, messages, config
-- `preferences.ts` - Town preferences, updates/minutes, meta endpoints
+The backend is an Express.js application written in TypeScript, exposing a RESTful API. It uses JWT for authentication in admin routes, bcrypt for password hashing, and Multer for handling file uploads (PDF, DOCX, TXT). Routes are organized into domain-specific routers.
 
 ### Data Storage
-PostgreSQL via Neon's serverless driver and **Drizzle ORM** (sole ORM). Schema includes `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (pgvector), and `embeddingJobs`. Drizzle Kit manages migrations.
+PostgreSQL is used as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (with pgvector for embeddings), and `embeddingJobs`. Drizzle Kit manages database migrations.
 
 ### Retrieval Backend (pgvector)
-Documents are embedded as 768-dimensional vectors (Gemini text-embedding-004) stored in PostgreSQL via pgvector. The two-lane retrieval system performs parallel local (town-specific) and statewide semantic search.
-
-**Key files**:
-- `server/chatV2/pgvectorRetrieveAdapter.ts` - Adapts pgvector search to the V3 pipeline's `V3RetrievalResult` format
-- `server/services/embeddingStorage.ts` - pgvector CRUD and semantic search queries
-- `server/services/embeddingService.ts` - Embedding generation via Gemini API
-- `server/services/pgvectorRetrieval.ts` - Lower-level pgvector retrieval utilities
+Documents are transformed into 768-dimensional vectors using Google Gemini's `text-embedding-004` model and stored in PostgreSQL with the pgvector extension. A two-lane retrieval system performs parallel town-specific and statewide semantic searches.
 
 ### AI Integration
-Google Gemini is used for:
-- **Answer synthesis** (V3 pipeline: Plan → Retrieve → Synthesize → Audit)
-- **Embedding generation** (text-embedding-004, 768 dimensions)
-- **Metadata extraction** during document ingestion
-- **Query planning** (V3 planner for multi-query retrieval plans)
-
-pgvector is the sole retrieval backend. Gemini File Search has been fully removed from the retrieval path.
+Google Gemini is integrated for several core functionalities:
+- **Answer synthesis**: Part of the V3 chat pipeline.
+- **Embedding generation**: Creates vector representations of documents.
+- **Metadata extraction**: Aids in organizing ingested documents.
+- **Query planning**: Generates multi-query retrieval plans.
+pgvector serves as the sole retrieval backend, with Gemini solely for synthesis, embedding, and metadata.
 
 ### Chat Pipeline (V3)
-The V3 pipeline (`server/chatV2/chatOrchestratorV3.ts`) runs:
-1. **Stage 0**: Situation relevance gating
-2. **Stage 1**: Planning (IssueMap + RetrievalPlanV3)
-3. **Stage 2**: Retrieval (pgvector two-lane semantic search)
-4. **Stage 3**: Synthesis (Gemini, with RecordStrength tiering)
-5. **Stage 4**: Audit (format validation, drift detection, repair)
+The V3 chat pipeline (`server/chatV2/chatOrchestratorV3.ts`) processes user queries through four main stages:
+1.  **Situation Relevance Gating**: Initial assessment of query relevance.
+2.  **Planning**: Generates an IssueMap and RetrievalPlanV3.
+3.  **Retrieval**: Executes pgvector two-lane semantic search.
+4.  **Synthesis**: Generates an answer using Gemini, with RecordStrength tiering.
+5.  **Audit**: Validates format, detects drift, and performs repairs.
 
-### V2 Document Ingestion Pipeline
-Staged workflow: upload → hash → extract text → LLM metadata suggestion → admin review → approve/reject → index. Includes meeting minutes detection and three-tier town detection.
+### Document Ingestion Pipeline (V2)
+This pipeline follows a staged workflow: document upload, hashing, text extraction, AI-powered metadata suggestion, admin review, approval/rejection, and indexing. It includes features for detecting meeting minutes and a three-tier town detection system.
 
 ### OCR Pipeline (Dual-Provider)
-Two OCR providers are supported:
-
-**Tesseract.js (legacy)**: Background worker in `server/workers/ocrWorker.ts` detects low-text PDFs, processes via Tesseract OCR, and triggers re-indexing.
-
-**AWS Textract (primary)**: Production-grade async OCR pipeline for S3-sourced documents:
-- **State machine**: queued → prechecked → textract_running → materialized (or skipped_native / failed)
-- **Worker A (Precheck)**: Claims `queued` jobs via `SKIP LOCKED`, validates PDF magic bytes, extracts native text. If native chars >= 1000, marks `skipped_native`. Otherwise starts Textract async job.
-- **Worker B (Poll + Materialize)**: Polls Textract `GetDocumentTextDetection`, assembles LINE blocks into text, writes gzipped `.txt.gz` artifact to `derived/text/<docId>.txt.gz` in S3, updates `fileBlobs.ocrText` and marks `materialized`.
-- **Key files**: `server/services/textractPipeline.ts`, `server/workers/textractWorker.ts`, `server/storage/ocrJobs.ts`
-- **DB table**: `ocr_jobs` (dedicated job queue with priority, backoff, Textract job ID tracking)
-- **API routes**: `/api/ocr/textract/stats`, `/api/ocr/textract/enqueue`, `/api/ocr/textract/jobs`, `/api/ocr/textract/reset-stuck`
-- **Requires**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` secrets; IAM permissions for `s3:GetObject`, `s3:PutObject`, `textract:Start/GetDocumentTextDetection`
+The system supports two OCR providers:
+-   **Tesseract.js**: Used by a background worker for low-text PDFs.
+-   **AWS Textract**: The primary production-grade asynchronous OCR pipeline for S3-sourced documents. It uses a state machine to manage jobs from queuing to materialization, involving precheck workers and polling workers for text extraction and storage.
 
 ### Persistent Object Storage
-Document files stored in Replit Object Storage (`server/services/blobStorage.ts`). Paths starting with `/replit-objstore` use cloud storage; legacy local paths supported for backward compatibility.
+Document files are stored in Replit Object Storage, with paths starting `/replit-objstore`. Legacy local paths are supported for backward compatibility.
 
 ### Crawler / Data Collection
-All crawler-related code, scripts, logs, and data are organized under `crawler/`:
-- `crawler/scripts/` - Crawling scripts, analysis tools, monitoring
-- `crawler/batch-pipeline/` - Batch embedding and OCR pipeline
-- `crawler/town-profiles/` - Per-town document profiles and crawl results
-- `crawler/crawl-logs/` - Crawl execution logs
-- `crawler/archive/` - Legacy crawlers and migration scripts
-
-**Admin Crawler Management** (`/admin/crawler`):
-- Full admin panel for managing crawl jobs, viewing town state, and triggering crawls
-- Schema in `shared/crawler-schema.ts`: `crawlerTowns`, `crawlerRuns`, `crawlerDocuments`, `crawlerUrls`, `crawlerSitemaps`
-- Storage layer: `server/storage/crawler.ts`
-- API routes: `server/routes/crawler.ts` (mounted at `/api/admin/crawler/`)
-- Frontend: `client/src/pages/admin-crawler.tsx`
-- Features: Town dashboard with stats, document/URL inventory browser, run history, town profile editor (CMS type, custom paths, max pages), crawl triggering
+A comprehensive crawler system is in place for data collection. This includes an in-house server-side crawler engine that handles discovery and download, supports state source crawling, and features an admin panel for managing crawl jobs, viewing town status, and triggering crawls. It includes structured failure tracking and document deduplication.
 
 ## External Dependencies
 
 ### Third-Party Services
-1. **Google Gemini API**: Answer synthesis, embedding generation, metadata extraction
-2. **Neon PostgreSQL** (with pgvector extension): Database + vector search
-3. **Google Fonts CDN**: Web fonts (Inter, JetBrains Mono)
+1.  **Google Gemini API**: Used for answer synthesis, embedding generation, and metadata extraction.
+2.  **Neon PostgreSQL**: Provides the database with the pgvector extension for vector search.
+3.  **Google Fonts CDN**: Used for web fonts (Inter, JetBrains Mono).
+4.  **AWS Textract**: For production-grade asynchronous OCR processing.
 
 ### Key NPM Packages
-* **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`
-* **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`, `tesseract.js`
-* **Development**: `vite`, `tsx`, `esbuild`, `drizzle-kit`, `typescript`
+*   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.
+*   **Backend**: `express`, `drizzle-orm`, `@neondatabase/serverless`, `@google/genai`, `bcryptjs`, `jsonwebtoken`, `multer`, `pdf-parse`, `mammoth`, `tesseract.js`.
