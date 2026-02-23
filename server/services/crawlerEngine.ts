@@ -11,7 +11,7 @@ import {
   extractDocumentMetadata,
 } from './crawlerStateExtensions';
 import { hashUrl, recordDocument } from './crawlerState';
-import { browserFetchPage, browserFetchDocument, closeBrowser, isBrowserAvailable } from './browserFetcher';
+import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial } from './scrapingApiClient';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -580,29 +580,8 @@ async function fetchPage(
   return await fetchPageOnce(url, signal, timeout, { ua: getRandomUA(), referer });
 }
 
-async function fetchPageViaBrowser(url: string): Promise<(FetchPageResult & { challengeResolved?: boolean }) | null> {
-  const result = await browserFetchPage(url);
-  if (!result) return null;
 
-  if (result.wasChallenged && !result.challengeResolved) {
-    return { html: '', status: 403, headers: {}, finalUrl: result.finalUrl, challengeResolved: false };
-  }
-
-  const protection = detectProtection(result.html);
-  if (protection && result.html.length < 5000) {
-    return { html: '', status: 403, headers: {}, finalUrl: result.finalUrl, challengeResolved: false };
-  }
-
-  return {
-    html: result.html,
-    status: result.status,
-    headers: {},
-    finalUrl: result.finalUrl,
-    challengeResolved: result.wasChallenged ? result.challengeResolved : undefined,
-  };
-}
-
-async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult & { useBrowser?: boolean; cloudflareManaged?: boolean } | null> {
+async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult & { needsHeavyLane?: boolean; viaHeavyLane?: boolean } | null> {
   let result = await fetchPage(baseUrl, signal);
   if (result && result.status === 200 && result.html.length > 100) return result;
 
@@ -613,37 +592,40 @@ async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<Fetc
   const altResult = await fetchPage(altUrl, signal);
   if (altResult && altResult.status === 200 && altResult.html.length > 100) return altResult;
 
-  const isBlocked = (!result || result.status === 403 || !result.html || result.html.length < 100);
-  if (isBlocked) {
-    const browserAvail = await isBrowserAvailable();
-    if (browserAvail) {
-      const browserResult = await fetchPageViaBrowser(baseUrl);
-      if (browserResult && browserResult.html.length > 100) {
-        return { ...browserResult, useBrowser: true };
-      }
-      if (browserResult && browserResult.challengeResolved === false) {
-        return { html: '', status: 403, headers: {}, finalUrl: baseUrl, useBrowser: false, cloudflareManaged: true };
-      }
-      if (!browserResult || browserResult.html.length < 100) {
-        const altBrowserResult = await fetchPageViaBrowser(altUrl);
-        if (altBrowserResult && altBrowserResult.html.length > 100) {
-          return { ...altBrowserResult, useBrowser: true };
-        }
-        if (altBrowserResult && altBrowserResult.challengeResolved === false) {
-          return { html: '', status: 403, headers: {}, finalUrl: baseUrl, useBrowser: false, cloudflareManaged: true };
-        }
-      }
+  const isBlocked = (!result || result.status === 403 || result.status === 429 || !result.html || result.html.length < 100);
+  if (isBlocked && isScrapingApiConfigured()) {
+    const apiResult = await fetchPageViaAPI(baseUrl);
+    if (apiResult && apiResult.html.length > 100 && apiResult.status === 200) {
+      return { html: apiResult.html, status: apiResult.status, headers: apiResult.headers, finalUrl: apiResult.finalUrl, viaHeavyLane: true };
+    }
+    const altApiResult = await fetchPageViaAPI(altUrl);
+    if (altApiResult && altApiResult.html.length > 100 && altApiResult.status === 200) {
+      return { html: altApiResult.html, status: altApiResult.status, headers: altApiResult.headers, finalUrl: altApiResult.finalUrl, viaHeavyLane: true };
     }
   }
 
+  if (isBlocked) {
+    return { html: '', status: result?.status || 0, headers: {}, finalUrl: baseUrl, needsHeavyLane: true };
+  }
+
   return result;
+}
+
+const DOC_EXTENSIONS = /\.(pdf|docx?|xlsx?|pptx?|csv|zip|rtf|odt|ods)$/i;
+
+interface FetchDocumentResult {
+  buffer: Buffer;
+  contentType: string;
+  size: number;
+  isInterstitial?: boolean;
+  interstitialHtml?: string;
 }
 
 async function fetchDocument(
   url: string, 
   signal: AbortSignal,
   referer?: string
-): Promise<{ buffer: Buffer; contentType: string; size: number } | null> {
+): Promise<FetchDocumentResult | null> {
   const MAX_DOC_RETRIES = 2;
   const domainDelay = getDomainDelay(url);
   
@@ -670,17 +652,25 @@ async function fetchDocument(
           await new Promise(r => setTimeout(r, backoff));
           continue;
         }
+        throw new Error(`HTTP ${response.status}`);
       }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
+
+      const contentType = response.headers.get('content-type') || 'application/pdf';
+      const urlPath = new URL(url).pathname;
+      if (DOC_EXTENSIONS.test(urlPath) && contentType.includes('text/html')) {
+        const html = await response.text();
+        return { buffer: Buffer.alloc(0), contentType, size: 0, isInterstitial: true, interstitialHtml: html };
+      }
+
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       if (buffer.length < 100) {
         throw new Error('Document too small or empty');
       }
-      const contentType = response.headers.get('content-type') || 'application/pdf';
       return { buffer, contentType, size: buffer.length };
     } catch (e: any) {
       if (attempt >= MAX_DOC_RETRIES) throw e;
@@ -830,26 +820,44 @@ async function executeCrawl(
   };
 
   let detectedCms: CmsType = (town.cms as CmsType) || null;
-  let useBrowserMode = false;
+  const heavyLaneDomains = new Set<string>();
+  let heavyLaneRequests = 0;
+  let fastLaneRequests = 0;
+  let interstitialsBypassed = 0;
+
+  const flagHeavyLane = (url: string) => {
+    try { heavyLaneDomains.add(new URL(url).hostname); } catch {}
+  };
+  const isHeavyLane = (url: string): boolean => {
+    try { return heavyLaneDomains.has(new URL(url).hostname); } catch { return false; }
+  };
 
   addLog(progress, '--- Phase 1: Homepage & CMS Detection ---');
+  fastLaneRequests++;
   const homepage = await fetchHomepage(baseUrl, signal);
   if (!homepage || !homepage.html) {
-    if ((homepage as any)?.cloudflareManaged) {
-      addLog(progress, `BLOCKED: ${town.name} uses Cloudflare managed challenge (Turnstile) which cannot be bypassed by automated crawling. This site requires manual document collection.`);
-      progress.protectionDetected = 'Cloudflare Managed';
+    if ((homepage as any)?.needsHeavyLane) {
+      flagHeavyLane(baseUrl);
+      if (isScrapingApiConfigured()) {
+        addLog(progress, `HEAVY LANE: Homepage blocked (status: ${homepage?.status || 'timeout'}). Domain flagged for scraping API. API also failed to retrieve homepage.`);
+      } else {
+        addLog(progress, `HEAVY LANE: Homepage blocked (status: ${homepage?.status || 'timeout'}). Domain flagged for scraping API. Configure SCRAPING_API_KEY to enable Heavy Lane.`);
+      }
       if (summary.protectionStats) {
         summary.protectionStats.detected = true;
-        summary.protectionStats.types.push('Cloudflare Managed Challenge');
+        if (!summary.protectionStats.types.includes('Blocked')) {
+          summary.protectionStats.types.push('Blocked');
+        }
       }
     } else {
       addLog(progress, `WARNING: Homepage fetch failed for ${baseUrl} (status: ${homepage?.status || 'timeout'}). Site may be blocking requests or down.`);
     }
   }
   if (homepage && homepage.html) {
-    if ((homepage as any).useBrowser) {
-      useBrowserMode = true;
-      addLog(progress, `BROWSER MODE: Cloudflare challenge solved via headless browser. Switching to browser-based crawling.`);
+    if ((homepage as any)?.viaHeavyLane) {
+      flagHeavyLane(baseUrl);
+      heavyLaneRequests++;
+      addLog(progress, `HEAVY LANE: Homepage retrieved via scraping API. Domain flagged for Heavy Lane.`);
     }
     if (homepage.finalUrl && homepage.finalUrl !== baseUrl && homepage.finalUrl !== baseUrl + '/') {
       addLog(progress, `Homepage redirected to: ${homepage.finalUrl}`);
@@ -864,9 +872,8 @@ async function executeCrawl(
           summary.protectionStats.types.push(protection);
         }
       }
-      if (!useBrowserMode) {
-        addLog(progress, `WARNING: ${protection} protection detected. Using rotating UAs and adaptive delays.`);
-      }
+      addLog(progress, `WARNING: ${protection} protection detected. Domain flagged for Heavy Lane.`);
+      flagHeavyLane(baseUrl);
 
       await db.update(crawlerTowns)
         .set({ updatedAt: new Date() })
@@ -980,9 +987,17 @@ async function executeCrawl(
     const fullUrl = p.startsWith('http') ? p : `${baseUrl}${p}`;
     if (visited.has(fullUrl)) continue;
 
-    const resp = useBrowserMode 
-      ? await fetchPageViaBrowser(fullUrl)
-      : await fetchPage(fullUrl, signal, 8000);
+    let resp: FetchPageResult | null = null;
+    if (isHeavyLane(fullUrl) && isScrapingApiConfigured()) {
+      heavyLaneRequests++;
+      const apiResp = await fetchPageViaAPI(fullUrl);
+      if (apiResp && apiResp.html.length > 100) {
+        resp = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+      }
+    } else {
+      fastLaneRequests++;
+      resp = await fetchPage(fullUrl, signal, 8000);
+    }
     if (resp && resp.status === 200 && resp.html.length > 500) {
       validPaths++;
       visited.add(fullUrl);
@@ -1043,9 +1058,17 @@ async function executeCrawl(
     for (const dp of deepPaths) {
       if (signal.aborted) break;
       if (visited.has(dp)) continue;
-      const resp = useBrowserMode
-        ? await fetchPageViaBrowser(dp)
-        : await fetchPage(dp, signal, 8000);
+      let resp: FetchPageResult | null = null;
+      if (isHeavyLane(dp) && isScrapingApiConfigured()) {
+        heavyLaneRequests++;
+        const apiResp = await fetchPageViaAPI(dp);
+        if (apiResp && apiResp.html.length > 100) {
+          resp = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+        }
+      } else {
+        fastLaneRequests++;
+        resp = await fetchPage(dp, signal, 8000);
+      }
       if (resp && resp.status === 200 && resp.html.length > 500) {
         deepValidPaths++;
         visited.add(dp);
@@ -1084,7 +1107,7 @@ async function executeCrawl(
     addLog(progress, `WordPress Media API: ${wpDocs.length} media items found, ${wpNewDocs} new docs`);
   }
 
-  addLog(progress, `--- Phase 4: Breadth-First Crawl ${useBrowserMode ? '(BROWSER MODE)' : ''} ---`);
+  addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
   let consecutiveEmptyPages = 0;
@@ -1113,49 +1136,50 @@ async function executeCrawl(
     progress.pagesQueued = queue.length;
 
     let page: FetchPageResult | null = null;
-    if (useBrowserMode) {
-      page = await fetchPageViaBrowser(pageUrl);
-      if (useBrowserMode) await new Promise(r => setTimeout(r, 500));
+    if (isHeavyLane(pageUrl) && isScrapingApiConfigured()) {
+      heavyLaneRequests++;
+      const apiResp = await fetchPageViaAPI(pageUrl);
+      if (apiResp && apiResp.html.length > 100) {
+        page = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+      }
+      await new Promise(r => setTimeout(r, 500));
     } else {
+      fastLaneRequests++;
       page = await fetchPage(pageUrl, signal, 15000, baseUrl);
     }
+
     if (!page || !page.html) {
-      if (!useBrowserMode && page && page.status === 403) {
-        const browserPage = await fetchPageViaBrowser(pageUrl);
-        if (browserPage && browserPage.html.length > 100) {
-          page = browserPage;
-          if (!useBrowserMode) {
-            useBrowserMode = true;
-            addLog(progress, `BROWSER MODE: Switching to browser-based crawling after 403 on ${pageUrl.substring(baseUrl.length)}`);
-          }
-        }
+      if (page && (page.status === 403 || page.status === 429)) {
+        flagHeavyLane(pageUrl);
+        addLog(progress, `HEAVY LANE: ${page.status} on ${pageUrl.substring(baseUrl.length)} — domain flagged for scraping API`);
       }
       if (!page || !page.html) continue;
     }
 
     if (page.html && detectProtection(page.html)) {
       const protType = detectProtection(page.html)!;
-      let bypassed = false;
-      if (!useBrowserMode) {
-        const browserAvail = await isBrowserAvailable();
-        if (browserAvail) {
-          addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} — trying browser fallback`);
-          const browserPage = await fetchPageViaBrowser(pageUrl);
-          if (browserPage && browserPage.html.length > 100 && !detectProtection(browserPage.html)) {
-            page = browserPage;
-            useBrowserMode = true;
-            bypassed = true;
-            addLog(progress, `BROWSER MODE: Protection bypassed via headless browser. Switching to browser-based crawling.`);
+      flagHeavyLane(pageUrl);
+
+      if (isScrapingApiConfigured()) {
+        heavyLaneRequests++;
+        addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} — trying Heavy Lane`);
+        const apiResp = await fetchPageViaAPI(pageUrl, { js_render: true });
+        if (apiResp && apiResp.html.length > 100 && !detectProtection(apiResp.html)) {
+          page = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+          addLog(progress, `HEAVY LANE: Protection bypassed via scraping API on ${pageUrl.substring(baseUrl.length)}`);
+        } else {
+          markDomainProtected(pageUrl, protType);
+          if (summary.protectionStats) {
+            summary.protectionStats.detected = true;
+            summary.protectionStats.blockedPages++;
+            if (!summary.protectionStats.types.includes(protType)) {
+              summary.protectionStats.types.push(protType);
+            }
           }
+          addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} (Heavy Lane also blocked)`);
+          continue;
         }
       } else {
-        const browserPage = await fetchPageViaBrowser(pageUrl);
-        if (browserPage && browserPage.html.length > 100 && !detectProtection(browserPage.html)) {
-          page = browserPage;
-          bypassed = true;
-        }
-      }
-      if (!bypassed) {
         markDomainProtected(pageUrl, protType);
         if (summary.protectionStats) {
           summary.protectionStats.detected = true;
@@ -1164,7 +1188,7 @@ async function executeCrawl(
             summary.protectionStats.types.push(protType);
           }
         }
-        addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} (blocked, browser fallback failed)`);
+        addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} — domain flagged for Heavy Lane (API not configured)`);
         continue;
       }
     }
@@ -1298,14 +1322,52 @@ async function executeCrawl(
         continue;
       }
 
+      fastLaneRequests++;
       let doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage).catch(async (e: any) => {
-        if (useBrowserMode && (e.message?.includes('403') || e.message?.includes('429') || e.message?.includes('Challenge'))) {
-          addLog(progress, `Browser fallback for doc: ${filename}`);
-          return await browserFetchDocument(docUrl, docInfo.foundOnPage);
+        if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
+          heavyLaneRequests++;
+          addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
+          const apiDoc = await fetchDocumentViaAPI(docUrl);
+          if (apiDoc) return { ...apiDoc, isInterstitial: false };
         }
         throw e;
       });
-      if (doc) {
+
+      if (doc && doc.isInterstitial) {
+        addLog(progress, `INTERSTITIAL detected for: ${filename}`);
+        let resolved = false;
+        if (isScrapingApiConfigured()) {
+          heavyLaneRequests++;
+          const apiResult = await fetchPageViaAPI(docUrl, { js_render: true });
+          if (apiResult) {
+            const finalUrl = extractFinalUrlFromInterstitial(apiResult.html);
+            const cookies = apiResult.cookies || [];
+            if (finalUrl) {
+              const absoluteUrl = finalUrl.startsWith('http') ? finalUrl : new URL(finalUrl, docUrl).href;
+              addLog(progress, `INTERSTITIAL bypass: extracted URL ${absoluteUrl} with ${cookies.length} cookies`);
+              const cookieDoc = await fetchDocumentWithCookies(absoluteUrl, cookies, signal);
+              if (cookieDoc) {
+                doc = { ...cookieDoc, isInterstitial: false };
+                interstitialsBypassed++;
+                resolved = true;
+              }
+            }
+            if (!resolved && cookies.length > 0) {
+              const cookieDoc = await fetchDocumentWithCookies(docUrl, cookies, signal);
+              if (cookieDoc) {
+                doc = { ...cookieDoc, isInterstitial: false };
+                interstitialsBypassed++;
+                resolved = true;
+              }
+            }
+          }
+        }
+        if (!resolved) {
+          throw new Error('Interstitial page detected, could not extract final document URL');
+        }
+      }
+
+      if (doc && !doc.isInterstitial && doc.size > 0) {
         await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
         await recordDocument({
           townId: town.id,
@@ -1380,14 +1442,17 @@ async function executeCrawl(
 
   const finalStatus = progress.documentsFailed > 0 && progress.documentsDownloaded === 0 ? 'failed' : 'completed';
 
-  if (useBrowserMode) {
-    addLog(progress, `Browser mode was used for this crawl (Cloudflare/protection bypass)`);
+  if (heavyLaneDomains.size > 0) {
+    addLog(progress, `Heavy Lane domains flagged: ${Array.from(heavyLaneDomains).join(', ')}`);
   }
+  addLog(progress, `Requests: Fast Lane=${fastLaneRequests}, Heavy Lane=${heavyLaneRequests}, Interstitials Bypassed=${interstitialsBypassed}`);
 
   (summary as any).strategyStats = stats;
   (summary as any).detectedCms = detectedCms;
   (summary as any).protectionDetected = progress.protectionDetected;
-  (summary as any).usedBrowserMode = useBrowserMode;
+  (summary as any).fastLaneRequests = fastLaneRequests;
+  (summary as any).heavyLaneRequests = heavyLaneRequests;
+  (summary as any).interstitialsBypassed = interstitialsBypassed;
 
   await db.update(crawlerRuns)
     .set({
@@ -1412,10 +1477,6 @@ async function executeCrawl(
       updatedAt: new Date(),
     })
     .where(eq(crawlerTowns.id, town.id));
-
-  if (useBrowserMode) {
-    closeBrowser().catch(() => {});
-  }
 
   setTimeout(() => {
     activeCrawls.delete(run.id);

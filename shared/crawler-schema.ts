@@ -258,6 +258,7 @@ export const FAILURE_TYPES = [
   "captcha_blocked",
   "too_large",
   "unsupported_format",
+  "interstitial",
   "unknown",
 ] as const;
 
@@ -276,6 +277,7 @@ export const FAILURE_LABELS: Record<FailureType, string> = {
   captcha_blocked: "CAPTCHA/Bot Blocked",
   too_large: "File Too Large",
   unsupported_format: "Unsupported Format",
+  interstitial: "Interstitial Trap",
   unknown: "Unknown Error",
 };
 
@@ -292,6 +294,7 @@ export function classifyError(error: string | Error | unknown): FailureType {
   if (msg.includes("parse") || msg.includes("syntax") || msg.includes("unexpected token") || msg.includes("invalid json")) return "parse_error";
   if (msg.includes("download") || msg.includes("fetch") || msg.includes("econnreset") || msg.includes("socket hang up")) return "download_failed";
   if (msg.includes("captcha") || msg.includes("bot") || msg.includes("challenge") || msg.includes("cloudflare")) return "captcha_blocked";
+  if (msg.includes("interstitial")) return "interstitial";
   if (msg.includes("too large") || msg.includes("content-length") || msg.includes("payload too large")) return "too_large";
   if (msg.includes("unsupported") || msg.includes("format")) return "unsupported_format";
 
@@ -314,6 +317,9 @@ export interface CrawlRunSummary {
     blockedPages: number;
     blockedDocuments: number;
   };
+  fastLaneRequests?: number;
+  heavyLaneRequests?: number;
+  interstitialsBypassed?: number;
 }
 
 // ============================================================

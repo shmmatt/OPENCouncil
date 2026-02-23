@@ -1725,6 +1725,15 @@ function RunLogViewer({ runId }: { runId: string }) {
           <Badge variant="secondary">External: {summary.strategyStats?.external ?? 0}</Badge>
           <Badge variant="secondary">Iframe: {summary.strategyStats?.iframe ?? 0}</Badge>
           {summary?.detectedCms && <Badge variant="outline">CMS: {summary.detectedCms}</Badge>}
+          {(summary?.fastLaneRequests != null || summary?.heavyLaneRequests != null) && (
+            <>
+              <Badge variant="secondary" data-testid="badge-fast-lane">Fast Lane: {summary.fastLaneRequests ?? 0}</Badge>
+              <Badge variant="secondary" data-testid="badge-heavy-lane">Heavy Lane: {summary.heavyLaneRequests ?? 0}</Badge>
+            </>
+          )}
+          {summary?.interstitialsBypassed != null && summary.interstitialsBypassed > 0 && (
+            <Badge variant="outline" className="text-green-600 border-green-600 dark:text-green-400 dark:border-green-400" data-testid="badge-interstitials">Interstitials Bypassed: {summary.interstitialsBypassed}</Badge>
+          )}
           {summary?.protectionDetected && <Badge variant="outline" className="text-yellow-600 border-yellow-600 dark:text-yellow-400 dark:border-yellow-400">Protection: {summary.protectionDetected}</Badge>}
           {summary?.protectionStats?.detected && (
             <>

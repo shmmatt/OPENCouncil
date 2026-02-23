@@ -51,8 +51,8 @@ Document files are stored in Replit Object Storage, with paths starting `/replit
 A comprehensive crawler system is in place for data collection (`server/services/crawlerEngine.ts`). Features include:
 - **Multi-strategy discovery**: Sitemap parsing, known path probing, breadth-first crawling (depth 5), iframe/embed extraction, external link detection
 - **CMS-specific enhancements**: CivicPlus DocumentCenter/AgendaCenter deep crawl with pagination; WordPress Media API integration
-- **Bot protection fallbacks**: Rotating UA pool (8 browser variants), enriched Sec-Fetch/Sec-CH-UA headers matching real browsers, adaptive rate limiting per domain when protection detected, protection-aware retry with different UA on 403/429 responses
-- **Browser fallback** (`server/services/browserFetcher.ts`): Playwright + stealth plugin headless browser for sites that block HTTP fetch. Auto-detects Cloudflare challenges and attempts JS-based resolution. Cloudflare Managed/Turnstile challenges are detected but cannot be bypassed (reported as `cloudflareManaged` in crawl logs). Browser mode used for page fetching, CivicPlus deep crawl, and document downloads when protection detected.
+- **Hybrid Fast Lane / Heavy Lane architecture**: Default HTTP fetch ("Fast Lane") with enriched headers and rotating UA pool (8 browser variants). When a domain returns 403/429 or protection markers (CAPTCHA/Cloudflare/Turnstile), it's automatically flagged for the "Heavy Lane" — a third-party Web Scraping API (`server/services/scrapingApiClient.ts`). Once flagged, all subsequent requests for that domain route through the API. Requires `SCRAPING_API_KEY` env var (ZenRows/Scrapfly compatible).
+- **Interstitial detection and bypass**: Document downloads check Content-Type before saving — if a document URL returns `text/html` instead of the expected binary type, it's flagged as an interstitial trap. The "Extract & Toss" strategy renders the interstitial via the scraping API with JS execution, extracts the final download URL and session cookies, then performs the binary download locally with those cookies attached.
 - **Hardened fetching**: 3-attempt retry with backoff, www/non-www fallback, protection detection (Cloudflare/Akamai/CAPTCHA)
 - **Attribution tracking**: Each discovered document tracked with source page and discovery strategy via Map-based deduplication
 - **Log persistence**: Crawl logs stored in `crawler_runs.logs` jsonb column (up to 2000 entries), viewable via expandable run rows in admin UI
@@ -68,6 +68,7 @@ A comprehensive crawler system is in place for data collection (`server/services
 2.  **Neon PostgreSQL**: Provides the database with the pgvector extension for vector search.
 3.  **Google Fonts CDN**: Used for web fonts (Inter, JetBrains Mono).
 4.  **AWS Textract**: For production-grade asynchronous OCR processing.
+5.  **Web Scraping API** (ZenRows/Scrapfly): Heavy Lane for protected sites. Requires `SCRAPING_API_KEY` env var.
 
 ### Key NPM Packages
 *   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.
