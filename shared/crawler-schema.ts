@@ -165,7 +165,8 @@ export const crawlerRuns = pgTable("crawler_runs", {
   summary: jsonb("summary"), // Detailed stats, by category, etc.
   
   // Logs
-  logPath: text("log_path"), // Path to detailed log file
+  logPath: text("log_path"),
+  logs: jsonb("logs").$type<string[]>(),
 });
 
 /**

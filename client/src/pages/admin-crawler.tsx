@@ -1693,8 +1693,78 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function RunLogViewer({ runId }: { runId: string }) {
+  const { data, isLoading } = useQuery<{ logs: string[]; summary: any }>({
+    queryKey: ["/api/admin/crawler/runs", runId, "logs"],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/runs/${runId}/logs`);
+      if (!res.ok) throw new Error("Failed to fetch logs");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-4">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-sm text-muted-foreground">Loading logs...</span>
+      </div>
+    );
+  }
+
+  const logs = data?.logs || [];
+  const summary = data?.summary as any;
+
+  return (
+    <div className="space-y-3">
+      {summary?.strategyStats && (
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">Sitemap: {summary.strategyStats?.sitemap ?? 0}</Badge>
+          <Badge variant="secondary">Known Paths: {summary.strategyStats?.knownPaths ?? 0}</Badge>
+          <Badge variant="secondary">BFS: {summary.strategyStats?.breadthFirst ?? 0}</Badge>
+          <Badge variant="secondary">External: {summary.strategyStats?.external ?? 0}</Badge>
+          <Badge variant="secondary">Iframe: {summary.strategyStats?.iframe ?? 0}</Badge>
+          {summary?.detectedCms && <Badge variant="outline">CMS: {summary.detectedCms}</Badge>}
+          {summary?.protectionDetected && <Badge variant="outline" className="text-yellow-600 border-yellow-600">Protection: {summary.protectionDetected}</Badge>}
+        </div>
+      )}
+      {summary?.errors && Array.isArray(summary.errors) && summary.errors.length > 0 && (
+        <div className="text-sm text-red-600">
+          {summary.errors.length} error(s): {summary.errors.slice(0, 3).map((e: any) => e?.error || 'unknown').join(", ")}
+          {summary.errors.length > 3 && ` (+${summary.errors.length - 3} more)`}
+        </div>
+      )}
+      <ScrollArea className="h-64 border rounded-md">
+        <div className="p-2 font-mono text-xs space-y-0.5">
+          {logs.length === 0 ? (
+            <div className="text-muted-foreground italic">No logs available (run may predate log persistence)</div>
+          ) : (
+            logs.map((line, i) => (
+              <div 
+                key={i} 
+                className={`${
+                  line.includes("FAIL") || line.includes("ERROR") 
+                    ? "text-red-600" 
+                    : line.includes("---") 
+                    ? "font-semibold text-foreground" 
+                    : line.includes("OK") 
+                    ? "text-green-600"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {line}
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
 function RunHistoryGlobal() {
   const [page, setPage] = useState(0);
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const limit = 50;
 
@@ -1754,22 +1824,36 @@ function RunHistoryGlobal() {
                 ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
                 : null;
               return (
-                <TableRow key={run.id} data-testid={`row-run-${run.id}`}>
-                  <TableCell className="font-medium">{townMap.get(run.townId) || run.townId}</TableCell>
-                  <TableCell className="text-xs">{formatDateShort(run.startedAt)}</TableCell>
-                  <TableCell><Badge variant="secondary">{run.mode}</Badge></TableCell>
-                  <TableCell className="text-xs">{run.triggerType}</TableCell>
-                  <TableCell>{getRunStatusBadge(run.status)}</TableCell>
-                  <TableCell>{run.pagesVisited}</TableCell>
-                  <TableCell>{run.documentsDiscovered}</TableCell>
-                  <TableCell className="text-green-600 font-medium">{run.documentsUploaded}</TableCell>
-                  <TableCell className={run.documentsFailed > 0 ? "text-red-600" : ""}>
-                    {run.documentsFailed}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
-                  </TableCell>
-                </TableRow>
+                <>
+                  <TableRow 
+                    key={run.id} 
+                    data-testid={`row-run-${run.id}`} 
+                    className="cursor-pointer hover-elevate"
+                    onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
+                  >
+                    <TableCell className="font-medium">{townMap.get(run.townId) || run.townId}</TableCell>
+                    <TableCell className="text-xs">{formatDateShort(run.startedAt)}</TableCell>
+                    <TableCell><Badge variant="secondary">{run.mode}</Badge></TableCell>
+                    <TableCell className="text-xs">{run.triggerType}</TableCell>
+                    <TableCell>{getRunStatusBadge(run.status)}</TableCell>
+                    <TableCell>{run.pagesVisited}</TableCell>
+                    <TableCell>{run.documentsDiscovered}</TableCell>
+                    <TableCell className="text-green-600 font-medium">{run.documentsUploaded}</TableCell>
+                    <TableCell className={run.documentsFailed > 0 ? "text-red-600" : ""}>
+                      {run.documentsFailed}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
+                    </TableCell>
+                  </TableRow>
+                  {expandedRun === run.id && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="p-4 bg-muted/30">
+                        <RunLogViewer runId={run.id} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               );
             })}
           </TableBody>
@@ -2338,6 +2422,160 @@ function StateSourcesDashboard({
   );
 }
 
+function CrawlAnalyticsDashboard() {
+  const { data: towns, isLoading: townsLoading } = useQuery<TownOverview[]>({
+    queryKey: ["/api/admin/crawler/towns"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/towns");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: runsData, isLoading: runsLoading } = useQuery<{ runs: CrawlerRun[]; total: number }>({
+    queryKey: ["/api/admin/crawler/runs", null, 0],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/runs?limit=100&offset=0`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  if (townsLoading || runsLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const allTowns = towns || [];
+  const allRuns = runsData?.runs || [];
+  const completedRuns = allRuns.filter(r => r.status === 'completed');
+
+  const totalDocs = allTowns.reduce((sum, t) => {
+    const total = Object.values(t.documentsByStatus).reduce((a, b) => a + b, 0);
+    return sum + total;
+  }, 0);
+  const totalUploaded = allTowns.reduce((sum, t) => sum + (t.documentsByStatus["uploaded"] || 0), 0);
+  const totalFailed = allTowns.reduce((sum, t) => sum + (t.documentsByStatus["failed"] || 0), 0);
+
+  const townsByDocs = [...allTowns].sort((a, b) => {
+    const aTotal = Object.values(a.documentsByStatus).reduce((s, v) => s + v, 0);
+    const bTotal = Object.values(b.documentsByStatus).reduce((s, v) => s + v, 0);
+    return bTotal - aTotal;
+  });
+
+  const cmsCounts: Record<string, number> = {};
+  allTowns.forEach(t => {
+    const cms = t.cms || "Unknown";
+    cmsCounts[cms] = (cmsCounts[cms] || 0) + 1;
+  });
+
+  const strategyTotals = { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0 };
+  completedRuns.forEach(r => {
+    const s = (r.summary as any)?.strategyStats;
+    if (s) {
+      strategyTotals.sitemap += s.sitemap || 0;
+      strategyTotals.knownPaths += s.knownPaths || 0;
+      strategyTotals.breadthFirst += s.breadthFirst || 0;
+      strategyTotals.external += s.external || 0;
+      strategyTotals.iframe += s.iframe || 0;
+    }
+  });
+  const totalByStrategy = Object.values(strategyTotals).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Document Coverage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold" data-testid="text-total-docs">{formatNumber(totalDocs)}</div>
+            <div className="text-sm text-muted-foreground mt-1">
+              {formatNumber(totalUploaded)} uploaded, {formatNumber(totalFailed)} failed
+            </div>
+            <Progress value={totalDocs > 0 ? (totalUploaded / totalDocs) * 100 : 0} className="mt-2" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">CMS Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {Object.entries(cmsCounts).sort((a, b) => b[1] - a[1]).map(([cms, count]) => (
+                <div key={cms} className="flex items-center justify-between gap-2">
+                  <span className="text-sm">{cms}</span>
+                  <Badge variant="secondary">{count}</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Discovery Strategy</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {Object.entries(strategyTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([strategy, count]) => (
+                <div key={strategy} className="flex items-center justify-between gap-2">
+                  <span className="text-sm capitalize">{strategy.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{formatNumber(count)}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {totalByStrategy > 0 ? `${Math.round((count / totalByStrategy) * 100)}%` : '0%'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Documents Per Town</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {townsByDocs.map(town => {
+              const total = Object.values(town.documentsByStatus).reduce((s, v) => s + v, 0);
+              const uploaded = town.documentsByStatus["uploaded"] || 0;
+              const maxDocs = Object.values(townsByDocs[0]?.documentsByStatus || {}).reduce((s, v) => s + v, 0);
+              return (
+                <div key={town.id} className="flex items-center gap-3" data-testid={`analytics-town-${town.slug}`}>
+                  <span className="text-sm w-32 truncate">{town.name}</span>
+                  <div className="flex-1 relative">
+                    <div className="h-5 bg-muted rounded-md overflow-hidden">
+                      <div 
+                        className="h-full bg-green-500/70 rounded-md" 
+                        style={{ width: `${maxDocs > 0 ? (uploaded / maxDocs) * 100 : 0}%` }} 
+                      />
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground w-20 text-right">
+                    {formatNumber(uploaded)}/{formatNumber(total)}
+                  </span>
+                  <Badge variant="secondary" className="text-xs">
+                    {town.cms || "?"}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminCrawler() {
   const [, setLocation] = useLocation();
   const [selectedTown, setSelectedTown] = useState<TownOverview | null>(null);
@@ -2377,6 +2615,24 @@ export default function AdminCrawler() {
     },
   });
 
+  const triggerAllCrawls = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/trigger-all", {
+        method: "POST",
+        body: JSON.stringify({ mode: "full" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Batch Crawl", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b">
@@ -2397,6 +2653,20 @@ export default function AdminCrawler() {
                   {stats?.activeRuns} active
                 </Badge>
               )}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => triggerAllCrawls.mutate()}
+                disabled={triggerAllCrawls.isPending || (stats?.activeRuns || 0) > 3}
+                data-testid="button-crawl-all-towns"
+              >
+                {triggerAllCrawls.isPending ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Play className="w-3 h-3 mr-1" />
+                )}
+                Crawl All Towns
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -2439,6 +2709,9 @@ export default function AdminCrawler() {
               <TabsTrigger value="runs" data-testid="tab-all-runs">
                 <Activity className="w-3 h-3 mr-1" />All Runs
               </TabsTrigger>
+              <TabsTrigger value="analytics" data-testid="tab-analytics">
+                <BarChart3 className="w-3 h-3 mr-1" />Analytics
+              </TabsTrigger>
               <TabsTrigger value="state-sources" data-testid="tab-state-sources">
                 <Globe className="w-3 h-3 mr-1" />State Sources
               </TabsTrigger>
@@ -2450,6 +2723,10 @@ export default function AdminCrawler() {
 
             <TabsContent value="runs">
               <RunHistoryGlobal />
+            </TabsContent>
+
+            <TabsContent value="analytics">
+              <CrawlAnalyticsDashboard />
             </TabsContent>
 
             <TabsContent value="state-sources">

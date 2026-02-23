@@ -325,21 +325,66 @@ function getCivicPlusPaginationUrls(html: string, pageUrl: string): string[] {
   if (maxPage > 1) {
     const basePageUrl = pageUrl.replace(/[?&]page=\d+/, '');
     const separator = basePageUrl.includes('?') ? '&' : '?';
-    for (let i = 2; i <= maxPage; i++) {
+    for (let i = 2; i <= Math.min(maxPage, 50); i++) {
       urls.push(`${basePageUrl}${separator}page=${i}`);
     }
   }
   return urls;
 }
 
-async function fetchPage(url: string, signal: AbortSignal, timeout = 15000): Promise<{ html: string; status: number; headers: Record<string, string> } | null> {
+function getCivicPlusDeepPaths(baseUrl: string): string[] {
+  const paths: string[] = [];
+  for (let i = 1; i <= 30; i++) {
+    paths.push(`${baseUrl}/documentcenter/index/${i}`);
+  }
+  for (let i = 1; i <= 20; i++) {
+    paths.push(`${baseUrl}/agendacenter/index/${i}`);
+  }
+  paths.push(`${baseUrl}/documentcenter/index/0`);
+  paths.push(`${baseUrl}/agendacenter/index/0`);
+  return paths;
+}
+
+async function probeWordPressMediaApi(baseUrl: string, signal: AbortSignal): Promise<string[]> {
+  const docs: string[] = [];
+  const perPage = 100;
+  for (let page = 1; page <= 10; page++) {
+    if (signal.aborted) break;
+    try {
+      const apiUrl = `${baseUrl}/wp-json/wp/v2/media?per_page=${perPage}&page=${page}&media_type=application`;
+      const response = await fetch(apiUrl, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) break;
+      const items = await response.json() as Array<{ source_url?: string; mime_type?: string }>;
+      if (!Array.isArray(items) || items.length === 0) break;
+      for (const item of items) {
+        if (item.source_url) {
+          docs.push(item.source_url);
+        }
+      }
+      if (items.length < perPage) break;
+    } catch {
+      break;
+    }
+  }
+  return docs;
+}
+
+interface FetchPageResult {
+  html: string;
+  status: number;
+  headers: Record<string, string>;
+  finalUrl?: string;
+}
+
+async function fetchPageOnce(url: string, signal: AbortSignal, timeout = 15000): Promise<FetchPageResult | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const combinedSignal = signal.aborted ? signal : controller.signal;
     if (signal.aborted) throw new Error('Aborted');
-
     signal.addEventListener('abort', () => controller.abort(), { once: true });
 
     const response = await fetch(url, {
@@ -348,25 +393,57 @@ async function fetchPage(url: string, signal: AbortSignal, timeout = 15000): Pro
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
         'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
       },
-      signal: combinedSignal,
+      signal: controller.signal,
       redirect: 'follow',
     });
     clearTimeout(timeoutId);
 
     const headers: Record<string, string> = {};
     response.headers.forEach((v, k) => { headers[k] = v; });
+    const finalUrl = response.url || url;
 
-    if (!response.ok) return { html: '', status: response.status, headers };
+    if (!response.ok) return { html: '', status: response.status, headers, finalUrl };
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
-      return { html: '', status: response.status, headers };
+      return { html: '', status: response.status, headers, finalUrl };
     }
     const html = await response.text();
-    return { html, status: response.status, headers };
+    return { html, status: response.status, headers, finalUrl };
   } catch {
     return null;
   }
+}
+
+async function fetchPage(url: string, signal: AbortSignal, timeout = 15000): Promise<FetchPageResult | null> {
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    if (signal.aborted) return null;
+    const result = await fetchPageOnce(url, signal, timeout);
+    if (result && result.status === 200 && result.html.length > 0) return result;
+    if (result && result.status >= 400 && result.status < 500 && result.status !== 429) {
+      return result;
+    }
+    if (attempt < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
+  return await fetchPageOnce(url, signal, timeout);
+}
+
+async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult | null> {
+  let result = await fetchPage(baseUrl, signal);
+  if (result && result.status === 200 && result.html.length > 100) return result;
+
+  const urlObj = new URL(baseUrl);
+  const altUrl = urlObj.hostname.startsWith('www.')
+    ? baseUrl.replace('://www.', '://')
+    : baseUrl.replace('://', '://www.');
+  const altResult = await fetchPage(altUrl, signal);
+  if (altResult && altResult.status === 200 && altResult.html.length > 100) return altResult;
+
+  return result;
 }
 
 async function fetchDocument(url: string, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string; size: number } | null> {
@@ -404,8 +481,8 @@ async function fetchDocument(url: string, signal: AbortSignal): Promise<{ buffer
 function addLog(progress: CrawlProgress, message: string) {
   const timestamp = new Date().toISOString().substring(11, 19);
   progress.log.push(`[${timestamp}] ${message}`);
-  if (progress.log.length > 500) {
-    progress.log = progress.log.slice(-400);
+  if (progress.log.length > 2000) {
+    progress.log = progress.log.slice(-1500);
   }
 }
 
@@ -507,7 +584,7 @@ async function executeCrawl(
 ) {
   const { progress, abortController } = job;
   const signal = abortController.signal;
-  const maxPages = options.maxPages || town.maxPages || 200;
+  const maxPages = options.maxPages || town.maxPages || 500;
   const baseUrl = town.url.replace(/\/$/, '');
   const baseHostname = new URL(baseUrl).hostname;
 
@@ -517,7 +594,7 @@ async function executeCrawl(
   addLog(progress, `Max pages: ${maxPages}, Mode: ${options.mode || 'full'}`);
 
   const visited = new Set<string>();
-  const docsSeen = new Set<string>();
+  const docsSeen = new Map<string, { foundOnPage: string; strategy: keyof StrategyStats }>();
   const externalDocs: FoundDocument[] = [];
   const queue: Array<{ url: string; depth: number; priority: number }> = [];
 
@@ -536,11 +613,14 @@ async function executeCrawl(
   let detectedCms: CmsType = (town.cms as CmsType) || null;
 
   addLog(progress, '--- Phase 1: Homepage & CMS Detection ---');
-  const homepage = await fetchPage(baseUrl, signal);
+  const homepage = await fetchHomepage(baseUrl, signal);
   if (!homepage || !homepage.html) {
-    addLog(progress, `WARNING: Homepage fetch failed for ${baseUrl}. Site may be blocking requests or down.`);
+    addLog(progress, `WARNING: Homepage fetch failed for ${baseUrl} (status: ${homepage?.status || 'timeout'}). Site may be blocking requests or down.`);
   }
   if (homepage && homepage.html) {
+    if (homepage.finalUrl && homepage.finalUrl !== baseUrl && homepage.finalUrl !== baseUrl + '/') {
+      addLog(progress, `Homepage redirected to: ${homepage.finalUrl}`);
+    }
     const protection = detectProtection(homepage.html);
     if (protection) {
       progress.protectionDetected = protection;
@@ -572,16 +652,19 @@ async function executeCrawl(
     progress.pagesVisited++;
 
     const homeLinks = extractLinksFromHtml(homepage.html, baseUrl);
+    let homeDocsFound = 0;
     for (const link of homeLinks) {
       if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
-        docsSeen.add(link.href);
+        docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'breadthFirst' });
         stats.breadthFirst++;
         progress.documentsDiscovered++;
+        homeDocsFound++;
       } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
-        docsSeen.add(link.href);
+        docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'external' });
         externalDocs.push({ url: link.href, linkText: link.text, foundOnPage: baseUrl, strategy: 'external' });
         stats.external++;
         progress.documentsDiscovered++;
+        homeDocsFound++;
       } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
         const prio = isHighPriorityUrl(link.href) ? 1 : 3;
         queue.push({ url: link.href, depth: 1, priority: prio });
@@ -591,11 +674,13 @@ async function executeCrawl(
     const embeds = extractIframeAndEmbedSrcs(homepage.html, baseUrl);
     for (const embedUrl of embeds) {
       if (isDocumentUrl(embedUrl) && !docsSeen.has(embedUrl)) {
-        docsSeen.add(embedUrl);
+        docsSeen.set(embedUrl, { foundOnPage: baseUrl, strategy: 'iframe' });
         stats.iframe++;
         progress.documentsDiscovered++;
+        homeDocsFound++;
       }
     }
+    addLog(progress, `Homepage: ${homeLinks.length} links, ${homeDocsFound} docs, ${queue.length} nav pages queued`);
 
     if (detectedCms === 'CivicPlus') {
       const paginationUrls = getCivicPlusPaginationUrls(homepage.html, baseUrl);
@@ -627,7 +712,7 @@ async function executeCrawl(
         if (sitemapUrlsSeen.has(u)) continue;
         sitemapUrlsSeen.add(u);
         if (isDocumentUrl(u) && !docsSeen.has(u)) {
-          docsSeen.add(u);
+          docsSeen.set(u, { foundOnPage: smUrl, strategy: 'sitemap' });
           stats.sitemap++;
           sitemapDocCount++;
           progress.documentsDiscovered++;
@@ -642,10 +727,12 @@ async function executeCrawl(
   addLog(progress, `Sitemap results: ${sitemapDocCount} docs, ${sitemapNavCount} pages queued`);
 
   addLog(progress, '--- Phase 3: Known Path Probing ---');
+  const phaseStart3 = Date.now();
   const knownPaths = getKnownPathsForCms(detectedCms);
   const customPaths = town.customPaths || [];
   const allPaths = Array.from(new Set([...knownPaths, ...customPaths]));
   let validPaths = 0;
+  let knownPathDocsFound = 0;
 
   for (const p of allPaths) {
     if (signal.aborted) break;
@@ -655,20 +742,24 @@ async function executeCrawl(
     const resp = await fetchPage(fullUrl, signal, 8000);
     if (resp && resp.status === 200 && resp.html.length > 500) {
       validPaths++;
-      stats.knownPaths++;
       visited.add(fullUrl);
       progress.pagesVisited++;
 
       const links = extractLinksFromHtml(resp.html, fullUrl);
+      let pathDocsCount = 0;
       for (const link of links) {
         if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
-          docsSeen.add(link.href);
+          docsSeen.set(link.href, { foundOnPage: fullUrl, strategy: 'knownPaths' });
+          stats.knownPaths++;
           progress.documentsDiscovered++;
+          pathDocsCount++;
+          knownPathDocsFound++;
         } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
-          docsSeen.add(link.href);
+          docsSeen.set(link.href, { foundOnPage: fullUrl, strategy: 'external' });
           externalDocs.push({ url: link.href, linkText: link.text, foundOnPage: fullUrl, strategy: 'external' });
           stats.external++;
           progress.documentsDiscovered++;
+          pathDocsCount++;
         } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
           const prio = isHighPriorityUrl(link.href) ? 1 : 3;
           queue.push({ url: link.href, depth: 1, priority: prio });
@@ -678,9 +769,10 @@ async function executeCrawl(
       const embeds = extractIframeAndEmbedSrcs(resp.html, fullUrl);
       for (const embedUrl of embeds) {
         if (isDocumentUrl(embedUrl) && !docsSeen.has(embedUrl)) {
-          docsSeen.add(embedUrl);
+          docsSeen.set(embedUrl, { foundOnPage: fullUrl, strategy: 'iframe' });
           stats.iframe++;
           progress.documentsDiscovered++;
+          pathDocsCount++;
         }
       }
 
@@ -690,17 +782,68 @@ async function executeCrawl(
           if (!visited.has(pu)) queue.push({ url: pu, depth: 1, priority: 1 });
         }
       }
+
+      if (pathDocsCount > 0) {
+        addLog(progress, `KnownPath ${p}: ${pathDocsCount} docs found`);
+      }
     }
 
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 150));
   }
-  addLog(progress, `Known paths: ${validPaths} valid out of ${allPaths.length} probed, ${docsSeen.size} total docs so far`);
+  addLog(progress, `Known paths: ${validPaths} valid out of ${allPaths.length} probed, ${knownPathDocsFound} docs found (${Math.round((Date.now() - phaseStart3) / 1000)}s)`);
+
+  if (detectedCms === 'CivicPlus' && !signal.aborted) {
+    addLog(progress, '--- Phase 3b: CivicPlus Deep Crawl ---');
+    const deepPaths = getCivicPlusDeepPaths(baseUrl);
+    let deepDocsFound = 0;
+    let deepValidPaths = 0;
+    for (const dp of deepPaths) {
+      if (signal.aborted) break;
+      if (visited.has(dp)) continue;
+      const resp = await fetchPage(dp, signal, 8000);
+      if (resp && resp.status === 200 && resp.html.length > 500) {
+        deepValidPaths++;
+        visited.add(dp);
+        progress.pagesVisited++;
+        const links = extractLinksFromHtml(resp.html, dp);
+        for (const link of links) {
+          if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
+            docsSeen.set(link.href, { foundOnPage: dp, strategy: 'knownPaths' });
+            stats.knownPaths++;
+            progress.documentsDiscovered++;
+            deepDocsFound++;
+          }
+        }
+        const paginationUrls = getCivicPlusPaginationUrls(resp.html, dp);
+        for (const pu of paginationUrls) {
+          if (!visited.has(pu)) queue.push({ url: pu, depth: 1, priority: 1 });
+        }
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+    addLog(progress, `CivicPlus deep crawl: ${deepValidPaths} valid pages, ${deepDocsFound} docs found`);
+  }
+
+  if (detectedCms === 'WordPress' && !signal.aborted) {
+    addLog(progress, '--- Phase 3b: WordPress Media API ---');
+    const wpDocs = await probeWordPressMediaApi(baseUrl, signal);
+    let wpNewDocs = 0;
+    for (const wpUrl of wpDocs) {
+      if (!docsSeen.has(wpUrl) && isDocumentUrl(wpUrl)) {
+        docsSeen.set(wpUrl, { foundOnPage: `${baseUrl}/wp-json/wp/v2/media`, strategy: 'sitemap' });
+        stats.sitemap++;
+        progress.documentsDiscovered++;
+        wpNewDocs++;
+      }
+    }
+    addLog(progress, `WordPress Media API: ${wpDocs.length} media items found, ${wpNewDocs} new docs`);
+  }
 
   addLog(progress, '--- Phase 4: Breadth-First Crawl ---');
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
   let consecutiveEmptyPages = 0;
-  const MAX_CONSECUTIVE_EMPTY = 30;
+  const MAX_CONSECUTIVE_EMPTY = Math.max(40, Math.min(queue.length, 80));
 
   while (queue.length > 0 && progress.pagesVisited < maxPages) {
     if (signal.aborted) {
@@ -742,13 +885,13 @@ async function executeCrawl(
 
     for (const link of links) {
       if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
-        docsSeen.add(link.href);
+        docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'breadthFirst' });
         pageDocsFound++;
         stats.breadthFirst++;
         progress.documentsDiscovered++;
         summary.documentsDiscovered = progress.documentsDiscovered;
       } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
-        docsSeen.add(link.href);
+        docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'external' });
         externalDocs.push({ url: link.href, linkText: link.text, foundOnPage: pageUrl, strategy: 'external' });
         stats.external++;
         pageDocsFound++;
@@ -756,8 +899,8 @@ async function executeCrawl(
         summary.documentsDiscovered = progress.documentsDiscovered;
       }
 
-      if (depth < 4 && !visited.has(link.href) && isNavigationLink(link.href, baseHostname)) {
-        const prio = isHighPriorityUrl(link.href) ? Math.min(depth + 1, 4) : depth + 3;
+      if (depth < 5 && !visited.has(link.href) && isNavigationLink(link.href, baseHostname)) {
+        const prio = isHighPriorityUrl(link.href) ? Math.min(depth + 1, 5) : depth + 3;
         queue.push({ url: link.href, depth: depth + 1, priority: prio });
       }
     }
@@ -765,7 +908,7 @@ async function executeCrawl(
     const embeds = extractIframeAndEmbedSrcs(page.html, pageUrl);
     for (const embedUrl of embeds) {
       if (isDocumentUrl(embedUrl) && !docsSeen.has(embedUrl)) {
-        docsSeen.add(embedUrl);
+        docsSeen.set(embedUrl, { foundOnPage: pageUrl, strategy: 'iframe' });
         stats.iframe++;
         pageDocsFound++;
         progress.documentsDiscovered++;
@@ -791,16 +934,16 @@ async function executeCrawl(
       await updateRunProgress(run.id, progress);
     }
 
-    const delay = 300 + Math.random() * 700;
+    const delay = 200 + Math.random() * 500;
     await new Promise(r => setTimeout(r, delay));
   }
 
   addLog(progress, `--- Phase 5: Download ${docsSeen.size} documents ---`);
   addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}`);
 
-  const docsToDownload = Array.from(docsSeen);
+  const docsToDownload = Array.from(docsSeen.entries());
   let downloadIndex = 0;
-  for (const docUrl of docsToDownload) {
+  for (const [docUrl, docInfo] of docsToDownload) {
     if (signal.aborted) break;
     downloadIndex++;
 
@@ -811,7 +954,7 @@ async function executeCrawl(
         urlHash: hashUrl(docUrl),
         filename: extractFilename(docUrl),
         status: 'discovered',
-        discoveredFrom: externalDocs.find(d => d.url === docUrl)?.foundOnPage || baseUrl,
+        discoveredFrom: docInfo.foundOnPage,
       });
       addLog(progress, `EXTERNAL (recorded): ${docUrl.substring(0, 80)}`);
       continue;
@@ -824,7 +967,7 @@ async function executeCrawl(
       town: town.slug,
       url: docUrl,
       filename,
-      discoveredFrom: baseUrl,
+      discoveredFrom: docInfo.foundOnPage,
     });
 
     summary.byCategory[metadata.category] = (summary.byCategory[metadata.category] || 0) + 1;
@@ -855,7 +998,7 @@ async function executeCrawl(
           year: metadata.year,
           s3Key,
           status: 'uploaded',
-          discoveredFrom: baseUrl,
+          discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
         progress.duplicatesSkipped++;
@@ -878,7 +1021,7 @@ async function executeCrawl(
           sizeBytes: doc.size,
           mimeType: doc.contentType,
           status: 'uploaded',
-          discoveredFrom: baseUrl,
+          discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
         progress.documentsDownloaded++;
@@ -909,7 +1052,7 @@ async function executeCrawl(
         year: metadata.year,
         status: 'failed',
         errorMessage: e.message,
-        discoveredFrom: baseUrl,
+        discoveredFrom: docInfo.foundOnPage,
       });
 
       if (downloadIndex % 10 === 0) {
@@ -948,6 +1091,7 @@ async function executeCrawl(
       documentsUploaded: progress.documentsDownloaded,
       documentsFailed: progress.documentsFailed,
       summary,
+      logs: progress.log || [],
     })
     .where(eq(crawlerRuns.id, run.id));
 

@@ -48,7 +48,16 @@ The system supports two OCR providers:
 Document files are stored in Replit Object Storage, with paths starting `/replit-objstore`. Legacy local paths are supported for backward compatibility.
 
 ### Crawler / Data Collection
-A comprehensive crawler system is in place for data collection. This includes an in-house server-side crawler engine that handles discovery and download, supports state source crawling, and features an admin panel for managing crawl jobs, viewing town status, and triggering crawls. It includes structured failure tracking and document deduplication.
+A comprehensive crawler system is in place for data collection (`server/services/crawlerEngine.ts`). Features include:
+- **Multi-strategy discovery**: Sitemap parsing, known path probing, breadth-first crawling (depth 5), iframe/embed extraction, external link detection
+- **CMS-specific enhancements**: CivicPlus DocumentCenter/AgendaCenter deep crawl with pagination; WordPress Media API integration
+- **Hardened fetching**: 3-attempt retry with backoff, www/non-www fallback, protection detection (Cloudflare/Akamai/CAPTCHA)
+- **Attribution tracking**: Each discovered document tracked with source page and discovery strategy via Map-based deduplication
+- **Log persistence**: Crawl logs stored in `crawler_runs.logs` jsonb column (up to 2000 entries), viewable via expandable run rows in admin UI
+- **Batch operations**: "Crawl All Towns" button triggers all active towns with staggered start
+- **Analytics dashboard**: Document coverage, CMS distribution, strategy breakdown, per-town bar charts
+- **Admin panel**: `client/src/pages/admin-crawler.tsx` with Towns, Runs (with log viewer), Analytics, and State Sources tabs
+- **State source crawling**: Separate pipeline for NH state agency documents with configurable target paths and link patterns
 
 ## External Dependencies
 

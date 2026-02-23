@@ -114,6 +114,16 @@ router.get("/runs/:id", async (req, res) => {
   }
 });
 
+router.get("/runs/:id/logs", async (req, res) => {
+  try {
+    const run = await crawlerStorage.getCrawlerRunById(req.params.id);
+    if (!run) return res.status(404).json({ message: "Run not found" });
+    res.json({ logs: run.logs || [], summary: run.summary });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.get("/documents", async (req, res) => {
   try {
     const { townId, status, search } = req.query;
@@ -194,6 +204,59 @@ router.post("/trigger", async (req, res) => {
     res.json({
       message: `Crawl started for ${town.name}`,
       runId,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/trigger-all", async (req, res) => {
+  try {
+    const { maxPages, mode = 'full', delayBetweenTowns = 5000 } = req.body || {};
+    const towns = await crawlerStorage.getCrawlerTowns();
+    const activeTowns = towns.filter(t => t.status === 'active');
+    
+    if (activeTowns.length === 0) {
+      return res.json({ message: "No active towns to crawl", started: 0 });
+    }
+
+    const activeCrawls = getActiveCrawls();
+    const results: Array<{ townId: string; townName: string; runId?: string; status: string }> = [];
+
+    for (const town of activeTowns) {
+      const existing = activeCrawls.find(c => c.townId === town.id && c.status === 'running');
+      if (existing) {
+        results.push({ townId: town.id, townName: town.name, runId: existing.runId, status: 'already_running' });
+        continue;
+      }
+
+      try {
+        const run = await crawlerStorage.createCrawlerRun(
+          town.id,
+          mode,
+          "manual",
+          maxPages || town.maxPages || undefined
+        );
+        const runId = await startCrawl(town, run, {
+          maxPages: maxPages || town.maxPages || undefined,
+          mode,
+        });
+        results.push({ townId: town.id, townName: town.name, runId, status: 'started' });
+        
+        if (delayBetweenTowns > 0) {
+          await new Promise(r => setTimeout(r, delayBetweenTowns));
+        }
+      } catch (err: any) {
+        results.push({ townId: town.id, townName: town.name, status: 'error: ' + err.message });
+      }
+    }
+
+    const started = results.filter(r => r.status === 'started').length;
+    res.json({ 
+      message: `Started ${started} crawls out of ${activeTowns.length} active towns`,
+      results,
+      started,
+      total: activeTowns.length,
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
