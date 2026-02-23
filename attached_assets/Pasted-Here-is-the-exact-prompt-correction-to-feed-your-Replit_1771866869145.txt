@@ -1,0 +1,23 @@
+Here is the exact prompt correction to feed your Replit agent. This will ensure it capitalizes on its great detective work without crashing your database with corrupted PDF files.
+
+---
+
+### Copy and Paste the text below to your Replit Agent:
+
+> "Your detective work on the CivicPlus `/node/` structure and the `/minutes/minutes-NNN` redirect chains is excellent. The plan is approved, but we must make one critical adjustment to **T001** to avoid the 'Heavy Lane Binary Trap'.
+> **Correction to T001:**
+> We absolutely cannot let the Scraping API (Heavy Lane) download the actual PDF binaries. Passing large 15MB binaries through proxy networks causes timeouts and often corrupts the file encoding.
+> We need to treat these `/minutes-{NNN}` and `/agenda-{NNN}` URLs exactly like the 'Extract & Toss' interstitial logic we built previously:
+> 1. When the crawler identifies one of these redirect URLs, pass it to the Scraping API (Heavy Lane).
+> 2. The API's *only* job is to follow the redirect and capture the `Zr-Final-Url` (e.g., `/sites/g/files/...pdf`) along with any session cookies. Do not let the API download the file body if possible, or simply ignore the body it returns.
+> 3. Once the Final URL and cookies are extracted, pass them back to our local Replit `fetch` (Fast Lane) to download the actual binary buffer and save it to the database.
+> 
+> 
+> **Updated T001 Acceptance Criteria:** > CivicPlus redirect URLs are classified as documents. The Heavy Lane resolves the redirect to find the true `.pdf` path and cookies, but the local Replit server performs the actual binary file download.
+> Acknowledge this change to T001 and proceed with executing the tasks."
+
+---
+
+Once the agent implements this, your crawler will be perfectly tuned to slice through the Ossipee site. It will use the WAF-bypassing API just to unlock the door, and use your fast, free Replit bandwidth to carry out the heavy boxes of documents.
+
+Let me know how the agent responds or if it needs the specific ZenRows syntax for extracting those redirect headers!
