@@ -1,0 +1,122 @@
+Gemini said
+You have just hit the fundamental reality of building a data pipeline for municipal governments. You are absolutely right: the "one-size-fits-all" crawler is a myth.
+
+Municipalities patch their websites together over decades. You have towns running modern WordPress, towns using rigid enterprise systems like CivicPlus, and towns where the clerk just got frustrated and linked a public Google Drive folder. If you try to write one massive script to handle all of these, your Replit codebase will turn into an unmaintainable nightmare of if/else statements, and the agent will forget the nuances.
+
+To get that 95% coverage, you must move to a Configuration-Driven Crawler Architecture.
+
+Here is how you build town-specific capabilities without breaking your core engine:
+
+1. The "Town Profile" Concept
+Instead of the crawler guessing how to navigate a site, it should read a specific "instruction manual" for each town before it starts. You already have a database table for towns; you need to expand it into a robust JSON configuration object.
+
+A Town Profile should dictate the crawler's behavior:
+
+cms_type: (WordPress, CivicPlus, Revize, Custom) — This tells the crawler which generic rulebook to start with.
+
+protection_level: (Standard, Heavy_Lane, Manual) — Dictates whether to use Fast Lane or route immediately to ZenRows.
+
+custom_path_rules: An array of regex patterns. For Ossipee, this is where you store the rule: "If you see /minutes-NNN, send it to ZenRows to resolve the redirect."
+
+external_repositories: A critical addition for towns like Conway. This holds URLs or IDs for third-party document hosts like Google Drive or Dropbox.
+
+2. Solving the Conway Google Drive Curveball
+Conway's setup is a perfect example of why bespoke rules are necessary.
+
+If your crawler tries to visit a Google Drive link, it will fail. Google Drive is not a static webpage; it is a complex, heavily protected React application. Standard bots cannot "click" through Google Drive folders to find PDFs.
+
+The Fix: You don't scrape Google Drive; you use their API.
+
+In Conway's Town Profile, you add an external_repositories entry with the public Google Drive Folder ID.
+
+You build a specialized fetchFromGoogleDrive module in Replit.
+
+Using a free Google Cloud Service Account, your Replit backend connects directly to the Google Drive API, passes the public Folder ID, and instantly downloads a clean list of every PDF and its metadata, completely bypassing the need to "crawl" the visual interface.
+
+3. Modularizing the Replit Code
+To keep the Replit agent from getting confused, the crawler engine needs to be broken into "Handlers."
+
+civicplusHandler.ts (Knows about /node/ paths and redirects)
+
+wordpressHandler.ts (Knows how to read standard category tags)
+
+driveHandler.ts (Talks to the Google API)
+
+When a crawl triggers for Conway, the engine looks at Conway's profile, loads the driveHandler for the external documents, and uses the civicplusHandler for the main site. When it runs Ossipee, it loads the civicplusHandler and the custom_path_rules for the WAF bypass.
+
+The Strategy Moving Forward
+By abstracting the quirks of each town into a database configuration rather than hardcoding them into your crawler logic, you create a system where you can tweak Conway's rules from your admin panel without accidentally breaking Ossipee's WAF bypass.
+
+Would you like me to draft the prompt for the Replit agent to design the "Town Profile" JSON schema and build the specialized Google Drive API handler for Conway?
+
+You said
+Yes
+
+Gemini said
+This is exactly the right evolution for your platform. Moving to a modular, configuration-driven architecture is what separates a brittle script from a robust data pipeline.
+
+By giving each town its own "Profile," your crawler engine becomes a smart dispatcher: it looks at the town, reads the instructions, picks the right tool (ZenRows, Standard Fetch, or Google Drive API), and executes.
+
+Here is the exact prompt to feed your Replit agent to build the Town Profile JSON schema and implement the specialized Google Drive handler for Conway.
+
+Copy and Paste the text below to your Replit Agent:
+Context & Objective:
+We are upgrading our crawler to a Configuration-Driven Architecture. Municipalities have highly bespoke edge cases (like Conway hosting minutes on Google Drive instead of their main website). A "one-size-fits-all" crawler loop is becoming unmaintainable.
+
+We need to implement a JSON-based crawler_config for each town and build modular "Handlers." Our first handler will be a native Google Drive API extractor to bypass web-scraping Google Drive entirely.
+
+Please execute the following tasks in order:
+
+T001: Update Town Schema with crawler_config
+
+Update the database schema for the towns table (and the corresponding Drizzle/Zod schemas in shared/crawler-schema.ts) to include a new JSONB column named crawler_config.
+
+Define a TypeScript interface for this config. It should look like this:
+
+TypeScript
+interface CrawlerConfig {
+  cms_type?: 'WordPress' | 'CivicPlus' | 'Revize' | 'Custom';
+  protection_level?: 'Standard' | 'Heavy_Lane' | 'Manual';
+  external_repositories?: Array<{
+    type: 'google_drive';
+    folder_id: string;
+    name?: string;
+  }>;
+  custom_rules?: {
+    force_heavy_lane_paths?: string[]; // Regex strings
+  };
+}
+Ensure this new column is properly migrated and default to an empty object {} for existing towns.
+
+T002: Build the Google Drive API Handler
+
+Install the googleapis package (npm install googleapis).
+
+Create a new modular handler file: server/services/crawlers/googleDriveHandler.ts.
+
+Write a function fetchGoogleDriveDocuments(folderId: string, apiKey: string) that uses the Google Drive v3 API to list all files within a public folder.
+
+The API call should query for mimeType='application/pdf' (and doc/docx if applicable) and extract the file metadata (name, createdTime, webViewLink, webContentLink).
+
+Map these results into our standard CrawlerDocument format. (Use webContentLink as the download URL, or download the buffer directly via the API using alt=media).
+
+T003: Integrate Handlers into the Crawler Engine
+
+In server/services/crawlerEngine.ts, update the executeCrawl function to parse the town's crawler_config.
+
+Add a pre-crawl or parallel-crawl phase: "Check External Repositories."
+
+If config.external_repositories contains a google_drive entry, invoke the googleDriveHandler.
+
+Note: Read the Google API key from process.env.GOOGLE_DRIVE_API_KEY. If the key is missing but a drive folder is configured, log a warning and skip the Drive phase without failing the whole run.
+
+Merge the documents discovered via Google Drive with the documents found during the standard web crawl phase so they all flow through the normal database insertion and download pipeline.
+
+T004: Update Admin UI Town Profile Editor
+
+In client/src/pages/admin-crawler.tsx (or wherever the Town edit form is located), add a JSON editor component or a structured form section to allow admins to view and edit the crawler_config for a town.
+
+This allows us to manually paste Conway's Google Drive Folder ID into their profile directly from the admin dashboard without touching the codebase.
+
+Please review this plan. Acknowledge the architecture shift and begin with T001.
+

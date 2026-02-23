@@ -1,0 +1,37 @@
+This is a phenomenal plan. The agent's decision to pivot away from the heavy `googleapis` npm package and just use raw `fetch()` is a massive win for your Replit server's stability. It keeps the architecture incredibly lean.
+
+The choice to use a custom `gdrive://` URI scheme for deduplication is also a brilliant architectural move. It allows these files to flow through your existing S3 upload and deduplication pipeline seamlessly alongside the standard HTTP documents.
+
+Cracking open the Conway Google Drive is going to be a game-changer. Having automated visibility into those specific board and committee minutes is exactly what you need to stay ahead of local zoning shifts or infrastructure discussions that could impact property management and hospitality operations in the area.
+
+Before you tell the agent to execute, there are **two critical Drive API traps** the plan missed. If you don't patch these in the prompt now, the crawler will crash when it hits Conway's folder.
+
+### The Two Critical Gotchas
+
+**1. The Native Google Doc Trap (Export vs. Media)**
+The agent's plan states: *Download URL: `?alt=media&key={apiKey}` — direct binary download for public files*.
+This works perfectly if the town uploaded an actual `.pdf` file to Drive. However, if the town clerk created a native **Google Doc** for the minutes, `alt=media` will throw a 403 error. Native Google Docs cannot be downloaded directly; they must be *exported*.
+
+* **The Fix:** The agent must check the `mimeType`. If it is `application/vnd.google-apps.document`, it must use the `/export?mimeType=application/pdf` endpoint instead of `?alt=media`.
+
+**2. The Recursive Folder Query**
+The Google Drive API doesn't let you just say "give me everything in this folder and its subfolders." It operates on a flat structure. To get files in a specific folder, you have to query `'{folderId}' in parents`.
+
+* **The Fix:** To do this recursively, the agent's `listFolderRecursive` function needs to specifically query for both PDFs *and* Folders (`mimeType='application/vnd.google-apps.folder'`). When it finds a subfolder, it needs to grab that new ID and run the query again, building the path (e.g., "Board of Selectmen/2025") as it goes down the tree.
+
+---
+
+### The Prompt Correction to Feed the Agent
+
+Copy and paste this directly to the agent to bulletproof the plan before it starts building:
+
+> "This is an excellent, lean architectural plan. The use of raw `fetch` and the `gdrive://` canonical URL strategy is approved.
+> However, before you begin T001, please update **T002** with the following critical API handling requirements:
+> 1. **Native Google Docs vs. Binary Files:** Town clerks often use native Google Docs instead of uploading PDFs. If a file's `mimeType` is `application/vnd.google-apps.document`, the `?alt=media` endpoint will fail. Your `downloadDriveFile` function must check the `mimeType`. If it is a native Google Doc, you must use the export endpoint: `https://www.googleapis.com/drive/v3/files/{fileId}/export?mimeType=application/pdf&key={apiKey}`. For standard PDFs/binaries, continue using `?alt=media`.
+> 2. **Recursive Query Structure:** The Drive API v3 `list` endpoint is flat. To recursively crawl the folder, your `listFolderRecursive` function must use the `q` parameter to search for `'{currentFolderId}' in parents`. You must ensure your query fetches both documents AND folders (`mimeType='application/vnd.google-apps.folder'`). When a folder is found, recursively call the function on that new ID, appending the folder's name to the `folderPath` string so we retain the metadata (e.g., 'Board of Selectmen/Minutes').
+> 3. **UI Parser Robustness:** In **T003**, ensure the regex that parses the Drive URL from the admin input can handle various formats (e.g., `drive.google.com/drive/folders/ID`, `drive.google.com/open?id=ID`, etc.) to reliably extract just the alphanumeric ID.
+> 
+> 
+> Please acknowledge these technical constraints and begin executing T001."
+
+Once the agent implements this, your crawler will perfectly map out that Conway drive and pull down all 655 documents without breaking a sweat! Let me know when it finishes and we can review the output.
