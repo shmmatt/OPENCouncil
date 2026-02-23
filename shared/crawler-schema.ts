@@ -308,6 +308,12 @@ export interface CrawlRunSummary {
   pagesVisited?: number;
   documentsDiscovered?: number;
   averageDocsPerPage?: number;
+  protectionStats?: {
+    detected: boolean;
+    types: string[];
+    blockedPages: number;
+    blockedDocuments: number;
+  };
 }
 
 // ============================================================

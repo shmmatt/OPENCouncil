@@ -15,7 +15,122 @@ import { hashUrl, recordDocument } from './crawlerState';
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+];
+
+const USER_AGENT = USER_AGENTS[0];
+
+function getRandomUA(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+function getBrowserHeaders(ua: string, refererUrl?: string): Record<string, string> {
+  const isChrome = ua.includes('Chrome') && !ua.includes('Edg');
+  const isFirefox = ua.includes('Firefox');
+  const isEdge = ua.includes('Edg');
+  const isSafari = ua.includes('Safari') && !ua.includes('Chrome');
+
+  const headers: Record<string, string> = {
+    'User-Agent': ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'Cache-Control': 'max-age=0',
+  };
+
+  if (refererUrl) {
+    headers['Referer'] = refererUrl;
+    try {
+      headers['Origin'] = new URL(refererUrl).origin;
+    } catch {}
+  }
+
+  if (isChrome || isEdge) {
+    headers['Sec-Fetch-Dest'] = 'document';
+    headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-Site'] = refererUrl ? 'same-origin' : 'none';
+    headers['Sec-Fetch-User'] = '?1';
+    headers['Sec-CH-UA'] = isEdge
+      ? '"Microsoft Edge";v="122", "Chromium";v="122", "Not(A:Brand";v="24"'
+      : '"Google Chrome";v="120", "Chromium";v="120", "Not_A Brand";v="8"';
+    headers['Sec-CH-UA-Mobile'] = '?0';
+    headers['Sec-CH-UA-Platform'] = ua.includes('Windows') ? '"Windows"' : ua.includes('Mac') ? '"macOS"' : '"Linux"';
+  }
+
+  if (isFirefox) {
+    headers['Sec-Fetch-Dest'] = 'document';
+    headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-Site'] = refererUrl ? 'same-origin' : 'none';
+    headers['Sec-Fetch-User'] = '?1';
+    headers['DNT'] = '1';
+  }
+
+  if (isSafari) {
+    headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+  }
+
+  return headers;
+}
+
+function getDocDownloadHeaders(ua: string, refererUrl: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'User-Agent': ua,
+    'Accept': 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/octet-stream,*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Referer': refererUrl,
+  };
+
+  try {
+    headers['Origin'] = new URL(refererUrl).origin;
+  } catch {}
+
+  if (ua.includes('Chrome')) {
+    headers['Sec-Fetch-Dest'] = 'document';
+    headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-Site'] = 'same-origin';
+    headers['Sec-Fetch-User'] = '?1';
+  }
+
+  return headers;
+}
+
+const protectedDomains = new Map<string, { protection: string; detectedAt: number; extraDelay: number }>();
+
+function getDomainFromUrl(url: string): string {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+function markDomainProtected(url: string, protection: string) {
+  const domain = getDomainFromUrl(url);
+  protectedDomains.set(domain, {
+    protection,
+    detectedAt: Date.now(),
+    extraDelay: protection === 'cloudflare' ? 3000 : protection === 'akamai' ? 4000 : 2000,
+  });
+}
+
+function getDomainDelay(url: string): number {
+  const domain = getDomainFromUrl(url);
+  const info = protectedDomains.get(domain);
+  if (!info) return 0;
+  if (Date.now() - info.detectedAt > 3600000) {
+    protectedDomains.delete(domain);
+    return 0;
+  }
+  return info.extraDelay;
+}
 
 const activeCrawls = new Map<string, CrawlJob>();
 
@@ -379,7 +494,12 @@ interface FetchPageResult {
   finalUrl?: string;
 }
 
-async function fetchPageOnce(url: string, signal: AbortSignal, timeout = 15000): Promise<FetchPageResult | null> {
+async function fetchPageOnce(
+  url: string, 
+  signal: AbortSignal, 
+  timeout = 15000,
+  options?: { ua?: string; referer?: string }
+): Promise<FetchPageResult | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -387,49 +507,76 @@ async function fetchPageOnce(url: string, signal: AbortSignal, timeout = 15000):
     if (signal.aborted) throw new Error('Aborted');
     signal.addEventListener('abort', () => controller.abort(), { once: true });
 
+    const ua = options?.ua || getRandomUA();
+    const headers = getBrowserHeaders(ua, options?.referer);
+
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-      },
+      headers,
       signal: controller.signal,
       redirect: 'follow',
     });
     clearTimeout(timeoutId);
 
-    const headers: Record<string, string> = {};
-    response.headers.forEach((v, k) => { headers[k] = v; });
+    const respHeaders: Record<string, string> = {};
+    response.headers.forEach((v, k) => { respHeaders[k] = v; });
     const finalUrl = response.url || url;
 
-    if (!response.ok) return { html: '', status: response.status, headers, finalUrl };
+    if (!response.ok) return { html: '', status: response.status, headers: respHeaders, finalUrl };
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
-      return { html: '', status: response.status, headers, finalUrl };
+      return { html: '', status: response.status, headers: respHeaders, finalUrl };
     }
     const html = await response.text();
-    return { html, status: response.status, headers, finalUrl };
+    
+    const protection = detectProtection(html);
+    if (protection) {
+      markDomainProtected(url, protection);
+      if (html.length < 5000) {
+        return { html, status: response.status, headers: respHeaders, finalUrl };
+      }
+    }
+
+    return { html, status: response.status, headers: respHeaders, finalUrl };
   } catch {
     return null;
   }
 }
 
-async function fetchPage(url: string, signal: AbortSignal, timeout = 15000): Promise<FetchPageResult | null> {
+async function fetchPage(
+  url: string, 
+  signal: AbortSignal, 
+  timeout = 15000,
+  referer?: string
+): Promise<FetchPageResult | null> {
   const MAX_RETRIES = 3;
+  const domainDelay = getDomainDelay(url);
+  
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     if (signal.aborted) return null;
-    const result = await fetchPageOnce(url, signal, timeout);
+    
+    const ua = getRandomUA();
+    const result = await fetchPageOnce(url, signal, timeout, { ua, referer });
+    
     if (result && result.status === 200 && result.html.length > 0) return result;
-    if (result && result.status >= 400 && result.status < 500 && result.status !== 429) {
+    
+    if (result && result.status === 403) {
+      if (attempt < MAX_RETRIES) {
+        const backoff = (1000 * attempt) + domainDelay + Math.random() * 2000;
+        await new Promise(r => setTimeout(r, backoff));
+        continue;
+      }
+    }
+    
+    if (result && result.status >= 400 && result.status < 500 && result.status !== 429 && result.status !== 403) {
       return result;
     }
+    
     if (attempt < MAX_RETRIES) {
-      await new Promise(r => setTimeout(r, 1000 * attempt));
+      const backoff = (1000 * attempt) + domainDelay;
+      await new Promise(r => setTimeout(r, backoff));
     }
   }
-  return await fetchPageOnce(url, signal, timeout);
+  return await fetchPageOnce(url, signal, timeout, { ua: getRandomUA(), referer });
 }
 
 async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult | null> {
@@ -446,36 +593,56 @@ async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<Fetc
   return result;
 }
 
-async function fetchDocument(url: string, signal: AbortSignal): Promise<{ buffer: Buffer; contentType: string; size: number } | null> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
-    signal.addEventListener('abort', () => controller.abort(), { once: true });
+async function fetchDocument(
+  url: string, 
+  signal: AbortSignal,
+  referer?: string
+): Promise<{ buffer: Buffer; contentType: string; size: number } | null> {
+  const MAX_DOC_RETRIES = 2;
+  const domainDelay = getDomainDelay(url);
+  
+  for (let attempt = 1; attempt <= MAX_DOC_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,*/*',
-        'Referer': new URL(url).origin,
-      },
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-    clearTimeout(timeoutId);
+      const ua = getRandomUA();
+      const refUrl = referer || new URL(url).origin;
+      const headers = getDocDownloadHeaders(ua, refUrl);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const response = await fetch(url, {
+        headers,
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+      clearTimeout(timeoutId);
+
+      if (response.status === 403 || response.status === 429) {
+        if (attempt < MAX_DOC_RETRIES) {
+          const backoff = 2000 * attempt + domainDelay + Math.random() * 2000;
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      if (buffer.length < 100) {
+        throw new Error('Document too small or empty');
+      }
+      const contentType = response.headers.get('content-type') || 'application/pdf';
+      return { buffer, contentType, size: buffer.length };
+    } catch (e: any) {
+      if (attempt >= MAX_DOC_RETRIES) throw e;
+      const backoff = 2000 * attempt + domainDelay;
+      await new Promise(r => setTimeout(r, backoff));
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    if (buffer.length < 100) {
-      throw new Error('Document too small or empty');
-    }
-    const contentType = response.headers.get('content-type') || 'application/pdf';
-    return { buffer, contentType, size: buffer.length };
-  } catch (e: any) {
-    throw e;
   }
+  throw new Error('Document download failed after retries');
 }
 
 function addLog(progress: CrawlProgress, message: string) {
@@ -608,6 +775,12 @@ async function executeCrawl(
     failuresByType: {} as Record<FailureType, number>,
     pagesVisited: 0,
     documentsDiscovered: 0,
+    protectionStats: {
+      detected: false,
+      types: [],
+      blockedPages: 0,
+      blockedDocuments: 0,
+    },
   };
 
   let detectedCms: CmsType = (town.cms as CmsType) || null;
@@ -624,8 +797,15 @@ async function executeCrawl(
     const protection = detectProtection(homepage.html);
     if (protection) {
       progress.protectionDetected = protection;
-      addLog(progress, `WARNING: ${protection} protection detected. Fetch-based crawl may be limited.`);
-      addLog(progress, `Town may need browser-based crawl for full coverage.`);
+      markDomainProtected(baseUrl, protection);
+      if (summary.protectionStats) {
+        summary.protectionStats.detected = true;
+        if (!summary.protectionStats.types.includes(protection)) {
+          summary.protectionStats.types.push(protection);
+        }
+      }
+      addLog(progress, `WARNING: ${protection} protection detected. Using rotating UAs and adaptive delays.`);
+      addLog(progress, `Fetch-based crawl will retry with different browser profiles.`);
 
       await db.update(crawlerTowns)
         .set({ updatedAt: new Date() })
@@ -867,13 +1047,22 @@ async function executeCrawl(
     progress.currentUrl = pageUrl;
     progress.pagesQueued = queue.length;
 
-    const page = await fetchPage(pageUrl, signal);
+    const page = await fetchPage(pageUrl, signal, 15000, baseUrl);
     if (!page || !page.html) {
       continue;
     }
 
     if (page.html && detectProtection(page.html)) {
-      addLog(progress, `PROTECTION: ${detectProtection(page.html)} on ${pageUrl.substring(baseUrl.length)}`);
+      const protType = detectProtection(page.html)!;
+      markDomainProtected(pageUrl, protType);
+      if (summary.protectionStats) {
+        summary.protectionStats.detected = true;
+        summary.protectionStats.blockedPages++;
+        if (!summary.protectionStats.types.includes(protType)) {
+          summary.protectionStats.types.push(protType);
+        }
+      }
+      addLog(progress, `PROTECTION: ${protType} on ${pageUrl.substring(baseUrl.length)} (adaptive delay enabled)`);
       continue;
     }
 
@@ -1006,7 +1195,7 @@ async function executeCrawl(
         continue;
       }
 
-      const doc = await fetchDocument(docUrl, signal);
+      const doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage);
       if (doc) {
         await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
         await recordDocument({
@@ -1040,6 +1229,10 @@ async function executeCrawl(
       });
       if (summary.failuresByType) {
         summary.failuresByType[failureType] = (summary.failuresByType[failureType] || 0) + 1;
+      }
+      if (e.message?.includes('403') && summary.protectionStats) {
+        summary.protectionStats.blockedDocuments++;
+        summary.protectionStats.detected = true;
       }
 
       await recordDocument({

@@ -1725,7 +1725,24 @@ function RunLogViewer({ runId }: { runId: string }) {
           <Badge variant="secondary">External: {summary.strategyStats?.external ?? 0}</Badge>
           <Badge variant="secondary">Iframe: {summary.strategyStats?.iframe ?? 0}</Badge>
           {summary?.detectedCms && <Badge variant="outline">CMS: {summary.detectedCms}</Badge>}
-          {summary?.protectionDetected && <Badge variant="outline" className="text-yellow-600 border-yellow-600">Protection: {summary.protectionDetected}</Badge>}
+          {summary?.protectionDetected && <Badge variant="outline" className="text-yellow-600 border-yellow-600 dark:text-yellow-400 dark:border-yellow-400">Protection: {summary.protectionDetected}</Badge>}
+          {summary?.protectionStats?.detected && (
+            <>
+              <Badge variant="outline" className="text-orange-600 border-orange-600 dark:text-orange-400 dark:border-orange-400">
+                Blocked Pages: {summary.protectionStats.blockedPages}
+              </Badge>
+              {summary.protectionStats.blockedDocuments > 0 && (
+                <Badge variant="outline" className="text-orange-600 border-orange-600 dark:text-orange-400 dark:border-orange-400">
+                  Blocked Docs: {summary.protectionStats.blockedDocuments}
+                </Badge>
+              )}
+              {summary.protectionStats.types.map((t: string) => (
+                <Badge key={t} variant="outline" className="text-yellow-600 border-yellow-600 dark:text-yellow-400 dark:border-yellow-400">
+                  {t}
+                </Badge>
+              ))}
+            </>
+          )}
         </div>
       )}
       {summary?.errors && Array.isArray(summary.errors) && summary.errors.length > 0 && (
@@ -1744,11 +1761,15 @@ function RunLogViewer({ runId }: { runId: string }) {
                 key={i} 
                 className={`${
                   line.includes("FAIL") || line.includes("ERROR") 
-                    ? "text-red-600" 
+                    ? "text-red-600 dark:text-red-400" 
+                    : line.includes("PROTECTION")
+                    ? "text-orange-600 dark:text-orange-400 font-medium"
+                    : line.includes("WARNING")
+                    ? "text-yellow-600 dark:text-yellow-400"
                     : line.includes("---") 
                     ? "font-semibold text-foreground" 
                     : line.includes("OK") 
-                    ? "text-green-600"
+                    ? "text-green-600 dark:text-green-400"
                     : "text-muted-foreground"
                 }`}
               >
