@@ -51,6 +51,7 @@ ADMIN_PASSWORD = "Lui2011#"
 CHAT_DEBUG_LOGGING = "1"
 LOG_LEVEL = "debug"
 SENDGRID_FROM_EMAIL = "noreply@opencouncil.co"
+GOOGLE_DRIVE_API_KEY = "AIzaSyAoPwqpQcgOtLurQBGsjETyNL3-7Um4_xg"
 
 [userenv.production]
 APP_BASE_URL = "https://opencouncil.co"

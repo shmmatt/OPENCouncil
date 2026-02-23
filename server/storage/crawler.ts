@@ -31,7 +31,7 @@ export async function getCrawlerTownBySlug(slug: string): Promise<CrawlerTown | 
 
 export async function updateCrawlerTown(
   id: string,
-  updates: Partial<Pick<CrawlerTown, "cms" | "maxPages" | "customPaths" | "status" | "url">>
+  updates: Partial<Pick<CrawlerTown, "cms" | "maxPages" | "customPaths" | "driveFolderId" | "status" | "url">>
 ): Promise<CrawlerTown | undefined> {
   const [result] = await db
     .update(schema.crawlerTowns)

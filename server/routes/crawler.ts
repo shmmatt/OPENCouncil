@@ -13,6 +13,7 @@ import {
   getTargetPathsForGaps,
   getLinkTextPatternsForGaps,
 } from "../services/gapAnalysis";
+import { parseDriveFolderUrl } from "../services/googleDriveClient";
 import {
   startCrawl,
   getCrawlProgress,
@@ -42,6 +43,7 @@ const updateTownSchema = z.object({
   cms: z.string().nullable().optional(),
   maxPages: z.number().int().positive().nullable().optional(),
   customPaths: z.array(z.string()).nullable().optional(),
+  driveFolderId: z.string().nullable().optional(),
   status: z.enum(["active", "paused", "disabled"]).optional(),
   url: z.string().url().optional(),
 });
@@ -85,7 +87,15 @@ router.patch("/towns/:id", async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
     }
-    const updated = await crawlerStorage.updateCrawlerTown(req.params.id, parsed.data);
+    const data = { ...parsed.data };
+    if (data.driveFolderId !== undefined && data.driveFolderId !== null) {
+      const normalized = parseDriveFolderUrl(data.driveFolderId);
+      if (!normalized) {
+        return res.status(400).json({ message: "Invalid Google Drive folder URL or ID" });
+      }
+      data.driveFolderId = normalized;
+    }
+    const updated = await crawlerStorage.updateCrawlerTown(req.params.id, data);
     if (!updated) return res.status(404).json({ message: "Town not found" });
     res.json(updated);
   } catch (error: any) {

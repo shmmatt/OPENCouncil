@@ -37,6 +37,7 @@ import {
   ExternalLink,
   BarChart3,
   Target,
+  HardDrive,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -141,6 +142,7 @@ interface TownOverview {
   consecutiveFailures: number;
   maxPages: number | null;
   customPaths: string[] | null;
+  driveFolderId: string | null;
   urlCount: number;
   documentsByStatus: Record<string, number>;
   lastRunStatus: string | null;
@@ -350,7 +352,7 @@ function TownsDashboard({
                   <div className="flex items-center gap-2">
                     <Globe className="w-4 h-4 text-muted-foreground" />
                     <div>
-                      <div className="font-medium">{town.name}</div>
+                      <div className="font-medium flex items-center gap-1 flex-wrap">{town.name}{town.driveFolderId && <HardDrive className="w-3 h-3 text-blue-500" title="Google Drive folder configured" />}</div>
                       <div className="text-xs text-muted-foreground truncate max-w-[200px]">{town.url}</div>
                     </div>
                   </div>
@@ -428,6 +430,7 @@ interface CrawlProgress {
     breadthFirst: number;
     external: number;
     iframe: number;
+    googleDrive: number;
   };
 }
 
@@ -560,6 +563,7 @@ function CrawlProgressPanel({ runId, onComplete }: { runId: string; onComplete: 
                 <span>BFS: {progress.strategyStats.breadthFirst}</span>
                 {progress.strategyStats.external > 0 && <span>External: {progress.strategyStats.external}</span>}
                 {progress.strategyStats.iframe > 0 && <span>Embed: {progress.strategyStats.iframe}</span>}
+                {progress.strategyStats.googleDrive > 0 && <span>Drive: {progress.strategyStats.googleDrive}</span>}
               </div>
             )}
           </div>
@@ -1622,6 +1626,7 @@ function TownProfileEditor({
   const [cms, setCms] = useState(town.cms || "");
   const [maxPages, setMaxPages] = useState(town.maxPages?.toString() || "");
   const [customPaths, setCustomPaths] = useState((town.customPaths || []).join("\n"));
+  const [driveFolderInput, setDriveFolderInput] = useState(town.driveFolderId || "");
   const [status, setStatus] = useState(town.status);
 
   return (
@@ -1702,15 +1707,36 @@ function TownProfileEditor({
             Additional URL paths the crawler should check beyond what it discovers automatically.
           </p>
         </div>
+        <div className="space-y-2">
+          <Label>Google Drive Folder</Label>
+          <Input
+            value={driveFolderInput}
+            onChange={(e) => setDriveFolderInput(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/... or folder ID"
+            data-testid="input-drive-folder"
+          />
+          <p className="text-xs text-muted-foreground">
+            Public Google Drive folder URL or ID. Documents in this folder (and subfolders) will be crawled automatically.
+          </p>
+        </div>
       </div>
       <DialogFooter>
         <Button
-          onClick={() => onSave({
-            status,
-            cms: cms === "unknown" ? null : cms,
-            maxPages: maxPages ? parseInt(maxPages) : null,
-            customPaths: customPaths.trim() ? customPaths.trim().split("\n").filter(Boolean) : null,
-          })}
+          onClick={() => {
+            let parsedDriveFolderId: string | null = null;
+            if (driveFolderInput.trim()) {
+              const m = driveFolderInput.match(/drive\.google\.com\/(?:drive\/)?(?:u\/\d+\/)?folders\/([a-zA-Z0-9_-]+)/) 
+                || driveFolderInput.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+              parsedDriveFolderId = m ? m[1] : (/^[a-zA-Z0-9_-]{10,}$/.test(driveFolderInput.trim()) ? driveFolderInput.trim() : driveFolderInput.trim());
+            }
+            onSave({
+              status,
+              cms: cms === "unknown" ? null : cms,
+              maxPages: maxPages ? parseInt(maxPages) : null,
+              customPaths: customPaths.trim() ? customPaths.trim().split("\n").filter(Boolean) : null,
+              driveFolderId: parsedDriveFolderId,
+            });
+          }}
           disabled={saving}
           data-testid="button-save-profile"
         >
@@ -1807,6 +1833,7 @@ function RunLogViewer({ runId }: { runId: string }) {
           <Badge variant="secondary">BFS: {summary.strategyStats?.breadthFirst ?? 0}</Badge>
           <Badge variant="secondary">External: {summary.strategyStats?.external ?? 0}</Badge>
           <Badge variant="secondary">Iframe: {summary.strategyStats?.iframe ?? 0}</Badge>
+          {(summary.strategyStats?.googleDrive ?? 0) > 0 && <Badge variant="secondary">Google Drive: {summary.strategyStats?.googleDrive}</Badge>}
           {summary?.detectedCms && <Badge variant="outline">CMS: {summary.detectedCms}</Badge>}
           {(summary?.fastLaneRequests != null || summary?.heavyLaneRequests != null) && (
             <>
@@ -2585,7 +2612,7 @@ function CrawlAnalyticsDashboard() {
     cmsCounts[cms] = (cmsCounts[cms] || 0) + 1;
   });
 
-  const strategyTotals = { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0 };
+  const strategyTotals = { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 };
   completedRuns.forEach(r => {
     const s = (r.summary as any)?.strategyStats;
     if (s) {
@@ -2594,6 +2621,7 @@ function CrawlAnalyticsDashboard() {
       strategyTotals.breadthFirst += s.breadthFirst || 0;
       strategyTotals.external += s.external || 0;
       strategyTotals.iframe += s.iframe || 0;
+      strategyTotals.googleDrive += s.googleDrive || 0;
     }
   });
   const totalByStrategy = Object.values(strategyTotals).reduce((a, b) => a + b, 0);
@@ -2638,7 +2666,7 @@ function CrawlAnalyticsDashboard() {
             <div className="space-y-1">
               {Object.entries(strategyTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([strategy, count]) => (
                 <div key={strategy} className="flex items-center justify-between gap-2">
-                  <span className="text-sm capitalize">{strategy.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  <span className="text-sm capitalize">{strategy === 'googleDrive' ? 'Google Drive' : strategy.replace(/([A-Z])/g, ' $1').trim()}</span>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{formatNumber(count)}</Badge>
                     <span className="text-xs text-muted-foreground">

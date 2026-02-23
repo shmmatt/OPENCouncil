@@ -64,6 +64,7 @@ A comprehensive crawler system is in place for data collection (`server/services
 - **Analytics dashboard**: Document coverage, CMS distribution, strategy breakdown, per-town bar charts
 - **Admin panel**: `client/src/pages/admin-crawler.tsx` with Towns, Runs (with log viewer), Analytics, and State Sources tabs
 - **State source crawling**: Separate pipeline for NH state agency documents with configurable target paths and link patterns
+- **Google Drive crawling**: Towns that host documents in public Google Drive folders (e.g., Conway's 655 meeting minutes) are supported via Drive API v3 with API key auth. Drive folder ID stored as `driveFolderId` column on `crawlerTowns`. Phase 3c of the crawl pipeline enumerates all files recursively across subfolders, using `gdrive://{fileId}/{filename}` canonical URLs for dedup. Downloads use the Drive `?alt=media` endpoint for standard files and `/export?mimeType=application/pdf` for native Google Docs/Sheets. Folder path is used to extract board/committee metadata. Client module: `server/services/googleDriveClient.ts`. Requires `GOOGLE_DRIVE_API_KEY` env var.
 
 ## External Dependencies
 
@@ -73,6 +74,7 @@ A comprehensive crawler system is in place for data collection (`server/services
 3.  **Google Fonts CDN**: Used for web fonts (Inter, JetBrains Mono).
 4.  **AWS Textract**: For production-grade asynchronous OCR processing.
 5.  **Web Scraping API** (ZenRows/Scrapfly): Heavy Lane for protected sites. Requires `SCRAPING_API_KEY` env var.
+6.  **Google Drive API v3**: For crawling public Drive folders. Requires `GOOGLE_DRIVE_API_KEY` env var.
 
 ### Key NPM Packages
 *   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.

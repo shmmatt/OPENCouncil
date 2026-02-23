@@ -36,6 +36,7 @@ export const crawlerTowns = pgTable("crawler_towns", {
   // Configuration overrides (optional)
   maxPages: integer("max_pages"), // Override default max pages for this town
   customPaths: jsonb("custom_paths").$type<string[]>(), // Manual paths to crawl
+  driveFolderId: text("drive_folder_id"), // Google Drive public folder ID for external docs
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

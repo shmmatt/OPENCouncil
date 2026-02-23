@@ -12,6 +12,7 @@ import {
 } from './crawlerStateExtensions';
 import { hashUrl, recordDocument } from './crawlerState';
 import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial, resolveRedirectViaAPI } from './scrapingApiClient';
+import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile } from './googleDriveClient';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -162,6 +163,7 @@ interface StrategyStats {
   breadthFirst: number;
   external: number;
   iframe: number;
+  googleDrive: number;
 }
 
 interface FoundDocument {
@@ -771,7 +773,7 @@ export async function startCrawl(
     currentUrl: '',
     log: [],
     startedAt: new Date(),
-    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0 },
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
   };
 
   const job: CrawlJob = { progress, abortController };
@@ -824,7 +826,7 @@ async function executeCrawl(
   addLog(progress, `Max pages: ${maxPages}, Mode: ${options.mode || 'full'}`);
 
   const visited = new Set<string>();
-  const docsSeen = new Map<string, { foundOnPage: string; strategy: keyof StrategyStats }>();
+  const docsSeen = new Map<string, { foundOnPage: string; strategy: keyof StrategyStats; driveMimeType?: string; driveFolderPath?: string }>();
   const externalDocs: FoundDocument[] = [];
   const queue: Array<{ url: string; depth: number; priority: number }> = [];
 
@@ -1134,6 +1136,37 @@ async function executeCrawl(
     addLog(progress, `WordPress Media API: ${wpDocs.length} media items found, ${wpNewDocs} new docs`);
   }
 
+  if (town.driveFolderId) {
+    addLog(progress, '--- Phase 3c: Google Drive Discovery ---');
+    if (isGoogleDriveConfigured()) {
+      try {
+        const driveFiles = await listFolderRecursive(town.driveFolderId, undefined, '', signal);
+        let driveNewDocs = 0;
+        const driveFolders = new Set<string>();
+        for (const file of driveFiles) {
+          driveFolders.add(file.folderPath);
+          const driveUrl = `gdrive://${file.id}/${encodeURIComponent(file.name)}`;
+          if (!docsSeen.has(driveUrl)) {
+            docsSeen.set(driveUrl, {
+              foundOnPage: `gdrive://folder/${town.driveFolderId}`,
+              strategy: 'googleDrive',
+              driveMimeType: file.mimeType,
+              driveFolderPath: file.folderPath,
+            });
+            stats.googleDrive++;
+            progress.documentsDiscovered++;
+            driveNewDocs++;
+          }
+        }
+        addLog(progress, `GOOGLE DRIVE: ${driveFiles.length} files found across ${driveFolders.size} folders, ${driveNewDocs} new`);
+      } catch (driveErr: any) {
+        addLog(progress, `GOOGLE DRIVE ERROR: ${driveErr.message}`);
+      }
+    } else {
+      addLog(progress, 'GOOGLE DRIVE: Skipped — GOOGLE_DRIVE_API_KEY not configured');
+    }
+  }
+
   addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
@@ -1298,13 +1331,113 @@ async function executeCrawl(
   }
 
   addLog(progress, `--- Phase 5: Download ${docsSeen.size} documents ---`);
-  addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}`);
+  addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}${stats.googleDrive ? ', GoogleDrive=' + stats.googleDrive : ''}`);
 
   const docsToDownload = Array.from(docsSeen.entries());
   let downloadIndex = 0;
   for (const [docUrl, docInfo] of docsToDownload) {
     if (signal.aborted) break;
     downloadIndex++;
+
+    if (docUrl.startsWith('gdrive://')) {
+      const driveMatch = docUrl.match(/^gdrive:\/\/([^/]+)\/(.+)$/);
+      if (!driveMatch) continue;
+      const [, driveFileId, encodedName] = driveMatch;
+      const driveFilename = decodeURIComponent(encodedName);
+      const driveMimeType = docInfo.driveMimeType || 'application/octet-stream';
+      const driveFolderPath = docInfo.driveFolderPath || '';
+      const urlHash = hashUrl(docUrl);
+      const driveBoard = driveFolderPath.split('/')[0] || undefined;
+      const driveYear = driveFolderPath.match(/\b(20\d{2}|19\d{2})\b/)?.[1] || undefined;
+      const pdfName = driveFilename.replace(/\.[^.]+$/, '.pdf');
+      const s3Key = `${town.slug}/gdrive/${driveFolderPath ? driveFolderPath + '/' : ''}${pdfName}`.replace(/\/+/g, '/');
+
+      const existing = await db.select({ id: crawlerDocuments.id, status: crawlerDocuments.status })
+        .from(crawlerDocuments)
+        .where(eq(crawlerDocuments.urlHash, urlHash))
+        .limit(1);
+
+      if (existing.length > 0 && existing[0].status === 'uploaded') {
+        progress.duplicatesSkipped++;
+        summary.duplicates++;
+        continue;
+      }
+
+      try {
+        if (await s3KeyExists(s3, s3Key)) {
+          await recordDocument({
+            townId: town.id,
+            url: docUrl,
+            urlHash,
+            filename: pdfName,
+            category: 'minutes',
+            board: driveBoard,
+            year: driveYear,
+            s3Key,
+            status: 'uploaded',
+            discoveredFrom: docInfo.foundOnPage,
+            s3UploadedAt: new Date(),
+          });
+          progress.duplicatesSkipped++;
+          summary.duplicates++;
+          continue;
+        }
+
+        const driveDoc = await downloadDriveFile(driveFileId, driveMimeType, undefined, signal);
+        await uploadToS3(s3, s3Key, driveDoc.buffer, driveDoc.contentType);
+        await recordDocument({
+          townId: town.id,
+          url: docUrl,
+          urlHash,
+          filename: pdfName,
+          category: 'minutes',
+          board: driveBoard,
+          year: driveYear,
+          s3Key,
+          sizeBytes: driveDoc.size,
+          mimeType: driveDoc.contentType,
+          status: 'uploaded',
+          discoveredFrom: docInfo.foundOnPage,
+          s3UploadedAt: new Date(),
+        });
+        progress.documentsDownloaded++;
+        summary.newDocuments++;
+        if (driveBoard) {
+          summary.byBoard[driveBoard] = (summary.byBoard[driveBoard] || 0) + 1;
+        }
+        summary.byCategory['minutes'] = (summary.byCategory['minutes'] || 0) + 1;
+        if (downloadIndex % 10 === 0 || progress.documentsDownloaded <= 5) {
+          addLog(progress, `DRIVE OK [${downloadIndex}/${docsSeen.size}]: ${pdfName} (${Math.round(driveDoc.size / 1024)}KB) [${driveFolderPath}]`);
+        }
+      } catch (e: any) {
+        const failureType = classifyError(e);
+        progress.documentsFailed++;
+        summary.errors.push({ url: docUrl, error: e.message || 'Unknown error', failureType });
+        if (summary.failuresByType) {
+          summary.failuresByType[failureType] = (summary.failuresByType[failureType] || 0) + 1;
+        }
+        await recordDocument({
+          townId: town.id,
+          url: docUrl,
+          urlHash,
+          filename: pdfName,
+          category: 'minutes',
+          board: driveBoard,
+          year: driveYear,
+          status: 'failed',
+          discoveredFrom: docInfo.foundOnPage,
+        }).catch(() => {});
+        if (progress.documentsFailed <= 20 || progress.documentsFailed % 50 === 0) {
+          addLog(progress, `DRIVE FAIL [${downloadIndex}/${docsSeen.size}]: ${driveFilename} - ${e.message}`);
+        }
+      }
+
+      if (downloadIndex % 20 === 0) {
+        await updateRunProgress(run.id, progress);
+        await new Promise(r => setTimeout(r, 100));
+      }
+      continue;
+    }
 
     if (isExternalDocumentLink(docUrl)) {
       await recordDocument({
@@ -1576,7 +1709,7 @@ async function executeCrawl(
   addLog(progress, `STATUS: ${finalStatus} — ${statusReason}`);
   addLog(progress, `DURATION: ${durationStr}`);
   addLog(progress, `PAGES: ${progress.pagesVisited} visited, ${blockedPages} blocked by protection`);
-  addLog(progress, `DISCOVERY: ${progress.documentsDiscovered} docs found — Strategy: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}`);
+  addLog(progress, `DISCOVERY: ${progress.documentsDiscovered} docs found — Strategy: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}${stats.googleDrive ? ', GoogleDrive=' + stats.googleDrive : ''}`);
   addLog(progress, `DUPLICATES: ${progress.duplicatesSkipped} of ${progress.documentsDiscovered} docs already in database (${coverageRate}% prior coverage)`);
   addLog(progress, `DOWNLOADS: ${progress.documentsDownloaded} succeeded, ${progress.documentsFailed} failed of ${attemptedDownloads} attempted (${downloadSuccessRate}% success rate)`);
   if (progress.documentsFailed > 0) {
