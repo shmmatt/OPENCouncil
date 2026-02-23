@@ -2562,31 +2562,52 @@ function CrawlAnalyticsDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">Documents Per Town</CardTitle>
+          <CardTitle className="text-sm font-medium">Per-Town Coverage</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {townsByDocs.map(town => {
               const total = Object.values(town.documentsByStatus).reduce((s, v) => s + v, 0);
               const uploaded = town.documentsByStatus["uploaded"] || 0;
+              const failed = town.documentsByStatus["failed"] || 0;
               const maxDocs = Object.values(townsByDocs[0]?.documentsByStatus || {}).reduce((s, v) => s + v, 0);
+              const uploadRate = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+              const lastRunInfo = completedRuns.find(r => r.townId === town.id);
+              const protectionStats = (lastRunInfo?.summary as any)?.protectionStats;
+              const isBlocked = total === 0 || (protectionStats?.blockedPages > 50 && uploaded < 10);
+              const hasProtection = protectionStats?.detected;
               return (
-                <div key={town.id} className="flex items-center gap-3" data-testid={`analytics-town-${town.slug}`}>
-                  <span className="text-sm w-32 truncate">{town.name}</span>
-                  <div className="flex-1 relative">
+                <div key={town.id} className="flex items-center gap-2 flex-wrap" data-testid={`analytics-town-${town.slug}`}>
+                  <span className="text-sm w-28 truncate font-medium">{town.name}</span>
+                  <div className="flex-1 min-w-[100px] relative">
                     <div className="h-5 bg-muted rounded-md overflow-hidden">
                       <div 
-                        className="h-full bg-green-500/70 rounded-md" 
+                        className={`h-full rounded-md ${isBlocked ? 'bg-red-500/50' : uploadRate > 90 ? 'bg-green-500/70' : uploadRate > 50 ? 'bg-yellow-500/70' : 'bg-orange-500/70'}`}
                         style={{ width: `${maxDocs > 0 ? (uploaded / maxDocs) * 100 : 0}%` }} 
                       />
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground w-20 text-right">
-                    {formatNumber(uploaded)}/{formatNumber(total)}
+                  <span className="text-xs text-muted-foreground w-24 text-right">
+                    {formatNumber(uploaded)}/{formatNumber(total)} ({uploadRate}%)
                   </span>
                   <Badge variant="secondary" className="text-xs">
                     {town.cms || "?"}
                   </Badge>
+                  {hasProtection && protectionStats.types?.length > 0 && (
+                    <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30" data-testid={`badge-protection-${town.slug}`}>
+                      {protectionStats.types.join(', ')}
+                    </Badge>
+                  )}
+                  {isBlocked && (
+                    <Badge variant="outline" className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" data-testid={`badge-blocked-${town.slug}`}>
+                      blocked
+                    </Badge>
+                  )}
+                  {town.consecutiveFailures > 0 && (
+                    <Badge variant="outline" className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" data-testid={`badge-failures-${town.slug}`}>
+                      {town.consecutiveFailures} failures
+                    </Badge>
+                  )}
                 </div>
               );
             })}

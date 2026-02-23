@@ -11,6 +11,7 @@ import {
   extractDocumentMetadata,
 } from './crawlerStateExtensions';
 import { hashUrl, recordDocument } from './crawlerState';
+import { browserFetchPage, browserFetchDocument, closeBrowser, isBrowserAvailable } from './browserFetcher';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -579,7 +580,29 @@ async function fetchPage(
   return await fetchPageOnce(url, signal, timeout, { ua: getRandomUA(), referer });
 }
 
-async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult | null> {
+async function fetchPageViaBrowser(url: string): Promise<(FetchPageResult & { challengeResolved?: boolean }) | null> {
+  const result = await browserFetchPage(url);
+  if (!result) return null;
+
+  if (result.wasChallenged && !result.challengeResolved) {
+    return { html: '', status: 403, headers: {}, finalUrl: result.finalUrl, challengeResolved: false };
+  }
+
+  const protection = detectProtection(result.html);
+  if (protection && result.html.length < 5000) {
+    return { html: '', status: 403, headers: {}, finalUrl: result.finalUrl, challengeResolved: false };
+  }
+
+  return {
+    html: result.html,
+    status: result.status,
+    headers: {},
+    finalUrl: result.finalUrl,
+    challengeResolved: result.wasChallenged ? result.challengeResolved : undefined,
+  };
+}
+
+async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult & { useBrowser?: boolean; cloudflareManaged?: boolean } | null> {
   let result = await fetchPage(baseUrl, signal);
   if (result && result.status === 200 && result.html.length > 100) return result;
 
@@ -589,6 +612,29 @@ async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<Fetc
     : baseUrl.replace('://', '://www.');
   const altResult = await fetchPage(altUrl, signal);
   if (altResult && altResult.status === 200 && altResult.html.length > 100) return altResult;
+
+  const isBlocked = (!result || result.status === 403 || !result.html || result.html.length < 100);
+  if (isBlocked) {
+    const browserAvail = await isBrowserAvailable();
+    if (browserAvail) {
+      const browserResult = await fetchPageViaBrowser(baseUrl);
+      if (browserResult && browserResult.html.length > 100) {
+        return { ...browserResult, useBrowser: true };
+      }
+      if (browserResult && browserResult.challengeResolved === false) {
+        return { html: '', status: 403, headers: {}, finalUrl: baseUrl, useBrowser: false, cloudflareManaged: true };
+      }
+      if (!browserResult || browserResult.html.length < 100) {
+        const altBrowserResult = await fetchPageViaBrowser(altUrl);
+        if (altBrowserResult && altBrowserResult.html.length > 100) {
+          return { ...altBrowserResult, useBrowser: true };
+        }
+        if (altBrowserResult && altBrowserResult.challengeResolved === false) {
+          return { html: '', status: 403, headers: {}, finalUrl: baseUrl, useBrowser: false, cloudflareManaged: true };
+        }
+      }
+    }
+  }
 
   return result;
 }
@@ -784,13 +830,27 @@ async function executeCrawl(
   };
 
   let detectedCms: CmsType = (town.cms as CmsType) || null;
+  let useBrowserMode = false;
 
   addLog(progress, '--- Phase 1: Homepage & CMS Detection ---');
   const homepage = await fetchHomepage(baseUrl, signal);
   if (!homepage || !homepage.html) {
-    addLog(progress, `WARNING: Homepage fetch failed for ${baseUrl} (status: ${homepage?.status || 'timeout'}). Site may be blocking requests or down.`);
+    if ((homepage as any)?.cloudflareManaged) {
+      addLog(progress, `BLOCKED: ${town.name} uses Cloudflare managed challenge (Turnstile) which cannot be bypassed by automated crawling. This site requires manual document collection.`);
+      progress.protectionDetected = 'Cloudflare Managed';
+      if (summary.protectionStats) {
+        summary.protectionStats.detected = true;
+        summary.protectionStats.types.push('Cloudflare Managed Challenge');
+      }
+    } else {
+      addLog(progress, `WARNING: Homepage fetch failed for ${baseUrl} (status: ${homepage?.status || 'timeout'}). Site may be blocking requests or down.`);
+    }
   }
   if (homepage && homepage.html) {
+    if ((homepage as any).useBrowser) {
+      useBrowserMode = true;
+      addLog(progress, `BROWSER MODE: Cloudflare challenge solved via headless browser. Switching to browser-based crawling.`);
+    }
     if (homepage.finalUrl && homepage.finalUrl !== baseUrl && homepage.finalUrl !== baseUrl + '/') {
       addLog(progress, `Homepage redirected to: ${homepage.finalUrl}`);
     }
@@ -804,8 +864,9 @@ async function executeCrawl(
           summary.protectionStats.types.push(protection);
         }
       }
-      addLog(progress, `WARNING: ${protection} protection detected. Using rotating UAs and adaptive delays.`);
-      addLog(progress, `Fetch-based crawl will retry with different browser profiles.`);
+      if (!useBrowserMode) {
+        addLog(progress, `WARNING: ${protection} protection detected. Using rotating UAs and adaptive delays.`);
+      }
 
       await db.update(crawlerTowns)
         .set({ updatedAt: new Date() })
@@ -919,7 +980,9 @@ async function executeCrawl(
     const fullUrl = p.startsWith('http') ? p : `${baseUrl}${p}`;
     if (visited.has(fullUrl)) continue;
 
-    const resp = await fetchPage(fullUrl, signal, 8000);
+    const resp = useBrowserMode 
+      ? await fetchPageViaBrowser(fullUrl)
+      : await fetchPage(fullUrl, signal, 8000);
     if (resp && resp.status === 200 && resp.html.length > 500) {
       validPaths++;
       visited.add(fullUrl);
@@ -980,7 +1043,9 @@ async function executeCrawl(
     for (const dp of deepPaths) {
       if (signal.aborted) break;
       if (visited.has(dp)) continue;
-      const resp = await fetchPage(dp, signal, 8000);
+      const resp = useBrowserMode
+        ? await fetchPageViaBrowser(dp)
+        : await fetchPage(dp, signal, 8000);
       if (resp && resp.status === 200 && resp.html.length > 500) {
         deepValidPaths++;
         visited.add(dp);
@@ -1019,7 +1084,7 @@ async function executeCrawl(
     addLog(progress, `WordPress Media API: ${wpDocs.length} media items found, ${wpNewDocs} new docs`);
   }
 
-  addLog(progress, '--- Phase 4: Breadth-First Crawl ---');
+  addLog(progress, `--- Phase 4: Breadth-First Crawl ${useBrowserMode ? '(BROWSER MODE)' : ''} ---`);
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
   let consecutiveEmptyPages = 0;
@@ -1047,9 +1112,25 @@ async function executeCrawl(
     progress.currentUrl = pageUrl;
     progress.pagesQueued = queue.length;
 
-    const page = await fetchPage(pageUrl, signal, 15000, baseUrl);
+    let page: FetchPageResult | null = null;
+    if (useBrowserMode) {
+      page = await fetchPageViaBrowser(pageUrl);
+      if (useBrowserMode) await new Promise(r => setTimeout(r, 500));
+    } else {
+      page = await fetchPage(pageUrl, signal, 15000, baseUrl);
+    }
     if (!page || !page.html) {
-      continue;
+      if (!useBrowserMode && page && page.status === 403) {
+        const browserPage = await fetchPageViaBrowser(pageUrl);
+        if (browserPage && browserPage.html.length > 100) {
+          page = browserPage;
+          if (!useBrowserMode) {
+            useBrowserMode = true;
+            addLog(progress, `BROWSER MODE: Switching to browser-based crawling after 403 on ${pageUrl.substring(baseUrl.length)}`);
+          }
+        }
+      }
+      if (!page || !page.html) continue;
     }
 
     if (page.html && detectProtection(page.html)) {
@@ -1195,7 +1276,13 @@ async function executeCrawl(
         continue;
       }
 
-      const doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage);
+      let doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage).catch(async (e: any) => {
+        if (useBrowserMode && (e.message?.includes('403') || e.message?.includes('429') || e.message?.includes('Challenge'))) {
+          addLog(progress, `Browser fallback for doc: ${filename}`);
+          return await browserFetchDocument(docUrl, docInfo.foundOnPage);
+        }
+        throw e;
+      });
       if (doc) {
         await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
         await recordDocument({
@@ -1271,9 +1358,14 @@ async function executeCrawl(
 
   const finalStatus = progress.documentsFailed > 0 && progress.documentsDownloaded === 0 ? 'failed' : 'completed';
 
+  if (useBrowserMode) {
+    addLog(progress, `Browser mode was used for this crawl (Cloudflare/protection bypass)`);
+  }
+
   (summary as any).strategyStats = stats;
   (summary as any).detectedCms = detectedCms;
   (summary as any).protectionDetected = progress.protectionDetected;
+  (summary as any).usedBrowserMode = useBrowserMode;
 
   await db.update(crawlerRuns)
     .set({
@@ -1298,6 +1390,10 @@ async function executeCrawl(
       updatedAt: new Date(),
     })
     .where(eq(crawlerTowns.id, town.id));
+
+  if (useBrowserMode) {
+    closeBrowser().catch(() => {});
+  }
 
   setTimeout(() => {
     activeCrawls.delete(run.id);

@@ -52,6 +52,7 @@ A comprehensive crawler system is in place for data collection (`server/services
 - **Multi-strategy discovery**: Sitemap parsing, known path probing, breadth-first crawling (depth 5), iframe/embed extraction, external link detection
 - **CMS-specific enhancements**: CivicPlus DocumentCenter/AgendaCenter deep crawl with pagination; WordPress Media API integration
 - **Bot protection fallbacks**: Rotating UA pool (8 browser variants), enriched Sec-Fetch/Sec-CH-UA headers matching real browsers, adaptive rate limiting per domain when protection detected, protection-aware retry with different UA on 403/429 responses
+- **Browser fallback** (`server/services/browserFetcher.ts`): Playwright + stealth plugin headless browser for sites that block HTTP fetch. Auto-detects Cloudflare challenges and attempts JS-based resolution. Cloudflare Managed/Turnstile challenges are detected but cannot be bypassed (reported as `cloudflareManaged` in crawl logs). Browser mode used for page fetching, CivicPlus deep crawl, and document downloads when protection detected.
 - **Hardened fetching**: 3-attempt retry with backoff, www/non-www fallback, protection detection (Cloudflare/Akamai/CAPTCHA)
 - **Attribution tracking**: Each discovered document tracked with source page and discovery strategy via Map-based deduplication
 - **Log persistence**: Crawl logs stored in `crawler_runs.logs` jsonb column (up to 2000 entries), viewable via expandable run rows in admin UI
