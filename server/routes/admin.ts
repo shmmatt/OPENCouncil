@@ -347,55 +347,79 @@ router.get("/v2/documents", authenticateAdmin, async (req, res) => {
   }
 });
 
-router.get("/unified-documents", authenticateAdmin, async (_req, res) => {
+router.get("/unified-documents", authenticateAdmin, async (req, res) => {
   try {
     const { db, sql: sqlTag } = await import("../storage/db");
+    const town = (req.query.town as string) || "";
+    const q = (req.query.q as string) || "";
+    const ids = req.query.ids as string | undefined;
+
+    if (ids) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const idList = ids.split(",").filter(id => uuidRegex.test(id));
+      if (idList.length === 0) return res.json([]);
+
+      const logicalResult = await db.execute(sqlTag`
+        SELECT ld.id, ld.canonical_title as title, ld.town, 'logical' as source
+        FROM logical_documents ld
+        WHERE ld.id IN (${sqlTag.join(idList.map(id => sqlTag`${id}`), sqlTag`, `)})
+      `);
+      const crawlerResult = await db.execute(sqlTag`
+        SELECT fb.id, COALESCE(cd.filename, fb.original_filename) as title, ct.name as town, 'crawler' as source
+        FROM file_blobs fb
+        JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+        JOIN crawler_towns ct ON cd.town_id = ct.id
+        WHERE fb.id IN (${sqlTag.join(idList.map(id => sqlTag`${id}`), sqlTag`, `)})
+      `);
+      const logicalDocs = (logicalResult.rows || logicalResult || []) as any[];
+      const crawlerDocs = (crawlerResult.rows || crawlerResult || []) as any[];
+      const seen = new Set(logicalDocs.map((d: any) => d.id));
+      const unified = [
+        ...logicalDocs.map((d: any) => ({ id: d.id, title: d.title, town: d.town, source: "logical" as const })),
+        ...crawlerDocs.filter((d: any) => !seen.has(d.id)).map((d: any) => ({ id: d.id, title: d.title, town: d.town, source: "crawler" as const })),
+      ];
+      return res.json(unified);
+    }
+
+    if (!q && !town) {
+      return res.json([]);
+    }
+
+    const searchPattern = q ? `%${q}%` : "%";
 
     const logicalResult = await db.execute(sqlTag`
-      SELECT 
-        ld.id,
-        ld.canonical_title as title,
-        ld.town,
-        'logical' as source
+      SELECT ld.id, ld.canonical_title as title, ld.town, 'logical' as source
       FROM logical_documents ld
       WHERE ld.canonical_title IS NOT NULL
+        AND lower(ld.canonical_title) LIKE lower(${searchPattern})
+        AND (${town} = '' OR ld.town = ${town})
       ORDER BY ld.canonical_title
+      LIMIT 25
     `);
 
     const crawlerResult = await db.execute(sqlTag`
-      SELECT 
-        fb.id,
-        COALESCE(cd.filename, fb.original_filename) as title,
-        ct.name as town,
-        'crawler' as source
+      SELECT DISTINCT ON (fb.id) fb.id, COALESCE(cd.filename, fb.original_filename) as title, ct.name as town, 'crawler' as source
       FROM file_blobs fb
       JOIN crawler_documents cd ON cd.file_blob_id = fb.id
       JOIN crawler_towns ct ON cd.town_id = ct.id
       WHERE fb.id NOT IN (
         SELECT dv.file_blob_id FROM document_versions dv
-        JOIN logical_documents ld ON ld.current_version_id = dv.id
+        JOIN logical_documents ld2 ON ld2.current_version_id = dv.id
         WHERE dv.file_blob_id IS NOT NULL
       )
       AND (fb.preview_text IS NOT NULL OR fb.ocr_text IS NOT NULL)
-      ORDER BY COALESCE(cd.filename, fb.original_filename)
+      AND lower(COALESCE(cd.filename, fb.original_filename)) LIKE lower(${searchPattern})
+      AND (${town} = '' OR ct.name = ${town})
+      ORDER BY fb.id, COALESCE(cd.filename, fb.original_filename)
+      LIMIT 25
     `);
 
     const logicalDocs = (logicalResult.rows || logicalResult || []) as any[];
     const crawlerDocs = (crawlerResult.rows || crawlerResult || []) as any[];
 
     const unified = [
-      ...logicalDocs.map((d: any) => ({
-        id: d.id,
-        title: d.title,
-        town: d.town,
-        source: "logical" as const,
-      })),
-      ...crawlerDocs.map((d: any) => ({
-        id: d.id,
-        title: d.title,
-        town: d.town,
-        source: "crawler" as const,
-      })),
+      ...logicalDocs.map((d: any) => ({ id: d.id, title: d.title, town: d.town, source: "logical" as const })),
+      ...crawlerDocs.map((d: any) => ({ id: d.id, title: d.title, town: d.town, source: "crawler" as const })),
     ];
 
     res.json(unified);

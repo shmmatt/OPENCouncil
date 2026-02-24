@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -157,26 +157,47 @@ function TemplateForm({
   );
   const [viewMode, setViewMode] = useState<"preview" | "json">("preview");
   const [docSearchQuery, setDocSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const { data: unifiedDocs, isLoading: docsLoading } = useQuery<UnifiedDocument[]>({
-    queryKey: ["/api/admin/unified-documents"],
+  const handleSearchChange = useCallback((value: string) => {
+    setDocSearchQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(value), 300);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
+  const { data: searchResults, isLoading: docsLoading } = useQuery<UnifiedDocument[]>({
+    queryKey: ["/api/admin/unified-documents", "search", town, debouncedSearch],
     queryFn: async () => {
-      const res = await adminFetch("/api/admin/unified-documents");
+      const params = new URLSearchParams();
+      if (town) params.set("town", town);
+      if (debouncedSearch) params.set("q", debouncedSearch);
+      const res = await adminFetch(`/api/admin/unified-documents?${params}`);
       if (res.status === 401) {
         setLocation("/admin/login");
         throw new Error("Unauthorized");
       }
       return res.json();
     },
+    enabled: !!(town || debouncedSearch),
   });
 
-  const filteredDocs = (unifiedDocs || []).filter((doc) => {
-    const matchesTown = !town || doc.town === town;
-    const matchesSearch =
-      !docSearchQuery ||
-      doc.title.toLowerCase().includes(docSearchQuery.toLowerCase());
-    return matchesTown && matchesSearch;
+  const { data: selectedDocsInfo } = useQuery<UnifiedDocument[]>({
+    queryKey: ["/api/admin/unified-documents", "selected", [...selectedDocIds].sort().join(",")],
+    queryFn: async () => {
+      if (selectedDocIds.length === 0) return [];
+      const res = await adminFetch(`/api/admin/unified-documents?ids=${selectedDocIds.join(",")}`);
+      return res.json();
+    },
+    enabled: selectedDocIds.length > 0,
   });
+
+  const selectedDocsMap = new Map((selectedDocsInfo || []).map(d => [d.id, d]));
+  const filteredDocs = (searchResults || []).filter(d => !selectedDocIds.includes(d.id));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -354,14 +375,14 @@ function TemplateForm({
         <Label>Target Documents</Label>
         <Input
           data-testid="input-doc-search"
-          placeholder="Search documents..."
+          placeholder={town ? `Search ${town} documents...` : "Select a town first, then search..."}
           value={docSearchQuery}
-          onChange={(e) => setDocSearchQuery(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
         />
         {selectedDocIds.length > 0 && (
           <div className="flex flex-wrap gap-1 py-1">
             {selectedDocIds.map((docId) => {
-              const doc = unifiedDocs?.find((d) => d.id === docId);
+              const doc = selectedDocsMap.get(docId);
               return (
                 <Badge key={docId} variant="secondary" className="gap-1">
                   <FileText className="w-3 h-3" />
@@ -412,7 +433,9 @@ function TemplateForm({
               ))}
               {filteredDocs.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No documents found{town ? ` for ${town}` : ""}
+                  {!town && !debouncedSearch
+                    ? "Select a town and type to search for documents"
+                    : `No documents found${town ? ` for ${town}` : ""}${debouncedSearch ? ` matching "${debouncedSearch}"` : ""}`}
                 </p>
               )}
             </div>
