@@ -10,7 +10,8 @@ import {
   extractFilename,
   extractDocumentMetadata,
 } from './crawlerStateExtensions';
-import { hashUrl, recordDocument } from './crawlerState';
+import { hashUrl, recordDocument, batchRecordDocuments, getAllTownDocumentUrls, getResumableDocuments } from './crawlerState';
+import type { InsertCrawlerDocument } from '../../shared/crawler-schema';
 import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial, resolveRedirectViaAPI } from './scrapingApiClient';
 import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile } from './googleDriveClient';
 
@@ -808,6 +809,34 @@ export async function startCrawl(
   return runId;
 }
 
+function buildBatchRecords(
+  townId: string,
+  docsSeen: Map<string, { foundOnPage: string; strategy: keyof StrategyStats; driveMimeType?: string; driveFolderPath?: string }>,
+  alreadyPersisted: Set<string>,
+  baseUrl: string,
+): InsertCrawlerDocument[] {
+  const records: InsertCrawlerDocument[] = [];
+  for (const [url, info] of docsSeen) {
+    if (alreadyPersisted.has(url)) continue;
+    const urlH = hashUrl(url);
+    const filename = extractFilename(url);
+    const metadata = url.startsWith('gdrive://') ? {} : extractDocumentMetadata(url, filename, baseUrl);
+    records.push({
+      townId,
+      url,
+      urlHash: urlH,
+      filename,
+      discoveredFrom: info.foundOnPage,
+      status: 'discovered',
+      category: metadata.category || undefined,
+      board: metadata.board || undefined,
+      year: metadata.year || undefined,
+    });
+    alreadyPersisted.add(url);
+  }
+  return records;
+}
+
 async function executeCrawl(
   town: CrawlerTown,
   run: CrawlerRun,
@@ -827,8 +856,40 @@ async function executeCrawl(
 
   const visited = new Set<string>();
   const docsSeen = new Map<string, { foundOnPage: string; strategy: keyof StrategyStats; driveMimeType?: string; driveFolderPath?: string }>();
+  const alreadyPersisted = new Set<string>();
   const externalDocs: FoundDocument[] = [];
   const queue: Array<{ url: string; depth: number; priority: number }> = [];
+
+  addLog(progress, 'Pre-seeding from database...');
+  const existingDocs = await getAllTownDocumentUrls(town.id);
+  let preSeededUploaded = 0;
+  let preSeededOther = 0;
+  for (const doc of existingDocs) {
+    docsSeen.set(doc.url, { foundOnPage: doc.discoveredFrom || 'db-preseed', strategy: 'breadthFirst' });
+    alreadyPersisted.add(doc.url);
+    if (doc.status === 'uploaded') preSeededUploaded++;
+    else preSeededOther++;
+  }
+  addLog(progress, `Pre-seeded ${existingDocs.length} known URLs (${preSeededUploaded} uploaded, ${preSeededOther} discovered/failed)`);
+
+  const isResumeMode = options.mode === 'resume';
+
+  if (isResumeMode) {
+    addLog(progress, '=== RESUME MODE: Skipping discovery, loading pending downloads from DB ===');
+    docsSeen.clear();
+    const resumableDocs = await getResumableDocuments(town.id);
+    const discoveredCount = resumableDocs.filter(d => d.status === 'discovered').length;
+    const failedCount = resumableDocs.filter(d => d.status === 'failed').length;
+    addLog(progress, `RESUME MODE: Found ${resumableDocs.length} documents to retry (${discoveredCount} discovered, ${failedCount} failed)`);
+
+    for (const doc of resumableDocs) {
+      docsSeen.set(doc.url, {
+        foundOnPage: doc.discoveredFrom || 'resume',
+        strategy: doc.url.startsWith('gdrive://') ? 'googleDrive' : 'breadthFirst',
+      });
+    }
+    progress.documentsDiscovered = resumableDocs.length;
+  }
 
   const stats = progress.strategyStats!;
   const summary: CrawlRunSummary = {
@@ -861,6 +922,7 @@ async function executeCrawl(
     try { return heavyLaneDomains.has(new URL(url).hostname); } catch { return false; }
   };
 
+  if (!isResumeMode) {
   addLog(progress, '--- Phase 1: Homepage & CMS Detection ---');
   fastLaneRequests++;
   const homepage = await fetchHomepage(baseUrl, signal);
@@ -967,6 +1029,14 @@ async function executeCrawl(
     }
   }
 
+  {
+    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordDocuments(batch);
+      addLog(progress, `Phase 1: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
   addLog(progress, '--- Phase 2: Sitemap Discovery ---');
   const sitemapUrls = [
     `${baseUrl}/sitemap.xml`,
@@ -1002,6 +1072,14 @@ async function executeCrawl(
     }
   }
   addLog(progress, `Sitemap results: ${sitemapDocCount} docs, ${sitemapNavCount} pages queued`);
+
+  {
+    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordDocuments(batch);
+      addLog(progress, `Phase 2: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
 
   addLog(progress, '--- Phase 3: Known Path Probing ---');
   const phaseStart3 = Date.now();
@@ -1167,6 +1245,14 @@ async function executeCrawl(
     }
   }
 
+  {
+    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordDocuments(batch);
+      addLog(progress, `Phase 3: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
   addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
@@ -1326,9 +1412,27 @@ async function executeCrawl(
       await updateRunProgress(run.id, progress);
     }
 
+    if (progressUpdateCounter % 50 === 0) {
+      const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+      if (batch.length > 0) {
+        await batchRecordDocuments(batch);
+        addLog(progress, `BFS checkpoint: Persisted ${batch.length} discovered URLs (total known: ${alreadyPersisted.size})`);
+      }
+    }
+
     const delay = 200 + Math.random() * 500;
     await new Promise(r => setTimeout(r, delay));
   }
+
+  {
+    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordDocuments(batch);
+      addLog(progress, `Phase 4 final: Persisted ${batch.length} discovered URLs to database (total known: ${alreadyPersisted.size})`);
+    }
+  }
+
+  } // end if (!isResumeMode)
 
   addLog(progress, `--- Phase 5: Download ${docsSeen.size} documents ---`);
   addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}${stats.googleDrive ? ', GoogleDrive=' + stats.googleDrive : ''}`);

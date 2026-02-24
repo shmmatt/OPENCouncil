@@ -35,7 +35,7 @@ router.use(authenticateAdmin);
 
 const triggerSchema = z.object({
   townId: z.string().min(1, "townId is required"),
-  mode: z.enum(["full", "incremental", "manual"]).default("full"),
+  mode: z.enum(["full", "incremental", "manual", "resume"]).default("full"),
   maxPages: z.number().int().positive().optional(),
 });
 

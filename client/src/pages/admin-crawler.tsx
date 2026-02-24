@@ -38,6 +38,7 @@ import {
   BarChart3,
   Target,
   HardDrive,
+  RotateCw,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -756,6 +757,21 @@ function TownDetail({
             <Play className="w-3 h-3 mr-1" />
             {activeRunId ? "Running..." : "Run Crawl"}
           </Button>
+          {(() => {
+            const resumable = (townData?.documentsByStatus?.["discovered"] || 0) + (townData?.documentsByStatus?.["failed"] || 0);
+            return resumable > 0 ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => triggerCrawl.mutate("resume")}
+                disabled={triggerCrawl.isPending || !!activeRunId}
+                data-testid="button-resume-downloads"
+              >
+                <RotateCw className="w-3 h-3 mr-1" />
+                Resume {formatNumber(resumable)} Downloads
+              </Button>
+            ) : null;
+          })()}
           {activeRunId && (
             <Button
               size="sm"

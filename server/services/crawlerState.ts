@@ -240,20 +240,105 @@ export async function getPendingUrls(townId: string, priority: 'high' | 'medium'
 // DOCUMENT MANAGEMENT
 // ============================================================
 
+const STATUS_RANK: Record<string, number> = {
+  'discovered': 1,
+  'failed': 2,
+  'downloaded': 3,
+  'uploaded': 4,
+};
+
 export async function recordDocument(doc: InsertCrawlerDocument): Promise<CrawlerDocument> {
   const [created] = await db.insert(crawlerDocuments)
     .values(doc)
     .onConflictDoUpdate({
       target: crawlerDocuments.urlHash,
       set: {
-        status: doc.status,
-        s3Key: doc.s3Key,
-        s3UploadedAt: doc.s3UploadedAt,
+        status: sql`CASE 
+          WHEN ${STATUS_RANK[doc.status || 'discovered'] || 1} > COALESCE(
+            CASE ${crawlerDocuments.status}
+              WHEN 'discovered' THEN 1
+              WHEN 'failed' THEN 2
+              WHEN 'downloaded' THEN 3
+              WHEN 'uploaded' THEN 4
+              ELSE 0
+            END, 0)
+          THEN ${doc.status || 'discovered'}
+          ELSE ${crawlerDocuments.status}
+        END`,
+        s3Key: doc.s3Key ? sql`${doc.s3Key}` : crawlerDocuments.s3Key,
+        s3UploadedAt: doc.s3UploadedAt ? sql`${doc.s3UploadedAt}` : crawlerDocuments.s3UploadedAt,
+        sizeBytes: doc.sizeBytes ? sql`${doc.sizeBytes}` : crawlerDocuments.sizeBytes,
+        mimeType: doc.mimeType ? sql`${doc.mimeType}` : crawlerDocuments.mimeType,
+        category: doc.category ? sql`${doc.category}` : crawlerDocuments.category,
+        board: doc.board ? sql`${doc.board}` : crawlerDocuments.board,
+        year: doc.year ? sql`${doc.year}` : crawlerDocuments.year,
         updatedAt: new Date(),
       },
     })
     .returning();
   return created;
+}
+
+export async function batchRecordDocuments(docs: InsertCrawlerDocument[]): Promise<void> {
+  if (docs.length === 0) return;
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    await db.insert(crawlerDocuments)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: crawlerDocuments.urlHash,
+        set: {
+          status: sql`CASE
+            WHEN (CASE EXCLUDED.status
+                    WHEN 'discovered' THEN 1
+                    WHEN 'failed' THEN 2
+                    WHEN 'downloaded' THEN 3
+                    WHEN 'uploaded' THEN 4
+                    ELSE 0
+                  END) > COALESCE(
+              CASE ${crawlerDocuments.status}
+                WHEN 'discovered' THEN 1
+                WHEN 'failed' THEN 2
+                WHEN 'downloaded' THEN 3
+                WHEN 'uploaded' THEN 4
+                ELSE 0
+              END, 0)
+            THEN EXCLUDED.status
+            ELSE ${crawlerDocuments.status}
+          END`,
+          discoveredFrom: sql`COALESCE(EXCLUDED.discovered_from, ${crawlerDocuments.discoveredFrom})`,
+          s3Key: sql`COALESCE(EXCLUDED.s3_key, ${crawlerDocuments.s3Key})`,
+          s3UploadedAt: sql`COALESCE(EXCLUDED.s3_uploaded_at, ${crawlerDocuments.s3UploadedAt})`,
+          sizeBytes: sql`COALESCE(EXCLUDED.size_bytes, ${crawlerDocuments.sizeBytes})`,
+          mimeType: sql`COALESCE(EXCLUDED.mime_type, ${crawlerDocuments.mimeType})`,
+          category: sql`COALESCE(EXCLUDED.category, ${crawlerDocuments.category})`,
+          board: sql`COALESCE(EXCLUDED.board, ${crawlerDocuments.board})`,
+          year: sql`COALESCE(EXCLUDED.year, ${crawlerDocuments.year})`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+}
+
+export async function getAllTownDocumentUrls(townId: string): Promise<Array<{ url: string; urlHash: string; status: string; discoveredFrom: string | null }>> {
+  return db.select({
+    url: crawlerDocuments.url,
+    urlHash: crawlerDocuments.urlHash,
+    status: crawlerDocuments.status,
+    discoveredFrom: crawlerDocuments.discoveredFrom,
+  })
+    .from(crawlerDocuments)
+    .where(eq(crawlerDocuments.townId, townId));
+}
+
+export async function getResumableDocuments(townId: string): Promise<CrawlerDocument[]> {
+  return db.select()
+    .from(crawlerDocuments)
+    .where(and(
+      eq(crawlerDocuments.townId, townId),
+      sql`${crawlerDocuments.status} IN ('discovered', 'failed')`
+    ));
 }
 
 export async function getDocument(urlHash: string): Promise<CrawlerDocument | null> {
@@ -411,16 +496,3 @@ export async function getTownState(slug: string): Promise<{
   };
 }
 
-/**
- * Batch upsert documents from crawl run
- */
-export async function batchRecordDocuments(docs: InsertCrawlerDocument[]): Promise<number> {
-  if (docs.length === 0) return 0;
-  
-  const results = await Promise.allSettled(
-    docs.map(doc => recordDocument(doc))
-  );
-  
-  const successful = results.filter(r => r.status === 'fulfilled').length;
-  return successful;
-}
