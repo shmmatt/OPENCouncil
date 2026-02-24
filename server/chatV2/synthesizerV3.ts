@@ -182,6 +182,9 @@ function buildProseSystemPrompt(
 - Stay within ${prosePolicy.wordMin}-${prosePolicy.wordMax} words`
     : '';
 
+  const crossRefInstructions = buildCrossReferenceInstructions(issueMap);
+  const recencyInstructions = buildRecencyInstructions(issueMap);
+
   return `You are a town administrator explaining municipal governance to a resident in an email. Write calmly, neutrally, with short sentences.
 
 ## WORD COUNT (MANDATORY - COUNT CAREFULLY)
@@ -207,7 +210,7 @@ ${renderStyle === "PROSE" ? "- Do NOT use section headings, bold headings, or ma
 - Short sentences preferred
 - No legalese unless quoting a source
 - Be direct and helpful without being preachy
-
+${crossRefInstructions}${recencyInstructions}
 ## CITATION RULES
 - Cite facts/legal claims inline at sentence end: "...requires a public hearing. [S1]"
 - [Lx] for local documents (minutes, ordinances, etc.)
@@ -319,16 +322,16 @@ function buildSynthesisUserPrompt(
   if (localChunks.length > 0) {
     parts.push('=== LOCAL DOCUMENTS (cite as [L1], [L2], etc.) ===');
     for (const chunk of localChunks) {
-      // Citeable format: [L1] Title — excerpt
-      parts.push(`${chunk.label} ${chunk.title} — ${chunk.content.slice(0, 2000)}\n`);
+      const meta = formatChunkMeta(chunk);
+      parts.push(`${chunk.label} ${chunk.title}${meta} — ${chunk.content.slice(0, 2000)}\n`);
     }
   }
 
   if (stateChunks.length > 0) {
     parts.push('=== STATE DOCUMENTS (cite as [S1], [S2], etc. for legal framework) ===');
     for (const chunk of stateChunks) {
-      // Citeable format: [S1] Title — excerpt
-      parts.push(`${chunk.label} ${chunk.title} — ${chunk.content.slice(0, 2000)}\n`);
+      const meta = formatChunkMeta(chunk);
+      parts.push(`${chunk.label} ${chunk.title}${meta} — ${chunk.content.slice(0, 2000)}\n`);
     }
   }
 
@@ -449,6 +452,42 @@ function detectAuthoritativeState(stateChunks: LabeledChunk[]): boolean {
   }
   
   return false;
+}
+
+function formatChunkMeta(chunk: LabeledChunk): string {
+  const parts: string[] = [];
+  if (chunk.year) parts.push(`Year: ${chunk.year}`);
+  if (chunk.category) parts.push(`Type: ${chunk.category}`);
+  if (parts.length === 0) return '';
+  return ` [${parts.join(', ')}]`;
+}
+
+function buildCrossReferenceInstructions(issueMap: IssueMap): string {
+  if (issueMap.queryFocus === "financial_exact" || issueMap.queryFocus === "narrative_context") {
+    return `
+## CROSS-REFERENCING (IMPORTANT)
+- When both numeric sources (budgets, warrants, town reports) and narrative sources (meeting minutes) are present, cross-reference them
+- Connect dollar amounts or article numbers from financial documents with discussions or votes recorded in meeting minutes
+- If a budget line item or warrant article appears in minutes, mention what was discussed or decided
+- Do not treat numeric and narrative sources in isolation — weave them together into a coherent account
+`;
+  }
+  return '';
+}
+
+function buildRecencyInstructions(issueMap: IssueMap): string {
+  if (!issueMap.temporalTarget) return '';
+
+  const { year, strategy } = issueMap.temporalTarget;
+  if (strategy === "none") return '';
+
+  return `
+## TEMPORAL PRIORITIZATION
+- The user's question targets year ${year}. Prioritize sources from that year.
+- When sources from multiple years are present, lead with ${year} data and clearly label older sources as historical context.
+- If an older document contradicts a ${year} document on the same topic, favor the ${year} source and note the change.
+- When citing older sources, note the year explicitly (e.g., "In ${year - 1}, the budget was..." vs "The current ${year} budget shows...").
+`;
 }
 
 function computeLegalTopicCoverage(stateChunks: LabeledChunk[], legalTopics: string[]): number {

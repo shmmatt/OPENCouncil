@@ -1,11 +1,12 @@
 import { generateQueryEmbedding } from "../services/embeddingService";
-import { semanticSearch, type SearchResult } from "../services/embeddingStorage";
+import { semanticSearch, hybridSearch, type SearchResult, type HybridSearchResult } from "../services/embeddingStorage";
 import { getDocumentVersionById, getLogicalDocumentById } from "../storage/documents";
 import { db, sql } from "../storage/db";
 import { logDebug, logInfo } from "../utils/logger";
 import { computeSituationMatchScore } from "./situationExtractor";
 import { chatConfigV3 } from "./chatConfigV3";
-import type { RetrievalPlanV3, IssueMap } from "./types";
+import type { RetrievalPlanV3, IssueMap, TemporalTarget, QueryFocus } from "./types";
+import { QUERY_FOCUS_DOC_TYPE_WEIGHTS } from "./types";
 import type { LabeledChunk, ChunkAuthority, PipelineLogContext } from "./types";
 import type { SituationContext } from "@shared/schema";
 import type { V3RetrievalResult } from "./twoLaneRetrieve";
@@ -17,6 +18,8 @@ interface PgvectorLaneChunk {
   lane: "local" | "state";
   score: number;
   documentNames: string[];
+  year?: string;
+  category?: string;
 }
 
 interface EnrichedResult {
@@ -92,24 +95,59 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
   };
 }
 
+interface LaneQueryOptions {
+  keywordTerms?: string[];
+  temporalFilter?: TemporalTarget;
+  queryFocus?: QueryFocus;
+}
+
 async function executeQueryOnLane(
   query: string,
   lane: "local" | "state",
   town: string | null,
   maxResults: number,
+  laneOptions?: LaneQueryOptions,
 ): Promise<PgvectorLaneChunk[]> {
   const queryEmbedding = await generateQueryEmbedding(query);
 
   const townFilter = lane === "local" && town ? town : lane === "state" ? "statewide" : undefined;
+  const useHybrid = laneOptions && (
+    (laneOptions.keywordTerms && laneOptions.keywordTerms.length > 0) ||
+    (laneOptions.temporalFilter && laneOptions.temporalFilter.strategy !== "none") ||
+    (laneOptions.queryFocus && laneOptions.queryFocus !== "general")
+  );
 
-  const results = await semanticSearch(queryEmbedding, {
-    town: townFilter,
-    limit: maxResults,
-    similarityThreshold: 0.4,
-  });
+  let results: Array<{ chunk: any; similarity: number; documentId: string | null }>;
+
+  if (useHybrid) {
+    const docTypeWeights = laneOptions.queryFocus
+      ? QUERY_FOCUS_DOC_TYPE_WEIGHTS[laneOptions.queryFocus]
+      : undefined;
+
+    const hybridResults = await hybridSearch(queryEmbedding, {
+      town: townFilter,
+      limit: maxResults,
+      similarityThreshold: 0.4,
+      keywordTerms: laneOptions.keywordTerms,
+      temporalFilter: laneOptions.temporalFilter,
+      docTypeWeights,
+    });
+
+    results = hybridResults.map(r => ({
+      chunk: r.chunk,
+      similarity: r.score,
+      documentId: r.documentId,
+    }));
+  } else {
+    results = await semanticSearch(queryEmbedding, {
+      town: townFilter,
+      limit: maxResults,
+      similarityThreshold: 0.4,
+    });
+  }
 
   const enriched = await Promise.all(results.map(async (r, idx) => {
-    const enrichedResult = await enrichResult(r);
+    const enrichedResult = await enrichResult({ chunk: r.chunk, similarity: r.similarity, documentId: r.documentId });
     let docName: string;
     if (enrichedResult.fileBlobId) {
       docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
@@ -125,6 +163,8 @@ async function executeQueryOnLane(
       lane,
       score: r.similarity,
       documentNames: [docName],
+      year: enrichedResult.year,
+      category: enrichedResult.category,
     } as PgvectorLaneChunk;
   }));
 
@@ -201,6 +241,12 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   const localQueriesUsed: string[] = [];
   const stateQueriesUsed: string[] = [];
 
+  const laneOpts: LaneQueryOptions = {
+    keywordTerms: plan.keywordTerms && plan.keywordTerms.length > 0 ? plan.keywordTerms : undefined,
+    temporalFilter: plan.temporalFilter,
+    queryFocus: plan.queryFocus,
+  };
+
   const allQueries = [
     ...localQueries.map(q => ({ query: q, lane: "local" as const })),
     ...stateQueries.map(q => ({ query: q, lane: "state" as const })),
@@ -208,7 +254,7 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
 
   const results = await Promise.all(
     allQueries.map(({ query, lane }) =>
-      executeQueryOnLane(query, lane, townPreference || null, lane === "local" ? plan.local.k : plan.state.k)
+      executeQueryOnLane(query, lane, townPreference || null, lane === "local" ? plan.local.k : plan.state.k, laneOpts)
         .then(chunks => ({ query, lane, chunks }))
         .catch(err => {
           logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
@@ -242,6 +288,8 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     content: chunk.content,
     lane: "local" as const,
     authority: classifyAuthority(chunk.title, chunk.content, "local"),
+    year: chunk.year,
+    category: chunk.category,
   }));
 
   const labeledStateChunks: LabeledChunk[] = selectedState.map((chunk, idx) => ({
@@ -250,6 +298,8 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     content: chunk.content,
     lane: "state" as const,
     authority: classifyAuthority(chunk.title, chunk.content, "state"),
+    year: chunk.year,
+    category: chunk.category,
   }));
 
   const situationAlignment = situationContext && [...selectedLocal, ...selectedState].length > 0

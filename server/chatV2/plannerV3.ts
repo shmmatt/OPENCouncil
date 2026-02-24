@@ -20,7 +20,9 @@ import type {
   RetrievalPlanV3, 
   PlannerOutput, 
   LanePlan,
-  PipelineLogContext 
+  PipelineLogContext,
+  QueryFocus,
+  TemporalTarget,
 } from "./types";
 import type { SessionSource, SituationContext } from "@shared/schema";
 
@@ -29,8 +31,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const PLANNER_SYSTEM_PROMPT = `You are the planning agent for OpenCouncil's civic research assistant.
 
 Your job is to analyze a user's question (and any pasted article/document) to produce:
-1. An IssueMap - structured extraction of entities, topics, and intent
-2. A RetrievalPlan - specific queries for local and state document lanes
+1. An IssueMap - structured extraction of entities, topics, intent, AND temporal/keyword signals
+2. A RetrievalPlan - specific queries for local and state document lanes with keyword and temporal filters
 
 CRITICAL RULES:
 - Only include entities that APPEAR in the provided text (user message or session source)
@@ -49,7 +51,10 @@ Return JSON matching this exact schema:
     "timeHints": ["dates, years, time references"],
     "requestedOutput": "explain|steps|cite_laws|risk|process",
     "legalSalience": 0.0-1.0,
-    "plannerConfidence": 0.0-1.0
+    "plannerConfidence": 0.0-1.0,
+    "temporalTarget": { "year": 2026, "strategy": "hard_filter|boost|none" } or null,
+    "hardEntities": ["$600,000", "Article 13", "Highway Department"],
+    "queryFocus": "financial_exact|narrative_context|historical_trend|general"
   },
   "retrievalPlan": {
     "local": {
@@ -67,9 +72,34 @@ Return JSON matching this exact schema:
       "minLocalFacts": 0-4
     },
     "priority": "law-first|facts-first|process-first",
-    "reason": "brief explanation of plan"
+    "reason": "brief explanation of plan",
+    "keywordTerms": ["exact strings for keyword matching"],
+    "queryFocus": "financial_exact|narrative_context|historical_trend|general"
   }
 }
+
+## TEMPORAL TARGET RULES:
+- If the user asks about "current", "this year", "upcoming", or "next" → set temporalTarget.year to the current year and strategy to "boost"
+- If the user asks about a specific year (e.g., "2026 budget") → set temporalTarget.year to that year and strategy to "hard_filter"
+- If the user asks about historical trends or comparisons across years → set strategy to "none" (don't filter, let all years through)
+- If no temporal signal is present → omit temporalTarget (null)
+
+## HARD ENTITIES RULES:
+- Extract dollar amounts exactly as written (e.g., "$600,000", "$1.2 million")
+- Extract article/warrant IDs (e.g., "Article 13", "Warrant Article 5")
+- Extract specific department or committee names (e.g., "Highway Department", "Parks & Recreation")
+- These will be used for exact keyword matching, so preserve the original text
+
+## QUERY FOCUS RULES:
+- "financial_exact": User asks about specific amounts, budget lines, tax rates, appropriations → retrieval will boost budget/warrant documents
+- "narrative_context": User asks "why" something was decided, background/discussion, debate, reasoning → retrieval will boost meeting minutes
+- "historical_trend": User asks about changes over time, comparisons, history → retrieval will allow all years
+- "general": Default for general questions about procedures, rules, or explanations
+
+## KEYWORD TERMS RULES:
+- Include exact strings that should match via keyword search (not semantic search)
+- Dollar amounts, article numbers, specific proper nouns, department names
+- These complement the semantic queries and help find exact matches in documents
 
 Legal salience indicators (high = 0.7+):
 - liability, negligence, illegal, lawsuit, ADA, compliance
@@ -218,6 +248,9 @@ function parseAndValidatePlannerOutput(
       requestedOutput: validateRequestedOutput(parsed.issueMap?.requestedOutput),
       legalSalience: clamp(parsed.issueMap?.legalSalience ?? computeLegalSalience(userMessage), 0, 1),
       plannerConfidence: clamp(parsed.issueMap?.plannerConfidence ?? 0.5, 0, 1),
+      temporalTarget: parseTemporalTarget(parsed.issueMap?.temporalTarget, userMessage),
+      hardEntities: parseHardEntities(parsed.issueMap?.hardEntities, userMessage),
+      queryFocus: validateQueryFocus(parsed.issueMap?.queryFocus, userMessage),
     };
 
     if (Array.isArray(parsed.issueMap?.entities)) {
@@ -258,6 +291,9 @@ function parseAndValidatePlannerOutput(
 
     const minStateFromSalience = issueMap.legalSalience >= 0.5 ? 3 : 1;
 
+    const keywordTerms = parseKeywordTerms(parsed.retrievalPlan?.keywordTerms, issueMap.hardEntities);
+    const planQueryFocus = validateQueryFocus(parsed.retrievalPlan?.queryFocus, userMessage);
+
     const retrievalPlan: RetrievalPlanV3 = {
       local: localPlan,
       state: statePlan,
@@ -267,6 +303,9 @@ function parseAndValidatePlannerOutput(
       },
       priority: validatePriority(parsed.retrievalPlan?.priority, issueMap.legalSalience),
       reason: parsed.retrievalPlan?.reason || 'Planner-generated plan',
+      temporalFilter: issueMap.temporalTarget,
+      keywordTerms,
+      queryFocus: planQueryFocus,
     };
 
     if (issueMap.plannerConfidence < chatConfigV3.LOW_CONFIDENCE_THRESHOLD) {
@@ -300,6 +339,7 @@ function parseAndValidatePlannerOutput(
 }
 
 function getFallbackPlannerOutput(userMessage: string, townHint?: string): PlannerOutput {
+  const hardEntities = extractHardEntitiesHeuristic(userMessage);
   const issueMap: IssueMap = {
     town: townHint,
     situationTitle: extractDefaultTitle(userMessage),
@@ -311,6 +351,9 @@ function getFallbackPlannerOutput(userMessage: string, townHint?: string): Plann
     requestedOutput: "explain",
     legalSalience: computeLegalSalience(userMessage),
     plannerConfidence: 0.3,
+    temporalTarget: extractTemporalTargetHeuristic(userMessage),
+    hardEntities,
+    queryFocus: inferQueryFocusHeuristic(userMessage),
   };
 
   const retrievalPlan: RetrievalPlanV3 = {
@@ -330,6 +373,9 @@ function getFallbackPlannerOutput(userMessage: string, townHint?: string): Plann
     },
     priority: issueMap.legalSalience >= 0.6 ? "law-first" : "facts-first",
     reason: "Fallback plan due to planner error",
+    temporalFilter: issueMap.temporalTarget,
+    keywordTerms: hardEntities,
+    queryFocus: issueMap.queryFocus,
   };
 
   return {
@@ -468,4 +514,117 @@ function buildDefaultStateQuery(userMessage: string, issueMap: IssueMap): string
   if (actionWord) parts.push(actionWord);
   
   return parts.join(' ').slice(0, 200);
+}
+
+function parseTemporalTarget(raw: unknown, userMessage: string): TemporalTarget | undefined {
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const year = typeof obj.year === 'number' ? obj.year : parseInt(String(obj.year), 10);
+    const strategy = obj.strategy;
+    if (!isNaN(year) && year >= 1900 && year <= 2100) {
+      const validStrategies = ["hard_filter", "boost", "none"] as const;
+      const validStrategy = validStrategies.includes(strategy as any) 
+        ? (strategy as TemporalTarget['strategy']) 
+        : "boost";
+      return { year, strategy: validStrategy };
+    }
+  }
+  return extractTemporalTargetHeuristic(userMessage);
+}
+
+function extractTemporalTargetHeuristic(text: string): TemporalTarget | undefined {
+  const currentYear = new Date().getFullYear();
+  const lowerText = text.toLowerCase();
+
+  const yearMatch = text.match(/\b(20\d{2})\b/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1], 10);
+    return { year, strategy: "hard_filter" };
+  }
+
+  if (/\b(current|this year|upcoming|next town meeting|next year)\b/i.test(lowerText)) {
+    const targetYear = /\bnext year\b/i.test(lowerText) ? currentYear + 1 : currentYear;
+    return { year: targetYear, strategy: "boost" };
+  }
+
+  if (/\b(trend|over the years|historically|history|compared? to|year.over.year)\b/i.test(lowerText)) {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function parseHardEntities(raw: unknown, userMessage: string): string[] {
+  if (Array.isArray(raw)) {
+    const validated = raw
+      .filter((e): e is string => typeof e === 'string' && e.trim().length > 0)
+      .slice(0, 10);
+    if (validated.length > 0) return validated;
+  }
+  return extractHardEntitiesHeuristic(userMessage);
+}
+
+function extractHardEntitiesHeuristic(text: string): string[] {
+  const entities: string[] = [];
+
+  const dollarPattern = /\$[\d,]+(?:\.\d{2})?(?:\s*(?:million|billion|k))?/gi;
+  let match;
+  while ((match = dollarPattern.exec(text)) !== null) {
+    entities.push(match[0]);
+  }
+
+  const articlePattern = /\b(?:Article|Warrant Article)\s+\d+\b/gi;
+  while ((match = articlePattern.exec(text)) !== null) {
+    entities.push(match[0]);
+  }
+
+  const deptPattern = /\b([A-Z][a-z]+(?:\s+(?:&|and)\s+[A-Z][a-z]+)*\s+(?:Department|Commission|Committee|Board))\b/g;
+  while ((match = deptPattern.exec(text)) !== null) {
+    entities.push(match[0]);
+  }
+
+  return entities.slice(0, 10);
+}
+
+function validateQueryFocus(raw: unknown, userMessage: string): QueryFocus {
+  const valid: QueryFocus[] = ["financial_exact", "narrative_context", "historical_trend", "general"];
+  if (typeof raw === 'string' && valid.includes(raw as QueryFocus)) {
+    return raw as QueryFocus;
+  }
+  return inferQueryFocusHeuristic(userMessage);
+}
+
+function inferQueryFocusHeuristic(text: string): QueryFocus {
+  const lowerText = text.toLowerCase();
+
+  if (/\b(trend|over the years|historically|history|compared? to|year.over.year|changed)\b/i.test(lowerText)) {
+    return "historical_trend";
+  }
+
+  if (/\b(why|reason|discussion|debate|decided|voted|rationale|background|context)\b/i.test(lowerText)) {
+    return "narrative_context";
+  }
+
+  if (/\$[\d,]|budget|appropriat|tax rate|how much|cost|spend|amount|warrant article/i.test(lowerText)) {
+    return "financial_exact";
+  }
+
+  return "general";
+}
+
+function parseKeywordTerms(raw: unknown, hardEntities: string[]): string[] {
+  const terms: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const term of raw) {
+      if (typeof term === 'string' && term.trim().length > 0) {
+        terms.push(term.trim());
+      }
+    }
+  }
+  for (const entity of hardEntities) {
+    if (!terms.some(t => t.toLowerCase() === entity.toLowerCase())) {
+      terms.push(entity);
+    }
+  }
+  return terms.slice(0, 15);
 }

@@ -266,6 +266,260 @@ export async function twoLaneSemanticSearch(
 }
 
 // ============================================================
+// KEYWORD SEARCH (Full-Text via GIN-indexed tsvector)
+// ============================================================
+
+export interface KeywordSearchResult {
+  chunk: DocumentChunk;
+  rank: number;
+  documentId: string | null;
+}
+
+function sanitizeKeywordTerms(terms: string[]): string {
+  return terms
+    .map(term => term
+      .replace(/[^\w\s$.,'-]/g, ' ')
+      .replace(/\$/g, '')
+      .trim()
+    )
+    .filter(t => t.length > 1)
+    .map(t => t.split(/\s+/).filter(w => w.length > 1).join(' & '))
+    .filter(t => t.length > 0)
+    .join(' | ');
+}
+
+export async function keywordSearch(
+  terms: string[],
+  options: SearchOptions = {}
+): Promise<KeywordSearchResult[]> {
+  const {
+    town,
+    towns,
+    category,
+    board,
+    year,
+    limit = 20,
+  } = options;
+
+  const tsQuery = sanitizeKeywordTerms(terms);
+  if (!tsQuery) return [];
+
+  const conditions = [];
+
+  conditions.push(sql`search_vector @@ to_tsquery('english', ${tsQuery})`);
+
+  if (town) {
+    conditions.push(sql`lower(metadata->>'town') = ${town.toLowerCase()}`);
+  } else if (towns && towns.length > 0) {
+    const townList = towns.map(t => `'${t.replace(/'/g, "''").toLowerCase()}'`).join(",");
+    conditions.push(sql.raw(`lower(metadata->>'town') IN (${townList})`));
+  }
+
+  if (category) {
+    conditions.push(sql`metadata->>'documentType' = ${category}`);
+  }
+  if (board) {
+    conditions.push(sql`metadata->>'board' = ${board}`);
+  }
+  if (year) {
+    conditions.push(sql`metadata->>'year' = ${year}`);
+  }
+
+  try {
+    const results = await db
+      .select({
+        chunk: schema.documentChunks,
+        rank: sql<number>`ts_rank(search_vector, to_tsquery('english', ${tsQuery}))`,
+      })
+      .from(schema.documentChunks)
+      .where(and(...conditions))
+      .orderBy(sql`ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC`)
+      .limit(limit);
+
+    const mapped = results.map(r => ({
+      chunk: r.chunk,
+      rank: r.rank,
+      documentId: r.chunk.documentId,
+    }));
+
+    logInfo(
+      `Keyword search: ${mapped.length} results for terms: ${terms.join(', ')}`,
+      { stage: "embeddingStorage" }
+    );
+
+    return mapped;
+  } catch (error) {
+    logError("Keyword search failed", { stage: "embeddingStorage", error: String(error) });
+    return [];
+  }
+}
+
+// ============================================================
+// HYBRID SEARCH (Semantic + Keyword via Reciprocal Rank Fusion)
+// ============================================================
+
+import type { TemporalTarget, QueryFocus } from "../chatV2/types";
+
+export interface HybridSearchOptions extends SearchOptions {
+  keywordTerms?: string[];
+  temporalFilter?: TemporalTarget;
+  queryFocus?: QueryFocus;
+  docTypeWeights?: Record<string, number>;
+}
+
+export interface HybridSearchResult {
+  chunk: DocumentChunk;
+  score: number;
+  documentId: string | null;
+  semanticRank?: number;
+  keywordRank?: number;
+}
+
+const RRF_K = 60;
+
+export async function hybridSearch(
+  queryEmbedding: number[],
+  options: HybridSearchOptions = {}
+): Promise<HybridSearchResult[]> {
+  const {
+    keywordTerms,
+    temporalFilter,
+    queryFocus,
+    docTypeWeights,
+    limit = 20,
+    ...baseOptions
+  } = options;
+
+  const fetchLimit = Math.max(limit * 2, 30);
+
+  const hasKeywords = keywordTerms && keywordTerms.length > 0;
+
+  const [semanticResults, keywordResults] = await Promise.all([
+    semanticSearch(queryEmbedding, { ...baseOptions, limit: fetchLimit }),
+    hasKeywords
+      ? keywordSearch(keywordTerms, { ...baseOptions, limit: fetchLimit })
+      : Promise.resolve([]),
+  ]);
+
+  const chunkMap = new Map<number, {
+    chunk: DocumentChunk;
+    documentId: string | null;
+    semanticRank?: number;
+    keywordRank?: number;
+  }>();
+
+  for (let i = 0; i < semanticResults.length; i++) {
+    const r = semanticResults[i];
+    chunkMap.set(r.chunk.id, {
+      chunk: r.chunk,
+      documentId: r.documentId,
+      semanticRank: i + 1,
+    });
+  }
+
+  for (let i = 0; i < keywordResults.length; i++) {
+    const r = keywordResults[i];
+    const existing = chunkMap.get(r.chunk.id);
+    if (existing) {
+      existing.keywordRank = i + 1;
+    } else {
+      chunkMap.set(r.chunk.id, {
+        chunk: r.chunk,
+        documentId: r.documentId,
+        keywordRank: i + 1,
+      });
+    }
+  }
+
+  const scored: HybridSearchResult[] = [];
+
+  for (const entry of Array.from(chunkMap.values())) {
+    let rrfScore = 0;
+    if (entry.semanticRank != null) {
+      rrfScore += 1 / (RRF_K + entry.semanticRank);
+    }
+    if (entry.keywordRank != null) {
+      rrfScore += 1 / (RRF_K + entry.keywordRank);
+    }
+
+    if (temporalFilter && temporalFilter.strategy !== "none") {
+      rrfScore = applyTemporalBoost(rrfScore, entry.chunk, temporalFilter);
+    }
+
+    if (docTypeWeights && Object.keys(docTypeWeights).length > 0) {
+      rrfScore = applyDocTypeWeight(rrfScore, entry.chunk, docTypeWeights);
+    }
+
+    scored.push({
+      chunk: entry.chunk,
+      score: rrfScore,
+      documentId: entry.documentId,
+      semanticRank: entry.semanticRank,
+      keywordRank: entry.keywordRank,
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const topResults = scored.slice(0, limit);
+
+  logInfo(
+    `Hybrid search: ${topResults.length} results (${semanticResults.length} semantic, ${keywordResults.length} keyword, ${chunkMap.size} unique)`,
+    { stage: "embeddingStorage" }
+  );
+
+  return topResults;
+}
+
+function applyTemporalBoost(
+  score: number,
+  chunk: DocumentChunk,
+  temporalFilter: TemporalTarget
+): number {
+  const meta = chunk.metadata;
+  if (!meta?.year) return score * 0.85;
+
+  const docYear = typeof meta.year === 'number' ? meta.year : parseInt(String(meta.year), 10);
+  if (isNaN(docYear)) return score * 0.85;
+
+  const yearDiff = Math.abs(temporalFilter.year - docYear);
+
+  if (temporalFilter.strategy === "hard_filter") {
+    if (yearDiff === 0) return score * 1.4;
+    if (yearDiff === 1) return score * 1.0;
+    if (yearDiff <= 3) return score * 0.6;
+    return score * 0.3;
+  }
+
+  if (temporalFilter.strategy === "boost") {
+    if (yearDiff === 0) return score * 1.3;
+    if (yearDiff === 1) return score * 1.1;
+    if (yearDiff <= 3) return score * 0.9;
+    return score * 0.7;
+  }
+
+  return score;
+}
+
+function applyDocTypeWeight(
+  score: number,
+  chunk: DocumentChunk,
+  weights: Record<string, number>
+): number {
+  const meta = chunk.metadata;
+  const docType = meta?.documentType || "";
+
+  for (const [type, weight] of Object.entries(weights)) {
+    if (docType.toLowerCase().includes(type.toLowerCase()) ||
+        type.toLowerCase().includes(docType.toLowerCase())) {
+      return score * weight;
+    }
+  }
+
+  return score;
+}
+
+// ============================================================
 // UTILITY FUNCTIONS
 // ============================================================
 

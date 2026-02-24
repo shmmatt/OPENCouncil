@@ -17,8 +17,14 @@ The backend is an Express.js application written in TypeScript, exposing a RESTf
 ### Data Storage
 PostgreSQL is used as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (with pgvector for embeddings), `embeddingJobs`, and `chatTemplates`. `chatSessions` has a `templateId` foreign key linking to `chatTemplates`. Drizzle Kit manages database migrations.
 
-### Retrieval Backend (pgvector)
-Documents are transformed into 768-dimensional vectors using Google Gemini's `text-embedding-004` model and stored in PostgreSQL with the pgvector extension. A two-lane retrieval system performs parallel town-specific and statewide semantic searches.
+### Retrieval Backend (Hybrid: pgvector + Full-Text Search)
+Documents are transformed into 768-dimensional vectors using Google Gemini's `gemini-embedding-001` model and stored in PostgreSQL with the pgvector extension. A **hybrid retrieval** system combines:
+- **Semantic search**: pgvector cosine similarity for conceptual matching
+- **Keyword search**: PostgreSQL full-text search via GIN-indexed `search_vector` tsvector column on `document_chunks` for exact-match retrieval (dollar amounts, article numbers, department names)
+- **Reciprocal Rank Fusion (RRF)**: Results from both search methods are merged using position-based RRF scoring (k=60), avoiding the pitfalls of linear score blending between different score distributions
+- **Temporal re-ranking**: When a temporal target is detected (e.g., "2026 budget"), year-matching chunks receive a score boost while historically distant chunks are penalized
+- **Document-type weighting**: Based on `queryFocus` classification (`financial_exact`, `narrative_context`, `historical_trend`, `general`), document types are weighted to boost the most relevant source types (e.g., meeting minutes for "why" questions, budgets for "how much" questions)
+The two-lane architecture (local + statewide) operates on top of this hybrid search.
 
 ### AI Integration
 Google Gemini is integrated for several core functionalities:

@@ -163,6 +163,43 @@ export interface PipelineLogContext {
 // CHAT V3 PIPELINE TYPES
 // =====================================================
 
+export type QueryFocus = "financial_exact" | "narrative_context" | "historical_trend" | "general";
+
+export interface TemporalTarget {
+  year: number;
+  strategy: "hard_filter" | "boost" | "none";
+}
+
+export const QUERY_FOCUS_DOC_TYPE_WEIGHTS: Record<QueryFocus, Record<string, number>> = {
+  financial_exact: {
+    "Budget": 1.4,
+    "Warrant": 1.4,
+    "Town Report": 1.2,
+    "Meeting Minutes": 0.8,
+    "Ordinance": 0.9,
+    "RSA": 0.9,
+  },
+  narrative_context: {
+    "Meeting Minutes": 1.5,
+    "Selectmen Minutes": 1.5,
+    "Planning Board Minutes": 1.3,
+    "Budget": 0.7,
+    "Warrant": 0.8,
+    "Town Report": 1.0,
+    "Ordinance": 1.0,
+    "RSA": 0.9,
+  },
+  historical_trend: {
+    "Budget": 1.2,
+    "Warrant": 1.2,
+    "Town Report": 1.3,
+    "Meeting Minutes": 1.0,
+    "Ordinance": 1.0,
+    "RSA": 0.9,
+  },
+  general: {},
+};
+
 /**
  * IssueMap: Structured extraction of the user's question/situation
  * Used by Stage 1 (Planner) to guide retrieval and synthesis
@@ -178,6 +215,9 @@ export interface IssueMap {
   requestedOutput?: "explain" | "steps" | "cite_laws" | "risk" | "process";
   legalSalience: number; // 0..1
   plannerConfidence: number; // 0..1
+  temporalTarget?: TemporalTarget;
+  hardEntities: string[];
+  queryFocus: QueryFocus;
 }
 
 /**
@@ -201,6 +241,9 @@ export interface RetrievalPlanV3 {
   };
   priority: "law-first" | "facts-first" | "process-first";
   reason: string; // for debug
+  temporalFilter?: TemporalTarget;
+  keywordTerms: string[];
+  queryFocus: QueryFocus;
 }
 
 /**
@@ -299,6 +342,8 @@ export interface LabeledChunk {
   content: string;
   lane: "local" | "state";
   authority: ChunkAuthority;
+  year?: string;
+  category?: string;
 }
 
 /**
