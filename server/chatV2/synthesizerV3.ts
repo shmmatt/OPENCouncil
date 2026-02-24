@@ -101,9 +101,15 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       config: {
         systemInstruction: systemPrompt,
         temperature: synthesisTemperature,
-        maxOutputTokens: 2500, // Reduced to encourage conciseness
+        maxOutputTokens: 8192,
+        thinkingConfig: { thinkingBudget: 1024 },
       },
     });
+
+    const finishReason = response.candidates?.[0]?.finishReason;
+    if (finishReason === 'MAX_TOKENS') {
+      logDebug(`synthesizerV3: WARNING: Gemini response truncated due to MAX_TOKENS (requestId: ${logContext?.requestId})`);
+    }
 
     const responseText = response.text || "Unable to synthesize an answer from the available sources.";
     const durationMs = Date.now() - startTime;

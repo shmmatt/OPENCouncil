@@ -120,10 +120,11 @@ export function validateProseFormat(
   const wordCount = words.length;
   
   if (wordCount < prosePolicy.wordMin) {
+    const severeTruncation = wordCount < prosePolicy.wordMin * 0.5;
     violations.push({
       type: 'format_violation',
       evidence: `Word count ${wordCount} is below minimum of ${prosePolicy.wordMin} for ${answerType}`,
-      severity: 'warning',
+      severity: severeTruncation ? 'error' : 'warning',
     });
   }
   
