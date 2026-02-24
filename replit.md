@@ -15,7 +15,7 @@ The frontend is built with React and TypeScript, using Vite for tooling. It leve
 The backend is an Express.js application written in TypeScript, exposing a RESTful API. It uses JWT for authentication in admin routes, bcrypt for password hashing, and Multer for handling file uploads (PDF, DOCX, TXT). Routes are organized into domain-specific routers.
 
 ### Data Storage
-PostgreSQL is used as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (with pgvector for embeddings), and `embeddingJobs`. Drizzle Kit manages database migrations.
+PostgreSQL is used as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (with pgvector for embeddings), `embeddingJobs`, and `chatTemplates`. `chatSessions` has a `templateId` foreign key linking to `chatTemplates`. Drizzle Kit manages database migrations.
 
 ### Retrieval Backend (pgvector)
 Documents are transformed into 768-dimensional vectors using Google Gemini's `text-embedding-004` model and stored in PostgreSQL with the pgvector extension. A two-lane retrieval system performs parallel town-specific and statewide semantic searches.
