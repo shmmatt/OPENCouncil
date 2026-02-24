@@ -1894,4 +1894,114 @@ router.post("/state-sources/:sourceSlug/runs/report", async (req, res) => {
   }
 });
 
+const S3_BUCKET_BACKFILL = process.env.S3_BUCKET || "opencouncil-municipal-docs";
+
+router.post("/backfill-blobs", async (req, res) => {
+  try {
+    const { townSlug, limit: batchLimit, dryRun } = req.body || {};
+    const maxDocs = Math.min(Number(batchLimit) || 10000, 50000);
+    const BATCH_SIZE = 50;
+
+    const whereClause = townSlug
+      ? sql`cd.status = 'uploaded' AND cd.file_blob_id IS NULL AND cd.s3_key IS NOT NULL AND ct.slug = ${townSlug}`
+      : sql`cd.status = 'uploaded' AND cd.file_blob_id IS NULL AND cd.s3_key IS NOT NULL`;
+
+    const countResult = await db.execute(sql`
+      SELECT COUNT(*) as total
+      FROM crawler_documents cd
+      JOIN crawler_towns ct ON cd.town_id = ct.id
+      WHERE ${whereClause}
+    `);
+    const totalUnbridged = Number((countResult.rows[0] as any)?.total || 0);
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        totalUnbridged,
+        wouldProcess: Math.min(totalUnbridged, maxDocs),
+        message: `Found ${totalUnbridged} uploaded docs without file_blob_id${townSlug ? ` for ${townSlug}` : ''}`,
+      });
+    }
+
+    const docs = await db.execute(sql`
+      SELECT cd.id, cd.s3_key, cd.filename, cd.mime_type, cd.size_bytes
+      FROM crawler_documents cd
+      JOIN crawler_towns ct ON cd.town_id = ct.id
+      WHERE ${whereClause}
+      ORDER BY cd.s3_uploaded_at ASC
+      LIMIT ${maxDocs}
+    `);
+
+    let created = 0;
+    let linked = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (let i = 0; i < docs.rows.length; i += BATCH_SIZE) {
+      const batch = docs.rows.slice(i, i + BATCH_SIZE) as any[];
+
+      for (const doc of batch) {
+        try {
+          const rawHash = `s3:${doc.s3_key}`;
+          const existingBlob = await db.execute(
+            sql`SELECT id FROM file_blobs WHERE raw_hash = ${rawHash}`
+          );
+
+          let fileBlobId: string;
+          if (existingBlob.rows.length > 0) {
+            fileBlobId = (existingBlob.rows[0] as any).id;
+            skipped++;
+          } else {
+            const storagePath = `s3://${S3_BUCKET_BACKFILL}/${doc.s3_key}`;
+            const [blob] = await db
+              .insert(schema.fileBlobs)
+              .values({
+                rawHash,
+                sizeBytes: doc.size_bytes || 0,
+                mimeType: doc.mime_type || "application/pdf",
+                originalFilename: doc.filename || doc.s3_key.split("/").pop() || "unknown.pdf",
+                storagePath,
+                s3Bucket: S3_BUCKET_BACKFILL,
+                s3Key: doc.s3_key,
+                needsOcr: false,
+                ocrStatus: "none",
+                extractedTextCharCount: 0,
+                embeddingStatus: "none",
+              })
+              .returning();
+            fileBlobId = blob.id;
+            created++;
+          }
+
+          await db.execute(sql`
+            UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${doc.id} AND file_blob_id IS NULL
+          `);
+          linked++;
+        } catch (e: any) {
+          errors++;
+          if (errors <= 5) {
+            console.error(`[Backfill] Error for doc ${doc.id}: ${e.message}`);
+          }
+        }
+      }
+
+      if (i + BATCH_SIZE < docs.rows.length) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    res.json({
+      message: `Backfill complete${townSlug ? ` for ${townSlug}` : ''}`,
+      totalUnbridged,
+      processed: docs.rows.length,
+      created,
+      linked,
+      skipped,
+      errors,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
 export default router;

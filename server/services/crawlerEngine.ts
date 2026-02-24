@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import * as crypto from 'crypto';
 import { db } from '../storage/db';
+import * as schema from '../../shared/schema';
 import { crawlerDocuments, crawlerTowns, crawlerRuns } from '../../shared/crawler-schema';
 import type { CrawlerTown, CrawlerRun, CrawlRunSummary, FailureType } from '../../shared/crawler-schema';
 import { classifyError } from '../../shared/crawler-schema';
@@ -326,6 +327,48 @@ async function uploadToS3(s3: S3Client, key: string, buffer: Buffer, contentType
     Body: buffer,
     ContentType: contentType,
   }));
+}
+
+async function bridgeToFileBlob(crawlerDocId: string, opts: {
+  s3Key: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<void> {
+  try {
+    const rawHash = `s3:${opts.s3Key}`;
+    const existing = await db.execute(
+      sql`SELECT id FROM file_blobs WHERE raw_hash = ${rawHash}`
+    );
+    let fileBlobId: string;
+    if (existing.rows.length > 0) {
+      fileBlobId = (existing.rows[0] as any).id;
+    } else {
+      const storagePath = `s3://${S3_BUCKET}/${opts.s3Key}`;
+      const [blob] = await db
+        .insert(schema.fileBlobs)
+        .values({
+          rawHash,
+          sizeBytes: opts.sizeBytes || 0,
+          mimeType: opts.mimeType || 'application/pdf',
+          originalFilename: opts.filename || opts.s3Key.split('/').pop() || 'unknown.pdf',
+          storagePath,
+          s3Bucket: S3_BUCKET,
+          s3Key: opts.s3Key,
+          needsOcr: false,
+          ocrStatus: 'none',
+          extractedTextCharCount: 0,
+          embeddingStatus: 'none',
+        })
+        .returning();
+      fileBlobId = blob.id;
+    }
+    await db.execute(sql`
+      UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${crawlerDocId} AND file_blob_id IS NULL
+    `);
+  } catch (e: any) {
+    console.warn(`[CrawlerEngine] bridgeToFileBlob failed for ${opts.s3Key}: ${e.message}`);
+  }
 }
 
 function extractLinksFromHtml(html: string, pageUrl: string): Array<{ href: string; text: string }> {
@@ -1469,7 +1512,7 @@ async function executeCrawl(
 
       try {
         if (await s3KeyExists(s3, s3Key)) {
-          await recordDocument({
+          const existDoc = await recordDocument({
             townId: town.id,
             url: docUrl,
             urlHash,
@@ -1482,6 +1525,7 @@ async function executeCrawl(
             discoveredFrom: docInfo.foundOnPage,
             s3UploadedAt: new Date(),
           });
+          await bridgeToFileBlob(existDoc.id, { s3Key, filename: pdfName, mimeType: 'application/pdf', sizeBytes: 0 });
           progress.duplicatesSkipped++;
           summary.duplicates++;
           continue;
@@ -1489,7 +1533,7 @@ async function executeCrawl(
 
         const driveDoc = await downloadDriveFile(driveFileId, driveMimeType, undefined, signal);
         await uploadToS3(s3, s3Key, driveDoc.buffer, driveDoc.contentType);
-        await recordDocument({
+        const newDriveDoc = await recordDocument({
           townId: town.id,
           url: docUrl,
           urlHash,
@@ -1504,6 +1548,7 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
+        await bridgeToFileBlob(newDriveDoc.id, { s3Key, filename: pdfName, mimeType: driveDoc.contentType, sizeBytes: driveDoc.size });
         progress.documentsDownloaded++;
         summary.newDocuments++;
         if (driveBoard) {
@@ -1584,7 +1629,7 @@ async function executeCrawl(
 
     try {
       if (await s3KeyExists(s3, s3Key)) {
-        await recordDocument({
+        const existDoc = await recordDocument({
           townId: town.id,
           url: docUrl,
           urlHash,
@@ -1597,6 +1642,7 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
+        await bridgeToFileBlob(existDoc.id, { s3Key, filename, mimeType: 'application/pdf', sizeBytes: 0 });
         progress.duplicatesSkipped++;
         summary.duplicates++;
         continue;
@@ -1672,7 +1718,7 @@ async function executeCrawl(
 
       if (doc && !doc.isInterstitial && doc.size > 0) {
         await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
-        await recordDocument({
+        const newDoc = await recordDocument({
           townId: town.id,
           url: docUrl,
           urlHash,
@@ -1687,6 +1733,7 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
+        await bridgeToFileBlob(newDoc.id, { s3Key, filename, mimeType: doc.contentType, sizeBytes: doc.size });
         progress.documentsDownloaded++;
         summary.newDocuments++;
         if (downloadIndex % 10 === 0 || progress.documentsDownloaded <= 5) {
