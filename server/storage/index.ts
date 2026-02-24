@@ -37,3 +37,6 @@ export * from "./ocrJobs";
 
 // S3 Gemini Sync
 export * from "./s3GeminiSync";
+
+// Chat Templates
+export * from "./chatTemplates";

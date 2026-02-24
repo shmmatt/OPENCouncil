@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { runChatV3Pipeline } from "../chatV2/chatOrchestratorV3";
 import { chatConfig } from "../chatV2/chatConfig";
 import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLimiter";
+import { getChatTemplateById } from "../storage/chatTemplates";
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.get("/sessions", async (req, res) => {
 
 router.post("/sessions", sessionCreationLimiter, async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, templateId } = req.body;
     const actor = req.actor;
     
     if (!actor || (!actor.userId && !actor.anonId)) {
@@ -34,6 +35,7 @@ router.post("/sessions", sessionCreationLimiter, async (req, res) => {
       title: title || "New conversation",
       userId: actor.actorType === 'user' ? actor.userId : undefined,
       anonId: actor.anonId,
+      templateId: templateId || undefined,
     });
     res.json(session);
   } catch (error) {
@@ -85,6 +87,21 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     let answer: string;
     let citations: string[];
     
+    let templateContext: string | null = null;
+    if ((session as any).templateId) {
+      try {
+        const template = await getChatTemplateById((session as any).templateId);
+        if (template?.generatedPayload) {
+          const payload = typeof template.generatedPayload === "string"
+            ? JSON.parse(template.generatedPayload)
+            : template.generatedPayload;
+          templateContext = `This chat was launched from a document template: "${template.title}" for ${template.town}. The template covers the following document sections:\n${(payload.sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+        }
+      } catch (err) {
+        console.error("Template context lookup error:", err);
+      }
+    }
+
     try {
       const townContext = req.body.townContext || session.townPreference || null;
       const v3Result = await runChatV3Pipeline({
@@ -93,6 +110,7 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
         townPreference: townContext,
         situationContext: null,
         sessionSources: [],
+        templateContext,
       });
       answer = v3Result.answerText;
       citations = v3Result.sourceDocumentNames || [];

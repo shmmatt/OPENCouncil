@@ -264,6 +264,12 @@ export default function AdminDocuments() {
                 Crawler
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-templates">
+              <Link href="/admin/templates">
+                <FileText className="w-4 h-4 mr-2" />
+                Templates
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="w-4 h-4 mr-2" />
               Logout

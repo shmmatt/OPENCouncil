@@ -54,13 +54,18 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     isRepairAttempt,
     answerType = "QUICK_PROCESS",
     renderStyle = "PROSE",
+    templateContext,
   } = options;
   
   const { model: modelName } = getModelForStage('complexSynthesis');
   const startTime = Date.now();
 
   const prosePolicy = getProsePolicy(answerType, renderStyle);
-  const systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length);
+  let systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length);
+
+  if (templateContext) {
+    systemPrompt += `\n\n## Template Document Context\n${templateContext}\nWhen answering, keep the above template context in mind. The user is exploring a structured document and may ask follow-up questions about specific sections, budget items, or warrant articles. Search the full municipal database for historical context and related records, not just the template's target documents.`;
+  }
   const userPrompt = buildSynthesisUserPrompt(
     userMessage, 
     issueMap, 

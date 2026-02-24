@@ -13,6 +13,7 @@ import { extractSituationHeuristic } from "./situationExtractor";
 import { detectDrift, shouldRegenerate } from "./driftDetector";
 import { detectSessionSource } from "./sessionSourceDetector";
 import { chatConfig } from "./chatConfig";
+import { getChatTemplateById } from "../storage/chatTemplates";
 import { chatConfigV3 } from "./chatConfigV3";
 import { chatMessageLimiter } from "../middleware/rateLimiter";
 import type { SituationContext, SessionSource } from "@shared/schema";
@@ -261,6 +262,21 @@ export function registerChatV2Routes(app: Express): void {
       let retrievedChunkCount: number;
       let pipelineDurationMs: number;
 
+      let templateContext: string | null = null;
+      if ((session as any).templateId) {
+        try {
+          const template = await getChatTemplateById((session as any).templateId);
+          if (template?.generatedPayload) {
+            const payload = typeof template.generatedPayload === "string"
+              ? JSON.parse(template.generatedPayload)
+              : template.generatedPayload;
+            templateContext = `This chat was launched from a document template: "${template.title}" for ${template.town}. The template covers the following document sections:\n${(payload.sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+          }
+        } catch (err) {
+          logDebug("template_context_error", { ...logCtx, stage: "template_lookup", error: String(err) });
+        }
+      }
+
       if (chatConfigV3.ENABLE_V3_PIPELINE) {
         // V3 PIPELINE: Plan → Retrieve → Synthesize → Audit
         const v3Result = await runChatV3Pipeline({
@@ -270,6 +286,7 @@ export function registerChatV2Routes(app: Express): void {
           situationContext,
           sessionSources,
           logContext: logCtx,
+          templateContext,
         });
 
         answerText = v3Result.answerText;

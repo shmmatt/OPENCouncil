@@ -15,9 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatSession, ChatMessage, MinutesUpdateItem } from "@shared/schema";
+import type { ChatSession, ChatMessage, MinutesUpdateItem, TemplatePayload } from "@shared/schema";
 import type { ChatNotice } from "@shared/chatNotices";
 import { MessageNotices } from "@/components/MessageNotices";
+import { TemplateBanner } from "@/components/TemplateBanner";
+import { TemplateFirstMessage } from "@/components/TemplateFirstMessage";
 import { useToast } from "@/hooks/use-toast";
 
 // V2 response types
@@ -603,8 +605,11 @@ export default function Chat() {
   });
 
   const createSessionMutation = useMutation({
-    mutationFn: async (): Promise<ChatSession> => {
-      const res = await apiRequest("POST", "/api/chat/sessions", { title: "New conversation" });
+    mutationFn: async (params?: { templateId?: string; title?: string }): Promise<ChatSession> => {
+      const res = await apiRequest("POST", "/api/chat/sessions", {
+        title: params?.title || "New conversation",
+        templateId: params?.templateId,
+      });
       return res.json();
     },
     onSuccess: (newSession: ChatSession) => {
@@ -770,7 +775,41 @@ export default function Chat() {
   }, [messages, sendMessageMutation.isPending]);
 
   const handleNewChat = () => {
-    createSessionMutation.mutate();
+    createSessionMutation.mutate(undefined);
+  };
+
+  const handleTemplateLaunch = (templateId: string, title: string) => {
+    createSessionMutation.mutate({ templateId, title });
+  };
+
+  const activeSession = sessions?.find((s) => s.id === activeSessionId);
+  const activeTemplateId = (activeSession as any)?.templateId as string | null;
+
+  const { data: templateData } = useQuery<{
+    id: string;
+    title: string;
+    bannerText: string;
+    town: string;
+    generatedPayload: TemplatePayload | null;
+  } | null>({
+    queryKey: ["/api/templates", activeTemplateId],
+    queryFn: async () => {
+      if (!activeTemplateId) return null;
+      const res = await fetch(`/api/templates/${activeTemplateId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!activeTemplateId,
+  });
+
+  const handleTemplateQuestionClick = (question: string) => {
+    setInputValue(question);
+    setTimeout(() => {
+      const form = document.querySelector("form");
+      if (form) {
+        form.requestSubmit();
+      }
+    }, 50);
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -814,6 +853,7 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 flex flex-col h-full">
+        <TemplateBanner onLaunch={handleTemplateLaunch} />
         <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Sheet>
@@ -870,6 +910,13 @@ export default function Chat() {
               </div>
             ) : (
               <>
+                {templateData?.generatedPayload && (
+                  <TemplateFirstMessage
+                    payload={templateData.generatedPayload}
+                    title={templateData.title}
+                    onQuestionClick={handleTemplateQuestionClick}
+                  />
+                )}
                 {messages?.map((message) => (
                   <MessageBubble 
                     key={message.id} 

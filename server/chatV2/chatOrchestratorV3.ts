@@ -75,6 +75,7 @@ export interface V3OrchestratorOptions {
   situationContext?: SituationContext | null;
   sessionSources?: SessionSource[];
   logContext?: PipelineLogContext;
+  templateContext?: string | null;
 }
 
 export async function runChatV3Pipeline(
@@ -87,6 +88,7 @@ export async function runChatV3Pipeline(
     situationContext,
     sessionSources,
     logContext,
+    templateContext,
   } = options;
 
   const startTime = Date.now();
@@ -229,6 +231,7 @@ export async function runChatV3Pipeline(
     logContext,
     answerType,
     renderStyle,
+    templateContext,
   });
 
   let answerText = synthesisResult.answerText;
@@ -278,6 +281,7 @@ export async function runChatV3Pipeline(
         isRepairAttempt: true,
         answerType,
         renderStyle,
+        templateContext,
       });
 
       repairRan = true;

@@ -211,15 +211,45 @@ export interface SessionSource {
   createdAt: string;
 }
 
+// ============================================================
+// DOCUMENT CHAT TEMPLATES
+// ============================================================
+
+export interface TemplateSection {
+  title: string;
+  budgetAmount?: string;
+  description: string;
+  suggestedQuestions: string[];
+}
+
+export interface TemplatePayload {
+  summary: string;
+  sections: TemplateSection[];
+  highLevelQuestions: string[];
+}
+
+export const chatTemplates = pgTable("chat_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  bannerText: text("banner_text").notNull(),
+  town: text("town").notNull(),
+  targetDocumentIds: jsonb("target_document_ids").$type<string[]>().notNull().default([]),
+  generatedPayload: jsonb("generated_payload").$type<TemplatePayload>(),
+  isActive: boolean("is_active").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Chat Sessions: Updated with user/anon tracking
 export const chatSessions = pgTable("chat_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   userId: varchar("user_id").references(() => users.id),
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
-  townPreference: text("town_preference"), // Session-level town preference override
-  situationContext: jsonb("situation_context").$type<SituationContext>(), // Current topic/situation for anchoring
-  sessionSources: jsonb("session_sources").$type<SessionSource[]>(), // Ephemeral user-provided content
+  templateId: varchar("template_id").references(() => chatTemplates.id),
+  townPreference: text("town_preference"),
+  situationContext: jsonb("situation_context").$type<SituationContext>(),
+  sessionSources: jsonb("session_sources").$type<SessionSource[]>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -384,6 +414,12 @@ export const insertIngestionJobSchema = createInsertSchema(ingestionJobs).omit({
   updatedAt: true,
 });
 
+export const insertChatTemplateSchema = createInsertSchema(chatTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertChatSessionSchema = createInsertSchema(chatSessions).omit({
   id: true,
   createdAt: true,
@@ -458,6 +494,9 @@ export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
 
 export type IngestionJob = typeof ingestionJobs.$inferSelect;
 export type InsertIngestionJob = z.infer<typeof insertIngestionJobSchema>;
+
+export type ChatTemplate = typeof chatTemplates.$inferSelect;
+export type InsertChatTemplate = z.infer<typeof insertChatTemplateSchema>;
 
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type InsertChatSession = z.infer<typeof insertChatSessionSchema>;

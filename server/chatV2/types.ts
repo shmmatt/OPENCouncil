@@ -287,6 +287,7 @@ export interface SynthesisInputV3 {
   stateChunks: LabeledChunk[];
   recordStrength: RecordStrength;
   history: ChatHistoryMessage[];
+  templateContext?: string | null;
 }
 
 /**
