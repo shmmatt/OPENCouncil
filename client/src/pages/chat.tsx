@@ -180,52 +180,20 @@ function ChatSidebar({
   activeSessionId, 
   onSessionSelect, 
   onNewChat,
-  onInsertPrompt
+  onInsertPrompt,
+  selectedTown,
+  onTownChange,
+  towns,
 }: { 
   sessions?: ChatSession[]; 
   activeSessionId: string | null;
   onSessionSelect: (id: string) => void;
   onNewChat: () => void;
   onInsertPrompt: (prompt: string) => void;
+  selectedTown: string;
+  onTownChange: (town: string) => void;
+  towns: string[];
 }) {
-  // Fetch available towns
-  const { data: townsData } = useQuery<{ towns: string[] }>({
-    queryKey: ["/api/meta/towns"],
-  });
-
-  // Fetch current town preference
-  const { data: prefData } = useQuery<{ town: string }>({
-    queryKey: ["/api/preferences/town"],
-  });
-
-  const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
-
-  // Update selected town when preference loads
-  useEffect(() => {
-    if (prefData?.town) {
-      setSelectedTown(prefData.town);
-    }
-  }, [prefData?.town]);
-
-  const setTownMutation = useMutation({
-    mutationFn: async (town: string) => {
-      await apiRequest("POST", "/api/preferences/town", { 
-        town,
-        sessionId: activeSessionId 
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
-    },
-  });
-
-  const handleTownChange = (town: string) => {
-    setSelectedTown(town);
-    setTownMutation.mutate(town);
-  };
-
-  const towns = townsData?.towns || ["Ossipee"];
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
@@ -246,7 +214,7 @@ function ChatSidebar({
         <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
           Town
         </label>
-        <Select value={selectedTown} onValueChange={handleTownChange}>
+        <Select value={selectedTown} onValueChange={onTownChange}>
           <SelectTrigger 
             className="w-full" 
             data-testid="select-town"
@@ -568,6 +536,7 @@ export default function Chat() {
   const [sharedLinkQuestion, setSharedLinkQuestion] = useState<string | null>(null);
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -608,9 +577,43 @@ export default function Chat() {
     }
   }, []);
 
+  const { data: townsData } = useQuery<{ towns: string[] }>({
+    queryKey: ["/api/meta/towns"],
+  });
+
+  const { data: prefData } = useQuery<{ town: string }>({
+    queryKey: ["/api/preferences/town"],
+  });
+
+  useEffect(() => {
+    if (prefData?.town) {
+      setSelectedTown(prefData.town);
+    }
+  }, [prefData?.town]);
+
   const { data: sessions } = useQuery<ChatSession[]>({
     queryKey: ["/api/chat/sessions"],
   });
+
+  const setTownMutation = useMutation({
+    mutationFn: async (town: string) => {
+      await apiRequest("POST", "/api/preferences/town", { 
+        town,
+        sessionId: activeSessionId 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
+    },
+  });
+
+  const handleTownChange = (town: string) => {
+    setSelectedTown(town);
+    setTownMutation.mutate(town);
+  };
+
+  const towns = townsData?.towns || ["Ossipee"];
 
   const { data: messages, isLoading: messagesLoading } = useQuery<ChatMessage[]>({
     queryKey: ["/api/chat/sessions", activeSessionId],
@@ -775,6 +778,12 @@ export default function Chat() {
 
   const handleFollowUpClick = (question: string) => {
     setInputValue(question);
+    setTimeout(() => {
+      const form = document.querySelector("form");
+      if (form) {
+        form.requestSubmit();
+      }
+    }, 50);
   };
 
   useEffect(() => {
@@ -856,6 +865,9 @@ export default function Chat() {
       onSessionSelect={setActiveSessionId}
       onNewChat={handleNewChat}
       onInsertPrompt={handleInsertPrompt}
+      selectedTown={selectedTown}
+      onTownChange={handleTownChange}
+      towns={towns}
     />
   );
 
@@ -866,7 +878,7 @@ export default function Chat() {
       </div>
 
       <div className="flex-1 flex flex-col h-full">
-        <TemplateBanner onLaunch={handleTemplateLaunch} />
+        <TemplateBanner onLaunch={handleTemplateLaunch} isLoading={createSessionMutation.isPending} selectedTown={selectedTown} />
         <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Sheet>

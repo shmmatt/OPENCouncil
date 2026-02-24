@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles } from "lucide-react";
+import { X, Sparkles, Loader2 } from "lucide-react";
 import type { TemplatePayload } from "@shared/schema";
 
 interface ActiveTemplate {
@@ -14,8 +14,12 @@ interface ActiveTemplate {
 
 export function TemplateBanner({
   onLaunch,
+  isLoading,
+  selectedTown,
 }: {
   onLaunch: (templateId: string, title: string) => void;
+  isLoading?: boolean;
+  selectedTown?: string;
 }) {
   const [dismissed, setDismissed] = useState(false);
 
@@ -30,6 +34,7 @@ export function TemplateBanner({
   });
 
   if (!template || dismissed || !template.generatedPayload) return null;
+  if (selectedTown && template.town && template.town !== selectedTown) return null;
 
   return (
     <div
@@ -43,9 +48,17 @@ export function TemplateBanner({
           size="sm"
           className="font-medium"
           onClick={() => onLaunch(template.id, template.title)}
+          disabled={isLoading}
           data-testid="button-launch-template"
         >
-          {template.bannerText}
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Loading template...
+            </>
+          ) : (
+            template.bannerText
+          )}
         </Button>
       </div>
       <Button
