@@ -1,0 +1,39 @@
+# Context & Objective
+We are upgrading the RAG (Retrieval-Augmented Generation) pipeline for "OPENCouncil," a civic tech application that indexes municipal documents (like town warrants, budgets, selectmen's minutes, and state RSAs). 
+
+Our current pipeline is: 
+1. Intent Pass (analyzes/rewrites the user query)
+2. Dual-Lane Retrieval (pulls from Local Town index and Statewide context index)
+3. Synthesis (final LLM call to answer the user).
+
+# The Core Problems to Solve
+Currently, our retrieval relies too heavily on pure semantic vector similarity, which is causing two main issues we need you to fix:
+1. **Temporal/Recency Bias:** When a user asks about the "2026 paving schedule," the system retrieves historical documents from 2011 or 2015 because they are semantically identical to 2026 documents. We need the system to understand time.
+2. **Narrative vs. Numeric Mismatch:** When a user asks about a specific warrant article (e.g., "$600k for paving"), the system retrieves keyword-dense budget spreadsheets, but completely misses the narrative context buried in the selectmen's meeting minutes from the months prior, where the actual discussion happened.
+
+# Required Outcomes
+
+Please update our RAG pipeline to achieve the following outcomes. You have the flexibility to determine the best technical implementation (e.g., updating our database schema, implementing hybrid search, adjusting the LLM schemas), as long as these behaviors are achieved:
+
+## 1. Upgrade the "Intent Pass" to Extract Structured Metadata
+Modify the initial Intent Pass so it doesn't just rewrite the prompt, but also outputs a structured data object (JSON) that extracts:
+* **Temporal Targets:** Explicitly identify the target year or timeframe implied by the user (e.g., if they ask about "upcoming town meeting", extract the current/next year).
+* **Hard Entities:** Extract specific numbers, warrant article IDs, or department names (e.g., "$600,000", "Article 13", "Highway Department") to be used as exact-match filters.
+* **Document Type Weighting:** Infer which types of documents might hold the answer. If the query asks "why" a budget increased, weight "Meeting Minutes" higher. If it asks "how much," weight "Budget/Warrant" higher.
+
+## 2. Implement a Hybrid Retrieval Strategy
+Upgrade the retrieval step to move beyond pure vector search. 
+* Combine semantic similarity search (to understand concepts like "governance changes") with sparse/keyword search (to find exact matches for "$600,000" or "Article 13").
+* Apply the temporal data extracted from the Intent Pass as a hard pre-filter or a strong weight to penalize out-of-date historical documents unless the user specifically asks for a historical trend.
+* Ensure the retrieval can link related chunks. If a budget document mentions "Article 13 paving," the search should actively surface meeting minutes that also mention those keywords in that same timeframe.
+
+## 3. Refine the Synthesis Pass
+Update the final synthesizer prompt to better handle these new inputs. 
+* It must cross-reference the numeric data (from warrants/budgets) with the narrative data (from minutes) when formulating the answer. 
+* It must heavily prioritize the most recent, temporally relevant documents provided in the context.
+
+# Acceptance Criteria
+* The Intent Pass successfully returns a structured object with timeframes and exact keywords.
+* Queries about current budgets prioritize current-year documents over historical ones.
+* Queries about specific budget line items or warrant articles successfully retrieve both the financial document and the relevant meeting minutes discussing them.
+* Please provide a summary of your proposed architecture changes before executing the code.
