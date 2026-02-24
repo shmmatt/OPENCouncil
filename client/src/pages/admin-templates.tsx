@@ -47,7 +47,14 @@ import {
   X,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
-import type { ChatTemplate, LogicalDocument, TemplatePayload, TemplateSection } from "@shared/schema";
+import type { ChatTemplate, TemplatePayload, TemplateSection } from "@shared/schema";
+
+type UnifiedDocument = {
+  id: string;
+  title: string;
+  town: string;
+  source: "logical" | "crawler";
+};
 
 function adminFetch(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem("adminToken");
@@ -151,10 +158,10 @@ function TemplateForm({
   const [viewMode, setViewMode] = useState<"preview" | "json">("preview");
   const [docSearchQuery, setDocSearchQuery] = useState("");
 
-  const { data: logicalDocs, isLoading: docsLoading } = useQuery<LogicalDocument[]>({
-    queryKey: ["/api/admin/v2/documents"],
+  const { data: unifiedDocs, isLoading: docsLoading } = useQuery<UnifiedDocument[]>({
+    queryKey: ["/api/admin/unified-documents"],
     queryFn: async () => {
-      const res = await adminFetch("/api/admin/v2/documents");
+      const res = await adminFetch("/api/admin/unified-documents");
       if (res.status === 401) {
         setLocation("/admin/login");
         throw new Error("Unauthorized");
@@ -163,11 +170,11 @@ function TemplateForm({
     },
   });
 
-  const filteredDocs = (logicalDocs || []).filter((doc) => {
+  const filteredDocs = (unifiedDocs || []).filter((doc) => {
     const matchesTown = !town || doc.town === town;
     const matchesSearch =
       !docSearchQuery ||
-      doc.canonicalTitle.toLowerCase().includes(docSearchQuery.toLowerCase());
+      doc.title.toLowerCase().includes(docSearchQuery.toLowerCase());
     return matchesTown && matchesSearch;
   });
 
@@ -354,11 +361,11 @@ function TemplateForm({
         {selectedDocIds.length > 0 && (
           <div className="flex flex-wrap gap-1 py-1">
             {selectedDocIds.map((docId) => {
-              const doc = logicalDocs?.find((d) => d.id === docId);
+              const doc = unifiedDocs?.find((d) => d.id === docId);
               return (
                 <Badge key={docId} variant="secondary" className="gap-1">
                   <FileText className="w-3 h-3" />
-                  <span className="max-w-[200px] truncate">{doc?.canonicalTitle || docId}</span>
+                  <span className="max-w-[200px] truncate">{doc?.title || docId}</span>
                   <button onClick={() => toggleDoc(docId)} className="ml-1">
                     <X className="w-3 h-3" />
                   </button>
@@ -392,10 +399,15 @@ function TemplateForm({
                   ) : (
                     <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                   )}
-                  <span className="truncate">{doc.canonicalTitle}</span>
-                  <Badge variant="outline" className="ml-auto shrink-0 text-xs">
-                    {doc.town}
-                  </Badge>
+                  <span className="truncate">{doc.title}</span>
+                  <div className="ml-auto flex items-center gap-1 shrink-0">
+                    {doc.source === "crawler" && (
+                      <Badge variant="outline" className="text-xs">crawled</Badge>
+                    )}
+                    <Badge variant="outline" className="text-xs">
+                      {doc.town}
+                    </Badge>
+                  </div>
                 </button>
               ))}
               {filteredDocs.length === 0 && (

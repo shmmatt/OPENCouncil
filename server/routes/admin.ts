@@ -347,6 +347,64 @@ router.get("/v2/documents", authenticateAdmin, async (req, res) => {
   }
 });
 
+router.get("/unified-documents", authenticateAdmin, async (_req, res) => {
+  try {
+    const { db, sql: sqlTag } = await import("../storage/db");
+
+    const logicalResult = await db.execute(sqlTag`
+      SELECT 
+        ld.id,
+        ld.canonical_title as title,
+        ld.town,
+        'logical' as source
+      FROM logical_documents ld
+      WHERE ld.canonical_title IS NOT NULL
+      ORDER BY ld.canonical_title
+    `);
+
+    const crawlerResult = await db.execute(sqlTag`
+      SELECT 
+        fb.id,
+        COALESCE(cd.filename, fb.original_filename) as title,
+        ct.name as town,
+        'crawler' as source
+      FROM file_blobs fb
+      JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+      JOIN crawler_towns ct ON cd.town_id = ct.id
+      WHERE fb.id NOT IN (
+        SELECT dv.file_blob_id FROM document_versions dv
+        JOIN logical_documents ld ON ld.current_version_id = dv.id
+        WHERE dv.file_blob_id IS NOT NULL
+      )
+      AND (fb.preview_text IS NOT NULL OR fb.ocr_text IS NOT NULL)
+      ORDER BY COALESCE(cd.filename, fb.original_filename)
+    `);
+
+    const logicalDocs = (logicalResult.rows || logicalResult || []) as any[];
+    const crawlerDocs = (crawlerResult.rows || crawlerResult || []) as any[];
+
+    const unified = [
+      ...logicalDocs.map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        town: d.town,
+        source: "logical" as const,
+      })),
+      ...crawlerDocs.map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        town: d.town,
+        source: "crawler" as const,
+      })),
+    ];
+
+    res.json(unified);
+  } catch (error) {
+    console.error("Error fetching unified documents:", error);
+    res.status(500).json({ message: "Failed to fetch unified documents" });
+  }
+});
+
 router.get("/v2/documents/:id", authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;

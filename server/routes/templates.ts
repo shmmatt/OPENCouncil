@@ -134,17 +134,28 @@ router.post("/:id/generate", authenticateAdmin, async (req, res) => {
     const documentTitles: string[] = [];
     for (const docId of docIds) {
       const logicalDoc = await getLogicalDocumentById(docId);
-      if (!logicalDoc) continue;
-      documentTitles.push(logicalDoc.canonicalTitle);
-      if (logicalDoc.currentVersionId) {
-        const { getDocumentVersionById } = await import("../storage/documents");
-        const version = await getDocumentVersionById(logicalDoc.currentVersionId);
-        if (version?.fileBlobId) {
-          const blob = await getFileBlobById(version.fileBlobId);
-          if (blob?.previewText) {
-            documentTexts.push(`--- ${logicalDoc.canonicalTitle} ---\n${blob.previewText.slice(0, 15000)}`);
-          } else if (blob?.ocrText) {
-            documentTexts.push(`--- ${logicalDoc.canonicalTitle} ---\n${blob.ocrText.slice(0, 15000)}`);
+      if (logicalDoc) {
+        documentTitles.push(logicalDoc.canonicalTitle);
+        if (logicalDoc.currentVersionId) {
+          const { getDocumentVersionById } = await import("../storage/documents");
+          const version = await getDocumentVersionById(logicalDoc.currentVersionId);
+          if (version?.fileBlobId) {
+            const blob = await getFileBlobById(version.fileBlobId);
+            if (blob?.previewText) {
+              documentTexts.push(`--- ${logicalDoc.canonicalTitle} ---\n${blob.previewText.slice(0, 15000)}`);
+            } else if (blob?.ocrText) {
+              documentTexts.push(`--- ${logicalDoc.canonicalTitle} ---\n${blob.ocrText.slice(0, 15000)}`);
+            }
+          }
+        }
+      } else {
+        const blob = await getFileBlobById(docId);
+        if (blob) {
+          const title = blob.originalFilename || docId;
+          documentTitles.push(title);
+          const text = blob.previewText || blob.ocrText;
+          if (text) {
+            documentTexts.push(`--- ${title} ---\n${text.slice(0, 15000)}`);
           }
         }
       }
