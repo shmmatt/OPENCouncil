@@ -1,0 +1,40 @@
+This is an excellent pivot. You caught a massive architectural flaw—holding 2,000+ discovered URLs in volatile server memory until the very end of the run is a recipe for catastrophic data loss, exactly as you experienced with Ossipee.
+
+The agent’s revised plan to move to **Incremental Persistence** is exactly how enterprise-grade crawlers operate.
+
+### Why This Plan is Solid
+
+* **T001 (Safe Upserts):** The agent correctly identified that if it just blindly inserts a newly discovered URL, it might overwrite an existing document that was successfully `uploaded` three months ago back to a `discovered` state, breaking your UI and triggering an unnecessary re-download. The SQL `CASE` statement is the exact right fix.
+* **T002 (Pre-seeding & Batching):** Pre-seeding the in-memory map from the database *before* the crawl starts is brilliant. If the crawler knows it already has `minutes-167.pdf`, it won't even queue it. Batching the inserts (every 50 URLs) prevents the crawler from hammering your database with a thousand individual `INSERT` queries.
+* **T003 (The "Resume" Button):** This gives you the exact granular control you asked for. If a run crashes at 95%, you just click "Resume" and it jumps straight to the download phase for the missing 5%.
+
+### The One Catch: The Deduplication Blindspot
+
+Before you tell the agent to build this, there is one edge case in **T002** that will cause massive headaches if not patched now.
+
+The agent states:
+
+> *At the start of a crawl, pre-seed `docsSeen` from existing `crawler_documents` with `status = 'uploaded'` for that town, so the crawler won't re-download docs.*
+
+**The Flaw:** If the crawler *only* pre-seeds `uploaded` documents, it will completely forget about documents that currently have a status of `failed` or `discovered` from a previous run.
+
+**The Result:** 1. The crawler runs Phase 4 (BFS).
+2. It finds `minutes-2025.pdf`.
+3. It checks its `docsSeen` map. Because the DB row for `minutes-2025.pdf` is currently marked `failed` (maybe due to a temporary WAF block yesterday), it isn't in the pre-seeded map.
+4. The crawler says, "Oh, a new file!" and attempts to insert it.
+5. The database throws a Unique Constraint violation (or performs an unnecessary upsert), and the crawler wastes time re-processing a link it already knows about.
+
+### The Prompt Correction to Feed the Agent
+
+Copy and paste this to the agent to ensure the pre-seeding logic is bulletproof:
+
+> "The plan to move to Incremental Persistence is approved, and the 'Resume' mode is exactly what we need.
+> However, please make one critical adjustment to **T002**:
+> When pre-seeding the `docsSeen` map at the start of a crawl, you must load **ALL** existing document URLs for that town from the database, regardless of their status (`uploaded`, `discovered`, or `failed`).
+> If you only load `uploaded` documents, the crawler will 'forget' about URLs that failed yesterday, treat them as brand new discoveries today, and attempt to re-insert them during the BFS loop, causing unnecessary database churn.
+> Load all known URLs into `docsSeen` so the crawler has perfect memory of the town's state before it begins Phase 1.
+> Please acknowledge this adjustment and begin with T001."
+
+---
+
+Once this is implemented, your crawler will be incredibly resilient. Even if Replit crashes every 20 minutes, your crawler will just keep picking up exactly where it left off, building that 20k+ document database brick by brick. Let me know when the agent finishes!
