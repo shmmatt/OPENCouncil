@@ -57,3 +57,11 @@ export async function deactivateAllTemplates(): Promise<void> {
     .set({ isActive: false, updatedAt: new Date() })
     .where(eq(schema.chatTemplates.isActive, true));
 }
+
+export async function getChatTemplateBySlug(slug: string): Promise<ChatTemplate | undefined> {
+  const [result] = await db
+    .select()
+    .from(schema.chatTemplates)
+    .where(eq(schema.chatTemplates.slug, slug));
+  return result;
+}

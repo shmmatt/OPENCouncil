@@ -15,6 +15,7 @@ import AdminChatAnalytics from "@/pages/admin-chat-analytics";
 import AdminOcrPipeline from "@/pages/admin-ocr-pipeline";
 import AdminCrawler from "@/pages/admin-crawler";
 import AdminTemplates from "@/pages/admin-templates";
+import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 
 function Router() {
@@ -22,6 +23,7 @@ function Router() {
     <Switch>
       <Route path="/" component={() => <Redirect to="/chat" />} />
       <Route path="/chat" component={Chat} />
+      <Route path="/chat/t/:slug" component={TemplateLauncher} />
       <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/documents" component={AdminDocuments} />

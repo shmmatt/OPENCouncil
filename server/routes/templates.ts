@@ -9,6 +9,7 @@ import {
   deleteChatTemplate,
   getActiveChatTemplate,
   deactivateAllTemplates,
+  getChatTemplateBySlug,
 } from "../storage/chatTemplates";
 import { getLogicalDocumentById } from "../storage/documents";
 import { getFileBlobById } from "../storage/fileBlobs";
@@ -20,6 +21,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
 const templateInputSchema = z.object({
   title: z.string().min(1),
+  slug: z.string().nullable().optional(),
   bannerText: z.string().min(1),
   town: z.string().min(1),
   targetDocumentIds: z.array(z.string()).min(1),
@@ -58,6 +60,7 @@ router.post("/", authenticateAdmin, async (req, res) => {
     }
     const template = await createChatTemplate({
       title: parsed.title,
+      slug: parsed.slug || null,
       bannerText: parsed.bannerText,
       town: parsed.town,
       targetDocumentIds: parsed.targetDocumentIds,
@@ -68,6 +71,9 @@ router.post("/", authenticateAdmin, async (req, res) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: "Invalid input", errors: error.errors });
+    }
+    if (error instanceof Error && error.message?.includes("unique")) {
+      return res.status(409).json({ message: "A template with this URL slug already exists. Please choose a different slug." });
     }
     console.error("Error creating template:", error);
     res.status(500).json({ message: "Failed to create template" });
@@ -89,6 +95,9 @@ router.put("/:id", authenticateAdmin, async (req, res) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ message: "Invalid input", errors: error.errors });
+    }
+    if (error instanceof Error && error.message?.includes("unique")) {
+      return res.status(409).json({ message: "A template with this URL slug already exists. Please choose a different slug." });
     }
     console.error("Error updating template:", error);
     res.status(500).json({ message: "Failed to update template" });
@@ -240,6 +249,26 @@ publicRouter.get("/active", async (_req, res) => {
   }
 });
 
+publicRouter.get("/by-slug/:slug", async (req, res) => {
+  try {
+    const template = await getChatTemplateBySlug(req.params.slug);
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+    res.json({
+      id: template.id,
+      title: template.title,
+      slug: template.slug,
+      bannerText: template.bannerText,
+      town: template.town,
+      generatedPayload: template.generatedPayload,
+    });
+  } catch (error) {
+    console.error("Error fetching template by slug:", error);
+    res.status(500).json({ message: "Failed to fetch template" });
+  }
+});
+
 publicRouter.get("/:id", async (req, res) => {
   try {
     const template = await getChatTemplateById(req.params.id);
@@ -249,6 +278,7 @@ publicRouter.get("/:id", async (req, res) => {
     res.json({
       id: template.id,
       title: template.title,
+      slug: template.slug,
       bannerText: template.bannerText,
       town: template.town,
       generatedPayload: template.generatedPayload,

@@ -574,6 +574,19 @@ export default function Chat() {
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
 
+  // Detect ?session= URL parameter for template-launched sessions
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionParam = urlParams.get("session");
+    if (sessionParam) {
+      setActiveSessionId(sessionParam);
+      urlParams.delete("session");
+      const remainingParams = urlParams.toString();
+      const newUrl = window.location.pathname + (remainingParams ? `?${remainingParams}` : "");
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+
   // Detect ?q= URL parameter for shareable links
   useEffect(() => {
     if (sharedLinkProcessedRef.current) return;

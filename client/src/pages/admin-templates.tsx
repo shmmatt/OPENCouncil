@@ -135,6 +135,7 @@ function TemplateForm({
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [title, setTitle] = useState(template?.title || "");
+  const [slug, setSlug] = useState(template?.slug || "");
   const [bannerText, setBannerText] = useState(template?.bannerText || "");
   const [town, setTown] = useState(template?.town || "");
   const [isActive, setIsActive] = useState(template?.isActive || false);
@@ -183,6 +184,7 @@ function TemplateForm({
 
       const body = {
         title,
+        slug: slug || null,
         bannerText,
         town,
         targetDocumentIds: selectedDocIds,
@@ -289,6 +291,25 @@ function TemplateForm({
             onChange={(e) => setBannerText(e.target.value)}
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="template-slug">URL Slug (shareable link)</Label>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground whitespace-nowrap">/chat/t/</span>
+          <Input
+            id="template-slug"
+            data-testid="input-template-slug"
+            placeholder="e.g., warrant-2025"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-"))}
+          />
+        </div>
+        {slug && (
+          <p className="text-xs text-muted-foreground">
+            Share this link: {window.location.origin}/chat/t/{slug}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -612,7 +633,12 @@ export default function AdminTemplates() {
                   <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                     <span>{t.town}</span>
                     <span>{(t.targetDocumentIds as string[])?.length || 0} documents</span>
-                    <span>Banner: "{t.bannerText}"</span>
+                    <span>Banner: &ldquo;{t.bannerText}&rdquo;</span>
+                    {t.slug && (
+                      <Badge variant="outline" className="text-xs font-mono">
+                        /chat/t/{t.slug}
+                      </Badge>
+                    )}
                     {t.generatedPayload ? (
                       <Badge variant="outline" className="text-xs">
                         <CheckCircle2 className="w-3 h-3 mr-1" />

@@ -231,6 +231,7 @@ export interface TemplatePayload {
 export const chatTemplates = pgTable("chat_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
+  slug: text("slug").unique(),
   bannerText: text("banner_text").notNull(),
   town: text("town").notNull(),
   targetDocumentIds: jsonb("target_document_ids").$type<string[]>().notNull().default([]),
