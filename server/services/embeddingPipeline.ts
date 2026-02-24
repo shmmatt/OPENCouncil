@@ -134,23 +134,25 @@ async function fetchReadyBlobs(limit: number | null, town: string | null): Promi
       fb.ocr_text,
       fb.original_filename,
       fb.content_hash,
-      ld.town,
-      ld.board,
+      COALESCE(ld.town, ct.name) as town,
+      COALESCE(ld.board, cd.board) as board,
       ld.category,
       dv.year,
       dv.document_id
     FROM file_blobs fb
     LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id AND dv.is_current = true
     LEFT JOIN logical_documents ld ON dv.document_id = ld.id
+    LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+    LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
     WHERE fb.embedding_status = 'none'
       AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
       AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
   `;
 
   if (town) {
-    finalQuery += ` AND LOWER(COALESCE(ld.town, 'unknown')) = LOWER('${town.replace(/'/g, "''")}')`;
+    finalQuery += ` AND LOWER(COALESCE(ld.town, ct.name, 'unknown')) = LOWER('${town.replace(/'/g, "''")}')`;
   }
-  finalQuery += ` ORDER BY COALESCE(ld.town, 'zzz'), fb.original_filename`;
+  finalQuery += ` ORDER BY COALESCE(ld.town, ct.name, 'zzz'), fb.original_filename`;
   if (limit) {
     finalQuery += ` LIMIT ${limit}`;
   }
