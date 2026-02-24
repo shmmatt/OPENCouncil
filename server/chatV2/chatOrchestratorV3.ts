@@ -127,8 +127,9 @@ export async function runChatV3Pipeline(
   const plannerResult = await runPlannerV3({
     userMessage,
     sessionSources,
-    situationContext: effectiveSituationContext, // Only pass if relevant
+    situationContext: effectiveSituationContext,
     townHint: townPreference || undefined,
+    templateContext,
     logContext,
   });
 
@@ -145,6 +146,9 @@ export async function runChatV3Pipeline(
     legalSalience: issueMap.legalSalience,
     plannerConfidence: issueMap.plannerConfidence,
     validationWarnings,
+    temporalFilter: retrievalPlan.temporalFilter || null,
+    queryFocus: retrievalPlan.queryFocus,
+    keywordTermCount: retrievalPlan.keywordTerms?.length || 0,
   });
 
   // =====================================================

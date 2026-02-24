@@ -117,11 +117,12 @@ interface PlannerV3Options {
   sessionSources?: SessionSource[];
   situationContext?: SituationContext | null;
   townHint?: string;
+  templateContext?: string | null;
   logContext?: PipelineLogContext;
 }
 
 export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOutput> {
-  const { userMessage, sessionSources, situationContext, townHint, logContext } = options;
+  const { userMessage, sessionSources, situationContext, townHint, templateContext, logContext } = options;
   const { model: modelName } = getModelForStage('retrievalPlanner');
 
   const sessionSourceText = sessionSources?.length 
@@ -134,12 +135,17 @@ export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOu
     ? `Current situation: "${situationContext.title}" with entities: ${situationContext.entities.slice(0, 5).join(', ')}`
     : '';
 
+  const templateHint = templateContext
+    ? `TEMPLATE CONTEXT: ${templateContext}`
+    : '';
+
   const userPrompt = `Analyze this question and create a retrieval plan:
 
 USER QUESTION: "${userMessage}"
 
 ${sessionSourceText ? `USER-PROVIDED DOCUMENT:\n${sessionSourceText}\n` : ''}
 ${situationHint ? `${situationHint}\n` : ''}
+${templateHint ? `${templateHint}\n` : ''}
 ${townHint ? `Town hint: ${townHint}` : 'No specific town mentioned'}
 
 Return valid JSON only.`;
@@ -197,7 +203,7 @@ Return valid JSON only.`;
       .replace(/```\n?/g, "")
       .trim();
 
-    const parsed = parseAndValidatePlannerOutput(cleanedText, userMessage, sessionSourceText, logContext);
+    const parsed = parseAndValidatePlannerOutput(cleanedText, userMessage, sessionSourceText, logContext, templateContext);
     return parsed;
 
   } catch (error) {
@@ -229,7 +235,8 @@ function parseAndValidatePlannerOutput(
   jsonText: string,
   userMessage: string,
   sessionSourceText: string,
-  logContext?: PipelineLogContext
+  logContext?: PipelineLogContext,
+  templateContext?: string | null,
 ): PlannerOutput {
   const validationWarnings: string[] = [];
   const combinedSourceText = (userMessage + ' ' + sessionSourceText).toLowerCase();
@@ -248,7 +255,7 @@ function parseAndValidatePlannerOutput(
       requestedOutput: validateRequestedOutput(parsed.issueMap?.requestedOutput),
       legalSalience: clamp(parsed.issueMap?.legalSalience ?? computeLegalSalience(userMessage), 0, 1),
       plannerConfidence: clamp(parsed.issueMap?.plannerConfidence ?? 0.5, 0, 1),
-      temporalTarget: parseTemporalTarget(parsed.issueMap?.temporalTarget, userMessage),
+      temporalTarget: parseTemporalTarget(parsed.issueMap?.temporalTarget, userMessage, templateContext),
       hardEntities: parseHardEntities(parsed.issueMap?.hardEntities, userMessage),
       queryFocus: validateQueryFocus(parsed.issueMap?.queryFocus, userMessage),
     };
@@ -324,6 +331,10 @@ function parseAndValidatePlannerOutput(
       legalSalience: issueMap.legalSalience,
       plannerConfidence: issueMap.plannerConfidence,
       warningCount: validationWarnings.length,
+      temporalTarget: issueMap.temporalTarget || null,
+      queryFocus: issueMap.queryFocus,
+      keywordTermCount: keywordTerms.length,
+      hardEntityCount: issueMap.hardEntities.length,
     });
 
     return {
@@ -516,7 +527,7 @@ function buildDefaultStateQuery(userMessage: string, issueMap: IssueMap): string
   return parts.join(' ').slice(0, 200);
 }
 
-function parseTemporalTarget(raw: unknown, userMessage: string): TemporalTarget | undefined {
+function parseTemporalTarget(raw: unknown, userMessage: string, templateContext?: string | null): TemporalTarget | undefined {
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
     const year = typeof obj.year === 'number' ? obj.year : parseInt(String(obj.year), 10);
@@ -529,10 +540,10 @@ function parseTemporalTarget(raw: unknown, userMessage: string): TemporalTarget 
       return { year, strategy: validStrategy };
     }
   }
-  return extractTemporalTargetHeuristic(userMessage);
+  return extractTemporalTargetHeuristic(userMessage, templateContext);
 }
 
-function extractTemporalTargetHeuristic(text: string): TemporalTarget | undefined {
+function extractTemporalTargetHeuristic(text: string, templateContext?: string | null): TemporalTarget | undefined {
   const currentYear = new Date().getFullYear();
   const lowerText = text.toLowerCase();
 
@@ -549,6 +560,14 @@ function extractTemporalTargetHeuristic(text: string): TemporalTarget | undefine
 
   if (/\b(trend|over the years|historically|history|compared? to|year.over.year)\b/i.test(lowerText)) {
     return undefined;
+  }
+
+  if (templateContext) {
+    const templateYearMatch = templateContext.match(/\b(20\d{2})\b/);
+    if (templateYearMatch) {
+      const year = parseInt(templateYearMatch[1], 10);
+      return { year, strategy: "boost" };
+    }
   }
 
   return undefined;
