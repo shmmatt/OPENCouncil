@@ -1,6 +1,7 @@
 import { generateQueryEmbedding } from "../services/embeddingService";
 import { semanticSearch, type SearchResult } from "../services/embeddingStorage";
 import { getDocumentVersionById, getLogicalDocumentById } from "../storage/documents";
+import { db, sql } from "../storage/db";
 import { logDebug, logInfo } from "../utils/logger";
 import { computeSituationMatchScore } from "./situationExtractor";
 import { chatConfigV3 } from "./chatConfigV3";
@@ -46,7 +47,7 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
           title: logicalDoc.canonicalTitle,
           content: result.chunk.content,
           fileBlobId,
-          filename,
+          filename: filename || logicalDoc.canonicalTitle,
           town: logicalDoc.town || town,
           board: logicalDoc.board || board,
           year: year,
@@ -55,7 +56,30 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
       }
     }
   } catch {}
-  const metaTitle = meta?.filename || meta?.documentType;
+
+  if (fileBlobId && !filename) {
+    try {
+      const blobResult = await db.execute(sql`
+        SELECT original_filename FROM file_blobs WHERE id = ${fileBlobId} LIMIT 1
+      `);
+      const rows = (blobResult.rows || blobResult) as any[];
+      if (rows.length > 0 && rows[0].original_filename) {
+        const resolvedFilename = rows[0].original_filename;
+        return {
+          title: resolvedFilename,
+          content: result.chunk.content,
+          fileBlobId,
+          filename: resolvedFilename,
+          town,
+          board,
+          year,
+          category,
+        };
+      }
+    } catch {}
+  }
+
+  const metaTitle = filename || meta?.documentType;
   return {
     title: metaTitle || `chunk-${result.chunk.chunkIndex}`,
     content: result.chunk.content,

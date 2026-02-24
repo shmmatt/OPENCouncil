@@ -18,6 +18,7 @@ interface ChunkData {
   board: string | null;
   year: string | null;
   contentHash: string;
+  filename: string | null;
 }
 
 export interface PipelineProgress {
@@ -167,6 +168,7 @@ async function insertChunk(c: ChunkData & { embedding: number[] }): Promise<void
     board: c.board || undefined,
     year: c.year || undefined,
     documentType: c.category || undefined,
+    filename: c.filename || undefined,
     fileBlobId: c.fileBlobId,
     contentHash: c.contentHash,
   });
@@ -258,6 +260,7 @@ export async function startPipeline(options?: { limit?: number; town?: string })
           board: blob.board || null,
           year: blob.year || null,
           contentHash,
+          filename: blob.original_filename || null,
         });
       }
 
