@@ -507,11 +507,16 @@ function applyDocTypeWeight(
   weights: Record<string, number>
 ): number {
   const meta = chunk.metadata;
-  const docType = meta?.documentType || "";
+  const docType = (meta?.documentType || "").toLowerCase();
+
+  const exactWeight = weights[docType];
+  if (exactWeight != null) {
+    return score * exactWeight;
+  }
 
   for (const [type, weight] of Object.entries(weights)) {
-    if (docType.toLowerCase().includes(type.toLowerCase()) ||
-        type.toLowerCase().includes(docType.toLowerCase())) {
+    const typeLower = type.toLowerCase();
+    if (docType.includes(typeLower) || typeLower.includes(docType)) {
       return score * weight;
     }
   }

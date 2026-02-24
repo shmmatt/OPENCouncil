@@ -93,6 +93,7 @@ Return JSON matching this exact schema:
 ## QUERY FOCUS RULES:
 - "financial_exact": User asks about specific amounts, budget lines, tax rates, appropriations → retrieval will boost budget/warrant documents
 - "narrative_context": User asks "why" something was decided, background/discussion, debate, reasoning → retrieval will boost meeting minutes
+  - IMPORTANT: When queryFocus is "narrative_context", at least ONE local query MUST target meeting minutes / deliberation content. Include words like "discussion", "voted", "debated", "reason", "explained", "proposed", "motion" in that query. Example: if user asks "Why did Selectmen salary increase?", include a query like "Selectmen salary increase discussion reason motion"
 - "historical_trend": User asks about changes over time, comparisons, history → retrieval will allow all years
 - "general": Default for general questions about procedures, rules, or explanations
 
@@ -294,6 +295,21 @@ function parseAndValidatePlannerOutput(
     }
     if (statePlan.queries.length === 0) {
       statePlan.queries = [buildDefaultStateQuery(userMessage, issueMap)];
+    }
+
+    if (issueMap.queryFocus === "narrative_context") {
+      const narrativeTerms = /\b(discussion|discussed|debated|debate|voted|vote|motion|reason|rationale|explained|proposed|deliberat)/i;
+      const hasNarrativeQuery = localPlan.queries.some(q => narrativeTerms.test(q));
+      if (!hasNarrativeQuery) {
+        const coreTopics = issueMap.entities.slice(0, 3).join(" ") || userMessage.split(/\s+/).slice(0, 6).join(" ");
+        const narrativeQuery = `${coreTopics} discussion reason voted motion`.trim();
+        if (localPlan.queries.length < chatConfigV3.MAX_QUERIES_PER_LANE) {
+          localPlan.queries.push(narrativeQuery);
+        } else {
+          localPlan.queries[localPlan.queries.length - 1] = narrativeQuery;
+        }
+        validationWarnings.push(`Injected narrative query for narrative_context focus: "${narrativeQuery}"`);
+      }
     }
 
     const minStateFromSalience = issueMap.legalSalience >= 0.5 ? 3 : 1;
