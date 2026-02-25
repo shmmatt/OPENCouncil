@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import * as crypto from 'crypto';
 import { db } from '../storage/db';
 import * as schema from '../../shared/schema';
@@ -370,6 +370,7 @@ async function bridgeToFileBlob(crawlerDocId: string, opts: {
     await db.execute(sql`
       UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${crawlerDocId} AND file_blob_id IS NULL
     `);
+    await tryExtractAndStoreText(fileBlobId, opts.s3Key, opts.mimeType || 'application/pdf');
   } catch (e: any) {
     console.warn(`[CrawlerEngine] bridgeToFileBlob failed for ${opts.s3Key}: ${e.message}`);
   }
@@ -2058,6 +2059,122 @@ export function generateStateS3Key(sourceSlug: string, url: string, filename: st
   return `state/${sourceSlug}/${sanitized}`;
 }
 
+async function extractTextFromS3File(s3Key: string, mimeType: string): Promise<string | null> {
+  const normalizedMime = mimeType.split(';')[0].trim().toLowerCase();
+  const isTextPlain = normalizedMime === 'text/plain';
+  const isHtml = normalizedMime === 'text/html';
+  const isDocx = normalizedMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const isDoc = normalizedMime === 'application/msword';
+
+  if (!isTextPlain && !isHtml && !isDocx && !isDoc) {
+    return null;
+  }
+
+  try {
+    const s3 = new S3Client({ region: S3_REGION });
+    const resp = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }));
+    if (!resp.Body) return null;
+
+    if (isTextPlain) {
+      return await resp.Body.transformToString('utf-8');
+    }
+
+    if (isHtml) {
+      const html = await resp.Body.transformToString('utf-8');
+      return html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#\d+;/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    if (isDocx) {
+      const bytes = await resp.Body.transformToByteArray();
+      const buffer = Buffer.from(bytes);
+      const tmpPath = `/tmp/extract_${Date.now()}.docx`;
+      const fs = await import('fs/promises');
+      await fs.writeFile(tmpPath, buffer);
+      try {
+        const mammoth = await import('mammoth');
+        const result = await (mammoth as any).extractRawText({ path: tmpPath });
+        return result.value || null;
+      } finally {
+        await fs.unlink(tmpPath).catch(() => {});
+      }
+    }
+
+    if (isDoc) {
+      const bytes = await resp.Body.transformToByteArray();
+      const buffer = Buffer.from(bytes);
+      const tmpPath = `/tmp/extract_${Date.now()}.doc`;
+      const fs = await import('fs/promises');
+      await fs.writeFile(tmpPath, buffer);
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+        const { stdout } = await execAsync(`antiword "${tmpPath}" 2>/dev/null || catdoc "${tmpPath}" 2>/dev/null || strings "${tmpPath}"`);
+        if (stdout && stdout.length > 50) return stdout;
+        return null;
+      } catch {
+        return null;
+      } finally {
+        await fs.unlink(tmpPath).catch(() => {});
+      }
+    }
+
+    return null;
+  } catch (e: any) {
+    console.warn(`[TextExtract] Failed for ${s3Key}: ${e.message}`);
+    return null;
+  }
+}
+
+function sanitizeTextForDb(text: string): string {
+  return text.replace(/\x00/g, '').replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
+function isPdfByKeyOrMime(s3Key: string, mimeType: string): boolean {
+  const normalizedMime = mimeType.split(';')[0].trim().toLowerCase();
+  if (normalizedMime === 'application/pdf') return true;
+  if (s3Key.toLowerCase().endsWith('.pdf')) return true;
+  if (normalizedMime === 'application/octet-stream' && s3Key.toLowerCase().endsWith('.pdf')) return true;
+  return false;
+}
+
+async function tryExtractAndStoreText(fileBlobId: string, s3Key: string, mimeType: string): Promise<void> {
+  if (isPdfByKeyOrMime(s3Key, mimeType)) return;
+
+  let text = await extractTextFromS3File(s3Key, mimeType);
+  if (text) {
+    text = sanitizeTextForDb(text);
+  }
+  if (text && text.length > 10) {
+    await db.execute(sql`
+      UPDATE file_blobs 
+      SET preview_text = ${text},
+          extracted_text_char_count = ${text.length},
+          needs_ocr = false,
+          ocr_status = 'not_needed'
+      WHERE id = ${fileBlobId} AND preview_text IS NULL
+    `);
+  } else {
+    await db.execute(sql`
+      UPDATE file_blobs 
+      SET needs_ocr = false,
+          ocr_status = 'not_applicable'
+      WHERE id = ${fileBlobId} AND preview_text IS NULL AND ocr_status IN ('none', 'failed')
+    `);
+  }
+}
+
 export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
   s3Key: string;
   filename: string;
@@ -2073,13 +2190,15 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
       sql`SELECT id FROM file_blobs WHERE raw_hash = ${rawHash}`
     );
     let fileBlobId: string;
+    const cleanText = opts.textContent ? sanitizeTextForDb(opts.textContent) : undefined;
+    const hasText = !!cleanText && cleanText.length > 0;
     if (existing.rows.length > 0) {
       fileBlobId = (existing.rows[0] as any).id;
-      if (opts.textContent) {
+      if (hasText) {
         await db.execute(sql`
           UPDATE file_blobs 
-          SET preview_text = ${opts.textContent},
-              extracted_text_char_count = ${opts.textContent.length},
+          SET preview_text = ${cleanText},
+              extracted_text_char_count = ${cleanText!.length},
               needs_ocr = false,
               ocr_status = 'not_needed'
           WHERE id = ${fileBlobId} AND preview_text IS NULL
@@ -2087,7 +2206,6 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
       }
     } else {
       const storagePath = `s3://${S3_BUCKET}/${opts.s3Key}`;
-      const hasText = !!opts.textContent;
       const [blob] = await db
         .insert(schema.fileBlobs)
         .values({
@@ -2098,10 +2216,10 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
           storagePath,
           s3Bucket: S3_BUCKET,
           s3Key: opts.s3Key,
-          needsOcr: hasText ? false : false,
+          needsOcr: false,
           ocrStatus: hasText ? 'not_needed' : 'none',
-          previewText: hasText ? opts.textContent : undefined,
-          extractedTextCharCount: hasText ? opts.textContent!.length : 0,
+          previewText: hasText ? cleanText : undefined,
+          extractedTextCharCount: hasText ? cleanText!.length : 0,
           embeddingStatus: 'none',
         })
         .returning();
@@ -2110,6 +2228,9 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
     await db.execute(sql`
       UPDATE crawler_state_documents SET file_blob_id = ${fileBlobId} WHERE id = ${stateDocId} AND file_blob_id IS NULL
     `);
+    if (!opts.textContent) {
+      await tryExtractAndStoreText(fileBlobId, opts.s3Key, opts.mimeType || 'application/pdf');
+    }
   } catch (e: any) {
     console.warn(`[StateCrawlEngine] bridgeStateDocToFileBlob failed for ${opts.s3Key}: ${e.message}`);
   }
