@@ -1,0 +1,29 @@
+1. The "Holy Grail" for Case Law: NH OPD Handbooks
+Before you try to scrape raw court dockets, you should ingest the synthesized resources provided by the New Hampshire Office of Planning and Development (OPD) (formerly the OEP). They maintain the definitive guides for local officials.
+
+The Big One: Federal and State Planning and Zoning Case Law for New Hampshire Local Officials (updated annually). This document already does the heavy lifting of summarizing every relevant NH Supreme Court ruling on zoning, variances, and municipal law. If you index this, your RAG will instantly know the case law without having to read raw legal opinions.
+
+The Board Handbooks: Ingest The Planning Board in New Hampshire and The Board of Adjustment in New Hampshire. These are the actual manuals board members are handed when they get elected/appointed.
+
+2. Raw Court Rulings (NH Supreme Court Slip Opinions)
+If you want the raw court rulings for deep legal research, the centralized source is the New Hampshire Judicial Branch website (specifically the Supreme Court Slip Opinions page) or public legal repositories like Justia.
+
+The Strategy: Do not scrape every criminal or civil case. Filter your crawl specifically for cases where a municipality, ZBA, or Planning Board is a named party (e.g., Smith v. Town of Ossipee ZBA).
+
+3. State Administrative Rules (The Regulatory Layer)
+RSAs are just the framework; the actual technical enforcement is done through NH Administrative Rules. These are maintained by the Office of Legislative Services (OLS). You don't need all of them, but you absolutely must crawl these specific agency chapters:
+
+NH DES (Department of Environmental Services) Env Rules: Crawl Env-Wt (Wetlands), Env-Wq (Water Quality), and Env-Dw (Drinking Water). Planning boards and Conservation Commissions rely heavily on these for subdivision and site plan approvals.
+
+NH DRA (Department of Revenue Administration) Rev Rules: Crawl the rules regarding municipal budgeting, property taxation, and the MS-forms (like the MS-737 you saw in the budget queries).
+
+NH State Fire Code / Building Code (Saf-C): Essential for Code Enforcement and Planning Board commercial site reviews.
+
+NH DOT (Department of Transportation) Tra Rules: Specifically the rules around state highway access and driveway permits, which constantly come up in local planning.
+
+4. New Hampshire Municipal Association (NHMA) Resources
+NHMA is the gold standard for municipal guidance. While some of their content is paywalled for members, they publish a massive amount of free legal Q&As and articles in their Town and City magazine.
+
+Key Handbooks to Target: Try to get your hands on digital copies of Knowing the Territory (the general guide for municipal officials), The Basic Law of Budgeting, and New Hampshire's Right-to-Know Law (RSA 91-A).
+
+Legal Q&As: Scraping their public archive of "Legal Q&A" articles will give your bot incredible capabilities for answering nuanced, day-to-day operational questions that town administrators face.
