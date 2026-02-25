@@ -209,7 +209,10 @@ function detectProtection(html: string): string | null {
   if (lower.includes('just a moment') && (lower.includes('cloudflare') || lower.includes('checking your browser'))) {
     return 'cloudflare';
   }
-  if (lower.includes('akamai') && (lower.includes('access denied') || lower.includes('bot manager'))) {
+  if ((lower.includes('akamai') || lower.includes('edgesuite.net')) && (lower.includes('access denied') || lower.includes('bot manager'))) {
+    return 'akamai';
+  }
+  if (lower.includes('<title>access denied</title>') && lower.includes('reference&#32;')) {
     return 'akamai';
   }
   if (lower.includes('captcha') || lower.includes('recaptcha') || lower.includes('hcaptcha')) {
@@ -2249,10 +2252,27 @@ async function executeStateCrawl(
   if (!homepage || !homepage.html) {
     if ((homepage as any)?.needsHeavyLane) {
       flagHeavyLane(baseUrl);
-      addLog(progress, `HEAVY LANE: Homepage blocked (status: ${homepage?.status || 'timeout'}).`);
+      addLog(progress, `HEAVY LANE: Homepage blocked (status: ${homepage?.status || 'timeout'}). Domain flagged for scraping API.`);
     }
     addLog(progress, `WARNING: Could not fetch homepage at ${baseUrl}`);
   } else {
+    if ((homepage as any)?.viaHeavyLane) {
+      flagHeavyLane(baseUrl);
+      heavyLaneRequests++;
+      addLog(progress, `HEAVY LANE: Homepage retrieved via scraping API. Domain flagged for Heavy Lane.`);
+    }
+    const protection = detectProtection(homepage.html);
+    if (protection) {
+      progress.protectionDetected = protection;
+      flagHeavyLane(baseUrl);
+      addLog(progress, `WARNING: ${protection} protection detected on homepage. Domain flagged for Heavy Lane.`);
+      if (summary.protectionStats) {
+        summary.protectionStats.detected = true;
+        if (!summary.protectionStats.types.includes(protection)) {
+          summary.protectionStats.types.push(protection);
+        }
+      }
+    }
     progress.pagesVisited++;
     visited.add(baseUrl);
 
@@ -2350,6 +2370,17 @@ async function executeStateCrawl(
     } else {
       fastLaneRequests++;
       resp = await fetchPage(fullUrl, signal, 8000);
+      if (resp && (resp.status === 403 || resp.status === 429 || (resp.html && detectProtection(resp.html)))) {
+        flagHeavyLane(fullUrl);
+        addLog(progress, `HEAVY LANE: Target path ${p} blocked (${resp.status}). Retrying via scraping API.`);
+        if (isScrapingApiConfigured()) {
+          heavyLaneRequests++;
+          const apiResp = await fetchPageViaAPI(fullUrl);
+          if (apiResp && apiResp.html.length > 100) {
+            resp = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+          }
+        }
+      }
     }
     if (resp && resp.status === 200 && resp.html.length > 500) {
       validPaths++;
@@ -2392,6 +2423,8 @@ async function executeStateCrawl(
       if (pathDocsCount > 0) {
         addLog(progress, `TargetPath ${p}: ${pathDocsCount} docs found`);
       }
+    } else {
+      addLog(progress, `TargetPath ${p}: failed (status: ${resp?.status || 'null'}, size: ${resp?.html?.length || 0})`);
     }
     await new Promise(r => setTimeout(r, 200));
   }
@@ -2454,6 +2487,29 @@ async function executeStateCrawl(
         flagHeavyLane(pageUrl);
       }
       continue;
+    }
+
+    if (page.status === 403 || page.status === 429) {
+      flagHeavyLane(pageUrl);
+      if (isScrapingApiConfigured()) {
+        heavyLaneRequests++;
+        const apiResp = await fetchPageViaAPI(pageUrl);
+        if (apiResp && apiResp.html.length > 100 && apiResp.status === 200) {
+          page = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+        } else {
+          if (summary.protectionStats) {
+            summary.protectionStats.detected = true;
+            summary.protectionStats.blockedPages++;
+          }
+          continue;
+        }
+      } else {
+        if (summary.protectionStats) {
+          summary.protectionStats.detected = true;
+          summary.protectionStats.blockedPages++;
+        }
+        continue;
+      }
     }
 
     if (page.html && detectProtection(page.html)) {
