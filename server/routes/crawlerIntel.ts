@@ -21,6 +21,7 @@ import {
   getActiveCrawls,
   abortCrawl,
 } from "../services/crawlerEngine";
+import { startCourtListenerCrawl } from "../services/courtListenerCrawl";
 import { FAILURE_LABELS, type FailureType } from "../../shared/crawler-schema";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -715,6 +716,7 @@ router.get("/state-sources/:sourceSlug", async (req, res) => {
         updateCadence: source.updateCadence,
         maxPages: source.maxPages,
         scope: source.scope,
+        crawlMethod: (source as any).crawlMethod || 'crawl',
         status: source.status,
         totalDocuments: source.totalDocuments,
         totalUploaded: source.totalUploaded,
@@ -755,7 +757,7 @@ router.patch("/state-sources/:sourceSlug", async (req, res) => {
     const allowedFields = [
       "name", "agency", "agencyAbbrev", "baseUrl", "description",
       "docCategories", "targetPaths", "linkPatterns", "excludePatterns",
-      "updateCadence", "maxPages", "status", "notes",
+      "updateCadence", "maxPages", "status", "notes", "crawlMethod",
     ];
     const updates: Record<string, any> = {};
     for (const field of allowedFields) {
@@ -870,19 +872,31 @@ router.post("/state-sources/:sourceSlug/crawl", async (req, res) => {
       maxPages || source.maxPages || undefined
     );
 
-    const runId = await startStateCrawl(source, run, {
-      maxPages: maxPages || source.maxPages || undefined,
-      mode,
-      targetPaths: effectiveTargetPaths,
-      linkPatterns: effectiveLinkPatterns,
-      excludePatterns: effectiveExcludePatterns,
-    });
+    let runId: string;
+    const crawlMethod = (source as any).crawlMethod || 'crawl';
+
+    if (crawlMethod === 'courtlistener') {
+      runId = await startCourtListenerCrawl(source, run, {
+        dateFiledAfter: mode === 'incremental' && source.lastCrawlDate
+          ? source.lastCrawlDate.toISOString().split('T')[0]
+          : undefined,
+      });
+    } else {
+      runId = await startStateCrawl(source, run, {
+        maxPages: maxPages || source.maxPages || undefined,
+        mode,
+        targetPaths: effectiveTargetPaths,
+        linkPatterns: effectiveLinkPatterns,
+        excludePatterns: effectiveExcludePatterns,
+      });
+    }
 
     res.json({
       message: `State source crawl started for ${source.name} (${source.agency})`,
       runId,
       sourceId: source.id,
       mode,
+      crawlMethod,
       maxPages: maxPages || source.maxPages || "default",
       triggerType: "bot",
       targetPaths: effectiveTargetPaths,

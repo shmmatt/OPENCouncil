@@ -2072,6 +2072,7 @@ interface StateSource {
   notes: string | null;
   scope?: string;
   state?: string;
+  crawlMethod?: string;
 }
 
 function getSourceStatusBadge(status: string) {
@@ -2110,6 +2111,7 @@ function StateSourceProfileEditor({
   const [maxPages, setMaxPages] = useState(source.maxPages?.toString() || "");
   const [notes, setNotes] = useState(source.notes || "");
   const [status, setStatus] = useState(source.status);
+  const [crawlMethod, setCrawlMethod] = useState(source.crawlMethod || "crawl");
 
   return (
     <>
@@ -2168,9 +2170,23 @@ function StateSourceProfileEditor({
               </Select>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Max Pages</Label>
-            <Input type="number" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="No limit" data-testid="input-source-maxpages" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Crawl Method</Label>
+              <Select value={crawlMethod} onValueChange={setCrawlMethod}>
+                <SelectTrigger data-testid="select-source-crawl-method">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="crawl">HTML Crawl</SelectItem>
+                  <SelectItem value="courtlistener">CourtListener API</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Max Pages</Label>
+              <Input type="number" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="No limit" data-testid="input-source-maxpages" />
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Target Paths (one per line)</Label>
@@ -2198,7 +2214,7 @@ function StateSourceProfileEditor({
             targetPaths: targetPaths.trim() ? targetPaths.trim().split("\n").filter(Boolean) : [],
             linkPatterns: linkPatterns.trim() ? linkPatterns.trim().split("\n").filter(Boolean) : [],
             excludePatterns: excludePatterns.trim() ? excludePatterns.trim().split("\n").filter(Boolean) : [],
-            updateCadence, status,
+            updateCadence, status, crawlMethod,
             maxPages: maxPages ? parseInt(maxPages) : null,
             notes: notes || null,
           })}
@@ -2355,6 +2371,7 @@ function StateSourceDetail({
           <h2 className="text-xl font-bold">{src.name}</h2>
           {getSourceStatusBadge(src.status)}
           {src.agencyAbbrev && <Badge variant="secondary">{src.agencyAbbrev}</Badge>}
+          {src.crawlMethod === 'courtlistener' && <Badge variant="outline">CourtListener API</Badge>}
         </div>
         <div className="flex items-center gap-2">
           <a href={src.baseUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground flex items-center gap-1">
@@ -2405,15 +2422,15 @@ function StateSourceDetail({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
               <div>
-                <div className="text-muted-foreground">Pages</div>
+                <div className="text-muted-foreground">{src.crawlMethod === 'courtlistener' ? 'API Pages' : 'Pages'}</div>
                 <div className="font-mono font-medium">{progressData.pagesVisited || 0}</div>
               </div>
               <div>
-                <div className="text-muted-foreground">Discovered</div>
+                <div className="text-muted-foreground">{src.crawlMethod === 'courtlistener' ? 'Matched' : 'Discovered'}</div>
                 <div className="font-mono font-medium">{progressData.documentsDiscovered || 0}</div>
               </div>
               <div>
-                <div className="text-muted-foreground">Downloaded</div>
+                <div className="text-muted-foreground">{src.crawlMethod === 'courtlistener' ? 'Stored' : 'Downloaded'}</div>
                 <div className="font-mono font-medium text-green-600">{progressData.documentsDownloaded || 0}</div>
               </div>
               <div>

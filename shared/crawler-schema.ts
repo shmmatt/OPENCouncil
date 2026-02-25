@@ -388,6 +388,7 @@ export const crawlerStateSources = pgTable("crawler_state_sources", {
   updateCadence: text("update_cadence").notNull().default("quarterly"),
   maxPages: integer("max_pages"),
   scope: text("scope").notNull().default("statewide"),
+  crawlMethod: text("crawl_method").notNull().default("crawl"),
 
   status: text("status").notNull().default("active"),
   lastCrawlDate: timestamp("last_crawl_date"),

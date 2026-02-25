@@ -137,7 +137,7 @@ function getDomainDelay(url: string): number {
   return info.extraDelay;
 }
 
-const activeCrawls = new Map<string, CrawlJob>();
+export const activeCrawls = new Map<string, CrawlJob>();
 
 export interface CrawlProgress {
   runId: string;
@@ -176,7 +176,7 @@ interface FoundDocument {
   strategy: keyof StrategyStats;
 }
 
-interface CrawlJob {
+export interface CrawlJob {
   progress: CrawlProgress;
   abortController: AbortController;
 }
@@ -738,7 +738,7 @@ async function fetchDocument(
   throw new Error('Document download failed after retries');
 }
 
-function addLog(progress: CrawlProgress, message: string) {
+export function addLog(progress: CrawlProgress, message: string) {
   const timestamp = new Date().toISOString().substring(11, 19);
   progress.log.push(`[${timestamp}] ${message}`);
   if (progress.log.length > 2000) {
@@ -2042,7 +2042,7 @@ function buildStateBatchRecords(
   return records;
 }
 
-function generateStateS3Key(sourceSlug: string, url: string, filename: string): string {
+export function generateStateS3Key(sourceSlug: string, url: string, filename: string): string {
   const sanitized = filename
     .replace(/[^a-zA-Z0-9._-]/g, '_')
     .replace(/_+/g, '_')
@@ -2058,7 +2058,7 @@ function generateStateS3Key(sourceSlug: string, url: string, filename: string): 
   return `state/${sourceSlug}/${sanitized}`;
 }
 
-async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
+export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
   s3Key: string;
   filename: string;
   mimeType: string;
