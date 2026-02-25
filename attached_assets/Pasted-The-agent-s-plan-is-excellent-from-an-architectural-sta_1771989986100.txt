@@ -1,0 +1,30 @@
+The agent's plan is excellent from an architectural standpoint, particularly Tasks T001 and T002. Building out the observability in your admin dashboard *before* flooding the database with statewide documents is exactly the right engineering approach.
+
+However, I need to raise a massive red flag on **Task T003**. Telling an AI agent to simply "research and set appropriate `targetPaths`" for New Hampshire state websites is a recipe for broken scrapers and IP violations.
+
+Here are the critical realities of crawling these specific NH resources that you must feed back to the agent before it writes the code:
+
+### 1. The NHMA Paywall & Copyright Trap
+
+The plan instructs the crawler to grab NHMA handbooks like *Knowing the Territory* and *The Basic Law of Budgeting*.
+
+* **The Reality:** NHMA is a private non-profit, not a government agency. Those specific handbooks are paywalled (they sell for about $90 in the NHMA store) and heavily copyrighted. If the crawler tries to grab them, it will either crash against the storefront or inadvertently pirate IP.
+* **The Fix:** Explicitly instruct the agent to *exclude* NHMA handbooks from the crawler. Instead, direct it strictly to the public, free archives of *Town and City* magazine and the "Legal Q&A" section on `nhmunicipal.org`.
+
+### 2. The OPD (OSI) Domain Shift
+
+The plan points to `nh.gov/osi` for the planning handbooks.
+
+* **The Reality:** The Office of Strategic Initiatives (OSI) was restructured and moved under the Department of Business and Economic Affairs (BEA). It is now the Office of Planning and Development (OPD).
+* **The Fix:** The crawler needs to target the BEA's domain, specifically `nheconomy.com/office-of-planning-and-development`, to find the current PDFs for the Planning Board and ZBA handbooks. Pointing to the old OSI domain will likely result in redirect loops or dead links.
+
+### 3. Supreme Court Slip Opinions (The Filtering Problem)
+
+* **The Reality:** The NH Judicial Branch website dumps all slip opinions (criminal, family, civil) into a single chronological list. A basic crawler will ingest thousands of irrelevant divorce and criminal cases, instantly polluting OPENCouncil's semantic search with non-municipal law.
+* **The Fix:** The agent must write a custom extraction rule for this source. It needs to parse the case title text and *only* download the PDF if the title contains specific municipal keywords (e.g., "Town of", "City of", "Zoning Board", "Planning Board", "Selectmen").
+
+### How to Proceed
+
+I highly recommend sending the plan back to the agent with these strict constraints before approving the build. If you let it guess the scraping logic, you will spend days cleaning junk data out of your vector database.
+
+Would you like me to write the exact prompt you can hand to the Replit agent to revise Task T003 with these specific scraping guardrails?
