@@ -31,6 +31,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 export interface SynthesisV3Options extends SynthesisInputV3 {
   logContext?: PipelineLogContext;
   isRepairAttempt?: boolean;
+  isFinalAttempt?: boolean;
   answerType?: AnswerType;
   renderStyle?: RenderStyle;
 }
@@ -39,7 +40,35 @@ export interface SynthesisV3Result {
   answerText: string;
   citationsUsed: string[];
   durationMs: number;
+  hasSufficientContext: boolean;
+  missingInformationQuery: string | null;
+  suggestedYear: number | null;
 }
+
+const SYNTHESIS_RESPONSE_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    has_sufficient_context: {
+      type: "boolean" as const,
+      description: "True if the provided chunks are sufficient to fully answer the prompt. False if a specific, critical piece of evidence is missing.",
+    },
+    missing_information_query: {
+      type: "string" as const,
+      nullable: true,
+      description: "If has_sufficient_context is false, a highly targeted search query to find the missing data. Otherwise null.",
+    },
+    suggested_year: {
+      type: "number" as const,
+      nullable: true,
+      description: "If has_sufficient_context is false, the year the missing information is most likely found in. Otherwise null.",
+    },
+    response: {
+      type: "string" as const,
+      description: "The full markdown response to the user's question.",
+    },
+  },
+  required: ["has_sufficient_context", "missing_information_query", "suggested_year", "response"],
+};
 
 export async function synthesizeV3(options: SynthesisV3Options): Promise<SynthesisV3Result> {
   const { 
@@ -52,6 +81,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     history,
     logContext,
     isRepairAttempt,
+    isFinalAttempt,
     answerType = "QUICK_PROCESS",
     renderStyle = "PROSE",
     templateContext,
@@ -62,6 +92,22 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
 
   const prosePolicy = getProsePolicy(answerType, renderStyle);
   let systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length);
+
+  systemPrompt += `\n\n## EVIDENCE SUFFICIENCY (IMPORTANT)
+- You are analyzing municipal and legal documents. Do NOT infer or guess the outcome of votes, budgets, or legal decisions.
+- If you see a proposal (e.g., a warrant article) but no document confirming the result (vote outcome, approval, rejection), you MUST set has_sufficient_context to false.
+- When has_sufficient_context is false, generate a highly targeted missing_information_query (e.g., "March 2025 Town Meeting election results Article 13 passed failed").
+- Set suggested_year to the year the missing information is most likely found in (this may differ from the year the user asked about).
+- If all critical evidence is present, set has_sufficient_context to true, missing_information_query to null, and suggested_year to null.`;
+
+  if (isFinalAttempt) {
+    systemPrompt += `\n\n## FINAL ATTEMPT — NO FURTHER SEARCHES
+- This is your SECOND and FINAL attempt with additional evidence retrieved.
+- You MUST set has_sufficient_context to true (do NOT request another search).
+- Set missing_information_query to null and suggested_year to null.
+- If the missing information was found in the new evidence, incorporate it into your response.
+- If the missing information is STILL not found, explicitly state which specific document (e.g., "official Town Meeting voting results for 2025") is not present in the current database. Do NOT guess the outcome.`;
+  }
 
   if (templateContext) {
     systemPrompt += `\n\n## Template Document Context\n${templateContext}\nWhen answering, keep the above template context in mind. The user is exploring a structured document and may ask follow-up questions about specific sections, budget items, or warrant articles. Search the full municipal database for historical context and related records, not just the template's target documents.`;
@@ -75,7 +121,6 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     history
   );
 
-  // Lower temperature for more consistent, concise output
   const synthesisTemperature = isRepairAttempt ? 0.15 : 0.2;
 
   logLlmRequest({
@@ -91,6 +136,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       localChunkCount: localChunks.length,
       stateChunkCount: stateChunks.length,
       isRepairAttempt,
+      isFinalAttempt,
     },
   });
 
@@ -102,7 +148,8 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
         systemInstruction: systemPrompt,
         temperature: synthesisTemperature,
         maxOutputTokens: 8192,
-        thinkingConfig: { thinkingBudget: 1024 },
+        responseMimeType: "application/json",
+        responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
       },
     });
 
@@ -111,16 +158,23 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       logDebug(`synthesizerV3: WARNING: Gemini response truncated due to MAX_TOKENS (requestId: ${logContext?.requestId})`);
     }
 
-    const responseText = response.text || "Unable to synthesize an answer from the available sources.";
+    const rawText = response.text || "";
     const durationMs = Date.now() - startTime;
+
+    const parsed = parseSynthesisJsonResponse(rawText, isFinalAttempt);
 
     logLlmResponse({
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
       stage: "synthesizerV3",
       model: modelName,
-      responseText: responseText.slice(0, 500),
+      responseText: parsed.response.slice(0, 500),
       durationMs,
+      extra: {
+        hasSufficientContext: parsed.hasSufficientContext,
+        missingInformationQuery: parsed.missingInformationQuery,
+        suggestedYear: parsed.suggestedYear,
+      },
     });
 
     if (logContext?.actor) {
@@ -133,16 +187,19 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
           stage: "synthesizerV3" as any,
           model: modelName,
         },
-        { text: responseText, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
+        { text: parsed.response, tokensIn: tokens.tokensIn, tokensOut: tokens.tokensOut }
       );
     }
 
-    const citationsUsed = extractCitationsFromAnswer(responseText);
+    const citationsUsed = extractCitationsFromAnswer(parsed.response);
 
     return {
-      answerText: responseText,
+      answerText: parsed.response,
       citationsUsed,
       durationMs,
+      hasSufficientContext: parsed.hasSufficientContext,
+      missingInformationQuery: parsed.missingInformationQuery,
+      suggestedYear: parsed.suggestedYear,
     };
 
   } catch (error) {
@@ -163,6 +220,38 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       answerText: "An error occurred while synthesizing the answer. Please try again.",
       citationsUsed: [],
       durationMs: Date.now() - startTime,
+      hasSufficientContext: true,
+      missingInformationQuery: null,
+      suggestedYear: null,
+    };
+  }
+}
+
+interface ParsedSynthesisResponse {
+  hasSufficientContext: boolean;
+  missingInformationQuery: string | null;
+  suggestedYear: number | null;
+  response: string;
+}
+
+function parseSynthesisJsonResponse(rawText: string, isFinalAttempt?: boolean): ParsedSynthesisResponse {
+  try {
+    const parsed = JSON.parse(rawText);
+    const hasSufficient = isFinalAttempt ? true : (parsed.has_sufficient_context === true);
+    const missingQuery = hasSufficient ? null : (typeof parsed.missing_information_query === 'string' ? parsed.missing_information_query : null);
+    const sugYear = hasSufficient ? null : (typeof parsed.suggested_year === 'number' ? parsed.suggested_year : null);
+    const response = typeof parsed.response === 'string' && parsed.response.length > 0
+      ? parsed.response
+      : "Unable to synthesize an answer from the available sources.";
+
+    return { hasSufficientContext: hasSufficient, missingInformationQuery: missingQuery, suggestedYear: sugYear, response };
+  } catch {
+    logDebug("synthesizerV3: JSON parse failed, treating raw text as response");
+    return {
+      hasSufficientContext: true,
+      missingInformationQuery: null,
+      suggestedYear: null,
+      response: rawText || "Unable to synthesize an answer from the available sources.",
     };
   }
 }

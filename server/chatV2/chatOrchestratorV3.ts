@@ -12,7 +12,7 @@
 import { logDebug, logInfo } from "../utils/logger";
 import { runPlannerV3 } from "./plannerV3";
 import { type V3RetrievalResult } from "./twoLaneRetrieve";
-import { pgvectorTwoLaneRetrieveWithPlan } from "./pgvectorRetrieveAdapter";
+import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane, dedupeChunksByContent } from "./pgvectorRetrieveAdapter";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
@@ -21,6 +21,7 @@ import { computeQuestionSituationMatch } from "./situationExtractor";
 import type {
   IssueMap,
   RecordStrength,
+  TemporalTarget,
   V3PipelineResult,
   V3DebugInfo,
   PipelineLogContext,
@@ -241,19 +242,129 @@ export async function runChatV3Pipeline(
   let answerText = synthesisResult.answerText;
   let auditFlags: string[] = [];
   let repairRan = false;
+  let secondHopRan = false;
+  let secondHopQuery: string | null = null;
+  let secondHopChunksAdded = 0;
   let selectedAnswerSource: 'original' | 'repair' | 'repair_normalized' | 'original_normalized' = 'original';
   let originalScore: AnswerScore | undefined;
   let repairScore: AnswerScore | undefined;
+
+  let effectiveLocalChunks = retrievalResult.localChunks;
+  let effectiveStateChunks = retrievalResult.stateChunks;
+  let effectiveRecordStrength = recordStrength;
+
+  // =====================================================
+  // STAGE 3.5: SECOND HOP (Conditional)
+  // =====================================================
+  if (
+    !synthesisResult.hasSufficientContext &&
+    synthesisResult.missingInformationQuery &&
+    synthesisResult.missingInformationQuery.length > 0
+  ) {
+    secondHopQuery = synthesisResult.missingInformationQuery;
+    secondHopRan = true;
+
+    logInfo("v3_second_hop_triggered", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "v3_orchestrator",
+      missingQuery: secondHopQuery,
+      suggestedYear: synthesisResult.suggestedYear,
+    });
+
+    let secondHopTemporal: TemporalTarget | undefined;
+    if (synthesisResult.suggestedYear) {
+      secondHopTemporal = { year: synthesisResult.suggestedYear, strategy: "boost" };
+    }
+
+    try {
+      const secondHopChunks = await executeQueryOnLane(
+        secondHopQuery,
+        "local",
+        townPreference || null,
+        8,
+        {
+          keywordTerms: secondHopQuery.split(/\s+/).filter(w => w.length > 3),
+          temporalFilter: secondHopTemporal,
+          queryFocus: retrievalPlan.queryFocus,
+        },
+      );
+
+      const originalLocalCount = effectiveLocalChunks.length;
+      const mergedLocal = dedupeChunksByContent([...effectiveLocalChunks, ...secondHopChunks]);
+      secondHopChunksAdded = mergedLocal.length - originalLocalCount;
+
+      logDebug("v3_second_hop_results", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "v3_orchestrator",
+        secondHopRetrieved: secondHopChunks.length,
+        newChunksAdded: secondHopChunksAdded,
+        mergedTotal: mergedLocal.length,
+      });
+
+      if (secondHopChunksAdded > 0) {
+        effectiveLocalChunks = mergedLocal;
+        effectiveRecordStrength = computeRecordStrength(
+          effectiveLocalChunks,
+          effectiveStateChunks,
+          issueMap,
+          retrievalResult.situationAlignment
+        );
+
+        synthesisResult = await synthesizeV3({
+          userMessage,
+          issueMap,
+          sessionSourceText,
+          localChunks: effectiveLocalChunks,
+          stateChunks: effectiveStateChunks,
+          recordStrength: effectiveRecordStrength,
+          history: historyForSynthesis,
+          logContext,
+          isFinalAttempt: true,
+          answerType,
+          renderStyle,
+          templateContext,
+        });
+
+        answerText = synthesisResult.answerText;
+      } else {
+        synthesisResult = await synthesizeV3({
+          userMessage,
+          issueMap,
+          sessionSourceText,
+          localChunks: effectiveLocalChunks,
+          stateChunks: effectiveStateChunks,
+          recordStrength: effectiveRecordStrength,
+          history: historyForSynthesis,
+          logContext,
+          isFinalAttempt: true,
+          answerType,
+          renderStyle,
+          templateContext,
+        });
+
+        answerText = synthesisResult.answerText;
+      }
+    } catch (error) {
+      logDebug("v3_second_hop_error", {
+        requestId: logContext?.requestId,
+        sessionId: logContext?.sessionId,
+        stage: "v3_orchestrator",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   // =====================================================
   // STAGE 4: AUDIT + REPAIR
   // =====================================================
   if (chatConfigV3.ENABLE_AUDIT) {
-    const stateChunkCount = retrievalResult.stateChunks.length;
+    const stateChunkCount = effectiveStateChunks.length;
     
     const auditResult = auditAnswer({
       answerText,
-      stateChunks: retrievalResult.stateChunks,
+      stateChunks: effectiveStateChunks,
       citationsUsed: synthesisResult.citationsUsed,
       issueMap,
       situationContext: effectiveSituationContext,
@@ -277,12 +388,13 @@ export async function runChatV3Pipeline(
         userMessage,
         issueMap,
         sessionSourceText,
-        localChunks: retrievalResult.localChunks,
-        stateChunks: retrievalResult.stateChunks,
-        recordStrength,
+        localChunks: effectiveLocalChunks,
+        stateChunks: effectiveStateChunks,
+        recordStrength: effectiveRecordStrength,
         history: historyForSynthesis,
         logContext,
         isRepairAttempt: true,
+        isFinalAttempt: true,
         answerType,
         renderStyle,
         templateContext,
@@ -307,7 +419,7 @@ export async function runChatV3Pipeline(
         // Re-audit the selected answer for flags
         const repairAuditResult = auditAnswer({
           answerText,
-          stateChunks: retrievalResult.stateChunks,
+          stateChunks: effectiveStateChunks,
           citationsUsed: repairSynthesisResult.citationsUsed,
           issueMap,
           situationContext: effectiveSituationContext,
@@ -341,7 +453,7 @@ export async function runChatV3Pipeline(
       // Apply normalization if answer has format violations
       const currentAuditResult = auditAnswer({
         answerText,
-        stateChunks: retrievalResult.stateChunks,
+        stateChunks: effectiveStateChunks,
         citationsUsed: synthesisResult.citationsUsed,
         issueMap,
         situationContext: effectiveSituationContext,
@@ -353,10 +465,9 @@ export async function runChatV3Pipeline(
       if (currentAuditResult.violations.some(v => v.type === 'format_violation')) {
         const normalizedAnswer = normalizeAnswerFormat(answerText);
         
-        // Check if normalization helped
         const normalizedAudit = auditAnswer({
           answerText: normalizedAnswer,
-          stateChunks: retrievalResult.stateChunks,
+          stateChunks: effectiveStateChunks,
           citationsUsed: synthesisResult.citationsUsed,
           issueMap,
           situationContext: effectiveSituationContext,
@@ -412,11 +523,13 @@ export async function runChatV3Pipeline(
       stateRetrieved: retrievalResult.debug.stateRetrievedTotal,
       stateSelected: retrievalResult.stateCount,
     },
-    recordStrengthTier: recordStrength.tier,
+    recordStrengthTier: effectiveRecordStrength.tier,
     auditFlags,
     repairRan,
     durationMs,
-    // New telemetry fields
+    secondHopRan,
+    secondHopQuery,
+    secondHopChunksAdded,
     selectedAnswerSource,
     originalScore: originalScore ? {
       score: originalScore.score,
@@ -437,11 +550,14 @@ export async function runChatV3Pipeline(
     sessionId: logContext?.sessionId,
     stage: "v3_orchestrator",
     answerLength: answerText.length,
-    tier: recordStrength.tier,
-    localSelected: retrievalResult.localCount,
-    stateSelected: retrievalResult.stateCount,
+    tier: effectiveRecordStrength.tier,
+    localSelected: effectiveLocalChunks.length,
+    stateSelected: effectiveStateChunks.length,
     auditFlagCount: auditFlags.length,
     repairRan,
+    secondHopRan,
+    secondHopQuery,
+    secondHopChunksAdded,
     durationMs,
   });
 
@@ -450,8 +566,8 @@ export async function runChatV3Pipeline(
     sourceDocumentNames: retrievalResult.allDocumentNames,
     docSourceType,
     docSourceTown: townPreference || null,
-    retrievedChunkCount: retrievalResult.localCount + retrievalResult.stateCount,
-    recordStrength,
+    retrievedChunkCount: effectiveLocalChunks.length + effectiveStateChunks.length,
+    recordStrength: effectiveRecordStrength,
     debug: debugInfo,
     durationMs,
   };

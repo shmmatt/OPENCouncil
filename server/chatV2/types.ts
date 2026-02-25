@@ -404,6 +404,9 @@ export interface V3DebugInfo {
   };
   finalAnswerCharLen?: number;
   finalAnswerWordCount?: number;
+  secondHopRan?: boolean;
+  secondHopQuery?: string | null;
+  secondHopChunksAdded?: number;
 }
 
 /**

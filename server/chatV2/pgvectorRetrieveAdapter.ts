@@ -11,7 +11,7 @@ import type { LabeledChunk, ChunkAuthority, PipelineLogContext } from "./types";
 import type { SituationContext } from "@shared/schema";
 import type { V3RetrievalResult } from "./twoLaneRetrieve";
 
-interface PgvectorLaneChunk {
+export interface PgvectorLaneChunk {
   docId: string;
   title: string;
   content: string;
@@ -95,13 +95,13 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
   };
 }
 
-interface LaneQueryOptions {
+export interface LaneQueryOptions {
   keywordTerms?: string[];
   temporalFilter?: TemporalTarget;
   queryFocus?: QueryFocus;
 }
 
-async function executeQueryOnLane(
+export async function executeQueryOnLane(
   query: string,
   lane: "local" | "state",
   town: string | null,
@@ -171,7 +171,7 @@ async function executeQueryOnLane(
   return enriched;
 }
 
-function dedupeChunksByContent(chunks: PgvectorLaneChunk[]): PgvectorLaneChunk[] {
+export function dedupeChunksByContent(chunks: PgvectorLaneChunk[]): PgvectorLaneChunk[] {
   const seen = new Set<string>();
   const deduped: PgvectorLaneChunk[] = [];
   for (const chunk of chunks) {

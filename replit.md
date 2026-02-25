@@ -34,13 +34,14 @@ Google Gemini is integrated for several core functionalities:
 - **Query planning**: Generates multi-query retrieval plans.
 pgvector serves as the sole retrieval backend, with Gemini solely for synthesis, embedding, and metadata.
 
-### Chat Pipeline (V3)
-The V3 chat pipeline (`server/chatV2/chatOrchestratorV3.ts`) processes user queries through four main stages:
+### Chat Pipeline (V3) — Self-Reflective RAG
+The V3 chat pipeline (`server/chatV2/chatOrchestratorV3.ts`) processes user queries through five stages with an optional "second hop" retrieval:
 1.  **Situation Relevance Gating**: Initial assessment of query relevance.
-2.  **Planning**: Generates an IssueMap and RetrievalPlanV3.
-3.  **Retrieval**: Executes pgvector two-lane semantic search.
-4.  **Synthesis**: Generates an answer using Gemini, with RecordStrength tiering.
-5.  **Audit**: Validates format, detects drift, and performs repairs.
+2.  **Planning**: Generates an IssueMap and RetrievalPlanV3 with temporal/entity/queryFocus extraction.
+3.  **Retrieval**: Executes hybrid two-lane search (pgvector semantic + tsvector keyword with RRF).
+4.  **Synthesis**: Generates an answer using Gemini structured output (JSON schema enforced via `responseMimeType`). The synthesizer returns `has_sufficient_context`, `missing_information_query`, and `suggested_year` alongside the response.
+5.  **Second Hop (Conditional)**: If the synthesizer flags `has_sufficient_context: false`, the orchestrator runs ONE additional targeted retrieval using `missing_information_query` with its OWN temporal filter (from `suggested_year`, not the original plan's filter). Results are deduplicated and merged, then re-synthesized with `isFinalAttempt: true` to prevent further loops. Max 2 retrieval passes per query.
+6.  **Audit**: Validates format, detects drift, and performs repairs.
 
 ### Document Ingestion Pipeline (V2)
 This pipeline follows a staged workflow: document upload, hashing, text extraction, AI-powered metadata suggestion, admin review, approval/rejection, and indexing. It includes features for detecting meeting minutes and a three-tier town detection system.

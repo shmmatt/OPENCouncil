@@ -461,6 +461,13 @@ const STATUS_PHRASES = {
     "Preparing your answer...",
     "Putting it all together...",
   ],
+  deepSearch: [
+    "Running a deeper search...",
+    "Looking for additional evidence...",
+    "Cross-referencing related documents...",
+    "Gathering more context...",
+    "Verifying details across records...",
+  ],
 };
 
 function getContextType(hasFile?: boolean, messageContent?: string): keyof typeof STATUS_PHRASES {
@@ -479,16 +486,24 @@ function getContextType(hasFile?: boolean, messageContent?: string): keyof typeo
 function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [showPhrase, setShowPhrase] = useState(false);
+  const [isDeepSearch, setIsDeepSearch] = useState(false);
   const contextType = getContextType(hasFile, messageContent);
-  const phrases = STATUS_PHRASES[contextType];
+  const phrases = isDeepSearch ? STATUS_PHRASES.deepSearch : STATUS_PHRASES[contextType];
 
   useEffect(() => {
-    // Show dots first, then show phrase after brief delay
     const initialTimer = setTimeout(() => {
       setShowPhrase(true);
     }, 800);
 
-    return () => clearTimeout(initialTimer);
+    const deepSearchTimer = setTimeout(() => {
+      setIsDeepSearch(true);
+      setPhraseIndex(0);
+    }, 8000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearTimeout(deepSearchTimer);
+    };
   }, []);
 
   useEffect(() => {
