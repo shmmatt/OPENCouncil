@@ -2,8 +2,8 @@ import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s
 import * as crypto from 'crypto';
 import { db } from '../storage/db';
 import * as schema from '../../shared/schema';
-import { crawlerDocuments, crawlerTowns, crawlerRuns } from '../../shared/crawler-schema';
-import type { CrawlerTown, CrawlerRun, CrawlRunSummary, FailureType } from '../../shared/crawler-schema';
+import { crawlerDocuments, crawlerTowns, crawlerRuns, crawlerStateSources, crawlerStateSourceRuns, crawlerStateDocuments } from '../../shared/crawler-schema';
+import type { CrawlerTown, CrawlerRun, CrawlRunSummary, FailureType, CrawlerStateSource, CrawlerStateSourceRun, InsertCrawlerStateDocument } from '../../shared/crawler-schema';
 import { classifyError } from '../../shared/crawler-schema';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -11,10 +11,11 @@ import {
   extractFilename,
   extractDocumentMetadata,
 } from './crawlerStateExtensions';
-import { hashUrl, recordDocument, batchRecordDocuments, getAllTownDocumentUrls, getResumableDocuments } from './crawlerState';
+import { hashUrl, recordDocument, batchRecordDocuments, getAllTownDocumentUrls, getResumableDocuments, recordStateDocument, batchRecordStateDocuments, getAllStateDocumentUrls, getResumableStateDocuments, updateStateRunProgress } from './crawlerState';
 import type { InsertCrawlerDocument } from '../../shared/crawler-schema';
 import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial, resolveRedirectViaAPI } from './scrapingApiClient';
 import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile } from './googleDriveClient';
+import { completeStateSourceRun } from '../storage/crawler';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -1933,3 +1934,883 @@ export function abortCrawl(runId: string): boolean {
   setTimeout(() => activeCrawls.delete(runId), 300000);
   return true;
 }
+
+// ============================================================
+// STATE SOURCE CRAWLING
+// ============================================================
+
+interface StateCrawlOptions {
+  maxPages?: number;
+  mode?: string;
+  targetPaths?: string[];
+  linkPatterns?: string[];
+  excludePatterns?: string[];
+}
+
+function matchesExcludePattern(url: string, text: string, excludePatterns: string[]): boolean {
+  if (excludePatterns.length === 0) return false;
+  const lowerUrl = url.toLowerCase();
+  const lowerText = text.toLowerCase();
+  for (const pattern of excludePatterns) {
+    const lowerPattern = pattern.toLowerCase();
+    if (lowerUrl.includes(lowerPattern)) return true;
+    if (lowerText.includes(lowerPattern)) return true;
+  }
+  return false;
+}
+
+function matchesLinkPattern(text: string, linkPatterns: string[]): boolean {
+  if (linkPatterns.length === 0) return true;
+  const lowerText = text.toLowerCase();
+  for (const pattern of linkPatterns) {
+    if (lowerText.includes(pattern.toLowerCase())) return true;
+  }
+  return false;
+}
+
+function extractLinksWithContext(html: string, pageUrl: string): Array<{ href: string; text: string; parentText: string }> {
+  const results: Array<{ href: string; text: string; parentText: string }> = [];
+
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+  const linkRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+  const parentBlocks = new Map<string, string>();
+
+  let m;
+  while ((m = rowRegex.exec(html)) !== null) {
+    const blockHtml = m[1];
+    const blockText = blockHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const innerLinks = /<a\s[^>]*href=["']([^"']+)["']/gi;
+    let lm;
+    while ((lm = innerLinks.exec(blockHtml)) !== null) {
+      const resolved = normalizeUrl(lm[1], pageUrl);
+      if (resolved) parentBlocks.set(resolved, blockText);
+    }
+  }
+  while ((m = liRegex.exec(html)) !== null) {
+    const blockHtml = m[1];
+    const blockText = blockHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const innerLinks = /<a\s[^>]*href=["']([^"']+)["']/gi;
+    let lm;
+    while ((lm = innerLinks.exec(blockHtml)) !== null) {
+      const resolved = normalizeUrl(lm[1], pageUrl);
+      if (resolved && !parentBlocks.has(resolved)) parentBlocks.set(resolved, blockText);
+    }
+  }
+
+  while ((m = linkRegex.exec(html)) !== null) {
+    const href = m[1];
+    const text = m[2].replace(/<[^>]+>/g, '').trim();
+    const resolved = normalizeUrl(href, pageUrl);
+    if (resolved) {
+      results.push({
+        href: resolved,
+        text,
+        parentText: parentBlocks.get(resolved) || text,
+      });
+    }
+  }
+  return results;
+}
+
+function buildStateBatchRecords(
+  sourceId: string,
+  docsSeen: Map<string, { foundOnPage: string; strategy: keyof StrategyStats; linkText?: string }>,
+  alreadyPersisted: Set<string>,
+  baseUrl: string,
+): InsertCrawlerStateDocument[] {
+  const records: InsertCrawlerStateDocument[] = [];
+  for (const [url, info] of docsSeen) {
+    if (alreadyPersisted.has(url)) continue;
+    const urlH = hashUrl(url);
+    const filename = extractFilename(url);
+    records.push({
+      sourceId,
+      url,
+      urlHash: urlH,
+      filename,
+      discoveredFrom: info.foundOnPage,
+      status: 'discovered',
+      title: info.linkText || undefined,
+    });
+    alreadyPersisted.add(url);
+  }
+  return records;
+}
+
+function generateStateS3Key(sourceSlug: string, url: string, filename: string): string {
+  const sanitized = filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .substring(0, 200);
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    const subPath = pathParts.slice(0, -1).slice(0, 3).join('/');
+    if (subPath) {
+      return `state/${sourceSlug}/${subPath}/${sanitized}`;
+    }
+  } catch {}
+  return `state/${sourceSlug}/${sanitized}`;
+}
+
+async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
+  s3Key: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  sourceSlug: string;
+  agency?: string;
+}): Promise<void> {
+  try {
+    const rawHash = `s3:${opts.s3Key}`;
+    const existing = await db.execute(
+      sql`SELECT id FROM file_blobs WHERE raw_hash = ${rawHash}`
+    );
+    let fileBlobId: string;
+    if (existing.rows.length > 0) {
+      fileBlobId = (existing.rows[0] as any).id;
+    } else {
+      const storagePath = `s3://${S3_BUCKET}/${opts.s3Key}`;
+      const [blob] = await db
+        .insert(schema.fileBlobs)
+        .values({
+          rawHash,
+          sizeBytes: opts.sizeBytes || 0,
+          mimeType: opts.mimeType || 'application/pdf',
+          originalFilename: opts.filename || opts.s3Key.split('/').pop() || 'unknown.pdf',
+          storagePath,
+          s3Bucket: S3_BUCKET,
+          s3Key: opts.s3Key,
+          needsOcr: false,
+          ocrStatus: 'none',
+          extractedTextCharCount: 0,
+          embeddingStatus: 'none',
+        })
+        .returning();
+      fileBlobId = blob.id;
+    }
+    await db.execute(sql`
+      UPDATE crawler_state_documents SET file_blob_id = ${fileBlobId} WHERE id = ${stateDocId} AND file_blob_id IS NULL
+    `);
+  } catch (e: any) {
+    console.warn(`[StateCrawlEngine] bridgeStateDocToFileBlob failed for ${opts.s3Key}: ${e.message}`);
+  }
+}
+
+export async function startStateCrawl(
+  source: CrawlerStateSource,
+  run: CrawlerStateSourceRun,
+  options: StateCrawlOptions = {}
+): Promise<string> {
+  const runId = run.id;
+  if (activeCrawls.has(runId)) {
+    throw new Error('Crawl already running for this run ID');
+  }
+
+  const abortController = new AbortController();
+  const progress: CrawlProgress = {
+    runId,
+    townId: source.id,
+    townName: `[STATE] ${source.name}`,
+    status: 'running',
+    pagesVisited: 0,
+    pagesQueued: 0,
+    documentsDiscovered: 0,
+    documentsDownloaded: 0,
+    documentsFailed: 0,
+    duplicatesSkipped: 0,
+    currentUrl: '',
+    log: [],
+    startedAt: new Date(),
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
+  };
+
+  const job: CrawlJob = { progress, abortController };
+  activeCrawls.set(runId, job);
+
+  executeStateCrawl(source, run, job, options).catch(async (err) => {
+    progress.status = 'failed';
+    progress.errorMessage = err.message;
+    addLog(progress, `FATAL: Unhandled exception — ${err.message}`);
+    addLog(progress, `FATAL: Stack — ${err.stack?.split('\n').slice(0, 3).join(' | ') || 'no stack'}`);
+
+    try {
+      await completeStateSourceRun(run.id, 'failed', {
+        pagesVisited: progress.pagesVisited,
+        documentsDiscovered: progress.documentsDiscovered,
+        documentsDownloaded: progress.documentsDownloaded,
+        documentsUploaded: progress.documentsDownloaded,
+        documentsFailed: progress.documentsFailed,
+        errorMessage: `CRASH: ${err.message}`,
+      });
+    } catch (dbErr: any) {
+      addLog(progress, `FATAL: Could not persist crash state to DB — ${dbErr.message}`);
+    }
+
+    setTimeout(() => activeCrawls.delete(runId), 300000);
+  });
+
+  return runId;
+}
+
+async function executeStateCrawl(
+  source: CrawlerStateSource,
+  run: CrawlerStateSourceRun,
+  job: CrawlJob,
+  options: StateCrawlOptions
+) {
+  const { progress, abortController } = job;
+  const signal = abortController.signal;
+  const maxPages = options.maxPages || source.maxPages || 500;
+  const baseUrl = source.baseUrl.replace(/\/$/, '');
+  const baseHostname = new URL(baseUrl).hostname;
+
+  const targetPaths = options.targetPaths || (source.targetPaths as string[]) || [];
+  const linkPatterns = options.linkPatterns || (source.linkPatterns as string[]) || [];
+  const excludePatterns = options.excludePatterns || (source.excludePatterns as string[]) || [];
+  const hasLinkFilter = linkPatterns.length > 0;
+
+  const s3 = new S3Client({ region: S3_REGION });
+
+  addLog(progress, `Starting STATE SOURCE crawl of ${source.name} (${source.agency})`);
+  addLog(progress, `Base URL: ${baseUrl}`);
+  addLog(progress, `Max pages: ${maxPages}, Mode: ${options.mode || 'full'}`);
+  if (targetPaths.length > 0) addLog(progress, `Target paths: ${targetPaths.join(', ')}`);
+  if (linkPatterns.length > 0) addLog(progress, `Link text filters: ${linkPatterns.join(', ')}`);
+  if (excludePatterns.length > 0) addLog(progress, `Exclude patterns: ${excludePatterns.join(', ')}`);
+
+  const visited = new Set<string>();
+  const docsSeen = new Map<string, { foundOnPage: string; strategy: keyof StrategyStats; linkText?: string }>();
+  const alreadyPersisted = new Set<string>();
+  const queue: Array<{ url: string; depth: number; priority: number }> = [];
+
+  addLog(progress, 'Pre-seeding from database...');
+  const existingDocs = await getAllStateDocumentUrls(source.id);
+  let preSeededUploaded = 0;
+  let preSeededOther = 0;
+  for (const doc of existingDocs) {
+    docsSeen.set(doc.url, { foundOnPage: doc.discoveredFrom || 'db-preseed', strategy: 'breadthFirst' });
+    alreadyPersisted.add(doc.url);
+    if (doc.status === 'uploaded') preSeededUploaded++;
+    else preSeededOther++;
+  }
+  addLog(progress, `Pre-seeded ${existingDocs.length} known URLs (${preSeededUploaded} uploaded, ${preSeededOther} discovered/failed)`);
+
+  const isResumeMode = options.mode === 'resume';
+
+  if (isResumeMode) {
+    addLog(progress, '=== RESUME MODE: Skipping discovery, loading pending downloads from DB ===');
+    docsSeen.clear();
+    const resumableDocs = await getResumableStateDocuments(source.id);
+    addLog(progress, `RESUME MODE: Found ${resumableDocs.length} documents to retry`);
+    for (const doc of resumableDocs) {
+      docsSeen.set(doc.url, { foundOnPage: doc.discoveredFrom || 'resume', strategy: 'breadthFirst' });
+    }
+    progress.documentsDiscovered = resumableDocs.length;
+  }
+
+  const stats = progress.strategyStats!;
+  const summary: CrawlRunSummary = {
+    byCategory: {},
+    byBoard: {},
+    newDocuments: 0,
+    duplicates: 0,
+    errors: [],
+    failuresByType: {} as Record<FailureType, number>,
+    pagesVisited: 0,
+    documentsDiscovered: 0,
+    protectionStats: {
+      detected: false,
+      types: [],
+      blockedPages: 0,
+      blockedDocuments: 0,
+    },
+  };
+
+  const heavyLaneDomains = new Set<string>();
+  let heavyLaneRequests = 0;
+  let fastLaneRequests = 0;
+  let linkFilterSkipped = 0;
+  let excludeFilterSkipped = 0;
+
+  const flagHeavyLane = (url: string) => {
+    try { heavyLaneDomains.add(new URL(url).hostname); } catch {}
+  };
+  const isHeavyLane = (url: string): boolean => {
+    try { return heavyLaneDomains.has(new URL(url).hostname); } catch { return false; }
+  };
+
+  if (!isResumeMode) {
+  addLog(progress, '--- Phase 1: Homepage Fetch ---');
+  fastLaneRequests++;
+  const homepage = await fetchHomepage(baseUrl, signal);
+  if (!homepage || !homepage.html) {
+    if ((homepage as any)?.needsHeavyLane) {
+      flagHeavyLane(baseUrl);
+      addLog(progress, `HEAVY LANE: Homepage blocked (status: ${homepage?.status || 'timeout'}).`);
+    }
+    addLog(progress, `WARNING: Could not fetch homepage at ${baseUrl}`);
+  } else {
+    progress.pagesVisited++;
+    visited.add(baseUrl);
+
+    const homeLinks = extractLinksWithContext(homepage.html, baseUrl);
+    let homeDocsFound = 0;
+    for (const link of homeLinks) {
+      if (matchesExcludePattern(link.href, link.parentText, excludePatterns)) {
+        excludeFilterSkipped++;
+        continue;
+      }
+      if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
+        if (hasLinkFilter && !matchesLinkPattern(link.parentText, linkPatterns)) {
+          linkFilterSkipped++;
+          continue;
+        }
+        docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'breadthFirst', linkText: link.text });
+        stats.breadthFirst++;
+        progress.documentsDiscovered++;
+        homeDocsFound++;
+      } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
+        const prio = isHighPriorityUrl(link.href) ? 1 : 3;
+        queue.push({ url: link.href, depth: 1, priority: prio });
+      }
+    }
+    addLog(progress, `Homepage: ${homeLinks.length} links, ${homeDocsFound} docs queued`);
+  }
+
+  {
+    const batch = buildStateBatchRecords(source.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordStateDocuments(batch);
+      addLog(progress, `Phase 1: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
+  addLog(progress, '--- Phase 2: Sitemap Discovery ---');
+  const sitemapUrls = [
+    `${baseUrl}/sitemap.xml`,
+    `${baseUrl}/sitemap_index.xml`,
+  ];
+  let sitemapDocCount = 0;
+  let sitemapNavCount = 0;
+  const sitemapUrlsSeen = new Set<string>();
+  for (const smUrl of sitemapUrls) {
+    if (signal.aborted) break;
+    const urls = await parseSitemapRecursive(smUrl, signal);
+    if (urls.length > 0) {
+      addLog(progress, `Sitemap ${smUrl}: ${urls.length} URLs found`);
+      for (const u of urls) {
+        if (sitemapUrlsSeen.has(u)) continue;
+        sitemapUrlsSeen.add(u);
+        if (matchesExcludePattern(u, '', excludePatterns)) {
+          excludeFilterSkipped++;
+          continue;
+        }
+        if (isDocumentUrl(u) && !docsSeen.has(u)) {
+          docsSeen.set(u, { foundOnPage: smUrl, strategy: 'sitemap' });
+          stats.sitemap++;
+          sitemapDocCount++;
+          progress.documentsDiscovered++;
+        } else if (isSameDomain(u, baseUrl) && !visited.has(u)) {
+          const prio = isHighPriorityUrl(u) ? 1 : 3;
+          queue.push({ url: u, depth: 1, priority: prio });
+          sitemapNavCount++;
+        }
+      }
+    }
+  }
+  addLog(progress, `Sitemap results: ${sitemapDocCount} docs, ${sitemapNavCount} pages queued`);
+
+  {
+    const batch = buildStateBatchRecords(source.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordStateDocuments(batch);
+      addLog(progress, `Phase 2: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
+  addLog(progress, '--- Phase 3: Target Path Probing ---');
+  let validPaths = 0;
+  let targetPathDocsFound = 0;
+
+  for (const p of targetPaths) {
+    if (signal.aborted) break;
+    const fullUrl = p.startsWith('http') ? p : `${baseUrl}${p}`;
+    if (visited.has(fullUrl)) continue;
+
+    let resp: FetchPageResult | null = null;
+    if (isHeavyLane(fullUrl) && isScrapingApiConfigured()) {
+      heavyLaneRequests++;
+      const apiResp = await fetchPageViaAPI(fullUrl);
+      if (apiResp && apiResp.html.length > 100) {
+        resp = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+      }
+    } else {
+      fastLaneRequests++;
+      resp = await fetchPage(fullUrl, signal, 8000);
+    }
+    if (resp && resp.status === 200 && resp.html.length > 500) {
+      validPaths++;
+      visited.add(fullUrl);
+      progress.pagesVisited++;
+
+      const links = extractLinksWithContext(resp.html, fullUrl);
+      let pathDocsCount = 0;
+      for (const link of links) {
+        if (matchesExcludePattern(link.href, link.parentText, excludePatterns)) {
+          excludeFilterSkipped++;
+          continue;
+        }
+        if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
+          if (hasLinkFilter && !matchesLinkPattern(link.parentText, linkPatterns)) {
+            linkFilterSkipped++;
+            continue;
+          }
+          docsSeen.set(link.href, { foundOnPage: fullUrl, strategy: 'knownPaths', linkText: link.text });
+          stats.knownPaths++;
+          progress.documentsDiscovered++;
+          pathDocsCount++;
+          targetPathDocsFound++;
+        } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
+          const prio = isHighPriorityUrl(link.href) ? 1 : 3;
+          queue.push({ url: link.href, depth: 1, priority: prio });
+        }
+      }
+
+      const embeds = extractIframeAndEmbedSrcs(resp.html, fullUrl);
+      for (const embedUrl of embeds) {
+        if (isDocumentUrl(embedUrl) && !docsSeen.has(embedUrl)) {
+          docsSeen.set(embedUrl, { foundOnPage: fullUrl, strategy: 'iframe' });
+          stats.iframe++;
+          progress.documentsDiscovered++;
+          pathDocsCount++;
+        }
+      }
+
+      if (pathDocsCount > 0) {
+        addLog(progress, `TargetPath ${p}: ${pathDocsCount} docs found`);
+      }
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  addLog(progress, `Target paths: ${validPaths} valid out of ${targetPaths.length} probed, ${targetPathDocsFound} docs found`);
+
+  {
+    const batch = buildStateBatchRecords(source.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordStateDocuments(batch);
+      addLog(progress, `Phase 3: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
+  addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
+  progress.pagesQueued = queue.length;
+  let progressUpdateCounter = 0;
+  let consecutiveEmptyPages = 0;
+  const MAX_CONSECUTIVE_EMPTY = Math.max(40, Math.min(queue.length, 100));
+
+  while (queue.length > 0 && progress.pagesVisited < maxPages) {
+    if (signal.aborted) {
+      addLog(progress, 'Crawl aborted by user');
+      break;
+    }
+    if (consecutiveEmptyPages >= MAX_CONSECUTIVE_EMPTY) {
+      addLog(progress, `Stopping: ${MAX_CONSECUTIVE_EMPTY} consecutive pages with no new documents`);
+      break;
+    }
+
+    queue.sort((a, b) => a.priority - b.priority || a.depth - b.depth);
+    const { url: pageUrl, depth } = queue.shift()!;
+
+    if (visited.has(pageUrl)) continue;
+    visited.add(pageUrl);
+
+    if (!isSameDomain(pageUrl, baseUrl)) continue;
+    if (matchesExcludePattern(pageUrl, '', excludePatterns)) {
+      excludeFilterSkipped++;
+      continue;
+    }
+
+    progress.currentUrl = pageUrl;
+    progress.pagesQueued = queue.length;
+
+    let page: FetchPageResult | null = null;
+    if (isHeavyLane(pageUrl) && isScrapingApiConfigured()) {
+      heavyLaneRequests++;
+      const apiResp = await fetchPageViaAPI(pageUrl);
+      if (apiResp && apiResp.html.length > 100) {
+        page = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+      }
+      await new Promise(r => setTimeout(r, 500));
+    } else {
+      fastLaneRequests++;
+      page = await fetchPage(pageUrl, signal, 15000, baseUrl);
+    }
+
+    if (!page || !page.html) {
+      if (page && (page.status === 403 || page.status === 429)) {
+        flagHeavyLane(pageUrl);
+      }
+      continue;
+    }
+
+    if (page.html && detectProtection(page.html)) {
+      const protType = detectProtection(page.html)!;
+      flagHeavyLane(pageUrl);
+      if (isScrapingApiConfigured()) {
+        heavyLaneRequests++;
+        const apiResp = await fetchPageViaAPI(pageUrl, { js_render: true });
+        if (apiResp && apiResp.html.length > 100 && !detectProtection(apiResp.html)) {
+          page = { html: apiResp.html, status: apiResp.status, headers: apiResp.headers, finalUrl: apiResp.finalUrl };
+        } else {
+          markDomainProtected(pageUrl, protType);
+          if (summary.protectionStats) {
+            summary.protectionStats.detected = true;
+            summary.protectionStats.blockedPages++;
+          }
+          continue;
+        }
+      } else {
+        markDomainProtected(pageUrl, protType);
+        if (summary.protectionStats) {
+          summary.protectionStats.detected = true;
+          summary.protectionStats.blockedPages++;
+        }
+        continue;
+      }
+    }
+
+    progress.pagesVisited++;
+    let pageDocsFound = 0;
+
+    const links = extractLinksWithContext(page.html, pageUrl);
+    for (const link of links) {
+      if (matchesExcludePattern(link.href, link.parentText, excludePatterns)) {
+        excludeFilterSkipped++;
+        continue;
+      }
+      if (isDocumentUrl(link.href) && !docsSeen.has(link.href)) {
+        if (hasLinkFilter && !matchesLinkPattern(link.parentText, linkPatterns)) {
+          linkFilterSkipped++;
+          continue;
+        }
+        docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'breadthFirst', linkText: link.text });
+        pageDocsFound++;
+        stats.breadthFirst++;
+        progress.documentsDiscovered++;
+      }
+
+      if (depth < 4 && !visited.has(link.href) && isNavigationLink(link.href, baseHostname)) {
+        const prio = isHighPriorityUrl(link.href) ? Math.min(depth + 1, 5) : depth + 3;
+        queue.push({ url: link.href, depth: depth + 1, priority: prio });
+      }
+    }
+
+    const embeds = extractIframeAndEmbedSrcs(page.html, pageUrl);
+    for (const embedUrl of embeds) {
+      if (isDocumentUrl(embedUrl) && !docsSeen.has(embedUrl)) {
+        docsSeen.set(embedUrl, { foundOnPage: pageUrl, strategy: 'iframe' });
+        stats.iframe++;
+        pageDocsFound++;
+        progress.documentsDiscovered++;
+      }
+    }
+
+    if (pageDocsFound > 0) {
+      consecutiveEmptyPages = 0;
+      addLog(progress, `Page ${progress.pagesVisited}: ${pageDocsFound} docs on ${pageUrl.substring(baseUrl.length) || '/'}`);
+    } else {
+      consecutiveEmptyPages++;
+    }
+
+    progressUpdateCounter++;
+    if (progressUpdateCounter % 5 === 0) {
+      await updateStateRunProgress(run.id, progress);
+    }
+
+    if (progressUpdateCounter % 50 === 0) {
+      const batch = buildStateBatchRecords(source.id, docsSeen, alreadyPersisted, baseUrl);
+      if (batch.length > 0) {
+        await batchRecordStateDocuments(batch);
+        addLog(progress, `BFS checkpoint: Persisted ${batch.length} discovered URLs`);
+      }
+    }
+
+    const delay = 200 + Math.random() * 500;
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  {
+    const batch = buildStateBatchRecords(source.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordStateDocuments(batch);
+      addLog(progress, `Phase 4 final: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
+  } // end if (!isResumeMode)
+
+  if (hasLinkFilter) {
+    addLog(progress, `LINK FILTER: ${linkFilterSkipped} docs skipped (link text did not match patterns)`);
+  }
+  if (excludePatterns.length > 0) {
+    addLog(progress, `EXCLUDE FILTER: ${excludeFilterSkipped} URLs/links skipped by exclude patterns`);
+  }
+
+  addLog(progress, `--- Phase 5: Download ${docsSeen.size} documents ---`);
+  addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, Iframe=${stats.iframe}`);
+
+  const docsToDownload = Array.from(docsSeen.entries());
+  let downloadIndex = 0;
+  for (const [docUrl, docInfo] of docsToDownload) {
+    if (signal.aborted) break;
+    downloadIndex++;
+
+    if (isExternalDocumentLink(docUrl)) {
+      await recordStateDocument({
+        sourceId: source.id,
+        url: docUrl,
+        urlHash: hashUrl(docUrl),
+        filename: extractFilename(docUrl),
+        status: 'discovered',
+        discoveredFrom: docInfo.foundOnPage,
+      });
+      continue;
+    }
+
+    const urlHash = hashUrl(docUrl);
+    const filename = extractFilename(docUrl);
+    const s3Key = generateStateS3Key(source.slug, docUrl, filename);
+
+    const existing = await db.select({ id: crawlerStateDocuments.id, status: crawlerStateDocuments.status })
+      .from(crawlerStateDocuments)
+      .where(eq(crawlerStateDocuments.urlHash, urlHash))
+      .limit(1);
+
+    if (existing.length > 0 && existing[0].status === 'uploaded') {
+      progress.duplicatesSkipped++;
+      summary.duplicates++;
+      continue;
+    }
+
+    try {
+      if (await s3KeyExists(s3, s3Key)) {
+        const existDoc = await recordStateDocument({
+          sourceId: source.id,
+          url: docUrl,
+          urlHash,
+          filename,
+          s3Key,
+          status: 'uploaded',
+          discoveredFrom: docInfo.foundOnPage,
+          s3UploadedAt: new Date(),
+          title: docInfo.linkText || undefined,
+        });
+        await bridgeStateDocToFileBlob(existDoc.id, { s3Key, filename, mimeType: 'application/pdf', sizeBytes: 0, sourceSlug: source.slug, agency: source.agency });
+        progress.duplicatesSkipped++;
+        summary.duplicates++;
+        continue;
+      }
+
+      let doc: FetchDocumentResult | null = null;
+
+      if (!doc) {
+        fastLaneRequests++;
+        doc = await fetchDocument(docUrl, signal, docInfo.foundOnPage).catch(async (e: any) => {
+          if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
+            heavyLaneRequests++;
+            addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
+            const apiDoc = await fetchDocumentViaAPI(docUrl);
+            if (apiDoc) return { ...apiDoc, isInterstitial: false };
+          }
+          throw e;
+        });
+      }
+
+      if (doc && doc.isInterstitial) {
+        addLog(progress, `INTERSTITIAL detected for: ${filename}`);
+        let resolved = false;
+        if (isScrapingApiConfigured()) {
+          heavyLaneRequests++;
+          const apiResult = await fetchPageViaAPI(docUrl, { js_render: true });
+          if (apiResult) {
+            const finalUrl = extractFinalUrlFromInterstitial(apiResult.html);
+            const cookies = apiResult.cookies || [];
+            if (finalUrl) {
+              const absoluteUrl = finalUrl.startsWith('http') ? finalUrl : new URL(finalUrl, docUrl).href;
+              const cookieDoc = await fetchDocumentWithCookies(absoluteUrl, cookies, signal);
+              if (cookieDoc) {
+                doc = { ...cookieDoc, isInterstitial: false };
+                resolved = true;
+              }
+            }
+            if (!resolved && cookies.length > 0) {
+              const cookieDoc = await fetchDocumentWithCookies(docUrl, cookies, signal);
+              if (cookieDoc) {
+                doc = { ...cookieDoc, isInterstitial: false };
+                resolved = true;
+              }
+            }
+          }
+        }
+        if (!resolved) {
+          throw new Error('Interstitial page detected, could not extract final document URL');
+        }
+      }
+
+      if (doc && !doc.isInterstitial && doc.size > 0) {
+        await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
+        const newDoc = await recordStateDocument({
+          sourceId: source.id,
+          url: docUrl,
+          urlHash,
+          filename,
+          s3Key,
+          sizeBytes: doc.size,
+          mimeType: doc.contentType,
+          status: 'uploaded',
+          discoveredFrom: docInfo.foundOnPage,
+          s3UploadedAt: new Date(),
+          title: docInfo.linkText || undefined,
+        });
+        await bridgeStateDocToFileBlob(newDoc.id, { s3Key, filename, mimeType: doc.contentType, sizeBytes: doc.size, sourceSlug: source.slug, agency: source.agency });
+        progress.documentsDownloaded++;
+        summary.newDocuments++;
+        if (downloadIndex % 10 === 0 || progress.documentsDownloaded <= 5) {
+          addLog(progress, `OK [${downloadIndex}/${docsSeen.size}]: ${filename} (${Math.round(doc.size / 1024)}KB)`);
+        }
+      }
+    } catch (e: any) {
+      const failureType = classifyError(e);
+      progress.documentsFailed++;
+      summary.errors.push({ url: docUrl, error: e.message || 'Unknown error', failureType });
+      if (summary.failuresByType) {
+        summary.failuresByType[failureType] = (summary.failuresByType[failureType] || 0) + 1;
+      }
+      if (e.message?.includes('403') && summary.protectionStats) {
+        summary.protectionStats.blockedDocuments++;
+        summary.protectionStats.detected = true;
+      }
+
+      await recordStateDocument({
+        sourceId: source.id,
+        url: docUrl,
+        urlHash,
+        filename,
+        status: 'failed',
+        errorMessage: e.message,
+        discoveredFrom: docInfo.foundOnPage,
+      }).catch(() => {});
+
+      if (downloadIndex % 10 === 0) {
+        addLog(progress, `FAIL [${downloadIndex}/${docsSeen.size}]: ${filename} - ${e.message}`);
+      }
+    }
+
+    if (downloadIndex % 5 === 0) {
+      await updateStateRunProgress(run.id, progress);
+    }
+
+    const delay = 200 + Math.random() * 500;
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  progress.completedAt = new Date();
+  progress.currentUrl = '';
+
+  const durationMs = progress.completedAt.getTime() - progress.startedAt.getTime();
+  const durationSec = Math.round(durationMs / 1000);
+  const durationStr = durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`;
+
+  const attemptedDownloads = progress.documentsDownloaded + progress.documentsFailed;
+  const downloadSuccessRate = attemptedDownloads > 0
+    ? ((progress.documentsDownloaded / attemptedDownloads) * 100).toFixed(1)
+    : 'N/A';
+
+  const failureSummaryParts: string[] = [];
+  if (summary.failuresByType) {
+    for (const [type, count] of Object.entries(summary.failuresByType)) {
+      failureSummaryParts.push(`${count}x ${type}`);
+    }
+  }
+  const failureSummaryStr = failureSummaryParts.length > 0 ? failureSummaryParts.join(', ') : 'none';
+
+  let finalStatus: 'completed' | 'completed_with_errors' | 'failed';
+  let statusReason: string;
+
+  const blockedPages = summary.protectionStats?.blockedPages || 0;
+  const siteCompletelyBlocked = progress.pagesVisited <= 2 && blockedPages > 10;
+  const highFailureRate = attemptedDownloads > 0 && (progress.documentsFailed / attemptedDownloads) > 0.5;
+  const allNewFailed = attemptedDownloads > 0 && progress.documentsDownloaded === 0 && progress.documentsFailed > 0;
+
+  if (siteCompletelyBlocked) {
+    finalStatus = 'failed';
+    statusReason = `Site completely blocked — only ${progress.pagesVisited} pages visited, ${blockedPages} pages blocked`;
+  } else if (allNewFailed) {
+    finalStatus = 'completed_with_errors';
+    statusReason = `All ${progress.documentsFailed} new download attempts failed (${failureSummaryStr})`;
+  } else if (highFailureRate && attemptedDownloads >= 5) {
+    finalStatus = 'completed_with_errors';
+    statusReason = `High failure rate: ${progress.documentsFailed} of ${attemptedDownloads} failed (${downloadSuccessRate}% success)`;
+  } else {
+    finalStatus = 'completed';
+    if (progress.documentsDownloaded > 0) {
+      statusReason = `${progress.documentsDownloaded} new docs uploaded, ${progress.duplicatesSkipped} duplicates`;
+    } else if (progress.duplicatesSkipped > 0) {
+      statusReason = `No new docs — all ${progress.duplicatesSkipped} discovered docs already in database`;
+    } else {
+      statusReason = `No documents discovered on this site`;
+    }
+  }
+
+  progress.status = finalStatus === 'completed_with_errors' ? 'completed_with_errors' : finalStatus;
+
+  addLog(progress, `=== STATE CRAWL SUMMARY ===`);
+  addLog(progress, `SOURCE: ${source.name} (${source.agency})`);
+  addLog(progress, `STATUS: ${finalStatus} — ${statusReason}`);
+  addLog(progress, `DURATION: ${durationStr}`);
+  addLog(progress, `PAGES: ${progress.pagesVisited} visited`);
+  addLog(progress, `DISCOVERY: ${progress.documentsDiscovered} docs found — Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, Iframe=${stats.iframe}`);
+  addLog(progress, `DUPLICATES: ${progress.duplicatesSkipped} already in database`);
+  addLog(progress, `DOWNLOADS: ${progress.documentsDownloaded} succeeded, ${progress.documentsFailed} failed (${downloadSuccessRate}% success rate)`);
+  if (hasLinkFilter) addLog(progress, `LINK FILTER: ${linkFilterSkipped} docs skipped by text filter`);
+  if (excludePatterns.length > 0) addLog(progress, `EXCLUDE FILTER: ${excludeFilterSkipped} URLs skipped`);
+  addLog(progress, `REQUESTS: Fast Lane=${fastLaneRequests}, Heavy Lane=${heavyLaneRequests}`);
+  addLog(progress, `=== END STATE CRAWL SUMMARY ===`);
+
+  (summary as any).strategyStats = stats;
+  (summary as any).statusReason = statusReason;
+  (summary as any).fastLaneRequests = fastLaneRequests;
+  (summary as any).heavyLaneRequests = heavyLaneRequests;
+  (summary as any).linkFilterSkipped = linkFilterSkipped;
+  (summary as any).excludeFilterSkipped = excludeFilterSkipped;
+
+  const errorMessageForDb = finalStatus === 'completed' ? null : statusReason;
+
+  await completeStateSourceRun(run.id, finalStatus, {
+    pagesVisited: progress.pagesVisited,
+    documentsDiscovered: progress.documentsDiscovered,
+    documentsDownloaded: progress.documentsDownloaded,
+    documentsUploaded: progress.documentsDownloaded,
+    documentsFailed: progress.documentsFailed,
+    errorMessage: errorMessageForDb || undefined,
+    summary,
+  });
+
+  await db.update(crawlerStateSources)
+    .set({
+      lastCrawlDate: new Date(),
+      totalDocuments: sql`(SELECT COUNT(*) FROM crawler_state_documents WHERE source_id = ${source.id})`,
+      totalUploaded: sql`(SELECT COUNT(*) FROM crawler_state_documents WHERE source_id = ${source.id} AND status = 'uploaded')`,
+      consecutiveFailures: finalStatus === 'failed' ? sql`consecutive_failures + 1` : 0,
+      updatedAt: new Date(),
+    })
+    .where(eq(crawlerStateSources.id, source.id));
+
+  setTimeout(() => {
+    activeCrawls.delete(run.id);
+  }, 300000);
+}
+

@@ -40,6 +40,7 @@ import {
   HardDrive,
   RotateCw,
   Plus,
+  Square,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -2257,6 +2258,33 @@ function StateSourceDetail({
     enabled: tab === "runs",
   });
 
+  const { data: progressData } = useQuery<{
+    active: boolean;
+    runId?: string;
+    status?: string;
+    pagesVisited?: number;
+    pagesQueued?: number;
+    documentsDiscovered?: number;
+    documentsDownloaded?: number;
+    documentsFailed?: number;
+    duplicatesSkipped?: number;
+    currentUrl?: string;
+    startedAt?: string;
+    recentLogs?: string[];
+  }>({
+    queryKey: ["/api/crawler-intel/state-sources", source.slug, "progress"],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/progress`);
+      if (!res.ok) return { active: false };
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      return query.state.data?.active ? 3000 : false;
+    },
+  });
+
+  const isCrawlActive = progressData?.active === true;
+
   const triggerCrawl = useMutation({
     mutationFn: async () => {
       const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/crawl`, {
@@ -2268,6 +2296,23 @@ function StateSourceDetail({
     },
     onSuccess: (data) => {
       toast({ title: "Crawl Started", description: data.message || "Crawl triggered" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/state-sources"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const abortCrawlMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/abort`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Crawl Aborted", description: data.message || "Crawl stopped" });
       queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/state-sources"] });
     },
     onError: (error: Error) => {
@@ -2325,17 +2370,76 @@ function StateSourceDetail({
               <StateSourceProfileEditor source={src} onSave={(updates) => updateSource.mutate(updates)} saving={updateSource.isPending} />
             </DialogContent>
           </Dialog>
-          <Button
-            size="sm"
-            onClick={() => triggerCrawl.mutate()}
-            disabled={triggerCrawl.isPending}
-            data-testid="button-trigger-source-crawl"
-          >
-            <Play className="w-3 h-3 mr-1" />
-            {triggerCrawl.isPending ? "Starting..." : "Trigger Crawl"}
-          </Button>
+          {isCrawlActive ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => abortCrawlMutation.mutate()}
+              disabled={abortCrawlMutation.isPending}
+              data-testid="button-abort-source-crawl"
+            >
+              <Square className="w-3 h-3 mr-1" />
+              {abortCrawlMutation.isPending ? "Stopping..." : "Abort Crawl"}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => triggerCrawl.mutate()}
+              disabled={triggerCrawl.isPending}
+              data-testid="button-trigger-source-crawl"
+            >
+              <Play className="w-3 h-3 mr-1" />
+              {triggerCrawl.isPending ? "Starting..." : "Trigger Crawl"}
+            </Button>
+          )}
         </div>
       </div>
+
+      {isCrawlActive && progressData && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+              <span className="text-sm font-medium">Crawl in Progress</span>
+              <Badge variant="secondary">{progressData.status}</Badge>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+              <div>
+                <div className="text-muted-foreground">Pages</div>
+                <div className="font-mono font-medium">{progressData.pagesVisited || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Discovered</div>
+                <div className="font-mono font-medium">{progressData.documentsDiscovered || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Downloaded</div>
+                <div className="font-mono font-medium text-green-600">{progressData.documentsDownloaded || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Failed</div>
+                <div className="font-mono font-medium text-red-500">{progressData.documentsFailed || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Duplicates</div>
+                <div className="font-mono font-medium">{progressData.duplicatesSkipped || 0}</div>
+              </div>
+            </div>
+            {progressData.currentUrl && (
+              <div className="text-xs text-muted-foreground truncate font-mono" data-testid="text-crawl-current-url">
+                {progressData.currentUrl}
+              </div>
+            )}
+            {progressData.recentLogs && progressData.recentLogs.length > 0 && (
+              <div className="max-h-32 overflow-y-auto bg-muted/50 rounded p-2 text-xs font-mono space-y-0.5">
+                {progressData.recentLogs.map((log, i) => (
+                  <div key={i} className="text-muted-foreground">{log}</div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>

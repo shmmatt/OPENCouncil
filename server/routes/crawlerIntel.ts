@@ -15,6 +15,12 @@ import {
   getLinkTextPatternsForGaps,
   type GapAnalysisResult,
 } from "../services/gapAnalysis";
+import {
+  startStateCrawl,
+  getCrawlProgress,
+  getActiveCrawls,
+  abortCrawl,
+} from "../services/crawlerEngine";
 import { FAILURE_LABELS, type FailureType } from "../../shared/crawler-schema";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -835,6 +841,11 @@ router.post("/state-sources/:sourceSlug/crawl", async (req, res) => {
       return apiError(res, 409, "SOURCE_DISABLED", `State source '${source.name}' is disabled`);
     }
 
+    const existingActive = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (existingActive) {
+      return apiError(res, 409, "CRAWL_ALREADY_RUNNING", `Crawl already running for ${source.name}`, false);
+    }
+
     const parsed = stateSourceCrawlSchema.safeParse(req.body || {});
     if (!parsed.success) {
       return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
@@ -850,6 +861,8 @@ router.post("/state-sources/:sourceSlug/crawl", async (req, res) => {
       ? linkPatterns
       : (source.linkPatterns as string[]) || [];
 
+    const effectiveExcludePatterns = (source.excludePatterns as string[]) || [];
+
     const run = await crawlerStorage.createStateSourceRun(
       source.id,
       mode,
@@ -857,21 +870,89 @@ router.post("/state-sources/:sourceSlug/crawl", async (req, res) => {
       maxPages || source.maxPages || undefined
     );
 
+    const runId = await startStateCrawl(source, run, {
+      maxPages: maxPages || source.maxPages || undefined,
+      mode,
+      targetPaths: effectiveTargetPaths,
+      linkPatterns: effectiveLinkPatterns,
+      excludePatterns: effectiveExcludePatterns,
+    });
+
     res.json({
       message: `State source crawl started for ${source.name} (${source.agency})`,
-      runId: run.id,
+      runId,
       sourceId: source.id,
       mode,
       maxPages: maxPages || source.maxPages || "default",
       triggerType: "bot",
       targetPaths: effectiveTargetPaths,
       linkPatterns: effectiveLinkPatterns,
+      excludePatterns: effectiveExcludePatterns,
       scope: source.scope,
-      hint: `Poll GET /state-sources/${source.slug}/runs for status updates`,
+      hint: `Poll GET /state-sources/${source.slug}/progress for real-time status`,
       ...(callbackUrl ? { callbackUrl } : {}),
     });
   } catch (error: any) {
     apiError(res, 500, "CRAWL_START_FAILED", error.message, true, 60);
+  }
+});
+
+router.get("/state-sources/:sourceSlug/progress", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const activeCrawl = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (!activeCrawl) {
+      return res.json({ active: false, message: "No active crawl for this source" });
+    }
+
+    const progress = getCrawlProgress(activeCrawl.runId);
+    if (!progress) {
+      return res.json({ active: false, message: "Crawl progress not found" });
+    }
+
+    res.json({
+      active: true,
+      runId: progress.runId,
+      status: progress.status,
+      pagesVisited: progress.pagesVisited,
+      pagesQueued: progress.pagesQueued,
+      documentsDiscovered: progress.documentsDiscovered,
+      documentsDownloaded: progress.documentsDownloaded,
+      documentsFailed: progress.documentsFailed,
+      duplicatesSkipped: progress.duplicatesSkipped,
+      currentUrl: progress.currentUrl,
+      startedAt: progress.startedAt,
+      recentLogs: (progress.log || []).slice(-20),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "PROGRESS_FETCH_FAILED", error.message);
+  }
+});
+
+router.post("/state-sources/:sourceSlug/abort", async (req, res) => {
+  try {
+    const source = await resolveStateSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `State source '${req.params.sourceSlug}' not found`);
+    }
+
+    const activeCrawl = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (!activeCrawl) {
+      return apiError(res, 404, "NO_ACTIVE_CRAWL", "No active crawl found for this source");
+    }
+
+    const aborted = abortCrawl(activeCrawl.runId);
+    if (aborted) {
+      res.json({ message: `Crawl aborted for ${source.name}`, runId: activeCrawl.runId });
+    } else {
+      apiError(res, 500, "ABORT_FAILED", "Failed to abort crawl");
+    }
+  } catch (error: any) {
+    apiError(res, 500, "ABORT_FAILED", error.message);
   }
 });
 
