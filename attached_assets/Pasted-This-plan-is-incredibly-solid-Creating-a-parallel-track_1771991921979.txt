@@ -1,0 +1,35 @@
+This plan is incredibly solid. Creating a parallel track (`startStateCrawl` and `executeStateCrawl`) instead of trying to shoehorn state websites into the existing municipal crawler is exactly the right architectural choice. State agency websites do not use the standard CivicPlus/WordPress municipal templates, so bypassing the CMS detection phase will save you a ton of wasted compute cycles.
+
+Adding the real-time progress polling and the "Abort Crawl" button (Task T003) is also a fantastic UX addition. State websites can be massive, and having an emergency stop button is crucial for testing.
+
+However, there is **one critical gap in Task T002** that will completely break the NH Supreme Court guardrails we established in the last step if it isn't explicitly addressed.
+
+### The Gap: URL Filtering vs. DOM/Text Filtering
+
+In Task T002, the plan states:
+
+> *"Applies source.excludePatterns — skip any URL matching exclude patterns during BFS and document download"*
+
+This works perfectly for the NHMA paywall because the URL contains `/store/` or `/cart/`.
+
+But remember the **NH Supreme Court Slip Opinions**? The URL for a court case PDF usually looks generic, like `https://www.courts.nh.gov/sites/g/files/ehbemt471/files/documents/2026-02/24-0125.pdf`. The municipal keywords ("Town of", "ZBA") are **not in the URL**; they are in the HTML text of the link itself or the adjacent table cell (e.g., `<td>Smith v. Town of Ossipee</td> <a href="24-0125.pdf">Opinion</a>`).
+
+If the crawler's BFS discovery phase only evaluates the raw URL string against `linkPatterns` and `excludePatterns`, it will blindly download every single criminal and divorce case on the docket because they all share the same generic URL structure.
+
+### The Fix to Hand to the Agent
+
+You need to instruct the agent to add a text-evaluation hook during the BFS link discovery phase. Here is the exact feedback you should provide to the agent before it starts coding:
+
+---
+
+**"The architecture for separating state crawls from town crawls looks excellent. However, we need to add one critical capability to the BFS discovery phase in T002 to support our Supreme Court filtering:**
+
+**1. DOM Text Link Filtering:** `excludePatterns` and `linkPatterns` currently only evaluate the raw URL string. For the NH Supreme Court source, the municipal keywords ('Town of', 'ZBA') are in the HTML text of the link or the surrounding DOM elements, not in the PDF's URL structure.
+**2. The Requirement:** Update the BFS link extraction logic in `executeStateCrawl` so that it evaluates both the `href` attribute AND the visible text of the `<a>` tag (or its immediate parent). If a source has a specific 'CRITICAL FILTER' note (like checking for municipal keywords), the crawler must apply that text-based filter before pushing the URL to the download queue.
+**3. Vectorization Handoff:** Ensure that when `bridgeToFileBlob` is called for state documents, the resulting blob is properly tagged with state metadata so our embedding pipeline knows to route it to the Statewide Lane context, rather than attaching it to a specific local town."
+
+---
+
+Once the agent implements that text-evaluation hook, your crawler will be surgical enough to rip through the Supreme Court docket and *only* pull down the exact municipal cases your RAG system needs.
+
+Would you like me to draft the specific Cheerio/Puppeteer logic for extracting link text so the agent has a concrete example of how to implement the BFS update?
