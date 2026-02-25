@@ -574,6 +574,9 @@ router.get("/state-sources", async (_req, res) => {
         baseUrl: s.baseUrl,
         description: s.description,
         docCategories: s.docCategories,
+        targetPaths: s.targetPaths,
+        linkPatterns: s.linkPatterns,
+        excludePatterns: s.excludePatterns,
         updateCadence: s.updateCadence,
         scope: s.scope,
         status: s.status,
@@ -582,6 +585,8 @@ router.get("/state-sources", async (_req, res) => {
         consecutiveFailures: s.consecutiveFailures,
         lastRunStatus: s.lastRunStatus,
         lastRunDate: s.lastRunDate,
+        lastCrawlDate: s.lastCrawlDate,
+        notes: s.notes,
         documentsByStatus: s.documentsByStatus,
       })),
     });

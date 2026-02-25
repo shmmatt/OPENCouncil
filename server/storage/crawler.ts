@@ -275,6 +275,10 @@ export async function getCrawlerStats(): Promise<{
   totalUrls: number;
   activeRuns: number;
   recentRuns: CrawlerRun[];
+  stateSources: number;
+  stateDocuments: number;
+  stateUploaded: number;
+  stateFailed: number;
 }> {
   const [townCount] = await db
     .select({ count: sql<number>`count(*)` })
@@ -303,7 +307,20 @@ export async function getCrawlerStats(): Promise<{
     .orderBy(desc(schema.crawlerRuns.startedAt))
     .limit(10);
 
+  const [stateSourceCount] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.crawlerStateSources);
+
+  const stateDocStats = await db.execute(sql`
+    SELECT
+      COUNT(*) as total,
+      COUNT(*) FILTER (WHERE status = 'uploaded') as uploaded,
+      COUNT(*) FILTER (WHERE status = 'failed') as failed
+    FROM crawler_state_documents
+  `);
+
   const docRow = (docStats.rows as any[])[0];
+  const stateDocRow = (stateDocStats.rows as any[])[0];
 
   return {
     totalTowns: Number(townCount.count),
@@ -313,6 +330,10 @@ export async function getCrawlerStats(): Promise<{
     totalUrls: Number(urlCount.count),
     activeRuns: Number(activeCount.count),
     recentRuns,
+    stateSources: Number(stateSourceCount.count),
+    stateDocuments: parseInt(stateDocRow.total || "0"),
+    stateUploaded: parseInt(stateDocRow.uploaded || "0"),
+    stateFailed: parseInt(stateDocRow.failed || "0"),
   };
 }
 

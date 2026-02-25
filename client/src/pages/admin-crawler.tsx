@@ -39,6 +39,7 @@ import {
   Target,
   HardDrive,
   RotateCw,
+  Plus,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -127,6 +128,10 @@ interface CrawlerStats {
   totalUrls: number;
   activeRuns: number;
   recentRuns: any[];
+  stateSources: number;
+  stateDocuments: number;
+  stateUploaded: number;
+  stateFailed: number;
 }
 
 interface TownOverview {
@@ -231,30 +236,54 @@ function FailureBreakdown({ summary, allRuns, runId }: { summary: any; allRuns: 
 }
 
 function StatsOverview({ stats }: { stats: CrawlerStats | undefined }) {
-  const cards = [
+  const townCards = [
     { label: "Towns", value: stats?.totalTowns ?? 0, icon: MapPin, color: "text-blue-600" },
     { label: "URLs Tracked", value: stats?.totalUrls ?? 0, icon: Link2, color: "text-purple-600" },
-    { label: "Documents", value: stats?.totalDocuments ?? 0, icon: FileText, color: "text-indigo-600" },
-    { label: "Uploaded", value: stats?.totalUploaded ?? 0, icon: FolderDown, color: "text-green-600" },
-    { label: "Failed", value: stats?.totalFailed ?? 0, icon: XCircle, color: "text-red-600" },
+    { label: "Town Docs", value: stats?.totalDocuments ?? 0, icon: FileText, color: "text-indigo-600" },
+    { label: "Town Uploaded", value: stats?.totalUploaded ?? 0, icon: FolderDown, color: "text-green-600" },
+    { label: "Town Failed", value: stats?.totalFailed ?? 0, icon: XCircle, color: "text-red-600" },
     { label: "Active Runs", value: stats?.activeRuns ?? 0, icon: Activity, color: "text-orange-600" },
   ];
 
+  const stateCards = [
+    { label: "State Sources", value: stats?.stateSources ?? 0, icon: Globe, color: "text-blue-600" },
+    { label: "State Docs", value: stats?.stateDocuments ?? 0, icon: FileText, color: "text-indigo-600" },
+    { label: "State Uploaded", value: stats?.stateUploaded ?? 0, icon: FolderDown, color: "text-green-600" },
+    { label: "State Failed", value: stats?.stateFailed ?? 0, icon: XCircle, color: "text-red-600" },
+  ];
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      {cards.map((c) => (
-        <Card key={c.label}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <c.icon className={`w-4 h-4 ${c.color}`} />
-              <span className="text-sm text-muted-foreground">{c.label}</span>
-            </div>
-            <div className="text-2xl font-bold" data-testid={`text-stat-${c.label.toLowerCase().replace(/\s+/g, "-")}`}>
-              {formatNumber(c.value)}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {townCards.map((c) => (
+          <Card key={c.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <c.icon className={`w-4 h-4 ${c.color}`} />
+                <span className="text-sm text-muted-foreground">{c.label}</span>
+              </div>
+              <div className="text-2xl font-bold" data-testid={`text-stat-${c.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                {formatNumber(c.value)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {stateCards.map((c) => (
+          <Card key={c.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <c.icon className={`w-4 h-4 ${c.color}`} />
+                <span className="text-sm text-muted-foreground">{c.label}</span>
+              </div>
+              <div className="text-2xl font-bold" data-testid={`text-stat-${c.label.toLowerCase().replace(/\s+/g, "-")}`}>
+                {formatNumber(c.value)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2040,6 +2069,8 @@ interface StateSource {
   totalUploaded: number;
   consecutiveFailures: number;
   notes: string | null;
+  scope?: string;
+  state?: string;
 }
 
 function getSourceStatusBadge(status: string) {
@@ -2198,7 +2229,7 @@ function StateSourceDetail({
   const { data: detailData } = useQuery<{ source: StateSource; documentStats: any; recentRuns: any[] }>({
     queryKey: ["/api/crawler-intel/state-sources", source.slug],
     queryFn: async () => {
-      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}`);
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2208,7 +2239,7 @@ function StateSourceDetail({
     queryKey: ["/api/crawler-intel/state-sources", source.slug, "documents", docPage],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(docPage * limit) });
-      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/documents?${params}`);
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/documents?${params}`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2219,7 +2250,7 @@ function StateSourceDetail({
     queryKey: ["/api/crawler-intel/state-sources", source.slug, "runs", runPage],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(runPage * limit) });
-      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/runs?${params}`);
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/runs?${params}`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2228,9 +2259,8 @@ function StateSourceDetail({
 
   const triggerCrawl = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}/crawl`, {
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}/crawl`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "full" }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
@@ -2247,9 +2277,8 @@ function StateSourceDetail({
 
   const updateSource = useMutation({
     mutationFn: async (updates: any) => {
-      const res = await fetch(`/api/crawler-intel/state-sources/${source.slug}`, {
+      const res = await adminFetch(`/api/crawler-intel/state-sources/${source.slug}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
       if (!res.ok) throw new Error((await res.json()).message);
@@ -2383,6 +2412,28 @@ function StateSourceDetail({
               </CardContent>
             </Card>
           </div>
+          {(src.excludePatterns && src.excludePatterns.length > 0) && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Exclude Patterns</div>
+                <div className="flex flex-wrap gap-1">
+                  {src.excludePatterns.map((p, i) => (
+                    <Badge key={i} variant="outline" className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {src.notes && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Notes</div>
+                <p className="text-sm whitespace-pre-wrap">{src.notes}</p>
+              </CardContent>
+            </Card>
+          )}
           {stats?.byCategory && Object.keys(stats.byCategory).length > 0 && (
             <Card>
               <CardContent className="p-4">
@@ -2489,6 +2540,152 @@ function StateSourceDetail({
   );
 }
 
+function RegisterStateSourceDialog({ onRegistered }: { onRegistered: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [agency, setAgency] = useState("");
+  const [agencyAbbrev, setAgencyAbbrev] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [docCategories, setDocCategories] = useState("");
+  const [targetPaths, setTargetPaths] = useState("");
+  const [linkPatterns, setLinkPatterns] = useState("");
+  const [excludePatterns, setExcludePatterns] = useState("");
+  const [updateCadence, setUpdateCadence] = useState("quarterly");
+  const [maxPages, setMaxPages] = useState("");
+  const [notes, setNotes] = useState("");
+  const { toast } = useToast();
+
+  const register = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/crawler-intel/state-sources", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          agency,
+          agencyAbbrev: agencyAbbrev || undefined,
+          baseUrl,
+          description: description || undefined,
+          docCategories: docCategories.split(",").map(s => s.trim()).filter(Boolean),
+          targetPaths: targetPaths.trim() ? targetPaths.trim().split("\n").filter(Boolean) : [],
+          linkPatterns: linkPatterns.trim() ? linkPatterns.trim().split("\n").filter(Boolean) : [],
+          excludePatterns: excludePatterns.trim() ? excludePatterns.trim().split("\n").filter(Boolean) : [],
+          updateCadence,
+          maxPages: maxPages ? parseInt(maxPages) : undefined,
+          notes: notes || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Registration failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Registered", description: data.message || "State source registered" });
+      setOpen(false);
+      setName(""); setAgency(""); setAgencyAbbrev(""); setBaseUrl("");
+      setDescription(""); setDocCategories(""); setTargetPaths("");
+      setLinkPatterns(""); setExcludePatterns(""); setUpdateCadence("quarterly");
+      setMaxPages(""); setNotes("");
+      onRegistered();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" data-testid="button-register-state-source">
+          <Plus className="w-3 h-3 mr-1" />Register Source
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Register New State Source</DialogTitle>
+        </DialogHeader>
+        <ScrollArea className="max-h-[60vh]">
+          <div className="space-y-4 py-2 pr-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Name *</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="NH Agency Name" data-testid="input-register-name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Agency *</Label>
+                <Input value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="Full agency name" data-testid="input-register-agency" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Agency Abbreviation</Label>
+                <Input value={agencyAbbrev} onChange={(e) => setAgencyAbbrev(e.target.value)} placeholder="e.g. DES" data-testid="input-register-abbrev" />
+              </div>
+              <div className="space-y-2">
+                <Label>Update Cadence</Label>
+                <Select value={updateCadence} onValueChange={setUpdateCadence}>
+                  <SelectTrigger data-testid="select-register-cadence">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UPDATE_CADENCES.map((c) => (
+                      <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Base URL *</Label>
+              <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://www.example.nh.gov" data-testid="input-register-url" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} data-testid="input-register-description" />
+            </div>
+            <div className="space-y-2">
+              <Label>Doc Categories (comma-separated)</Label>
+              <Input value={docCategories} onChange={(e) => setDocCategories(e.target.value)} placeholder="rsas, regulations, guidance" data-testid="input-register-categories" />
+            </div>
+            <div className="space-y-2">
+              <Label>Max Pages</Label>
+              <Input type="number" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="No limit" data-testid="input-register-maxpages" />
+            </div>
+            <div className="space-y-2">
+              <Label>Target Paths (one per line)</Label>
+              <Textarea value={targetPaths} onChange={(e) => setTargetPaths(e.target.value)} rows={3} data-testid="input-register-target-paths" />
+            </div>
+            <div className="space-y-2">
+              <Label>Link Patterns (one per line)</Label>
+              <Textarea value={linkPatterns} onChange={(e) => setLinkPatterns(e.target.value)} rows={2} data-testid="input-register-link-patterns" />
+            </div>
+            <div className="space-y-2">
+              <Label>Exclude Patterns (one per line)</Label>
+              <Textarea value={excludePatterns} onChange={(e) => setExcludePatterns(e.target.value)} rows={2} data-testid="input-register-exclude-patterns" />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Crawl constraints, copyright warnings, etc." data-testid="input-register-notes" />
+            </div>
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <Button
+            onClick={() => register.mutate()}
+            disabled={register.isPending || !name || !agency || !baseUrl}
+            data-testid="button-submit-register"
+          >
+            {register.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+            Register Source
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StateSourcesDashboard({
   onSelectSource,
 }: {
@@ -2497,7 +2694,7 @@ function StateSourcesDashboard({
   const { data, isLoading } = useQuery<{ sources: StateSource[] }>({
     queryKey: ["/api/crawler-intel/state-sources"],
     queryFn: async () => {
-      const res = await fetch("/api/crawler-intel/state-sources");
+      const res = await adminFetch("/api/crawler-intel/state-sources");
       if (!res.ok) throw new Error("Failed to fetch state sources");
       return res.json();
     },
@@ -2515,8 +2712,12 @@ function StateSourcesDashboard({
   const sources = data?.sources || [];
 
   return (
-    <ScrollArea className="w-full">
-      <Table>
+    <div className="space-y-3">
+      <div className="flex items-center justify-end">
+        <RegisterStateSourceDialog onRegistered={() => queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/state-sources"] })} />
+      </div>
+      <ScrollArea className="w-full">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Source</TableHead>
@@ -2574,7 +2775,8 @@ function StateSourcesDashboard({
           )}
         </TableBody>
       </Table>
-    </ScrollArea>
+      </ScrollArea>
+    </div>
   );
 }
 
