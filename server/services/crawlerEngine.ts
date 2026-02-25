@@ -2065,6 +2065,7 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
   sizeBytes: number;
   sourceSlug: string;
   agency?: string;
+  textContent?: string;
 }): Promise<void> {
   try {
     const rawHash = `s3:${opts.s3Key}`;
@@ -2074,8 +2075,19 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
     let fileBlobId: string;
     if (existing.rows.length > 0) {
       fileBlobId = (existing.rows[0] as any).id;
+      if (opts.textContent) {
+        await db.execute(sql`
+          UPDATE file_blobs 
+          SET preview_text = ${opts.textContent},
+              extracted_text_char_count = ${opts.textContent.length},
+              needs_ocr = false,
+              ocr_status = 'not_needed'
+          WHERE id = ${fileBlobId} AND preview_text IS NULL
+        `);
+      }
     } else {
       const storagePath = `s3://${S3_BUCKET}/${opts.s3Key}`;
+      const hasText = !!opts.textContent;
       const [blob] = await db
         .insert(schema.fileBlobs)
         .values({
@@ -2086,9 +2098,10 @@ export async function bridgeStateDocToFileBlob(stateDocId: string, opts: {
           storagePath,
           s3Bucket: S3_BUCKET,
           s3Key: opts.s3Key,
-          needsOcr: false,
-          ocrStatus: 'none',
-          extractedTextCharCount: 0,
+          needsOcr: hasText ? false : false,
+          ocrStatus: hasText ? 'not_needed' : 'none',
+          previewText: hasText ? opts.textContent : undefined,
+          extractedTextCharCount: hasText ? opts.textContent!.length : 0,
           embeddingStatus: 'none',
         })
         .returning();

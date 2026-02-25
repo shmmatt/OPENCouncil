@@ -377,6 +377,7 @@ async function executeCourtListenerCrawl(
         sizeBytes: textBuffer.length,
         sourceSlug: source.slug,
         agency: source.agency,
+        textContent: fullText,
       });
 
       opinionsStored++;
