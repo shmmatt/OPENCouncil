@@ -1,0 +1,30 @@
+This is exactly the kind of high-value analysis that transitions OPENCouncil from a simple search tool into a predictive analytics platform for local real estate and commercial development. If you are trying to open a business, expand a facility, or develop land, the most valuable thing you can know is exactly where the hidden landmines are in the local approval process.
+To do this, we need to extract the narrative arc of these applications across multiple documents and then present the aggregate data as a "Site Plan Funnel." Here is how we build that pipeline and present the insights.
+Phase 1: The Extraction Schema
+We need to run a batch process on your vector database of Ossipee documents, specifically targeting Planning Board and Zoning Board of Adjustment (ZBA) minutes. We will use a structured output prompt to force the LLM to extract the data into a strict JSON format for every commercial entity or address mentioned.
+We want the LLM to pull:
+ * Entity/Project Name: (e.g., "Main Street Retail Expansion")
+ * Initial Appearance Date: The first time it hits the Planning Board agenda.
+ * Total Continuances: How many subsequent meetings it was bumped to.
+ * Initial Outcome: Approved, Approved with Conditions, Denied, or Withdrawn.
+ * Primary Reason for Denial/Friction: (e.g., "Parking setback violation," "Drainage concerns," "Abutter noise complaints").
+ * Appeal Path (NH Specifics): Did it go to the ZBA? In New Hampshire, if a Planning Board denial is based on a zoning ordinance interpretation (RSA 676:5), the appeal goes to the ZBA. If it's based on the Planning Board's own site plan regulations, it often goes straight to Superior Court (RSA 677:15). We want to track if an applicant fought the denial locally and won.
+Phase 2: Presenting the "Site Plan Funnel"
+Once you have this structured data, the best way to present it is visually, treating the municipal approval process like a sales pipeline.
+You can build a dashboard that shows the attrition rate of site plans in Ossipee:
+ * Top of Funnel (100%): Total Initial Site Plan Applications.
+ * Stage 2 (e.g., 65%): Applications that require more than two continuances (highlighting the "delay zone").
+ * Stage 3 (e.g., 50%): Approved without conditions vs. Approved with conditions.
+ * Stage 4 (e.g., 15%): Outright Denials.
+ * Bottom of Funnel: The Appeal Success Rate (How many denied applications won an appeal at the ZBA and eventually got built).
+This visual instantly tells a developer or business owner: "If you apply in this town, you have an X% chance of getting approved on the first try, and a Y% chance of getting dragged into a six-month appeal process."
+Phase 3: Summarizing the "Whys" (The Friction Matrix)
+The numbers show what happened; the text extraction shows why. You can aggregate the "Primary Reason for Denial/Friction" field into a categorized matrix.
+You can offer a breakdown that shows the top killers of site plans in Ossipee. For example, the data might reveal:
+ * 40% of friction comes from Abutter Pushback (specifically regarding traffic/noise).
+ * 30% of friction is State vs. Local clashes (e.g., the applicant met NH DOT driveway requirements, but the local board still wanted a traffic study).
+ * 20% of friction is strictly Zoning Dimensional Constraints (parking spaces, setbacks).
+The Ultimate Insight:
+By tying the "Whys" to the "Funnel," you can offer a predictive insight: "Site plans involving X (e.g., new commercial driveways) are 3 times more likely to be denied or continued than site plans involving Y (e.g., change of use in an existing building)."
+This is incredibly powerful for a town trying to streamline its economic development, or for an entrepreneur trying to calculate holding costs while waiting for town approvals.
+Would you like to draft the exact JSON schema and the system prompt we would feed to the LLM to accurately pull this specific appeal and denial data from the Ossipee minutes?
