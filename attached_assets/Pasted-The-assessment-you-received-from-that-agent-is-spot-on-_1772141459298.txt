@@ -1,0 +1,20 @@
+The assessment you received from that agent is spot on. It correctly identified the Achilles' heel of using standard RAG for narrative extraction: arbitrary character-count chunking destroys contextual relationships. If chunk 1 contains "Main Street LLC applied for a variance," chunk 2 contains a long debate about drainage, and chunk 3 contains "Motion to deny due to impervious surface limits," standard entity-matching often fails to connect the denial in chunk 3 back to the applicant in chunk 1.
+Re-chunking by semantic boundaries (specifically, by agenda item) is absolutely the right architectural move.
+Here is how we should plan this enhancement to ensure high-fidelity extraction from those Ossipee (and eventually statewide) minutes.
+Phase 1: Raw Document Retrieval
+Instead of querying the document_chunks table for the extraction pipeline, we need to bypass it and go straight to the source text.
+ * Action: Modify the backend route to query your database for the original, full-text file_blobs associated with a specific town's Planning Board and ZBA meetings.
+ * Goal: Assemble the complete, unbroken transcript of a single meeting in memory.
+Phase 2: Agenda Boundary Detection (The "Pre-Processing" Pass)
+Meeting minutes are semi-structured. Town clerks usually use visual cues to separate topics. We need to split the full document into logical "Agenda Chunks" before doing the heavy data extraction.
+ * The Heuristic Approach (Fast/Cheap): We can write a Python utility that splits the text based on common regex patterns found in NH minutes (e.g., Roman numerals IV., terms like Case #, Public Hearing:, or bolded applicant names).
+ * The LLM Approach (Slower/Highly Accurate): We feed the full text of the meeting to Gemini with a single task: "Identify the start and end indices (or exact header text) of every distinct application or agenda item discussed in these minutes." * Result: We turn a 10-page document into an array of discrete text blocks, where each block contains the entire continuous narrative of one specific site plan application.
+Phase 3: The Targeted Extraction Pipeline
+Now that we have isolated the full narrative of a single application into its own logical block, we run your Map-Reduce extraction prompt.
+ * Action: Send each "Agenda Chunk" to Gemini with the strict JSON schema you defined in T001.
+ * Why this works: Because the LLM is now reading the entire debate, motion, and vote in one continuous context window, it won't hallucinate connections. It will clearly see the "why" next to the "who."
+Phase 4: The Edge Case (Massive Agenda Items)
+Occasionally, a single controversial development (like a massive new subdivision) will dominate a meeting and generate an agenda chunk that exceeds our optimal token limit for extraction.
+ * Action: If an agenda chunk exceeds a certain threshold, we apply a sliding window or overlapping chunk strategy within that specific agenda item to ensure no details are lost during extraction.
+To map out the code for this, I need to understand a bit more about your current data pipeline.
+Are the raw, un-chunked text files currently accessible in your database (e.g., in a file_blobs or documents table), or does your ingestion pipeline only save the resulting vector chunks?
