@@ -34,6 +34,14 @@ PostgreSQL, accessed via Neon's serverless driver and Drizzle ORM, serves as the
 
 **User Feedback System**: Allows users to provide thumbs up/down feedback on AI responses, which is stored and available for admin analytics.
 
+**UI/UX Design Decisions**:
+- Landing page uses voter-focused copy ("Don't Read the Town Warrant. Ask It.") rather than B2B SaaS language
+- AI responses always start with a TL;DR section of 2-3 bold bullet points for scannability
+- Inline citations (`[L1]`, `[S1]`) render as color-coded badges (sky blue for local, violet for state) with tooltips showing source document details
+- Chat header shows "OPENCouncil | {Town}" in a single clean line
+- Usage indicator shows human-readable text ("X% used · Guest/Free/Pro") instead of a progress bar
+- Chat empty state displays 5 clickable example queries to reduce friction for first-time users
+
 **Batch Analysis & Review Runs**: Supports batch analysis of chat data with Gemini-generated executive summaries, stored in `chat_review_runs`.
 
 ## External Dependencies
