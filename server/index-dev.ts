@@ -24,7 +24,6 @@ export async function setupVite(app: Express, server: Server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
       },
     },
     server: serverOptions,
@@ -57,6 +56,11 @@ export async function setupVite(app: Express, server: Server) {
     }
   });
 }
+
+process.on('SIGTERM', () => { console.log('[Process] SIGTERM received'); process.exit(0); });
+process.on('SIGINT', () => { console.log('[Process] SIGINT received'); process.exit(0); });
+process.on('uncaughtException', (err) => { console.error('[Process] Uncaught exception:', err); process.exit(1); });
+process.on('unhandledRejection', (reason) => { console.error('[Process] Unhandled rejection:', reason); });
 
 (async () => {
   await runApp(setupVite);

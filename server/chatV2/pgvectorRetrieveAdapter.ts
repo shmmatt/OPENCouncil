@@ -254,31 +254,28 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     queryFocus: plan.queryFocus,
   };
 
-  const allQueries = [
-    ...localQueries.map(q => ({ query: q, lane: "local" as const })),
-    ...stateQueries.map(q => ({ query: q, lane: "state" as const })),
-  ];
-
-  const results = await Promise.all(
-    allQueries.map(({ query, lane }) =>
-      executeQueryOnLane(query, lane, townPreference || null, lane === "local" ? plan.local.k : plan.state.k, laneOpts)
-        .then(chunks => ({ query, lane, chunks }))
-        .catch(err => {
-          logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
-          return { query, lane, chunks: [] as PgvectorLaneChunk[] };
-        })
-    )
-  );
-
-  for (const r of results) {
-    if (r.lane === "local") {
-      allLocalChunks.push(...r.chunks);
-      if (r.chunks.length > 0) localQueriesUsed.push(r.query);
-    } else {
-      allStateChunks.push(...r.chunks);
-      if (r.chunks.length > 0) stateQueriesUsed.push(r.query);
+  async function runLaneSequentially(queries: string[], lane: "local" | "state", k: number) {
+    const chunks: PgvectorLaneChunk[] = [];
+    const queriesUsed: string[] = [];
+    for (const query of queries) {
+      try {
+        const result = await executeQueryOnLane(query, lane, townPreference || null, k, laneOpts);
+        chunks.push(...result);
+        if (result.length > 0) queriesUsed.push(query);
+      } catch (err) {
+        logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
+      }
     }
+    return { chunks, queriesUsed };
   }
+
+  const localResult = await runLaneSequentially(localQueries, "local", plan.local.k);
+  const stateResult = await runLaneSequentially(stateQueries, "state", plan.state.k);
+
+  allLocalChunks.push(...localResult.chunks);
+  localQueriesUsed.push(...localResult.queriesUsed);
+  allStateChunks.push(...stateResult.chunks);
+  stateQueriesUsed.push(...stateResult.queriesUsed);
 
   const dedupedLocal = dedupeChunksByContent(allLocalChunks);
   const dedupedState = dedupeChunksByContent(allStateChunks);

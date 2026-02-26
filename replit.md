@@ -24,7 +24,7 @@ PostgreSQL, accessed via Neon's serverless driver and Drizzle ORM, serves as the
 
 **Document Ingestion Pipeline (V2)**: Manages document lifecycle from upload and hashing to AI-powered metadata suggestion, admin review, and indexing. Includes features for meeting minute detection and a three-tier town detection system.
 
-**OCR Pipeline (Dual-Provider)**: Supports Tesseract.js for low-text PDFs via background workers and AWS Textract for production-grade asynchronous OCR.
+**OCR Pipeline (Dual-Provider)**: Supports Tesseract.js for low-text PDFs via background workers and AWS Textract for production-grade asynchronous OCR. OCR workers are gated behind `ENABLE_OCR_WORKERS=true` env var to prevent memory overhead during normal serving.
 
 **Persistent Object Storage**: Document files are stored in Replit Object Storage.
 
