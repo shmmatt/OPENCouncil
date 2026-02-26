@@ -710,6 +710,84 @@ export type OcrJob = typeof ocrJobs.$inferSelect;
 export type InsertOcrJob = z.infer<typeof insertOcrJobSchema>;
 
 // ============================================================
+// OC RESEARCH TABLES
+// ============================================================
+
+export const RESEARCH_REPORT_STATUS = ['pending', 'processing', 'completed', 'failed'] as const;
+export type ResearchReportStatus = typeof RESEARCH_REPORT_STATUS[number];
+
+export const RESEARCH_REPORT_TYPES = ['friction'] as const;
+export type ResearchReportType = typeof RESEARCH_REPORT_TYPES[number];
+
+export const SITE_PLAN_OUTCOMES = ['approved', 'approved_with_conditions', 'denied', 'withdrawn', 'pending', 'unknown'] as const;
+export type SitePlanOutcome = typeof SITE_PLAN_OUTCOMES[number];
+
+export const APPEAL_PATHS = ['zba', 'superior_court', 'none', 'unknown'] as const;
+export type AppealPath = typeof APPEAL_PATHS[number];
+
+export interface SitePlanApplication {
+  entityName: string;
+  address?: string;
+  applicant?: string;
+  initialAppearanceDate?: string;
+  lastAppearanceDate?: string;
+  totalContinuances: number;
+  outcome: SitePlanOutcome;
+  conditions?: string[];
+  primaryFrictionReason?: string;
+  frictionCategories?: string[];
+  appealPath: AppealPath;
+  appealOutcome?: string;
+  meetingReferences: string[];
+}
+
+export interface FunnelStage {
+  label: string;
+  count: number;
+  percentage: number;
+  description?: string;
+}
+
+export interface FrictionCategory {
+  category: string;
+  count: number;
+  percentage: number;
+  examples?: string[];
+}
+
+export interface FrictionReportData {
+  townName: string;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+  chunksAnalyzed: number;
+  batchesProcessed: number;
+  funnelStages: FunnelStage[];
+  frictionMatrix: FrictionCategory[];
+  predictiveInsights: string[];
+  applications: SitePlanApplication[];
+}
+
+export const researchReports = pgTable("research_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  townName: text("town_name").notNull(),
+  reportType: text("report_type").notNull().default("friction"),
+  status: text("status").notNull().default("pending"),
+  reportData: jsonb("report_data").$type<FrictionReportData>(),
+  error: text("error"),
+  chunksAnalyzed: integer("chunks_analyzed").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertResearchReportSchema = createInsertSchema(researchReports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ResearchReport = typeof researchReports.$inferSelect;
+export type InsertResearchReport = z.infer<typeof insertResearchReportSchema>;
+
+// ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
 // ============================================================
 export * from './crawler-schema';

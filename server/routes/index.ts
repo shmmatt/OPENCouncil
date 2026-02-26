@@ -14,6 +14,7 @@ import { registerAdminChatAnalyticsRoutes } from "./adminChatAnalyticsRoutes";
 import crawlerRouter from "./crawler";
 import crawlerIntelRouter from "./crawlerIntel";
 import { templateRouter, publicTemplateRouter } from "./templates";
+import researchRouter from "./research";
 
 export {
   adminRouter,
@@ -38,6 +39,8 @@ export function registerAllRoutes(app: Express): void {
 
   app.use("/api/admin/templates", templateRouter);
   app.use("/api/templates", publicTemplateRouter);
+
+  app.use("/api/admin/research", researchRouter);
 
   app.use("/api/chat", chatRouter);
   app.use("/api", preferencesRouter);

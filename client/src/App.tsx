@@ -16,6 +16,7 @@ import AdminChatAnalytics from "@/pages/admin-chat-analytics";
 import AdminOcrPipeline from "@/pages/admin-ocr-pipeline";
 import AdminCrawler from "@/pages/admin-crawler";
 import AdminTemplates from "@/pages/admin-templates";
+import AdminResearch from "@/pages/admin-research";
 import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 import Landing from "@/pages/landing";
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/admin/ocr-pipeline" component={AdminOcrPipeline} />
       <Route path="/admin/crawler" component={AdminCrawler} />
       <Route path="/admin/templates" component={AdminTemplates} />
+      <Route path="/admin/research" component={AdminResearch} />
       <Route component={NotFound} />
     </Switch>
   );
