@@ -10,6 +10,8 @@ import type {
   InsertEvent,
   ChatAnalytics,
   InsertChatAnalytics,
+  ChatReviewRun,
+  InsertChatReviewRun,
 } from "@shared/schema";
 
 // ============================================================
@@ -97,4 +99,28 @@ export async function upsertChatAnalytics(analytics: InsertChatAnalytics): Promi
   } else {
     return createChatAnalytics(analytics);
   }
+}
+
+// ============================================================
+// CHAT REVIEW RUNS
+// ============================================================
+
+export async function createChatReviewRun(run: InsertChatReviewRun): Promise<ChatReviewRun> {
+  const [result] = await db.insert(schema.chatReviewRuns).values(run).returning();
+  return result;
+}
+
+export async function getChatReviewRuns(): Promise<ChatReviewRun[]> {
+  return await db
+    .select()
+    .from(schema.chatReviewRuns)
+    .orderBy(sql`created_at DESC`);
+}
+
+export async function getChatReviewRunById(id: string): Promise<ChatReviewRun | undefined> {
+  const [result] = await db
+    .select()
+    .from(schema.chatReviewRuns)
+    .where(eq(schema.chatReviewRuns.id, id));
+  return result;
 }

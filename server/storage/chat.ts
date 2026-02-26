@@ -97,6 +97,25 @@ export async function getMessagesBySessionId(sessionId: string): Promise<ChatMes
 }
 
 // ============================================================
+// MESSAGE FEEDBACK
+// ============================================================
+
+export async function updateMessageFeedback(messageId: string, feedback: string | null): Promise<void> {
+  await db
+    .update(schema.chatMessages)
+    .set({ feedback })
+    .where(eq(schema.chatMessages.id, messageId));
+}
+
+export async function getMessageById(messageId: string): Promise<ChatMessage | undefined> {
+  const [result] = await db
+    .select()
+    .from(schema.chatMessages)
+    .where(eq(schema.chatMessages.id, messageId));
+  return result;
+}
+
+// ============================================================
 // SITUATION CONTEXT (topic continuity)
 // ============================================================
 

@@ -6,6 +6,7 @@ import express, {
   Response,
   NextFunction,
 } from "express";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 
 import { validateEnv } from "./config/env";
@@ -40,6 +41,20 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "wss:", "ws:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;

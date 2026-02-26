@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -285,6 +285,58 @@ function ChatSidebar({
   );
 }
 
+function FeedbackButtons({ message }: { message: ChatMessage }) {
+  const feedbackMutation = useMutation({
+    mutationFn: async ({ feedback }: { feedback: string | null }) => {
+      await apiRequest("POST", `/api/chat/messages/${message.id}/feedback`, { feedback });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", message.sessionId] });
+    },
+  });
+
+  const currentFeedback = message.feedback;
+
+  return (
+    <div className="flex items-center gap-1">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => feedbackMutation.mutate({ feedback: currentFeedback === "up" ? null : "up" })}
+            className={`p-1 rounded transition-colors ${
+              currentFeedback === "up" 
+                ? "text-primary bg-primary/10" 
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            disabled={feedbackMutation.isPending}
+            data-testid={`button-thumbs-up-${message.id}`}
+          >
+            <ThumbsUp className="w-3.5 h-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Helpful</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => feedbackMutation.mutate({ feedback: currentFeedback === "down" ? null : "down" })}
+            className={`p-1 rounded transition-colors ${
+              currentFeedback === "down" 
+                ? "text-destructive bg-destructive/10" 
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            disabled={feedbackMutation.isPending}
+            data-testid={`button-thumbs-down-${message.id}`}
+          >
+            <ThumbsDown className="w-3.5 h-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Not helpful</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 function MessageBubble({ 
   message, 
   onFollowUpClick 
@@ -423,9 +475,17 @@ function MessageBubble({
           </div>
         )}
         
-        <p className="text-xs text-muted-foreground px-1">
-          {new Date(message.createdAt).toLocaleTimeString()}
-        </p>
+        <div className="flex items-center gap-2 flex-wrap px-1">
+          <p className="text-xs text-muted-foreground">
+            {new Date(message.createdAt).toLocaleTimeString()}
+          </p>
+          {!isUser && <FeedbackButtons message={message} />}
+        </div>
+        {!isUser && (
+          <p className="text-[10px] text-muted-foreground/60 px-1" data-testid="text-ai-disclaimer">
+            AI can make mistakes — verify with official records
+          </p>
+        )}
       </div>
       {isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">

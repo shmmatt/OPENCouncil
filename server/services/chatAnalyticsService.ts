@@ -5,7 +5,8 @@ import ws from "ws";
 import { storage } from "../storage";
 import { eq, desc, asc, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { ChatAnalytics } from "@shared/schema";
+import type { ChatAnalytics, ChatReviewRun } from "@shared/schema";
+import { createChatReviewRun, getChatReviewRuns, getChatReviewRunById } from "../storage/analytics";
 
 neonConfig.webSocketConstructor = ws;
 
@@ -37,6 +38,8 @@ export interface ChatAnalyticsListItem {
   documentQualityScore: number | null;
   answerQualityScore: number | null;
   analyzedAt: string | null;
+  thumbsUpCount: number;
+  thumbsDownCount: number;
 }
 
 export interface ChatAnalyticsListResult {
@@ -54,6 +57,7 @@ interface ListParams {
   sortOrder: "asc" | "desc";
   search: string;
   filterAnalyzed?: boolean;
+  filterNegativeFeedback?: boolean;
   filterMinDocScore: number;
   filterMaxDocScore: number;
   filterMinAnswerScore: number;
@@ -68,6 +72,7 @@ export async function getChatAnalyticsList(params: ListParams): Promise<ChatAnal
     sortOrder,
     search,
     filterAnalyzed,
+    filterNegativeFeedback,
     filterMinDocScore,
     filterMaxDocScore,
     filterMinAnswerScore,
@@ -83,6 +88,8 @@ export async function getChatAnalyticsList(params: ListParams): Promise<ChatAnal
       session: schema.chatSessions,
       messageCount: sql<number>`(SELECT COUNT(*) FROM chat_messages WHERE session_id = ${schema.chatSessions.id})`.as('message_count'),
       totalCost: sql<number>`COALESCE((SELECT SUM(CAST(cost_usd AS FLOAT)) FROM llm_cost_logs WHERE session_id = ${schema.chatSessions.id}), 0)`.as('total_cost'),
+      thumbsUpCount: sql<number>`(SELECT COUNT(*) FROM chat_messages WHERE session_id = ${schema.chatSessions.id} AND feedback = 'up')`.as('thumbs_up_count'),
+      thumbsDownCount: sql<number>`(SELECT COUNT(*) FROM chat_messages WHERE session_id = ${schema.chatSessions.id} AND feedback = 'down')`.as('thumbs_down_count'),
     })
     .from(schema.chatSessions)
     .orderBy(sortOrder === "desc" ? desc(schema.chatSessions.updatedAt) : asc(schema.chatSessions.updatedAt))
@@ -119,6 +126,8 @@ export async function getChatAnalyticsList(params: ListParams): Promise<ChatAnal
       documentQualityScore: analytics?.documentQualityScore || null,
       answerQualityScore: analytics?.answerQualityScore || null,
       analyzedAt: analytics?.analyzedAt?.toISOString() || null,
+      thumbsUpCount: Number(row.thumbsUpCount) || 0,
+      thumbsDownCount: Number(row.thumbsDownCount) || 0,
     };
   });
 
@@ -133,6 +142,10 @@ export async function getChatAnalyticsList(params: ListParams): Promise<ChatAnal
 
   if (filterAnalyzed !== undefined) {
     items = items.filter(item => item.isAnalyzed === filterAnalyzed);
+  }
+
+  if (filterNegativeFeedback) {
+    items = items.filter(item => item.thumbsDownCount > 0);
   }
 
   items = items.filter(item => {
@@ -207,8 +220,19 @@ export async function analyzeChatSession(sessionId: string): Promise<ChatAnalyti
     throw new Error("No messages in session");
   }
 
+  const feedbackSummary = messages
+    .filter(m => m.feedback)
+    .map(m => `Message "${m.content.slice(0, 80)}..." received ${m.feedback === 'up' ? 'THUMBS UP' : 'THUMBS DOWN'} from the user`)
+    .join("\n");
+
   const transcript = messages
-    .map(m => `[${m.role.toUpperCase()}]: ${m.content}`)
+    .map(m => {
+      let line = `[${m.role.toUpperCase()}]: ${m.content}`;
+      if (m.feedback) {
+        line += `\n  [USER FEEDBACK: ${m.feedback === 'up' ? 'THUMBS UP' : 'THUMBS DOWN'}]`;
+      }
+      return line;
+    })
     .join("\n\n");
 
   const prompt = `You are a HARSH CRITIC analyzing chat conversations between users and OPENCouncil, an AI assistant for New Hampshire municipal officials. Your job is to ruthlessly identify failures and gaps.
@@ -246,6 +270,7 @@ Analyze this conversation:
 
 5. **Answer Quality Score**: Did the user get what they actually needed? Generic advice = low score. Missing the user's actual question = very low score.
 
+${feedbackSummary ? `\nUSER FEEDBACK SIGNALS:\n${feedbackSummary}\n\nPay special attention to messages that received THUMBS DOWN — these indicate specific user dissatisfaction.\n` : ''}
 TRANSCRIPT:
 ${transcript}
 
@@ -322,3 +347,104 @@ export async function batchAnalyzeSessions(sessionIds: string[]): Promise<{ sess
 
   return results;
 }
+
+export async function batchAnalyzeWithSummary(sessionIds: string[]): Promise<ChatReviewRun> {
+  const analysisResults = await batchAnalyzeSessions(sessionIds);
+  const successCount = analysisResults.filter(r => r.success).length;
+
+  const db = getDb();
+
+  const analyses: ChatAnalytics[] = [];
+  for (const sessionId of sessionIds) {
+    const a = await storage.getChatAnalyticsBySessionId(sessionId);
+    if (a) analyses.push(a);
+  }
+
+  let totalThumbsUp = 0;
+  let totalThumbsDown = 0;
+  for (const sessionId of sessionIds) {
+    const messages = await storage.getMessagesBySessionId(sessionId);
+    for (const m of messages) {
+      if (m.feedback === "up") totalThumbsUp++;
+      if (m.feedback === "down") totalThumbsDown++;
+    }
+  }
+
+  const docScores = analyses.filter(a => a.documentQualityScore != null).map(a => a.documentQualityScore!);
+  const answerScores = analyses.filter(a => a.answerQualityScore != null).map(a => a.answerQualityScore!);
+  const avgDocScore = docScores.length > 0 ? (docScores.reduce((a, b) => a + b, 0) / docScores.length).toFixed(1) : null;
+  const avgAnswerScore = answerScores.length > 0 ? (answerScores.reduce((a, b) => a + b, 0) / answerScores.length).toFixed(1) : null;
+
+  const allMissingDocs = analyses
+    .map(a => a.missingDocsSuggestions)
+    .filter(Boolean)
+    .join("\n---\n");
+
+  const critiques = analyses.map(a => `Session: ${a.sessionId}\nDoc Score: ${a.documentQualityScore}/10 | Answer Score: ${a.answerQualityScore}/10\nCritique: ${a.critique}\nMissing: ${a.missingDocsSuggestions || "None"}`).join("\n\n");
+
+  let executiveSummary = "";
+  try {
+    const summaryPrompt = `You are an executive analyst reviewing a batch of ${sessionIds.length} chat sessions for OPENCouncil, an AI assistant for NH municipal governance.
+
+STATS:
+- Total sessions analyzed: ${sessionIds.length}
+- Successful analyses: ${successCount}
+- Average Document Quality Score: ${avgDocScore || "N/A"}/10
+- Average Answer Quality Score: ${avgAnswerScore || "N/A"}/10
+- User Thumbs Up: ${totalThumbsUp}
+- User Thumbs Down: ${totalThumbsDown}
+
+INDIVIDUAL SESSION CRITIQUES:
+${critiques}
+
+Provide a concise executive summary covering:
+1. **Overall Performance**: How is the system performing? Are users satisfied?
+2. **Top Failures**: The 3 most critical issues causing bad answers
+3. **Missing Documents Priority List**: The top 5-10 specific documents that would most improve answer quality (be specific: town name, document type, year)
+4. **Recommendations**: 2-3 actionable steps to improve the system
+
+Respond in JSON:
+{
+  "executiveSummary": "...(comprehensive markdown summary)..."
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: summaryPrompt }] }],
+      config: { responseMimeType: "application/json" },
+    });
+
+    const text = response.text || "";
+    try {
+      const parsed = JSON.parse(text);
+      executiveSummary = parsed.executiveSummary || text;
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        executiveSummary = parsed.executiveSummary || text;
+      } else {
+        executiveSummary = text;
+      }
+    }
+  } catch (error) {
+    console.error("Error generating executive summary:", error);
+    executiveSummary = `Batch analysis completed. ${successCount}/${sessionIds.length} sessions analyzed. Avg Doc: ${avgDocScore}/10, Avg Answer: ${avgAnswerScore}/10. ${totalThumbsUp} thumbs up, ${totalThumbsDown} thumbs down.`;
+  }
+
+  const run = await createChatReviewRun({
+    sessionIds,
+    totalSessions: sessionIds.length,
+    successfulAnalyses: successCount,
+    avgDocScore: avgDocScore,
+    avgAnswerScore: avgAnswerScore,
+    thumbsUpCount: totalThumbsUp,
+    thumbsDownCount: totalThumbsDown,
+    topMissingDocs: allMissingDocs.slice(0, 5000),
+    executiveSummary,
+  });
+
+  return run;
+}
+
+export { getChatReviewRuns, getChatReviewRunById };

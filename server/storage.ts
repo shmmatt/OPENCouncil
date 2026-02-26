@@ -83,6 +83,8 @@ export interface IStorage {
   // Chat message operations
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   getMessagesBySessionId(sessionId: string): Promise<ChatMessage[]>;
+  updateMessageFeedback(messageId: string, feedback: string | null): Promise<void>;
+  getMessageById(messageId: string): Promise<ChatMessage | undefined>;
 
   // Temp upload operations
   createTempUpload(upload: InsertTempUpload): Promise<TempUpload>;
@@ -223,6 +225,8 @@ export class DatabaseStorage implements IStorage {
   // Chat messages
   createChatMessage = chat.createChatMessage;
   getMessagesBySessionId = chat.getMessagesBySessionId;
+  updateMessageFeedback = chat.updateMessageFeedback;
+  getMessageById = chat.getMessageById;
 
   // Situation context
   setSessionSituationContext = chat.setSessionSituationContext;

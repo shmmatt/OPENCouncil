@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import { ErrorBoundary } from "@/components/error-boundary";
 import AdminLogin from "@/pages/admin-login";
 import AdminDocuments from "@/pages/admin-documents";
 import AdminBulkUpload from "@/pages/admin-bulk-upload";
@@ -17,11 +18,12 @@ import AdminCrawler from "@/pages/admin-crawler";
 import AdminTemplates from "@/pages/admin-templates";
 import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
+import Landing from "@/pages/landing";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <Redirect to="/chat" />} />
+      <Route path="/" component={Landing} />
       <Route path="/chat" component={Chat} />
       <Route path="/chat/t/:slug" component={TemplateLauncher} />
       <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
@@ -44,10 +46,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <ErrorBoundary>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }

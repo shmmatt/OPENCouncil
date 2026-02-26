@@ -169,6 +169,8 @@ export const users = pgTable("users", {
   defaultTown: text("default_town"),
   isPaying: boolean("is_paying").default(false).notNull(),
   isMunicipalStaff: boolean("is_municipal_staff").default(false).notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastLoginAt: timestamp("last_login_at"),
 });
@@ -261,6 +263,7 @@ export const chatMessages = pgTable("chat_messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   citations: text("citations"),
+  feedback: text("feedback"),
   attachmentFilename: text("attachment_filename"),
   attachmentMimeType: text("attachment_mime_type"),
   attachmentExtractedText: text("attachment_extracted_text"),
@@ -328,6 +331,21 @@ export const chatAnalytics = pgTable("chat_analytics", {
   documentQualityScore: integer("document_quality_score"), // 1-10 scale
   answerQualityScore: integer("answer_quality_score"), // 1-10 scale
   analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
+});
+
+// Chat Review Runs: Aggregated summaries of batch chat analysis runs
+export const chatReviewRuns = pgTable("chat_review_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionIds: jsonb("session_ids").$type<string[]>().notNull(),
+  totalSessions: integer("total_sessions").notNull(),
+  successfulAnalyses: integer("successful_analyses").notNull().default(0),
+  avgDocScore: numeric("avg_doc_score"),
+  avgAnswerScore: numeric("avg_answer_score"),
+  thumbsUpCount: integer("thumbs_up_count").default(0),
+  thumbsDownCount: integer("thumbs_down_count").default(0),
+  topMissingDocs: text("top_missing_docs"),
+  executiveSummary: text("executive_summary"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // S3 to Gemini File Search Sync: Tracks files synced from S3 to Gemini stores
@@ -472,6 +490,11 @@ export const insertChatAnalyticsSchema = createInsertSchema(chatAnalytics).omit(
   analyzedAt: true,
 });
 
+export const insertChatReviewRunSchema = createInsertSchema(chatReviewRuns).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertS3GeminiSyncSchema = createInsertSchema(s3GeminiSync).omit({
   id: true,
   createdAt: true,
@@ -526,6 +549,9 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 
 export type ChatAnalytics = typeof chatAnalytics.$inferSelect;
 export type InsertChatAnalytics = z.infer<typeof insertChatAnalyticsSchema>;
+
+export type ChatReviewRun = typeof chatReviewRuns.$inferSelect;
+export type InsertChatReviewRun = z.infer<typeof insertChatReviewRunSchema>;
 
 export type S3GeminiSync = typeof s3GeminiSync.$inferSelect;
 export type InsertS3GeminiSync = z.infer<typeof insertS3GeminiSyncSchema>;

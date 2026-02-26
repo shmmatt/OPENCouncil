@@ -1,9 +1,15 @@
 import { Router } from "express";
+import sanitizeHtml from "sanitize-html";
 import { storage } from "../storage";
 import { runChatV3Pipeline } from "../chatV2/chatOrchestratorV3";
 import { chatConfig } from "../chatV2/chatConfig";
 import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLimiter";
 import { getChatTemplateById } from "../storage/chatTemplates";
+
+const sanitizeOptions: sanitizeHtml.IOptions = {
+  allowedTags: [],
+  allowedAttributes: {},
+};
 
 const router = Router();
 
@@ -69,10 +75,12 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
       return res.status(404).json({ message: "Chat session not found" });
     }
 
+    const sanitizedContent = sanitizeHtml(content.trim(), sanitizeOptions);
+
     const userMessage = await storage.createChatMessage({
       sessionId: id,
       role: "user",
-      content: content.trim(),
+      content: sanitizedContent,
       citations: null,
     });
 
@@ -138,6 +146,32 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     res.status(500).json({ 
       message: error instanceof Error ? error.message : "Failed to send message" 
     });
+  }
+});
+
+router.post("/messages/:messageId/feedback", async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { feedback } = req.body;
+
+    if (feedback !== null && feedback !== "up" && feedback !== "down") {
+      return res.status(400).json({ message: "Feedback must be 'up', 'down', or null" });
+    }
+
+    const message = await storage.getMessageById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    if (message.role !== "assistant") {
+      return res.status(400).json({ message: "Can only provide feedback on assistant messages" });
+    }
+
+    await storage.updateMessageFeedback(messageId, feedback);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating feedback:", error);
+    res.status(500).json({ message: "Failed to update feedback" });
   }
 });
 

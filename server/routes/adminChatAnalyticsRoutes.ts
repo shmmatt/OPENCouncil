@@ -5,6 +5,9 @@ import {
   getChatAnalyticsList,
   analyzeChatSession,
   batchAnalyzeSessions,
+  batchAnalyzeWithSummary,
+  getChatReviewRuns,
+  getChatReviewRunById,
 } from "../services/chatAnalyticsService";
 
 export function registerAdminChatAnalyticsRoutes(app: Express) {
@@ -19,6 +22,7 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
         const sortOrder = (req.query.sortOrder as string) || "desc";
         const search = (req.query.search as string) || "";
         const filterAnalyzed = req.query.filterAnalyzed as string | undefined;
+        const filterNegativeFeedback = req.query.filterNegativeFeedback as string | undefined;
         const filterMinDocScore = parseInt(req.query.filterMinDocScore as string) || 0;
         const filterMaxDocScore = parseInt(req.query.filterMaxDocScore as string) || 10;
         const filterMinAnswerScore = parseInt(req.query.filterMinAnswerScore as string) || 0;
@@ -31,6 +35,7 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
           sortOrder: sortOrder as "asc" | "desc",
           search,
           filterAnalyzed: filterAnalyzed === "true" ? true : filterAnalyzed === "false" ? false : undefined,
+          filterNegativeFeedback: filterNegativeFeedback === "true",
           filterMinDocScore,
           filterMaxDocScore,
           filterMinAnswerScore,
@@ -41,6 +46,37 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
       } catch (error) {
         console.error("Error fetching chat analytics:", error);
         res.status(500).json({ message: "Failed to fetch chat analytics" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/admin/chat-analytics/review-runs",
+    authenticateAdmin,
+    async (_req: Request, res: Response) => {
+      try {
+        const runs = await getChatReviewRuns();
+        res.json(runs);
+      } catch (error) {
+        console.error("Error fetching review runs:", error);
+        res.status(500).json({ message: "Failed to fetch review runs" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/admin/chat-analytics/review-runs/:id",
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const run = await getChatReviewRunById(req.params.id);
+        if (!run) {
+          return res.status(404).json({ message: "Review run not found" });
+        }
+        res.json(run);
+      } catch (error) {
+        console.error("Error fetching review run:", error);
+        res.status(500).json({ message: "Failed to fetch review run" });
       }
     }
   );
@@ -103,4 +139,23 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
       }
     }
   );
+
+  app.post(
+    "/api/admin/chat-analytics/batch-with-summary",
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { sessionIds } = req.body;
+        if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+          return res.status(400).json({ message: "sessionIds array is required" });
+        }
+        const run = await batchAnalyzeWithSummary(sessionIds);
+        res.json(run);
+      } catch (error) {
+        console.error("Error batch analyzing with summary:", error);
+        res.status(500).json({ message: "Failed to batch analyze sessions with summary" });
+      }
+    }
+  );
+
 }
