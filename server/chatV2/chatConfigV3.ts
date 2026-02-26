@@ -21,17 +21,17 @@ export const chatConfigV3 = {
   /**
    * Maximum queries per lane to prevent query explosion
    */
-  MAX_QUERIES_PER_LANE: 6,
+  MAX_QUERIES_PER_LANE: 3,
 
   /**
    * Default K (documents to retrieve) for local lane
    */
-  DEFAULT_LOCAL_K: 12,
+  DEFAULT_LOCAL_K: 6,
 
   /**
    * Default K (documents to retrieve) for state lane  
    */
-  DEFAULT_STATE_K: 8,
+  DEFAULT_STATE_K: 4,
 
   /**
    * Default cap (documents to keep after ranking) for local lane
