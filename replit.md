@@ -1,59 +1,97 @@
 # OPENCouncil - NH Municipal Governance Assistant
 
 ## Overview
-OPENCouncil is an AI-powered assistant designed for New Hampshire's elected officials and municipal workers. Its primary purpose is to provide instant and accurate answers to governance-related questions. It achieves this by combining Google's Gemini AI for answer synthesis with a pgvector-based semantic search across official municipal documents. The system features a user-friendly ChatGPT-style interface and a secure administrative panel for document management, including an advanced ingestion pipeline with duplicate detection and AI-driven metadata extraction. The project aims to improve accessibility to municipal information and streamline decision-making processes for local government.
+OPENCouncil is an AI-powered assistant for New Hampshire elected officials and municipal workers. It delivers instant, accurate answers to governance questions by utilizing Google's Gemini AI for answer synthesis and pgvector-based semantic search over official municipal documents. The system provides a ChatGPT-style chat interface for end-users and a secure admin panel for document management, featuring an advanced ingestion pipeline with duplicate detection and AI-powered metadata extraction.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Design and Technology Choices
-The frontend is built with React and TypeScript, utilizing Vite, `shadcn/ui` (Radix UI), and Tailwind CSS for a modern, responsive user experience. State management uses TanStack Query, and client-side routing is handled by `wouter`.
+### Frontend
+The frontend is built with React and TypeScript, using Vite for tooling. It leverages `shadcn/ui` (built on Radix UI primitives) and Tailwind CSS for styling. State management is handled by TanStack Query, and client-side routing uses `wouter`.
 
-The backend is an Express.js application in TypeScript, offering a RESTful API. It secures admin routes with JWT authentication and uses bcrypt for password hashing. File uploads (PDF, DOCX, TXT) are managed by Multer.
+### Backend
+The backend is an Express.js application written in TypeScript, exposing a RESTful API. It uses JWT for authentication in admin routes, bcrypt for password hashing, and Multer for handling file uploads (PDF, DOCX, TXT). Routes are organized into domain-specific routers.
 
-PostgreSQL, accessed via Neon's serverless driver and Drizzle ORM, serves as the primary data store. The database schema includes tables for managing admins, chat sessions, documents (`fileBlobs`, `logicalDocuments`, `documentVersions`), ingestion and embedding jobs, document chunks (with pgvector for embeddings), and chat templates. Drizzle Kit handles database migrations.
+### Data Storage
+PostgreSQL is used as the primary database, accessed via Neon's serverless driver and Drizzle ORM. The schema includes tables for `admins`, `chatSessions`, `chatMessages`, `fileBlobs`, `logicalDocuments`, `documentVersions`, `ingestionJobs`, `documentChunks` (with pgvector for embeddings), `embeddingJobs`, and `chatTemplates`. `chatSessions` has a `templateId` foreign key linking to `chatTemplates`. Drizzle Kit manages database migrations.
 
-### Core Features and Implementations
-**Retrieval Backend (Hybrid: pgvector + Full-Text Search)**: Implements a hybrid retrieval system combining semantic search (pgvector cosine similarity for conceptual matching) and keyword search (PostgreSQL full-text search). Results are merged using Reciprocal Rank Fusion (RRF). It also incorporates temporal re-ranking and document-type weighting based on query focus.
+### Retrieval Backend (Hybrid: pgvector + Full-Text Search)
+Documents are transformed into 768-dimensional vectors using Google Gemini's `gemini-embedding-001` model and stored in PostgreSQL with the pgvector extension. A **hybrid retrieval** system combines:
+- **Semantic search**: pgvector cosine similarity for conceptual matching
+- **Keyword search**: PostgreSQL full-text search via GIN-indexed `search_vector` tsvector column on `document_chunks` for exact-match retrieval (dollar amounts, article numbers, department names)
+- **Reciprocal Rank Fusion (RRF)**: Results from both search methods are merged using position-based RRF scoring (k=60), avoiding the pitfalls of linear score blending between different score distributions
+- **Temporal re-ranking**: When a temporal target is detected (e.g., "2026 budget"), year-matching chunks receive a score boost while historically distant chunks are penalized
+- **Document-type weighting**: Based on `queryFocus` classification (`financial_exact`, `narrative_context`, `historical_trend`, `general`), document types are weighted to boost the most relevant source types (e.g., meeting minutes for "why" questions, budgets for "how much" questions)
+The two-lane architecture (local + statewide) operates on top of this hybrid search.
 
-**AI Integration**: Google Gemini is central for answer synthesis, document embedding generation (`gemini-embedding-001`), metadata extraction during ingestion, and advanced query planning for retrieval.
+### AI Integration
+Google Gemini is integrated for several core functionalities:
+- **Answer synthesis**: Part of the V3 chat pipeline.
+- **Embedding generation**: Creates vector representations of documents.
+- **Metadata extraction**: Aids in organizing ingested documents.
+- **Query planning**: Generates multi-query retrieval plans.
+pgvector serves as the sole retrieval backend, with Gemini solely for synthesis, embedding, and metadata.
 
-**Chat Pipeline (V3 - Self-Reflective RAG)**: A five-stage pipeline processes user queries: Situation Relevance Gating, Planning (generating an IssueMap and RetrievalPlanV3), Retrieval (executing hybrid search), Synthesis (generating answers with Gemini and structured output, enforcing JSON schema), and an optional Conditional Second Hop for re-retrieval if initial context is insufficient. An Audit stage validates and repairs output.
+### Chat Pipeline (V3) — Self-Reflective RAG
+The V3 chat pipeline (`server/chatV2/chatOrchestratorV3.ts`) processes user queries through five stages with an optional "second hop" retrieval:
+1.  **Situation Relevance Gating**: Initial assessment of query relevance.
+2.  **Planning**: Generates an IssueMap and RetrievalPlanV3 with temporal/entity/queryFocus extraction.
+3.  **Retrieval**: Executes hybrid two-lane search (pgvector semantic + tsvector keyword with RRF).
+4.  **Synthesis**: Generates an answer using Gemini structured output (JSON schema enforced via `responseMimeType`). The synthesizer returns `has_sufficient_context`, `missing_information_query`, and `suggested_year` alongside the response.
+5.  **Second Hop (Conditional)**: If the synthesizer flags `has_sufficient_context: false`, the orchestrator runs ONE additional targeted retrieval using `missing_information_query` with its OWN temporal filter (from `suggested_year`, not the original plan's filter). Results are deduplicated and merged, then re-synthesized with `isFinalAttempt: true` to prevent further loops. Max 2 retrieval passes per query.
+6.  **Audit**: Validates format, detects drift, and performs repairs.
 
-**Document Ingestion Pipeline (V2)**: Manages document lifecycle from upload and hashing to AI-powered metadata suggestion, admin review, and indexing. Includes features for meeting minute detection and a three-tier town detection system.
+### Document Ingestion Pipeline (V2)
+This pipeline follows a staged workflow: document upload, hashing, text extraction, AI-powered metadata suggestion, admin review, approval/rejection, and indexing. It includes features for detecting meeting minutes and a three-tier town detection system.
 
-**OCR Pipeline (Dual-Provider)**: Supports Tesseract.js for low-text PDFs via background workers and AWS Textract for production-grade asynchronous OCR. OCR workers are gated behind `ENABLE_OCR_WORKERS=true` env var to prevent memory overhead during normal serving.
+### OCR Pipeline (Dual-Provider)
+The system supports two OCR providers:
+-   **Tesseract.js**: Used by a background worker for low-text PDFs.
+-   **AWS Textract**: The primary production-grade asynchronous OCR pipeline for S3-sourced documents. It uses a state machine to manage jobs from queuing to materialization, involving precheck workers and polling workers for text extraction and storage.
 
-**Persistent Object Storage**: Document files are stored in Replit Object Storage.
+### Persistent Object Storage
+Document files are stored in Replit Object Storage, with paths starting `/replit-objstore`. Legacy local paths are supported for backward compatibility.
 
-**Crawler / Data Collection**: A robust crawler engine supports multi-strategy discovery (sitemaps, BFS), CMS-specific enhancements (CivicPlus, WordPress), and handles redirects and interstitial pages. It features a "Hybrid Fast Lane / Heavy Lane" architecture for resilient fetching, including third-party Web Scraping API integration for protected sites. The crawler ensures crash resilience, incremental discovery persistence, and includes a "Resume Downloads" mode. It also supports state source crawling (e.g., OPD, DES, DRA, NHMA, RSAs, Admin Rules, Supreme Court, Fire/Building Code, DOT) and Google Drive folder crawling. Integrates with the CourtListener API for Supreme Court opinions.
-
-**Security**: Utilizes Helmet for security headers and `sanitize-html` for XSS protection. An error boundary is implemented in the frontend.
-
-**User Feedback System**: Allows users to provide thumbs up/down feedback on AI responses, which is stored and available for admin analytics.
-
-**UI/UX Design Decisions**:
-- Landing page uses voter-focused copy ("Don't Read the Town Warrant. Ask It.") rather than B2B SaaS language
-- AI responses always start with a TL;DR section of 2-3 bold bullet points for scannability
-- Inline citations (`[L1]`, `[S1]`) render as color-coded badges (sky blue for local, violet for state) with tooltips showing source document details
-- Chat header shows "OPENCouncil | {Town}" in a single clean line
-- Usage indicator shows human-readable text ("X% used · Guest/Free/Pro") instead of a progress bar
-- Chat empty state displays 5 clickable example queries to reduce friction for first-time users
-
-**Batch Analysis & Review Runs**: Supports batch analysis of chat data with Gemini-generated executive summaries, stored in `chat_review_runs`.
+### Crawler / Data Collection
+A comprehensive crawler system is in place for data collection (`server/services/crawlerEngine.ts`). Features include:
+- **Multi-strategy discovery**: Sitemap parsing, known path probing, breadth-first crawling (depth 5), iframe/embed extraction, external link detection
+- **CMS-specific enhancements**: CivicPlus DocumentCenter/AgendaCenter deep crawl with pagination; CivicPlus `/node/{id}/minutes` archive deep crawl with automatic year-page queuing (2013–current); WordPress Media API integration
+- **CivicPlus redirect resolution**: URLs like `/{board}/minutes/minutes-{NNN}` and `/{board}/agenda/agenda-{NNN}` are redirect URLs that resolve to actual PDFs at `/sites/g/files/...`. The crawler detects these, uses ZenRows `resolveRedirectViaAPI()` to extract the `Zr-Final-Url` and cookies (headers only, body discarded), then downloads the PDF locally via `fetchDocumentWithCookies()` — the "Extract & Toss" pattern.
+- **Hybrid Fast Lane / Heavy Lane architecture**: Default HTTP fetch ("Fast Lane") with enriched headers and rotating UA pool (8 browser variants). When a domain returns 403/429 or protection markers (CAPTCHA/Cloudflare/Turnstile), it's automatically flagged for the "Heavy Lane" — a third-party Web Scraping API (`server/services/scrapingApiClient.ts`). Once flagged, all subsequent requests for that domain route through the API. Requires `SCRAPING_API_KEY` env var (ZenRows/Scrapfly compatible).
+- **Interstitial detection and bypass**: Document downloads check Content-Type before saving — if a document URL returns `text/html` instead of the expected binary type, it's flagged as an interstitial trap. The "Extract & Toss" strategy renders the interstitial via the scraping API with JS execution, extracts the final download URL and session cookies, then performs the binary download locally with those cookies attached.
+- **Stale run cleanup**: On server startup, crawl runs stuck as "running" for over 30 minutes are automatically marked as failed. Admin panel has "Force Clear" buttons for manually clearing stale runs.
+- **Hardened fetching**: 3-attempt retry with backoff, www/non-www fallback, protection detection (Cloudflare/Akamai/CAPTCHA)
+- **Attribution tracking**: Each discovered document tracked with source page and discovery strategy via Map-based deduplication
+- **Run status taxonomy**: Three-tier status system: `completed` (clean run or negligible errors), `completed_with_errors` (amber — high failure rate, all downloads failed, or many docs blocked by protection), `failed` (red — site completely blocked or unhandled crash). Status reason persisted in `summary.statusReason` and `error_message` column. Rich end-of-crawl summary logs with duration, coverage rate, download success rate, failure breakdown, protection stats.
+- **Incremental discovery persistence**: Every discovered document URL is persisted to `crawler_documents` with `status: 'discovered'` during each discovery phase (not just at download time). Batch upserts run after Phase 1, 2, 3/3b/3c, and every 50 pages during BFS Phase 4. Uses status-rank protection (`discovered` < `failed` < `uploaded`) so re-discovery never downgrades an already-uploaded document. At crawl start, `docsSeen` is pre-seeded from ALL existing DB records for the town, giving perfect memory across runs.
+- **Resume Downloads mode**: Admin UI "Resume N Downloads" button triggers a crawl with `mode: 'resume'` that skips all discovery phases (1–4) and loads `discovered`/`failed` documents from the database as the download queue. Useful after crashes or timeouts to finish downloading without re-spidering.
+- **Crash resilience**: Unhandled exceptions in the crawl loop are caught, logged with stack trace, and persisted to the DB with `CRASH:` prefix in `error_message`. Periodic progress updates also persist logs to DB, so even mid-crawl crashes preserve diagnostic data. Discovery persistence ensures URLs found before a crash are never lost.
+- **Log persistence**: Crawl logs stored in `crawler_runs.logs` jsonb column (up to 2000 entries), viewable via expandable run rows in admin UI
+- **Batch operations**: "Crawl All Towns" button triggers all active towns with staggered start
+- **Analytics dashboard**: Document coverage, CMS distribution, strategy breakdown, per-town bar charts
+- **Admin panel**: `client/src/pages/admin-crawler.tsx` with Towns, Runs (with log viewer), Analytics, and State Sources tabs
+- **State source crawling**: Full crawl engine for NH state agency documents via `startStateCrawl()`/`executeStateCrawl()` in `crawlerEngine.ts`. Reuses the core BFS/sitemap/download infrastructure but writes to state-specific tables (`crawler_state_documents`, `crawler_state_source_runs`, `crawler_state_sources`). S3 keys use `state/{sourceSlug}/` prefix. State crawls tracked in the shared `activeCrawls` map with `townId` set to `source.id` and `townName` prefixed with `[STATE]`. 9 state sources registered: OPD, DES, DRA, NHMA (public content only), RSAs, Admin Rules (OLS), Supreme Court (municipal-only filtering), Fire/Building Code, DOT. Admin panel shows statewide stats alongside town stats and has a "Register Source" button.
+- **DOM text-based link filtering**: `extractLinksWithContext()` parses parent `<tr>`/`<li>`/`<td>` blocks to capture surrounding context text. When a source has `linkPatterns`, they are matched against the visible link text and parent context (not URLs). Critical for NH Supreme Court where PDFs have generic names but link text contains "Town of Ossipee" etc. `excludePatterns` evaluate against both URLs and link text.
+- **State crawl API endpoints**: `POST /state-sources/:slug/crawl` (triggers crawl with duplicate-running check), `GET /state-sources/:slug/progress` (real-time progress polling from `activeCrawls`), `POST /state-sources/:slug/abort` (cancels running crawl). All require admin auth.
+- **CourtListener API integration**: NH Supreme Court opinions are fetched via the CourtListener REST API (`/api/rest/v4/`) instead of HTML crawling (courts.nh.gov is behind Akamai protection). The `crawlMethod` column on `crawler_state_sources` controls dispatch: `"crawl"` (default HTML crawl) or `"courtlistener"` (API-based). CourtListener crawl flow: paginate `/clusters/?docket__court=nh`, filter case names by `linkPatterns` (municipal keywords) and `excludePatterns` (criminal/family), fetch full opinion text from sub_opinions endpoints, upload as `.txt` to S3 under `state/{sourceSlug}/opinions/`, bridge to `file_blobs` for embedding. Client: `server/services/courtListenerClient.ts`. Crawl engine: `server/services/courtListenerCrawl.ts`. Requires `COURTLISTENER_API_TOKEN` env var (free registration at courtlistener.com).
+- **State crawl admin UI**: `StateSourceDetail` component polls progress every 3s when a crawl is active, showing pages visited, docs discovered/downloaded/failed, current URL, and recent logs. "Trigger Crawl" button swaps to "Abort Crawl" during active crawls. CourtListener sources display an "API" badge and adjusted labels (API Pages, Matched, Stored). Source editor includes a Crawl Method selector.
+- **Generalized non-PDF text extraction**: Both `bridgeToFileBlob()` (town crawls) and `bridgeStateDocToFileBlob()` (state crawls) automatically extract text from non-PDF files at bridge time via `tryExtractAndStoreText()`. Supported types: `.txt` (direct read), `.docx` (mammoth), `.doc` (antiword/catdoc/strings fallback), `.html` (tag stripping). Extracted text is stored in `preview_text` with `ocr_status: 'not_needed'`, bypassing the OCR pipeline entirely. Non-extractable files (images, audio, spreadsheets) are marked `ocr_status: 'not_applicable'`. Null bytes and invalid UTF-8 control characters are sanitized before storage. PDFs are left for the normal Textract/Tesseract OCR pipeline.
+- **State document storage**: `recordStateDocument()`, `batchRecordStateDocuments()`, `getAllStateDocumentUrls()`, `getResumableStateDocuments()`, `updateStateRunProgress()` in `crawlerState.ts` — operate on state document tables. `bridgeStateDocToFileBlob()` links state docs to the embedding pipeline with statewide metadata.
+- **Admin statewide stats**: `getCrawlerStats()` returns both town-level and statewide document counts. `StatsOverview` component displays two rows of stat cards — town stats and state stats. State Sources tab includes notes and exclude patterns display for crawler guardrails.
+- **Google Drive crawling**: Towns that host documents in public Google Drive folders (e.g., Conway's 655 meeting minutes) are supported via Drive API v3 with API key auth. Drive folder ID stored as `driveFolderId` column on `crawlerTowns`. Phase 3c of the crawl pipeline enumerates all files recursively across subfolders, using `gdrive://{fileId}/{filename}` canonical URLs for dedup. Downloads use the Drive `?alt=media` endpoint for standard files and `/export?mimeType=application/pdf` for native Google Docs/Sheets. Folder path is used to extract board/committee metadata. Client module: `server/services/googleDriveClient.ts`. Requires `GOOGLE_DRIVE_API_KEY` env var.
 
 ## External Dependencies
 
 ### Third-Party Services
-1.  **Google Gemini API**: For AI-powered answer synthesis, embedding generation, and metadata extraction.
-2.  **Neon PostgreSQL**: Provides the serverless PostgreSQL database with pgvector extension.
-3.  **Google Fonts CDN**: For web fonts.
-4.  **AWS Textract**: For production-grade OCR processing.
-5.  **Web Scraping API** (e.g., ZenRows/Scrapfly): Used for robust web scraping of protected sites.
-6.  **Google Drive API v3**: For crawling publicly shared Google Drive folders.
-7.  **CourtListener REST API**: Used to fetch NH Supreme Court opinions.
+1.  **Google Gemini API**: Used for answer synthesis, embedding generation, and metadata extraction.
+2.  **Neon PostgreSQL**: Provides the database with the pgvector extension for vector search.
+3.  **Google Fonts CDN**: Used for web fonts (Inter, JetBrains Mono).
+4.  **AWS Textract**: For production-grade asynchronous OCR processing.
+5.  **Web Scraping API** (ZenRows/Scrapfly): Heavy Lane for protected sites. Requires `SCRAPING_API_KEY` env var.
+6.  **Google Drive API v3**: For crawling public Drive folders. Requires `GOOGLE_DRIVE_API_KEY` env var.
+7.  **CourtListener REST API** (The Free Law Project): For fetching NH Supreme Court slip opinions. Requires `COURTLISTENER_API_TOKEN` env var (free registration at courtlistener.com).
 
 ### Key NPM Packages
 *   **Frontend**: `react`, `react-dom`, `@tanstack/react-query`, `wouter`, `@radix-ui/*`, `tailwindcss`, `zod`, `react-hook-form`.

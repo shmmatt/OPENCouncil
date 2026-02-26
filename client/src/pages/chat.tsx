@@ -22,98 +22,6 @@ import { TemplateBanner } from "@/components/TemplateBanner";
 import { TemplateFirstMessage } from "@/components/TemplateFirstMessage";
 import { useToast } from "@/hooks/use-toast";
 
-const CITATION_REGEX = /\[(L\d+|S\d+|USER)\]/g;
-
-function buildCitationMap(sources: SourceCitation[]): Map<string, SourceCitation> {
-  const map = new Map<string, SourceCitation>();
-  let localIdx = 1;
-  let stateIdx = 1;
-  for (const source of sources) {
-    const isState = !source.town || source.category?.toLowerCase().includes("state") || source.category?.toLowerCase().includes("rsa");
-    if (isState) {
-      map.set(`S${stateIdx}`, source);
-      stateIdx++;
-    } else {
-      map.set(`L${localIdx}`, source);
-      localIdx++;
-    }
-  }
-  if (map.size === 0) {
-    sources.forEach((s, i) => map.set(`L${i + 1}`, s));
-  }
-  return map;
-}
-
-function CitationBadge({ label, source }: { label: string; source?: SourceCitation }) {
-  const isState = label.startsWith("S");
-  const tooltipText = source
-    ? `${source.title}${source.meetingDate ? ` (${source.meetingDate})` : source.year ? ` (${source.year})` : ""}${source.board ? ` — ${source.board}` : ""}`
-    : `${isState ? "State" : "Local"} source ${label}`;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-none cursor-default align-baseline mx-0.5 ${
-            isState
-              ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-              : "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
-          }`}
-          data-testid={`citation-badge-${label}`}
-        >
-          {label}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-xs">
-        {tooltipText}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function renderTextWithCitations(text: string, citationMap: Map<string, SourceCitation>): (string | JSX.Element)[] {
-  const parts: (string | JSX.Element)[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  const regex = new RegExp(CITATION_REGEX.source, "g");
-
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    const label = match[1];
-    const source = citationMap.get(label);
-    parts.push(<CitationBadge key={`${label}-${match.index}`} label={label} source={source} />);
-    lastIndex = regex.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts;
-}
-
-function processChildrenWithCitations(
-  children: React.ReactNode,
-  citationMap: Map<string, SourceCitation>
-): React.ReactNode {
-  if (typeof children === "string") {
-    const result = renderTextWithCitations(children, citationMap);
-    return result.length === 1 && typeof result[0] === "string" ? result[0] : <>{result}</>;
-  }
-  if (Array.isArray(children)) {
-    return children.map((child, i) => {
-      if (typeof child === "string") {
-        const result = renderTextWithCitations(child, citationMap);
-        return result.length === 1 && typeof result[0] === "string" ? result[0] : <span key={i}>{result}</span>;
-      }
-      return child;
-    });
-  }
-  return children;
-}
-
 // V2 response types
 interface SourceCitation {
   id: string;
@@ -461,27 +369,6 @@ function MessageBubble({
   const showCoverageDisclaimer = v2Data?.showCoverageDisclaimer || false;
   const missingFacets = v2Data?.missingFacets || [];
 
-  const citationMap = buildCitationMap(sources);
-  const hasCitations = CITATION_REGEX.test(message.content);
-
-  const markdownComponents = hasCitations ? {
-    p: ({ children, ...props }: React.ComponentPropsWithoutRef<"p">) => (
-      <p {...props}>{processChildrenWithCitations(children, citationMap)}</p>
-    ),
-    li: ({ children, ...props }: React.ComponentPropsWithoutRef<"li">) => (
-      <li {...props}>{processChildrenWithCitations(children, citationMap)}</li>
-    ),
-    td: ({ children, ...props }: React.ComponentPropsWithoutRef<"td">) => (
-      <td {...props}>{processChildrenWithCitations(children, citationMap)}</td>
-    ),
-    strong: ({ children, ...props }: React.ComponentPropsWithoutRef<"strong">) => (
-      <strong {...props}>{processChildrenWithCitations(children, citationMap)}</strong>
-    ),
-    em: ({ children, ...props }: React.ComponentPropsWithoutRef<"em">) => (
-      <em {...props}>{processChildrenWithCitations(children, citationMap)}</em>
-    ),
-  } : undefined;
-
   return (
     <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
@@ -502,7 +389,7 @@ function MessageBubble({
             <p className="text-base whitespace-pre-wrap">{message.content}</p>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:my-3 prose-headings:font-semibold prose-table:w-full prose-table:border-collapse prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{message.content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
             </div>
           )}
         </div>
@@ -1046,31 +933,6 @@ export default function Chat() {
     setInputValue(prompt);
   };
 
-  const handleExampleQueryClick = async (query: string) => {
-    try {
-      const res = await apiRequest("POST", "/api/chat/sessions", {
-        title: query.slice(0, 50) + (query.length > 50 ? "..." : ""),
-      });
-      const newSession: ChatSession = await res.json();
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      setActiveSessionId(newSession.id);
-      setPendingMessage(query);
-      await apiRequest("POST", `/api/chat/v2/sessions/${newSession.id}/messages`, { content: query });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", newSession.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
-      setPendingMessage(null);
-    } catch (error) {
-      setPendingMessage(null);
-      setInputValue(query);
-      toast({
-        title: "Failed to start conversation",
-        description: error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      });
-    }
-  };
-
   const sidebarContent = (
     <ChatSidebar
       sessions={sessions}
@@ -1104,9 +966,10 @@ export default function Chat() {
                 {sidebarContent}
               </SheetContent>
             </Sheet>
-            <h1 className="text-lg font-semibold" data-testid="text-header-title">
-              OPENCouncil{selectedTown ? ` | ${selectedTown}` : ""}
-            </h1>
+            <div>
+              <h1 className="text-lg font-semibold">OPENCouncil Assistant</h1>
+              <p className="text-xs text-muted-foreground">Ask questions about your municipal documents</p>
+            </div>
           </div>
           <UserStatusBar />
         </header>
@@ -1128,33 +991,12 @@ export default function Chat() {
               </div>
             ) : !activeSessionId ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Sparkles className="w-8 h-8 text-primary" />
-                </div>
-                <h2 className="text-xl font-semibold mb-2" data-testid="text-empty-state-title">What would you like to know?</h2>
-                <p className="text-muted-foreground mb-6">Try one of these questions, or start your own conversation</p>
-                <div className="flex flex-col gap-2 max-w-lg w-full mb-6">
-                  {[
-                    "Show me the biggest increases in the 2026 budget",
-                    "What are the arguments for and against the Town Manager plan?",
-                    "Summarize the recent changes to Accessory Dwelling Units (ADUs)",
-                    "What happened at the last Planning Board meeting?",
-                    "Explain the tax impact of this year's warrant articles",
-                  ].map((query, idx) => (
-                    <Button
-                      key={idx}
-                      variant="outline"
-                      className="text-left justify-start whitespace-normal h-auto py-3"
-                      onClick={() => handleExampleQueryClick(query)}
-                      data-testid={`button-example-query-${idx}`}
-                    >
-                      {query}
-                    </Button>
-                  ))}
-                </div>
-                <Button onClick={handleNewChat} variant="outline" data-testid="button-start-chat">
+                <MessageCircle className="w-16 h-16 text-muted-foreground mb-4" />
+                <h2 className="text-xl font-semibold mb-2">Start a New Conversation</h2>
+                <p className="text-muted-foreground mb-6">Ask questions about your municipal documents</p>
+                <Button onClick={handleNewChat} data-testid="button-start-chat">
                   <Plus className="w-4 h-4 mr-2" />
-                  Or start a blank conversation
+                  New Chat
                 </Button>
               </div>
             ) : messagesLoading ? (

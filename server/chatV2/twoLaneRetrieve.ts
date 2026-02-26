@@ -1074,11 +1074,8 @@ export async function twoLaneRetrieve(
       finalTownStoreId = await getOrCreateFileSearchStoreId();
   }
   
-  logDebug("two_lane_store_ids", {
-    townPreference,
-    townStoreId: finalTownStoreId,
-    statewideStoreId: statewideStoreId || "none",
-  });
+  console.log(`[DEBUG] Town Store ID for ${townPreference}: ${finalTownStoreId}`);
+  console.log(`[DEBUG] Statewide Store ID: ${statewideStoreId || 'none'}`);
   
   if (!finalTownStoreId && !statewideStoreId) {
     logError("two_lane_no_store", {
@@ -1368,11 +1365,8 @@ export async function twoLaneRetrieveWithPlan(
       finalTownStoreId = await getOrCreateFileSearchStoreId();
   }
   
-  logDebug("two_lane_v3_store_ids", {
-    townPreference,
-    townStoreId: finalTownStoreId,
-    statewideStoreId: statewideStoreId || "none",
-  });
+  console.log(`[DEBUG] V3 Town Store ID for ${townPreference}: ${finalTownStoreId}`);
+  console.log(`[DEBUG] V3 Statewide Store ID: ${statewideStoreId || 'none'}`);
   
   // Build store ID arrays for each lane
   const localStoreIds = finalTownStoreId ? [finalTownStoreId] : [];

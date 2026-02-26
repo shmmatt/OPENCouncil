@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -104,27 +105,25 @@ export function UserStatusBar() {
   const isAuthenticated = usage?.isAuthenticated || false;
 
   const tierLabel = tier === "paying" ? "Pro" : tier === "free" ? "Free" : "Guest";
-
-  const usageLabel = usagePercent >= 100
-    ? `${tierLabel} — Limit reached`
-    : `${usagePercent}% used · ${tierLabel}`;
-
-  const usageColor = usagePercent >= 90
-    ? "text-destructive"
-    : usagePercent >= 70
-    ? "text-yellow-600 dark:text-yellow-400"
-    : "text-muted-foreground";
+  const progressColor = usagePercent >= 90 ? "bg-destructive" : usagePercent >= 70 ? "bg-yellow-500" : "bg-primary";
 
   return (
     <div className="flex items-center gap-3">
-      <div className="flex flex-col items-end gap-0.5">
-        <span className={`text-xs font-medium ${usageColor}`} data-testid="text-usage-label">
-          {usageLabel}
-        </span>
+      <div className="flex flex-col gap-1 min-w-[120px]">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">{tierLabel}</span>
+          <span className="text-muted-foreground">{usagePercent}%</span>
+        </div>
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div 
+            className={`h-full ${progressColor} transition-all duration-300`}
+            style={{ width: `${usagePercent}%` }}
+          />
+        </div>
         {usagePercent >= 80 && (
-          <span className="text-[10px] text-muted-foreground" data-testid="text-usage-hint">
+          <p className="text-[10px] text-muted-foreground">
             {!isAuthenticated ? "Sign in for more" : tier !== "paying" ? "Upgrade for more" : "Resets tomorrow"}
-          </span>
+          </p>
         )}
       </div>
 

@@ -109,12 +109,9 @@ export default async function runApp(
   // Initialize admin account from environment variables
   await ensureAdminExists();
   
-  if (process.env.ENABLE_OCR_WORKERS === 'true') {
-    startOcrWorker();
-    startTextractWorkers();
-  } else {
-    console.log('[Workers] OCR/Textract workers disabled (set ENABLE_OCR_WORKERS=true to enable)');
-  }
+  // Start the OCR background workers
+  startOcrWorker();
+  startTextractWorkers();
 
   // importantly run the final setup after setting up all the other routes so
   // the catch-all route doesn't interfere with the other routes

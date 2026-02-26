@@ -4,10 +4,10 @@
  * Centralized output policies for answer generation based on complexity, mode, and answer type.
  * This module defines character targets, hard caps, token limits, and structure constraints.
  * 
- * V3 PROSE-FIRST MODE (includes TL;DR ~30-50 words):
- * - QUICK_PROCESS: 150-270 words (~900-1600 chars) - TL;DR + 1-2 paragraphs, no headings
- * - EXPLAINER: 220-370 words (~1300-2200 chars) - TL;DR + 2-3 paragraphs, no headings  
- * - RISK_DISPUTE: 290-500 words (~1700-3000 chars) - TL;DR + 3-5 paragraphs, no headings
+ * V3 PROSE-FIRST MODE:
+ * - QUICK_PROCESS: 120-220 words (~700-1300 chars) - 1-2 paragraphs, no headings
+ * - EXPLAINER: 180-320 words (~1000-1900 chars) - 2-3 paragraphs, no headings  
+ * - RISK_DISPUTE: 250-450 words (~1500-2700 chars) - 3-5 paragraphs, no headings
  */
 
 import type { AnswerMode, AnswerType, RenderStyle } from "./types";
@@ -340,10 +340,10 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 150,
-        wordMax: 270,
-        charMin: 900,
-        charMax: 1600,
+        wordMin: 120,
+        wordMax: 220,
+        charMin: 700,
+        charMax: 1300,
         paragraphs: { min: 1, max: 2 },
         allowHeadings: false,
         allowBullets: false,
@@ -353,10 +353,10 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 220,
-        wordMax: 370,
-        charMin: 1300,
-        charMax: 2200,
+        wordMin: 180,
+        wordMax: 320,
+        charMin: 1000,
+        charMax: 1900,
         paragraphs: { min: 2, max: 3 },
         allowHeadings: false,
         allowBullets: false,
@@ -366,10 +366,10 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 290,
-        wordMax: 500,
-        charMin: 1700,
-        charMax: 3000,
+        wordMin: 250,
+        wordMax: 450,
+        charMin: 1500,
+        charMax: 2700,
         paragraphs: { min: 3, max: 5 },
         allowHeadings: false,
         allowBullets: false,

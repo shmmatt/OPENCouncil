@@ -390,7 +390,7 @@ export async function hybridSearch(
     ...baseOptions
   } = options;
 
-  const fetchLimit = Math.max(limit, 15);
+  const fetchLimit = Math.max(limit * 2, 30);
 
   const hasKeywords = keywordTerms && keywordTerms.length > 0;
 

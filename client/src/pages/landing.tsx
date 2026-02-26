@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 const features = [
   {
     title: "Document-Grounded Answers",
-    description: "No guesswork. Every response is fact-checked against official town records.",
+    description: "Every response is backed by real municipal documents — no hallucinations, no guesswork.",
     icon: FileText,
     testId: "card-feature-document-grounded",
   },
@@ -40,13 +40,13 @@ export default function Landing() {
             className="mt-4 text-lg md:text-xl text-white/90 font-medium"
             data-testid="text-hero-tagline"
           >
-            Don't Read the Town Warrant. Ask It.
+            Your AI-Powered Municipal Governance Assistant
           </p>
           <p
             className="mt-3 text-base md:text-lg text-white/75 max-w-2xl mx-auto"
             data-testid="text-hero-subtitle"
           >
-            Get instant, verifiable answers about your town's budgets, zoning laws, and meeting minutes — backed by the official documents.
+            Instant answers grounded in official New Hampshire town documents — ordinances, budgets, meeting minutes, and state law.
           </p>
           <div className="mt-8">
             <Button asChild size="lg" data-testid="link-cta-chat">
