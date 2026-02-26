@@ -47,6 +47,10 @@ The OC Research tab (`/admin/research`) provides analytical tools for municipal 
 
 Dashboard shows: Applications Found, Documents Analyzed, Agenda Items extracted, Date Range, Approval Rate, Site Plan Funnel visualization, Friction Matrix, Predictive Insights, and an expandable applications table. Data stored in `research_reports` table.
 
+### Ingestion Scripts (crawler/scripts/)
+- `bridge-ossipee-minutes.ts` — Bridges crawled documents in `crawler_documents` to `s3_gemini_sync` for the ingestion pipeline
+- `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled documents that already have OCR text but were never linked to the unified document schema. Extracts meeting dates from OCR text headers.
+
 ## External Dependencies
 
 1.  **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.
