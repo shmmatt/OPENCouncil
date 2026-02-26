@@ -21,9 +21,28 @@ const frictionReportBodySchema = z.object({
   townName: z.string().min(1, "townName is required"),
 });
 
-const MAP_SYSTEM_PROMPT = `You are a municipal records analyst specializing in New Hampshire local governance. You are analyzing meeting minutes from Planning Board and Zoning Board of Adjustment (ZBA) meetings.
+interface MeetingDocument {
+  fileBlobId: string;
+  documentId: string;
+  title: string;
+  board: string | null;
+  meetingDate: Date | null;
+  year: string | null;
+  fullText: string;
+}
 
-Your task is to extract ALL site plan review applications, subdivision applications, and commercial/residential development proposals mentioned in these meeting minutes.
+interface AgendaChunk {
+  meetingDate: string | null;
+  board: string | null;
+  title: string;
+  agendaLabel: string;
+  content: string;
+  sourceDocId: string;
+}
+
+const MAP_SYSTEM_PROMPT = `You are a municipal records analyst specializing in New Hampshire local governance. You are analyzing a single agenda item or discussion segment from Planning Board or Zoning Board of Adjustment (ZBA) meeting minutes.
+
+Your task is to extract ALL site plan review applications, subdivision applications, variance requests, conditional use permits, and commercial/residential development proposals mentioned in this segment.
 
 For each application/project you find, extract:
 - entityName: The project or business name (e.g., "Main Street Retail Expansion", "Smith Subdivision")
@@ -31,7 +50,7 @@ For each application/project you find, extract:
 - applicant: The applicant or representative name
 - initialAppearanceDate: The date this project first appeared (from these minutes)
 - lastAppearanceDate: The most recent date mentioned for this project
-- totalContinuances: How many times the application was continued/tabled/postponed (0 if approved same meeting)
+- totalContinuances: How many times the application was continued/tabled/postponed in THIS segment (0 if decided same meeting)
 - outcome: One of "approved", "approved_with_conditions", "denied", "withdrawn", "pending", "unknown"
 - conditions: Array of specific conditions imposed (if approved with conditions)
 - primaryFrictionReason: The main issue causing delay or denial (e.g., "Parking setback violation", "Drainage concerns", "Abutter noise complaints")
@@ -40,7 +59,7 @@ For each application/project you find, extract:
 - appealOutcome: Result of any appeal
 - meetingReferences: Array of meeting dates/descriptions where this project was discussed
 
-Be thorough. Extract EVERY project mentioned, even if only briefly discussed. If information is unclear, use "unknown" rather than guessing.`;
+Be thorough. Extract EVERY project mentioned, even briefly. If information is unclear, use "unknown" rather than guessing. This text represents the COMPLETE discussion of this agenda item, so you have full context for the outcome and reasoning.`;
 
 const MAP_RESPONSE_SCHEMA = {
   type: "object" as const,
@@ -69,6 +88,41 @@ const MAP_RESPONSE_SCHEMA = {
     },
   },
   required: ["applications"],
+};
+
+const AGENDA_SPLIT_SYSTEM_PROMPT = `You are parsing New Hampshire municipal meeting minutes. Your task is to identify the boundaries of each distinct agenda item, application, or topic discussed in these minutes.
+
+Return an array of agenda items. For each item, provide:
+- label: A short descriptive label (e.g., "Case #2024-01: Smith Variance Request", "Public Hearing: Main St Development", "Old Business: Jones Subdivision")
+- startPhrase: The EXACT text (first 60-80 characters) that begins this agenda item in the document. This must be a verbatim quote from the document text.
+- isApplicationRelated: true if this item involves a site plan, subdivision, variance, conditional use permit, or development application. false for procedural items (roll call, minutes approval, adjournment).
+
+Focus on identifying clear topic transitions. Common boundary markers include:
+- Case numbers or application numbers
+- "Public Hearing" headers
+- "New Business" / "Old Business" sections
+- Applicant names in headers
+- Roman numerals (I., II., III.)
+- Numbered items (1., 2., 3.)
+- Bold or ALL CAPS headers`;
+
+const AGENDA_SPLIT_RESPONSE_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    agendaItems: {
+      type: "array" as const,
+      items: {
+        type: "object" as const,
+        properties: {
+          label: { type: "string" as const },
+          startPhrase: { type: "string" as const },
+          isApplicationRelated: { type: "boolean" as const },
+        },
+        required: ["label", "startPhrase", "isApplicationRelated"],
+      },
+    },
+  },
+  required: ["agendaItems"],
 };
 
 const REDUCE_SYSTEM_PROMPT = `You are a data analyst merging extracted site plan application records. You have received multiple batches of extracted applications from different meeting minutes for the same town.
@@ -147,21 +201,30 @@ const ANALYSIS_RESPONSE_SCHEMA = {
   required: ["funnelStages", "frictionMatrix", "predictiveInsights"],
 };
 
+// ============================================================
+// ROUTES
+// ============================================================
+
 router.get("/towns", async (_req, res) => {
   try {
     const results = await db.execute(sql`
       SELECT 
-        metadata->>'town' as town_name,
-        COUNT(*) as chunk_count
-      FROM document_chunks
-      WHERE metadata->>'town' IS NOT NULL
-        AND lower(metadata->>'town') != 'statewide'
-      GROUP BY metadata->>'town'
-      ORDER BY COUNT(*) DESC
+        ld.town as town_name,
+        COUNT(DISTINCT dv.id) as doc_count,
+        COUNT(DISTINCT dc.id) as chunk_count
+      FROM logical_documents ld
+      JOIN document_versions dv ON ld.id = dv.document_id
+      LEFT JOIN document_chunks dc ON dc.document_id = ld.id OR dc.file_blob_id = dv.file_blob_id
+      WHERE ld.town IS NOT NULL
+        AND lower(ld.town) != 'statewide'
+        AND ld.category = 'meeting_minutes'
+      GROUP BY ld.town
+      ORDER BY COUNT(DISTINCT dv.id) DESC
     `);
 
-    const towns = results.rows.map((r: any) => ({
+    const towns = (results.rows as any[]).map((r) => ({
       name: r.town_name,
+      docCount: parseInt(r.doc_count, 10),
       chunkCount: parseInt(r.chunk_count, 10),
     }));
 
@@ -250,6 +313,308 @@ router.delete("/friction-report/:id", async (req, res) => {
   }
 });
 
+// ============================================================
+// PHASE 1: FULL DOCUMENT RETRIEVAL
+// ============================================================
+
+async function retrieveMeetingDocuments(townName: string): Promise<MeetingDocument[]> {
+  const results = await db.execute(sql`
+    SELECT
+      fb.id as file_blob_id,
+      ld.id as document_id,
+      ld.canonical_title as title,
+      ld.board,
+      dv.meeting_date,
+      dv.year,
+      COALESCE(fb.ocr_text, fb.preview_text) as full_text
+    FROM logical_documents ld
+    JOIN document_versions dv ON ld.id = dv.document_id
+    JOIN file_blobs fb ON dv.file_blob_id = fb.id
+    WHERE lower(ld.town) = ${townName.toLowerCase()}
+      AND (
+        ld.category = 'meeting_minutes'
+        OR dv.is_minutes = true
+      )
+      AND (
+        lower(ld.board) LIKE '%planning%'
+        OR lower(ld.board) LIKE '%zba%'
+        OR lower(ld.board) LIKE '%zoning%'
+        OR lower(ld.canonical_title) LIKE '%planning board%'
+        OR lower(ld.canonical_title) LIKE '%zoning board%'
+        OR lower(ld.canonical_title) LIKE '%zba%'
+      )
+      AND COALESCE(fb.ocr_text, fb.preview_text) IS NOT NULL
+      AND length(COALESCE(fb.ocr_text, fb.preview_text)) > 200
+    ORDER BY dv.meeting_date ASC NULLS LAST, dv.year ASC NULLS LAST
+  `);
+
+  return (results.rows as any[]).map((r) => ({
+    fileBlobId: r.file_blob_id,
+    documentId: r.document_id,
+    title: r.title || "Unknown Meeting",
+    board: r.board,
+    meetingDate: r.meeting_date ? new Date(r.meeting_date) : null,
+    year: r.year,
+    fullText: r.full_text,
+  }));
+}
+
+// ============================================================
+// PHASE 2: AGENDA BOUNDARY DETECTION
+// ============================================================
+
+function heuristicAgendaSplit(text: string): string[] {
+  const patterns = [
+    /\n\s*(?:(?:I{1,3}V?|VI{0,3}|IX|X)\.\s)/,
+    /\n\s*(?:Case\s*(?:#|No\.?|Number)\s*\d)/i,
+    /\n\s*(?:Public\s+Hearing\s*[:\-])/i,
+    /\n\s*(?:(?:New|Old|Other)\s+Business\s*[:\-])/i,
+    /\n\s*(?:Application\s*(?:#|No\.?))/i,
+    /\n\s*(?:\d+\.\s+[A-Z])/,
+    /\n\s*(?:[A-Z][A-Z\s]{5,}(?:LLC|INC|CORP|TRUST|REALTY)?[:\-\s]*\n)/,
+  ];
+
+  const combinedPattern = new RegExp(
+    patterns.map((p) => p.source).join("|"),
+    "gim"
+  );
+
+  const matches: number[] = [0];
+  let match;
+  while ((match = combinedPattern.exec(text)) !== null) {
+    if (match.index > 0) {
+      matches.push(match.index);
+    }
+  }
+
+  if (matches.length <= 1) {
+    return [text];
+  }
+
+  const segments: string[] = [];
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i];
+    const end = i < matches.length - 1 ? matches[i + 1] : text.length;
+    const segment = text.slice(start, end).trim();
+    if (segment.length > 100) {
+      segments.push(segment);
+    }
+  }
+
+  return segments;
+}
+
+async function llmAgendaSplit(
+  text: string,
+  meetingInfo: string
+): Promise<{ label: string; content: string; isApplicationRelated: boolean }[]> {
+  const truncatedText = text.length > 120000 ? text.slice(0, 120000) + "\n[...truncated]" : text;
+
+  const prompt = `Identify all distinct agenda items/topics in these ${meetingInfo} meeting minutes.
+
+${truncatedText}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction: AGENDA_SPLIT_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        responseSchema: AGENDA_SPLIT_RESPONSE_SCHEMA,
+        temperature: 0.1,
+      },
+    });
+
+    const parsed = JSON.parse(response.text || "{}");
+    const items = parsed.agendaItems || [];
+
+    if (items.length === 0) {
+      return [{ label: "Full Meeting", content: text, isApplicationRelated: true }];
+    }
+
+    const result: { label: string; content: string; isApplicationRelated: boolean }[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const startPhrase = item.startPhrase || "";
+
+      let startIdx = -1;
+      if (startPhrase.length > 10) {
+        startIdx = text.indexOf(startPhrase);
+        if (startIdx === -1) {
+          const shortPhrase = startPhrase.slice(0, 40);
+          startIdx = text.indexOf(shortPhrase);
+        }
+        if (startIdx === -1) {
+          const words = startPhrase.split(/\s+/).slice(0, 5).join("\\s+");
+          const regex = new RegExp(words, "i");
+          const match = regex.exec(text);
+          if (match) startIdx = match.index;
+        }
+      }
+
+      let endIdx = text.length;
+      if (i < items.length - 1) {
+        const nextPhrase = items[i + 1].startPhrase || "";
+        if (nextPhrase.length > 10) {
+          const nextStart = text.indexOf(nextPhrase, startIdx > 0 ? startIdx + 1 : 0);
+          if (nextStart > 0) endIdx = nextStart;
+        }
+      }
+
+      if (startIdx >= 0 && endIdx > startIdx) {
+        const content = text.slice(startIdx, endIdx).trim();
+        if (content.length > 50) {
+          result.push({
+            label: item.label || `Item ${i + 1}`,
+            content,
+            isApplicationRelated: item.isApplicationRelated !== false,
+          });
+        }
+      }
+    }
+
+    if (result.length === 0) {
+      return [{ label: "Full Meeting", content: text, isApplicationRelated: true }];
+    }
+
+    return result;
+  } catch (error) {
+    logError("LLM agenda split failed, falling back to heuristic", { error: String(error), stage: "research" });
+    return heuristicAgendaSplit(text).map((content, i) => ({
+      label: `Section ${i + 1}`,
+      content,
+      isApplicationRelated: true,
+    }));
+  }
+}
+
+async function splitDocumentIntoAgendaChunks(doc: MeetingDocument): Promise<AgendaChunk[]> {
+  const dateStr = doc.meetingDate
+    ? doc.meetingDate.toISOString().split("T")[0]
+    : doc.year || "unknown date";
+  const meetingInfo = `${doc.board || "Board"} (${dateStr})`;
+
+  const MIN_TEXT_FOR_LLM_SPLIT = 2000;
+
+  let segments: { label: string; content: string; isApplicationRelated: boolean }[];
+
+  if (doc.fullText.length < MIN_TEXT_FOR_LLM_SPLIT) {
+    segments = [{ label: "Full Meeting", content: doc.fullText, isApplicationRelated: true }];
+  } else {
+    segments = await llmAgendaSplit(doc.fullText, meetingInfo);
+  }
+
+  const applicationChunks = segments.filter((s) => s.isApplicationRelated);
+
+  if (applicationChunks.length === 0) {
+    return [{
+      meetingDate: dateStr,
+      board: doc.board,
+      title: doc.title,
+      agendaLabel: "Full Meeting",
+      content: doc.fullText,
+      sourceDocId: doc.documentId,
+    }];
+  }
+
+  return applicationChunks.map((s) => ({
+    meetingDate: dateStr,
+    board: doc.board,
+    title: doc.title,
+    agendaLabel: s.label,
+    content: s.content,
+    sourceDocId: doc.documentId,
+  }));
+}
+
+// ============================================================
+// PHASE 3: TARGETED EXTRACTION
+// ============================================================
+
+const OVERSIZED_CHUNK_THRESHOLD = 15000;
+const OVERLAP_CHARS = 500;
+
+function splitOversizedChunk(content: string): string[] {
+  if (content.length <= OVERSIZED_CHUNK_THRESHOLD) {
+    return [content];
+  }
+
+  const windows: string[] = [];
+  let start = 0;
+  while (start < content.length) {
+    const end = Math.min(start + OVERSIZED_CHUNK_THRESHOLD, content.length);
+    windows.push(content.slice(start, end));
+    if (end >= content.length) break;
+    start = end - OVERLAP_CHARS;
+  }
+  return windows;
+}
+
+async function extractFromAgendaChunk(
+  chunk: AgendaChunk,
+  chunkIndex: number,
+  totalChunks: number,
+  townName: string
+): Promise<SitePlanApplication[]> {
+  const windows = splitOversizedChunk(chunk.content);
+  let allApps: SitePlanApplication[] = [];
+
+  for (let wi = 0; wi < windows.length; wi++) {
+    const windowText = windows[wi];
+    const header = [
+      `Meeting: ${chunk.meetingDate || "unknown date"}`,
+      chunk.board ? `Board: ${chunk.board}` : null,
+      `Agenda Item: ${chunk.agendaLabel}`,
+      windows.length > 1 ? `(Window ${wi + 1}/${windows.length})` : null,
+    ].filter(Boolean).join(" | ");
+
+    const prompt = `Analyze this agenda item from ${townName}, NH meeting minutes (item ${chunkIndex + 1} of ${totalChunks}).
+
+${header}
+
+--- BEGIN AGENDA ITEM ---
+${windowText}
+--- END AGENDA ITEM ---`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: MAP_SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          responseSchema: MAP_RESPONSE_SCHEMA,
+          temperature: 0.1,
+        },
+      });
+
+      const text = response.text || "";
+      const parsed = JSON.parse(text);
+      const apps = (parsed.applications || []).map(normalizeApplication);
+      allApps.push(...apps);
+    } catch (error) {
+      logError(`Agenda chunk extraction failed`, {
+        chunkIndex,
+        agendaLabel: chunk.agendaLabel,
+        error: String(error),
+        stage: "research",
+      });
+    }
+  }
+
+  if (windows.length > 1 && allApps.length > 1) {
+    allApps = deduplicateLocally(allApps);
+  }
+
+  return allApps;
+}
+
+// ============================================================
+// MAIN PIPELINE
+// ============================================================
+
 async function runFrictionPipeline(reportId: string, townName: string): Promise<void> {
   try {
     await db
@@ -257,27 +622,12 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
       .set({ status: "processing" })
       .where(eq(schema.researchReports.id, reportId));
 
-    const chunks = await db.execute(sql`
-      SELECT id, content, metadata
-      FROM document_chunks
-      WHERE lower(metadata->>'town') = ${townName.toLowerCase()}
-        AND (
-          lower(metadata->>'board') LIKE '%planning%'
-          OR lower(metadata->>'board') LIKE '%zba%'
-          OR lower(metadata->>'board') LIKE '%zoning%'
-          OR lower(metadata->>'documentType') LIKE '%meeting_minutes%'
-          OR lower(metadata->>'documentType') LIKE '%minutes%'
-          OR lower(content) LIKE '%planning board%'
-          OR lower(content) LIKE '%site plan%'
-          OR lower(content) LIKE '%zoning board%'
-        )
-      ORDER BY metadata->>'date' ASC NULLS LAST, id ASC
-    `);
+    logInfo(`Friction pipeline starting for ${townName}`, { stage: "research" });
 
-    const allChunks = chunks.rows as any[];
-    logInfo(`Friction pipeline: found ${allChunks.length} relevant chunks for ${townName}`, { stage: "research" });
+    const documents = await retrieveMeetingDocuments(townName);
+    logInfo(`Phase 1: Retrieved ${documents.length} meeting documents for ${townName}`, { stage: "research" });
 
-    if (allChunks.length === 0) {
+    if (documents.length === 0) {
       await db
         .update(schema.researchReports)
         .set({
@@ -288,6 +638,7 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
             townName,
             chunksAnalyzed: 0,
             batchesProcessed: 0,
+            documentsAnalyzed: 0,
             funnelStages: [],
             frictionMatrix: [],
             predictiveInsights: ["No Planning Board or ZBA meeting minutes found for this town. Upload meeting minutes to generate a friction report."],
@@ -298,38 +649,45 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
       return;
     }
 
-    await db
-      .update(schema.researchReports)
-      .set({ chunksAnalyzed: allChunks.length })
-      .where(eq(schema.researchReports.id, reportId));
+    logInfo(`Phase 2: Splitting ${documents.length} documents by agenda items...`, { stage: "research" });
+    let allAgendaChunks: AgendaChunk[] = [];
 
-    const BATCH_SIZE = 8;
-    const batches: any[][] = [];
-    for (let i = 0; i < allChunks.length; i += BATCH_SIZE) {
-      batches.push(allChunks.slice(i, i + BATCH_SIZE));
+    for (const doc of documents) {
+      const chunks = await splitDocumentIntoAgendaChunks(doc);
+      allAgendaChunks.push(...chunks);
+      logInfo(`  ${doc.title}: ${chunks.length} agenda items extracted`, { stage: "research" });
     }
 
-    logInfo(`Friction pipeline: processing ${batches.length} batches`, { stage: "research" });
+    logInfo(`Phase 2 complete: ${allAgendaChunks.length} total agenda chunks from ${documents.length} documents`, { stage: "research" });
+
+    await db
+      .update(schema.researchReports)
+      .set({ chunksAnalyzed: allAgendaChunks.length })
+      .where(eq(schema.researchReports.id, reportId));
+
+    logInfo(`Phase 3: Extracting applications from ${allAgendaChunks.length} agenda chunks...`, { stage: "research" });
 
     const CONCURRENCY = 3;
     let allExtracted: SitePlanApplication[] = [];
 
-    for (let i = 0; i < batches.length; i += CONCURRENCY) {
-      const batchSlice = batches.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < allAgendaChunks.length; i += CONCURRENCY) {
+      const batch = allAgendaChunks.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
-        batchSlice.map((batch, idx) => extractFromBatch(batch, i + idx, batches.length, townName))
+        batch.map((chunk, idx) =>
+          extractFromAgendaChunk(chunk, i + idx, allAgendaChunks.length, townName)
+        )
       );
 
       for (const result of results) {
         if (result.status === "fulfilled" && result.value) {
           allExtracted.push(...result.value);
         } else if (result.status === "rejected") {
-          logError("Batch extraction failed", { error: String(result.reason), stage: "research" });
+          logError("Agenda chunk extraction failed", { error: String(result.reason), stage: "research" });
         }
       }
     }
 
-    logInfo(`MAP phase complete: extracted ${allExtracted.length} raw applications`, { stage: "research" });
+    logInfo(`Phase 3 (MAP) complete: extracted ${allExtracted.length} raw applications`, { stage: "research" });
 
     let mergedApplications: SitePlanApplication[];
     if (allExtracted.length > 0) {
@@ -344,8 +702,9 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
       const analysis = await analyzeApplications(mergedApplications, townName);
       reportData = {
         townName,
-        chunksAnalyzed: allChunks.length,
-        batchesProcessed: batches.length,
+        chunksAnalyzed: allAgendaChunks.length,
+        batchesProcessed: documents.length,
+        documentsAnalyzed: documents.length,
         funnelStages: analysis.funnelStages,
         frictionMatrix: analysis.frictionMatrix,
         predictiveInsights: analysis.predictiveInsights,
@@ -354,22 +713,23 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
     } else {
       reportData = {
         townName,
-        chunksAnalyzed: allChunks.length,
-        batchesProcessed: batches.length,
+        chunksAnalyzed: allAgendaChunks.length,
+        batchesProcessed: documents.length,
+        documentsAnalyzed: documents.length,
         funnelStages: [],
         frictionMatrix: [],
-        predictiveInsights: ["No site plan applications were identified in the meeting minutes. The documents may not contain Planning Board or ZBA proceedings, or may require more specific board metadata."],
+        predictiveInsights: ["No site plan applications were identified in the meeting minutes. The documents may not contain Planning Board or ZBA proceedings, or the board metadata may need updating."],
         applications: [],
       };
     }
 
-    const dates = mergedApplications
-      .flatMap((a) => [a.initialAppearanceDate, a.lastAppearanceDate])
+    const meetingDates = documents
+      .map((d) => d.meetingDate?.toISOString().split("T")[0])
       .filter(Boolean)
       .sort();
-    if (dates.length > 0) {
-      reportData.dateRangeStart = dates[0];
-      reportData.dateRangeEnd = dates[dates.length - 1];
+    if (meetingDates.length > 0) {
+      reportData.dateRangeStart = meetingDates[0];
+      reportData.dateRangeEnd = meetingDates[meetingDates.length - 1];
     }
 
     await db
@@ -381,7 +741,7 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
       })
       .where(eq(schema.researchReports.id, reportId));
 
-    logInfo(`Friction report completed for ${townName}: ${mergedApplications.length} applications`, { stage: "research" });
+    logInfo(`Friction report completed for ${townName}: ${documents.length} docs, ${allAgendaChunks.length} agenda items, ${mergedApplications.length} applications`, { stage: "research" });
   } catch (error) {
     logError("Friction pipeline error", { reportId, error: String(error), stage: "research" });
     await db
@@ -395,52 +755,9 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
   }
 }
 
-async function extractFromBatch(
-  chunks: any[],
-  batchIndex: number,
-  totalBatches: number,
-  townName: string
-): Promise<SitePlanApplication[]> {
-  const batchText = chunks
-    .map((c, i) => {
-      const meta = c.metadata || {};
-      const header = [
-        meta.date ? `Date: ${meta.date}` : null,
-        meta.board ? `Board: ${meta.board}` : null,
-        meta.filename ? `Source: ${meta.filename}` : null,
-      ]
-        .filter(Boolean)
-        .join(" | ");
-      return `--- Chunk ${i + 1} ${header ? `(${header})` : ""} ---\n${c.content}`;
-    })
-    .join("\n\n");
-
-  const prompt = `Analyze these meeting minutes chunks from ${townName}, NH (batch ${batchIndex + 1} of ${totalBatches}).
-
-Extract ALL site plan applications, subdivision requests, and development proposals mentioned.
-
-${batchText}`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: prompt,
-      config: {
-        systemInstruction: MAP_SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: MAP_RESPONSE_SCHEMA,
-        temperature: 0.1,
-      },
-    });
-
-    const text = response.text || "";
-    const parsed = JSON.parse(text);
-    return (parsed.applications || []).map(normalizeApplication);
-  } catch (error) {
-    logError(`Batch ${batchIndex + 1} extraction failed`, { error: String(error), stage: "research" });
-    return [];
-  }
-}
+// ============================================================
+// SHARED UTILITIES
+// ============================================================
 
 function normalizeApplication(raw: any): SitePlanApplication {
   const validOutcomes = ["approved", "approved_with_conditions", "denied", "withdrawn", "pending", "unknown"];
@@ -465,14 +782,14 @@ function normalizeApplication(raw: any): SitePlanApplication {
 
 async function reduceApplications(applications: SitePlanApplication[]): Promise<SitePlanApplication[]> {
   if (applications.length <= 5) {
-    return applications;
+    return deduplicateLocally(applications);
   }
 
   const appSummary = JSON.stringify(applications, null, 1);
   const MAX_CHARS = 900000;
   const truncated = appSummary.length > MAX_CHARS ? appSummary.slice(0, MAX_CHARS) + "\n...]" : appSummary;
 
-  const prompt = `Here are ${applications.length} extracted site plan application records from multiple meeting minutes batches. Many are duplicate references to the same project across different meetings.
+  const prompt = `Here are ${applications.length} extracted site plan application records from multiple meeting minutes. Many are references to the same project across different meetings.
 
 Merge and deduplicate them into a unified list. Each unique project should appear exactly once with its full timeline merged.
 
@@ -494,7 +811,7 @@ ${truncated}`;
     const parsed = JSON.parse(text);
     return (parsed.applications || []).map(normalizeApplication);
   } catch (error) {
-    logError("Reduce phase failed, using raw applications", { error: String(error), stage: "research" });
+    logError("Reduce phase failed, using local deduplication", { error: String(error), stage: "research" });
     return deduplicateLocally(applications);
   }
 }

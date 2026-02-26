@@ -39,7 +39,13 @@ Document files are stored in Replit Object Storage, providing scalable and secur
 A sophisticated crawler system is responsible for data collection, featuring multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements), hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching, interstitial detection, and crash resilience. It supports both town-level and state-level document collection, including Google Drive and CourtListener API integrations.
 
 ### OC Research Module
-The OC Research tab provides analytical tools to extract insights from municipal data, such as analyzing Planning Board and ZBA meeting minutes to identify site plan approval friction patterns and generate predictive insights using a 3-stage Map-Reduce Gemini pipeline.
+The OC Research tab (`/admin/research`) provides analytical tools for municipal data analysis. The **Development Friction Report** uses a full-document pipeline that:
+1. **Phase 1** — Retrieves full meeting text from `logical_documents → document_versions → file_blobs` (bypassing pre-chunked RAG segments), filtering by town, board type (Planning/ZBA), and `isMinutes` flag
+2. **Phase 2** — Detects agenda-item boundaries via LLM analysis with heuristic regex fallback, splitting each meeting into discrete application discussions
+3. **Phase 3** — Sends each agenda item to Gemini (`gemini-2.5-flash`) for structured JSON extraction of site plan applications, with 15k-char sliding windows for oversized items and 3-concurrent-call throttling
+4. **Reduce** — Cross-meeting deduplication, funnel stage aggregation, friction matrix computation, and predictive insight generation
+
+Dashboard shows: Applications Found, Documents Analyzed, Agenda Items extracted, Date Range, Approval Rate, Site Plan Funnel visualization, Friction Matrix, Predictive Insights, and an expandable applications table. Data stored in `research_reports` table.
 
 ## External Dependencies
 

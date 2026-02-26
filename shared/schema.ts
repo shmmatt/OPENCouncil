@@ -761,6 +761,7 @@ export interface FrictionReportData {
   dateRangeEnd?: string;
   chunksAnalyzed: number;
   batchesProcessed: number;
+  documentsAnalyzed?: number;
   funnelStages: FunnelStage[];
   frictionMatrix: FrictionCategory[];
   predictiveInsights: string[];

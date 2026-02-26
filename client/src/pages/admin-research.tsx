@@ -39,6 +39,7 @@ import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelSta
 
 interface TownOption {
   name: string;
+  docCount: number;
   chunkCount: number;
 }
 
@@ -233,7 +234,7 @@ export default function AdminResearch() {
                   <SelectContent>
                     {towns.map((t) => (
                       <SelectItem key={t.name} value={t.name} data-testid={`option-town-${t.name}`}>
-                        {t.name} ({t.chunkCount.toLocaleString()} chunks)
+                        {t.name} ({t.docCount} document{t.docCount !== 1 ? "s" : ""})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -266,7 +267,7 @@ export default function AdminResearch() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
@@ -275,14 +276,14 @@ export default function AdminResearch() {
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold" data-testid="text-stat-chunks">{reportData.chunksAnalyzed}</div>
-                  <p className="text-sm text-muted-foreground">Chunks Analyzed</p>
+                  <div className="text-2xl font-bold" data-testid="text-stat-documents">{reportData.documentsAnalyzed ?? reportData.batchesProcessed}</div>
+                  <p className="text-sm text-muted-foreground">Documents Analyzed</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold" data-testid="text-stat-batches">{reportData.batchesProcessed}</div>
-                  <p className="text-sm text-muted-foreground">Batches Processed</p>
+                  <div className="text-2xl font-bold" data-testid="text-stat-chunks">{reportData.chunksAnalyzed}</div>
+                  <p className="text-sm text-muted-foreground">Agenda Items</p>
                 </CardContent>
               </Card>
               <Card>
@@ -293,6 +294,16 @@ export default function AdminResearch() {
                       : "N/A"}
                   </div>
                   <p className="text-sm text-muted-foreground">Date Range</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-2xl font-bold text-primary" data-testid="text-stat-approval-rate">
+                    {reportData.applications.length > 0
+                      ? `${Math.round((reportData.applications.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions").length / reportData.applications.length) * 100)}%`
+                      : "N/A"}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Approval Rate</p>
                 </CardContent>
               </Card>
             </div>
@@ -370,7 +381,7 @@ export default function AdminResearch() {
                   <TableRow>
                     <TableHead>Town</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Chunks</TableHead>
+                    <TableHead>Documents</TableHead>
                     <TableHead>Applications</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Actions</TableHead>
@@ -387,7 +398,7 @@ export default function AdminResearch() {
                         <TableCell>
                           <StatusBadge status={report.status} />
                         </TableCell>
-                        <TableCell>{report.chunksAnalyzed}</TableCell>
+                        <TableCell>{rd?.documentsAnalyzed ?? rd?.batchesProcessed ?? report.chunksAnalyzed}</TableCell>
                         <TableCell>{rd?.applications?.length ?? "—"}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {new Date(report.createdAt).toLocaleDateString()}
