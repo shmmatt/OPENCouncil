@@ -40,7 +40,9 @@ import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelSta
 interface TownOption {
   name: string;
   docCount: number;
-  chunkCount: number;
+  analyzableCount: number;
+  failedOcrCount: number;
+  dateRange: string | null;
 }
 
 export default function AdminResearch() {
@@ -234,7 +236,8 @@ export default function AdminResearch() {
                   <SelectContent>
                     {towns.map((t) => (
                       <SelectItem key={t.name} value={t.name} data-testid={`option-town-${t.name}`}>
-                        {t.name} ({t.docCount} document{t.docCount !== 1 ? "s" : ""})
+                        {t.name} — {t.analyzableCount} analyzable / {t.docCount} total
+                        {t.failedOcrCount > 0 ? ` (${t.failedOcrCount} need OCR)` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -253,6 +256,21 @@ export default function AdminResearch() {
                 Generate Report
               </Button>
             </div>
+            {selectedTown && (() => {
+              const t = towns.find(tw => tw.name === selectedTown);
+              if (!t) return null;
+              return (
+                <div className="mt-3 text-sm text-muted-foreground space-y-1" data-testid="text-town-coverage">
+                  <p>
+                    <span className="font-medium text-foreground">{t.analyzableCount}</span> of {t.docCount} Planning/ZBA meeting minutes have analyzable text
+                    {t.failedOcrCount > 0 && (
+                      <span className="text-destructive"> ({t.failedOcrCount} failed OCR)</span>
+                    )}
+                  </p>
+                  {t.dateRange && <p>Date coverage: {t.dateRange}</p>}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 

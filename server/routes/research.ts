@@ -209,23 +209,48 @@ router.get("/towns", async (_req, res) => {
   try {
     const results = await db.execute(sql`
       SELECT 
-        ld.town as town_name,
-        COUNT(DISTINCT dv.id) as doc_count,
-        COUNT(DISTINCT dc.id) as chunk_count
+        initcap(lower(ld.town)) as town_name,
+        COUNT(DISTINCT dv.id) as total_doc_count,
+        COUNT(DISTINCT CASE 
+          WHEN COALESCE(fb.ocr_text, fb.preview_text) IS NOT NULL 
+               AND length(COALESCE(fb.ocr_text, fb.preview_text)) > 200 
+          THEN dv.id END) as analyzable_doc_count,
+        COUNT(DISTINCT CASE 
+          WHEN fb.ocr_status = 'failed' 
+               OR (COALESCE(fb.ocr_text, fb.preview_text) IS NULL 
+                   AND fb.extracted_text_s3_key IS NULL)
+          THEN dv.id END) as failed_ocr_count,
+        MIN(dv.meeting_date) as earliest_date,
+        MAX(dv.meeting_date) as latest_date
       FROM logical_documents ld
       JOIN document_versions dv ON ld.id = dv.document_id
-      LEFT JOIN document_chunks dc ON dc.document_id = ld.id OR dc.file_blob_id = dv.file_blob_id
+      JOIN file_blobs fb ON dv.file_blob_id = fb.id
       WHERE ld.town IS NOT NULL
         AND lower(ld.town) != 'statewide'
-        AND ld.category = 'meeting_minutes'
-      GROUP BY ld.town
+        AND (
+          ld.category IN ('meeting_minutes', 'minutes')
+          OR dv.is_minutes = true
+        )
+        AND (
+          lower(ld.board) LIKE '%planning%'
+          OR lower(ld.board) LIKE '%zba%'
+          OR lower(ld.board) LIKE '%zoning%'
+          OR lower(ld.canonical_title) LIKE '%planning board%'
+          OR lower(ld.canonical_title) LIKE '%zoning board%'
+          OR lower(ld.canonical_title) LIKE '%zba%'
+        )
+      GROUP BY initcap(lower(ld.town))
       ORDER BY COUNT(DISTINCT dv.id) DESC
     `);
 
     const towns = (results.rows as any[]).map((r) => ({
       name: r.town_name,
-      docCount: parseInt(r.doc_count, 10),
-      chunkCount: parseInt(r.chunk_count, 10),
+      docCount: parseInt(r.total_doc_count, 10),
+      analyzableCount: parseInt(r.analyzable_doc_count, 10),
+      failedOcrCount: parseInt(r.failed_ocr_count, 10),
+      dateRange: r.earliest_date && r.latest_date
+        ? `${new Date(r.earliest_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })} – ${new Date(r.latest_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+        : null,
     }));
 
     res.json({ towns });
@@ -332,7 +357,7 @@ async function retrieveMeetingDocuments(townName: string): Promise<MeetingDocume
     JOIN file_blobs fb ON dv.file_blob_id = fb.id
     WHERE lower(ld.town) = ${townName.toLowerCase()}
       AND (
-        ld.category = 'meeting_minutes'
+        ld.category IN ('meeting_minutes', 'minutes')
         OR dv.is_minutes = true
       )
       AND (
