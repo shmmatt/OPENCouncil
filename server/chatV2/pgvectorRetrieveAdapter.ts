@@ -146,27 +146,34 @@ export async function executeQueryOnLane(
     });
   }
 
-  const enriched = await Promise.all(results.map(async (r, idx) => {
-    const enrichedResult = await enrichResult({ chunk: r.chunk, similarity: r.similarity, documentId: r.documentId });
-    let docName: string;
-    if (enrichedResult.fileBlobId) {
-      docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
-    } else if (enrichedResult.filename && enrichedResult.town) {
-      docName = `[file:${enrichedResult.town}:${enrichedResult.filename}] ${enrichedResult.title}`;
-    } else {
-      docName = enrichedResult.title;
-    }
-    return {
-      docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
-      title: enrichedResult.title,
-      content: enrichedResult.content,
-      lane,
-      score: r.similarity,
-      documentNames: [docName],
-      year: enrichedResult.year,
-      category: enrichedResult.category,
-    } as PgvectorLaneChunk;
-  }));
+  const ENRICH_BATCH_SIZE = 5;
+  const enriched: PgvectorLaneChunk[] = [];
+  for (let i = 0; i < results.length; i += ENRICH_BATCH_SIZE) {
+    const batch = results.slice(i, i + ENRICH_BATCH_SIZE);
+    const batchResults = await Promise.all(batch.map(async (r, batchIdx) => {
+      const idx = i + batchIdx;
+      const enrichedResult = await enrichResult({ chunk: r.chunk, similarity: r.similarity, documentId: r.documentId });
+      let docName: string;
+      if (enrichedResult.fileBlobId) {
+        docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
+      } else if (enrichedResult.filename && enrichedResult.town) {
+        docName = `[file:${enrichedResult.town}:${enrichedResult.filename}] ${enrichedResult.title}`;
+      } else {
+        docName = enrichedResult.title;
+      }
+      return {
+        docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
+        title: enrichedResult.title,
+        content: enrichedResult.content,
+        lane,
+        score: r.similarity,
+        documentNames: [docName],
+        year: enrichedResult.year,
+        category: enrichedResult.category,
+      } as PgvectorLaneChunk;
+    }));
+    enriched.push(...batchResults);
+  }
 
   return enriched;
 }
