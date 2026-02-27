@@ -51,6 +51,7 @@ Dashboard shows: Applications Found, Documents Analyzed, Agenda Items extracted,
 - `bridge-ossipee-minutes.ts` — Bridges crawled documents in `crawler_documents` to `s3_gemini_sync` for the ingestion pipeline
 - `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled Ossipee PB/ZBA documents. Extracts meeting dates from OCR text headers.
 - `ingest-all-gapped-docs.ts` — General-purpose backfill script that links ALL gapped crawler_documents (any town) to logical_documents. Extracts board names from crawler metadata, S3 path, filename prefixes, and OCR text headers. Supports `--dry-run`, `--limit=N`, and `--town=Name` flags.
+- `classify-unknown-boards.ts` — Gemini-powered classification script for "Unknown Board" minutes documents. Uses `gemini-2.5-flash` with `responseMimeType: "application/json"` to classify board names from OCR text headers and extract meeting dates. Concurrency 2, exponential backoff retries. Successfully classified all 342 Unknown Board docs across 14 towns into 52 distinct board types. Zero Unknown Board minutes remaining.
 
 ### Pipeline Fix (crawlerEngine.ts)
 - `bridgeToFileBlob` now returns the fileBlobId (was void)
