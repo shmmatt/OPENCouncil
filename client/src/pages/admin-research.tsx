@@ -40,6 +40,7 @@ import {
   Users,
   TrendingUp,
   Ghost,
+  Info,
 } from "lucide-react";
 import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData, TemporalTrendsData, YoYDeltas } from "@shared/schema";
 
@@ -317,7 +318,7 @@ export default function AdminResearch() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
                     {reportData.temporalTrends?.yoyDeltas && (
-                      <YoYBadge value={reportData.temporalTrends.yoyDeltas.volumePct} label="vs last year" />
+                      <YoYBadge value={reportData.temporalTrends.yoyDeltas.volumePct} label="vs. prev year" />
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -573,7 +574,12 @@ function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
             return (
               <div key={stage.label} className="space-y-1" data-testid={`funnel-stage-${i}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{stage.label}</span>
+                  <span className="text-sm font-medium flex items-center gap-1">
+                    {stage.label}
+                    {isGhost && (
+                      <Info className="w-3.5 h-3.5 text-muted-foreground" title="Applications that were never formally approved or denied, but saw no board action for over 365 days, effectively abandoning the project." data-testid="info-ghost-projects" />
+                    )}
+                  </span>
                   <span className="text-sm text-muted-foreground tabular-nums">
                     {stage.count} ({stage.percentage}%)
                   </span>
@@ -616,7 +622,12 @@ function FrictionMatrixCard({ matrix }: { matrix: FrictionCategory[] }) {
             return (
               <div key={item.category} className="space-y-1" data-testid={`friction-category-${i}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{item.category}</span>
+                  <span className="text-sm font-medium flex items-center gap-1">
+                    {item.category}
+                    {item.category === "Procedural/Incomplete" && (
+                      <Info className="w-3.5 h-3.5 text-muted-foreground" title="Delays caused by missing paperwork, unpaid fees, or incomplete site maps prior to substantive project review." data-testid="info-procedural" />
+                    )}
+                  </span>
                   <span className="text-sm text-muted-foreground tabular-nums">
                     {item.count} ({item.percentage}%)
                   </span>
@@ -656,7 +667,7 @@ function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoy
           <div className="text-center p-3 bg-muted rounded-md">
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <div className="text-2xl font-bold" data-testid="text-avg-days">{data.overall.avgDays}</div>
-              {yoyDeltas && <YoYBadge value={yoyDeltas.ttdPct} label="vs last year" invertColor />}
+              {yoyDeltas && <YoYBadge value={yoyDeltas.ttdPct} label="vs. prev year" invertColor />}
             </div>
             <p className="text-sm text-muted-foreground">Avg Days</p>
           </div>
@@ -667,7 +678,7 @@ function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoy
           <div className="text-center p-3 bg-muted rounded-md">
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <div className="text-2xl font-bold" data-testid="text-avg-continuances">{data.overall.avgContinuances}</div>
-              {yoyDeltas && <YoYBadge value={yoyDeltas.continuancesPct} label="vs last year" invertColor />}
+              {yoyDeltas && <YoYBadge value={yoyDeltas.continuancesPct} label="vs. prev year" invertColor />}
             </div>
             <p className="text-sm text-muted-foreground">Avg Continuances</p>
           </div>
@@ -800,9 +811,9 @@ function DeveloperScorecardCard({ entries }: { entries: DeveloperScorecardData[]
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="w-5 h-5" />
-          Developer Scorecard
+          Frequent Applicants & Property Owners
         </CardTitle>
-        <CardDescription>Applicants with the highest friction and continuance rates</CardDescription>
+        <CardDescription>Entities submitting the highest volume of applications and their respective friction rates.</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>

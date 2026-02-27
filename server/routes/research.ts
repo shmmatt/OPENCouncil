@@ -12,6 +12,7 @@ import type {
 import {
   resolveEntities,
   normalizeDatesOnApps,
+  splitOvermergedEntities,
   detectAbandonedProjects,
   computeAllStats,
   buildInsightPromptData,
@@ -300,13 +301,13 @@ router.post("/friction-report/:id/reanalyze", async (req, res) => {
 
     const rawApps = existingData.applications;
     const rawCount = existingData.rawApplicationCount || rawApps.length;
-    const alreadyDeduped = rawCount > rawApps.length;
 
     try {
       const normalized = normalizeDatesOnApps(rawApps);
-      const resolved = alreadyDeduped ? normalized : resolveEntities(normalized);
+      const split = splitOvermergedEntities(normalized);
+      const resolved = resolveEntities(split);
       const deduped = detectAbandonedProjects(resolved);
-      logInfo(`Reanalyze: ${rawApps.length} apps → ${deduped.length} ${alreadyDeduped ? "(already deduped, re-computing stats)" : "deduplicated"}`, { stage: "research" });
+      logInfo(`Reanalyze: ${rawApps.length} apps → ${split.length} split → ${deduped.length} after entity resolution`, { stage: "research" });
 
       const reportData = await buildReportData(
         deduped,
@@ -817,7 +818,7 @@ async function buildReportData(
   const ghostCount = stats.withdrawn + stats.abandoned;
   const funnelStages: FunnelStage[] = [
     { label: "Total Applications", count: stats.totalApps, percentage: 100 },
-    { label: "Delayed (2+ Continuances)", count: stats.delayed, percentage: pct(stats.delayed) },
+    { label: "Approved After Delay (2+ Continuances)", count: stats.delayed, percentage: pct(stats.delayed) },
     { label: "Approved Without Conditions", count: stats.approvedClean, percentage: pct(stats.approvedClean) },
     { label: "Approved With Conditions", count: stats.approvedWithConditions, percentage: pct(stats.approvedWithConditions) },
     { label: "Denied", count: stats.denied, percentage: pct(stats.denied) },

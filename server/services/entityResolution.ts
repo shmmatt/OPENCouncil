@@ -110,6 +110,103 @@ function parseToISO(dateStr: string | undefined): string | null {
   return null;
 }
 
+const NAME_STOP_WORDS = new Set([
+  "site", "plan", "application", "review", "request", "for", "at", "the",
+  "a", "an", "of", "and", "to", "in", "on", "by", "with", "new", "proposed",
+  "project", "approval", "hearing", "meeting", "continued", "continuation",
+  "public", "board", "planning", "zoning", "lot", "map", "tax",
+]);
+
+const SCOPE_KEYWORDS = [
+  "subdivision", "sign", "shed", "garage", "addition", "demolition",
+  "renovation", "commercial", "residential", "industrial", "retail",
+  "restaurant", "hotel", "motel", "storage", "cell tower", "antenna",
+  "solar", "gravel pit", "excavation", "driveway", "septic",
+  "roof", "fence", "deck", "pool", "barn", "warehouse",
+];
+
+function extractMeaningfulWords(name: string): Set<string> {
+  return new Set(
+    name.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !NAME_STOP_WORDS.has(w))
+  );
+}
+
+function namesAreCompatible(existingNames: string[], newName: string): boolean {
+  const newWords = extractMeaningfulWords(newName);
+  if (newWords.size === 0) return true;
+
+  const newScope = SCOPE_KEYWORDS.find(kw => newName.toLowerCase().includes(kw));
+
+  for (const existing of existingNames) {
+    const existingWords = extractMeaningfulWords(existing);
+    if (existingWords.size === 0) continue;
+
+    const existingScope = SCOPE_KEYWORDS.find(kw => existing.toLowerCase().includes(kw));
+    if (newScope && existingScope && newScope !== existingScope) {
+      return false;
+    }
+
+    let overlap = 0;
+    for (const w of newWords) {
+      if (existingWords.has(w)) overlap++;
+    }
+    const smaller = Math.min(newWords.size, existingWords.size);
+    if (smaller > 0 && overlap / smaller >= 0.2) return true;
+  }
+
+  return existingNames.length === 0;
+}
+
+const TIME_BREAK_MS = 270 * 24 * 60 * 60 * 1000;
+
+function splitGroupIntoRuns(group: SitePlanApplication[]): SitePlanApplication[][] {
+  if (group.length <= 1) return [group];
+
+  const sorted = [...group].sort((a, b) => {
+    const da = parseToISO(a.initialAppearanceDate) || parseToISO(a.lastAppearanceDate) || "";
+    const db = parseToISO(b.initialAppearanceDate) || parseToISO(b.lastAppearanceDate) || "";
+    return da.localeCompare(db);
+  });
+
+  const runs: SitePlanApplication[][] = [[sorted[0]]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const app = sorted[i];
+    const currentRun = runs[runs.length - 1];
+
+    const lastInRun = currentRun[currentRun.length - 1];
+    const lastDate = parseToISO(lastInRun.lastAppearanceDate) || parseToISO(lastInRun.initialAppearanceDate);
+    const nextDate = parseToISO(app.initialAppearanceDate) || parseToISO(app.lastAppearanceDate);
+
+    let shouldSplit = false;
+
+    if (lastDate && nextDate) {
+      const gap = new Date(nextDate).getTime() - new Date(lastDate).getTime();
+      if (gap > TIME_BREAK_MS) {
+        shouldSplit = true;
+      }
+    }
+
+    if (!shouldSplit) {
+      const runNames = currentRun.map(a => a.entityName);
+      if (!namesAreCompatible(runNames, app.entityName)) {
+        shouldSplit = true;
+      }
+    }
+
+    if (shouldSplit) {
+      runs.push([app]);
+    } else {
+      currentRun.push(app);
+    }
+  }
+
+  return runs;
+}
+
 function mergeGroup(group: SitePlanApplication[]): SitePlanApplication {
   if (group.length === 1) return group[0];
 
@@ -228,6 +325,60 @@ export function normalizeDatesOnApps(applications: SitePlanApplication[]): SiteP
   });
 }
 
+export function splitOvermergedEntities(applications: SitePlanApplication[]): SitePlanApplication[] {
+  const result: SitePlanApplication[] = [];
+
+  for (const app of applications) {
+    if (!app.meetingReferences || app.meetingReferences.length <= 1) {
+      result.push(app);
+      continue;
+    }
+
+    const refDates = extractDatesFromRefs(app.meetingReferences);
+    if (refDates.length <= 1) {
+      result.push(app);
+      continue;
+    }
+
+    const sorted = [...refDates].sort();
+    const splitPoints: number[] = [0];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prevMs = new Date(sorted[i - 1]).getTime();
+      const currMs = new Date(sorted[i]).getTime();
+      if (currMs - prevMs > TIME_BREAK_MS) {
+        splitPoints.push(i);
+      }
+    }
+
+    if (splitPoints.length === 1) {
+      result.push(app);
+      continue;
+    }
+
+    for (let s = 0; s < splitPoints.length; s++) {
+      const startIdx = splitPoints[s];
+      const endIdx = s + 1 < splitPoints.length ? splitPoints[s + 1] : sorted.length;
+      const segmentDates = sorted.slice(startIdx, endIdx);
+      const segmentRefs = app.meetingReferences.filter(ref => {
+        const refDate = extractDatesFromRefs([ref]);
+        return refDate.length > 0 && segmentDates.includes(refDate[0]);
+      });
+
+      result.push({
+        ...app,
+        initialAppearanceDate: segmentDates[0],
+        lastAppearanceDate: segmentDates[segmentDates.length - 1],
+        totalContinuances: Math.max(0, segmentRefs.length - 1),
+        meetingReferences: segmentRefs.length > 0 ? segmentRefs : [app.meetingReferences[0]],
+        outcome: s < splitPoints.length - 1 ? "unknown" : app.outcome,
+      });
+    }
+  }
+
+  return result;
+}
+
 export function detectAbandonedProjects(applications: SitePlanApplication[]): SitePlanApplication[] {
   const now = new Date();
   const cutoffMs = 365 * 24 * 60 * 60 * 1000;
@@ -284,11 +435,17 @@ export function resolveEntities(applications: SitePlanApplication[]): SitePlanAp
   const merged: SitePlanApplication[] = [];
 
   for (const group of addressGroups.values()) {
-    merged.push(mergeGroup(group));
+    const runs = splitGroupIntoRuns(group);
+    for (const run of runs) {
+      merged.push(mergeGroup(run));
+    }
   }
 
   for (const group of applicantGroups.values()) {
-    merged.push(mergeGroup(group));
+    const runs = splitGroupIntoRuns(group);
+    for (const run of runs) {
+      merged.push(mergeGroup(run));
+    }
   }
 
   for (const app of ungrouped) {
