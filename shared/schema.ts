@@ -755,6 +755,29 @@ export interface FrictionCategory {
   examples?: string[];
 }
 
+export interface TimeToDecisionData {
+  overall: {
+    avgDays: number;
+    medianDays: number;
+    avgContinuances: number;
+  };
+  byCategory: Array<{
+    category: string;
+    avgDays: number;
+    count: number;
+  }>;
+}
+
+export interface FrequentFlyerData {
+  entityName: string;
+  address?: string;
+  meetingCount: number;
+  totalContinuances: number;
+  daysElapsed: number;
+  outcome: string;
+  frictionCategories: string[];
+}
+
 export interface FrictionReportData {
   townName: string;
   dateRangeStart?: string;
@@ -762,10 +785,13 @@ export interface FrictionReportData {
   chunksAnalyzed: number;
   batchesProcessed: number;
   documentsAnalyzed?: number;
+  rawApplicationCount?: number;
   funnelStages: FunnelStage[];
   frictionMatrix: FrictionCategory[];
   predictiveInsights: string[];
   applications: SitePlanApplication[];
+  timeToDecision?: TimeToDecisionData;
+  frequentFlyers?: FrequentFlyerData[];
 }
 
 export const researchReports = pgTable("research_reports", {

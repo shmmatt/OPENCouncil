@@ -43,9 +43,15 @@ The OC Research tab (`/admin/research`) provides analytical tools for municipal 
 1. **Phase 1** — Retrieves full meeting text from `logical_documents → document_versions → file_blobs` (bypassing pre-chunked RAG segments), filtering by town, board type (Planning/ZBA), and `isMinutes` flag
 2. **Phase 2** — Detects agenda-item boundaries via LLM analysis with heuristic regex fallback, splitting each meeting into discrete application discussions
 3. **Phase 3** — Sends each agenda item to Gemini (`gemini-2.5-flash`) for structured JSON extraction of site plan applications, with 15k-char sliding windows for oversized items and 3-concurrent-call throttling
-4. **Reduce** — Cross-meeting deduplication, funnel stage aggregation, friction matrix computation, and predictive insight generation
+4. **Entity Resolution** (`server/services/entityResolution.ts`) — Deterministic, code-based deduplication (no LLM). Multi-key strategy: address normalization (strips Tax Map/Lot suffixes, normalizes street abbreviations), groups by normalized address then applicant name. Merges timelines, picks chronological outcomes, unions friction categories and meeting references. Date normalization via `parseToISO` handles MM/DD/YYYY, ISO, and written-out date formats. Fallback date extraction from meeting reference strings.
+5. **Stats Engine** (`entityResolution.ts`) — Computes: 8-category canonical friction matrix from `frictionCategories` arrays, time-to-decision (avg/median overall + by friction category), frequent flyers (top contested projects), funnel stages, year-over-year trends. All deterministic — no LLM.
+6. **Narrative Insights** — Compact stats summary (~2KB) sent to Gemini for 5 data-driven insight paragraphs. Structured JSON response with `responseMimeType: "application/json"`. Fallback to code-generated insights on Gemini failure.
+7. **Re-analyze Endpoint** — `POST /api/admin/research/friction-report/:id/reanalyze` re-runs entity resolution + stats + Gemini insights on existing report data without re-crawling. Detects already-deduped data and normalizes dates.
 
-Dashboard shows: Applications Found, Documents Analyzed, Agenda Items extracted, Date Range, Approval Rate, Site Plan Funnel visualization, Friction Matrix, Predictive Insights, and an expandable applications table. Data stored in `research_reports` table.
+Dashboard shows: Unique Projects (from N appearances), Documents Analyzed, Agenda Items, Date Range, Approval Rate, Site Plan Funnel, Ordinance Heatmap (8-category friction matrix), Time-to-Decision card (avg/median + by-category breakdown), Most Contested Projects (frequent flyers with meeting counts, days elapsed, outcome badges), Predictive Insights (5 narrative paragraphs), and expandable applications table. Data stored in `research_reports` table.
+
+#### Canonical Friction Categories
+Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushback, State vs. Local Clash, Traffic/Access, Infrastructure, Other
 
 ### Ingestion Scripts (crawler/scripts/)
 - `bridge-ossipee-minutes.ts` — Bridges crawled documents in `crawler_documents` to `s3_gemini_sync` for the ingestion pipeline

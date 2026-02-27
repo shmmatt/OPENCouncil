@@ -34,8 +34,10 @@ import {
   XCircle,
   Clock,
   Lightbulb,
+  Timer,
+  Flame,
 } from "lucide-react";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory } from "@shared/schema";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData } from "@shared/schema";
 
 interface TownOption {
   name: string;
@@ -115,6 +117,26 @@ export default function AdminResearch() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/research/friction-reports"] });
       if (viewingReport) setViewingReport(null);
       toast({ title: "Report deleted" });
+    },
+  });
+
+  const reanalyzeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(`/api/admin/research/friction-report/${id}/reanalyze`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to start re-analysis");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/friction-reports"] });
+      setViewingReport(null);
+      toast({ title: "Re-analysis started", description: "The report is being re-analyzed with improved deduplication and analytics." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to start re-analysis", variant: "destructive" });
     },
   });
 
@@ -289,7 +311,10 @@ export default function AdminResearch() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
-                  <p className="text-sm text-muted-foreground">Applications Found</p>
+                  <p className="text-sm text-muted-foreground">
+                    Unique Projects
+                    {reportData.rawApplicationCount ? ` (from ${reportData.rawApplicationCount.toLocaleString()} appearances)` : ""}
+                  </p>
                 </CardContent>
               </Card>
               <Card>
@@ -332,6 +357,14 @@ export default function AdminResearch() {
 
             {reportData.frictionMatrix.length > 0 && (
               <FrictionMatrixCard matrix={reportData.frictionMatrix} />
+            )}
+
+            {reportData.timeToDecision && reportData.timeToDecision.overall.avgDays > 0 && (
+              <TimeToDecisionCard data={reportData.timeToDecision} />
+            )}
+
+            {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
+              <FrequentFlyersCard flyers={reportData.frequentFlyers} />
             )}
 
             {reportData.predictiveInsights.length > 0 && (
@@ -424,14 +457,25 @@ export default function AdminResearch() {
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {report.status === "completed" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => viewReport(report.id)}
-                                data-testid={`button-view-${report.id}`}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => viewReport(report.id)}
+                                  data-testid={`button-view-${report.id}`}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => reanalyzeMutation.mutate(report.id)}
+                                  disabled={reanalyzeMutation.isPending}
+                                  data-testid={`button-reanalyze-${report.id}`}
+                                >
+                                  <BarChart3 className="w-4 h-4" />
+                                </Button>
+                              </>
                             )}
                             <Button
                               variant="ghost"
@@ -528,9 +572,9 @@ function FrictionMatrixCard({ matrix }: { matrix: FrictionCategory[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlertTriangle className="w-5 h-5" />
-          Friction Matrix
+          Ordinance Heatmap
         </CardTitle>
-        <CardDescription>Primary causes of development friction, delays, and denials</CardDescription>
+        <CardDescription>Where your zoning and land use regulations create the most friction</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -559,6 +603,111 @@ function FrictionMatrixCard({ matrix }: { matrix: FrictionCategory[] }) {
               </div>
             );
           })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimeToDecisionCard({ data }: { data: TimeToDecisionData }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Timer className="w-5 h-5" />
+          Time-to-Decision
+        </CardTitle>
+        <CardDescription>How long applications take from submission to final decision</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-avg-days">{data.overall.avgDays}</div>
+            <p className="text-sm text-muted-foreground">Avg Days</p>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-median-days">{data.overall.medianDays}</div>
+            <p className="text-sm text-muted-foreground">Median Days</p>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-avg-continuances">{data.overall.avgContinuances}</div>
+            <p className="text-sm text-muted-foreground">Avg Continuances</p>
+          </div>
+        </div>
+        {data.byCategory.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium mb-3 text-muted-foreground">Breakdown by Friction Type</h4>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Friction Category</TableHead>
+                  <TableHead className="text-right">Avg Days</TableHead>
+                  <TableHead className="text-right">Applications</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.byCategory.map((cat, i) => (
+                  <TableRow key={cat.category} data-testid={`row-ttd-${i}`}>
+                    <TableCell className="font-medium">{cat.category}</TableCell>
+                    <TableCell className="text-right tabular-nums">{cat.avgDays}</TableCell>
+                    <TableCell className="text-right tabular-nums">{cat.count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FrequentFlyersCard({ flyers }: { flyers: FrequentFlyerData[] }) {
+  const outcomeVariant = (outcome: string) => {
+    switch (outcome) {
+      case "approved": return "default" as const;
+      case "approved_with_conditions": return "secondary" as const;
+      case "denied": return "destructive" as const;
+      default: return "outline" as const;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Flame className="w-5 h-5" />
+          Most Contested Projects
+        </CardTitle>
+        <CardDescription>Projects requiring the most board meetings before resolution</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {flyers.map((flyer, i) => (
+            <div key={i} className="flex items-start justify-between gap-3 p-3 border rounded-md" data-testid={`flyer-row-${i}`}>
+              <div className="space-y-1 min-w-0">
+                <div className="font-medium truncate">{flyer.entityName}</div>
+                {flyer.address && (
+                  <div className="text-sm text-muted-foreground truncate">{flyer.address}</div>
+                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={outcomeVariant(flyer.outcome)} className="text-xs">
+                    {flyer.outcome.replace(/_/g, " ")}
+                  </Badge>
+                  {flyer.frictionCategories.slice(0, 3).map((cat, ci) => (
+                    <Badge key={ci} variant="outline" className="text-xs">{cat}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="text-right shrink-0 space-y-1">
+                <div className="text-lg font-bold tabular-nums">{flyer.meetingCount}</div>
+                <div className="text-xs text-muted-foreground">meetings</div>
+                {flyer.daysElapsed > 0 && (
+                  <div className="text-xs text-muted-foreground tabular-nums">{flyer.daysElapsed} days</div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
