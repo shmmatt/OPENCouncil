@@ -36,8 +36,10 @@ import {
   Lightbulb,
   Timer,
   Flame,
+  Target,
+  Users,
 } from "lucide-react";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData } from "@shared/schema";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData } from "@shared/schema";
 
 interface TownOption {
   name: string;
@@ -359,12 +361,20 @@ export default function AdminResearch() {
               <FrictionMatrixCard matrix={reportData.frictionMatrix} />
             )}
 
+            {reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0 && (
+              <OrdinanceHitListCard entries={reportData.ordinanceHitList} />
+            )}
+
             {reportData.timeToDecision && reportData.timeToDecision.overall.avgDays > 0 && (
               <TimeToDecisionCard data={reportData.timeToDecision} />
             )}
 
             {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
               <FrequentFlyersCard flyers={reportData.frequentFlyers} />
+            )}
+
+            {reportData.developerScorecard && reportData.developerScorecard.length > 0 && (
+              <DeveloperScorecardCard entries={reportData.developerScorecard} />
             )}
 
             {reportData.predictiveInsights.length > 0 && (
@@ -709,6 +719,96 @@ function FrequentFlyersCard({ flyers }: { flyers: FrequentFlyerData[] }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OrdinanceHitListCard({ entries }: { entries: OrdinanceHitListData[] }) {
+  const maxCount = entries.length > 0 ? entries[0].count : 1;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Target className="w-5 h-5" />
+          Ordinance Hit List
+        </CardTitle>
+        <CardDescription>Specific zoning and procedural rules causing the most friction</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {entries.map((entry, i) => (
+            <div key={entry.keyword} className="space-y-1" data-testid={`hitlist-row-${i}`}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <span className="font-medium capitalize">{entry.keyword}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm tabular-nums text-muted-foreground">{entry.count} apps</span>
+                  <Badge variant="outline" className="text-xs tabular-nums">{entry.percentage}%</Badge>
+                </div>
+              </div>
+              <div className="w-full bg-muted rounded-md h-2 overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-md transition-all"
+                  style={{ width: `${Math.round((entry.count / maxCount) * 100)}%` }}
+                />
+              </div>
+              {entry.exampleProjects.length > 0 && (
+                <p className="text-xs text-muted-foreground truncate">
+                  e.g. {entry.exampleProjects.join(", ")}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DeveloperScorecardCard({ entries }: { entries: DeveloperScorecardData[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="w-5 h-5" />
+          Developer Scorecard
+        </CardTitle>
+        <CardDescription>Applicants with the highest friction and continuance rates</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Applicant</TableHead>
+              <TableHead className="text-right">Projects</TableHead>
+              <TableHead className="text-right">Avg Cont.</TableHead>
+              <TableHead className="text-right">Avg Days</TableHead>
+              <TableHead className="text-right">Approval</TableHead>
+              <TableHead>Top Friction</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry, i) => (
+              <TableRow key={i} data-testid={`scorecard-row-${i}`}>
+                <TableCell className="font-medium max-w-[200px] truncate" title={entry.applicantName}>
+                  {entry.applicantName}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{entry.projectCount}</TableCell>
+                <TableCell className="text-right tabular-nums">{entry.avgContinuances}</TableCell>
+                <TableCell className="text-right tabular-nums">{entry.avgDaysToDecision}</TableCell>
+                <TableCell className="text-right tabular-nums">{entry.approvalRate}%</TableCell>
+                <TableCell>
+                  <div className="flex gap-1 flex-wrap">
+                    {entry.topFrictionCategories.slice(0, 2).map((cat, ci) => (
+                      <Badge key={ci} variant="outline" className="text-xs">{cat}</Badge>
+                    ))}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

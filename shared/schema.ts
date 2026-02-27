@@ -778,6 +778,22 @@ export interface FrequentFlyerData {
   frictionCategories: string[];
 }
 
+export interface OrdinanceHitListData {
+  keyword: string;
+  count: number;
+  percentage: number;
+  exampleProjects: string[];
+}
+
+export interface DeveloperScorecardData {
+  applicantName: string;
+  projectCount: number;
+  avgContinuances: number;
+  avgDaysToDecision: number;
+  approvalRate: number;
+  topFrictionCategories: string[];
+}
+
 export interface FrictionReportData {
   townName: string;
   dateRangeStart?: string;
@@ -792,6 +808,8 @@ export interface FrictionReportData {
   applications: SitePlanApplication[];
   timeToDecision?: TimeToDecisionData;
   frequentFlyers?: FrequentFlyerData[];
+  ordinanceHitList?: OrdinanceHitListData[];
+  developerScorecard?: DeveloperScorecardData[];
 }
 
 export const researchReports = pgTable("research_reports", {

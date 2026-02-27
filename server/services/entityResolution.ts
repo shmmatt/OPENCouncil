@@ -435,6 +435,152 @@ export function aggregateFrictionMatrix(apps: SitePlanApplication[]): FrictionAg
     .filter((c): c is FrictionAggregation => c !== null);
 }
 
+export interface OrdinanceHitListEntry {
+  keyword: string;
+  count: number;
+  percentage: number;
+  exampleProjects: string[];
+}
+
+const ORDINANCE_KEYWORDS: Array<{ term: string; regex: RegExp }> = [
+  { term: "parking", regex: /\bparking\b/i },
+  { term: "setback", regex: /\bsetbacks?\b/i },
+  { term: "signage", regex: /\bsignage?\b|signs?\b/i },
+  { term: "drainage", regex: /\bdrainage?\b/i },
+  { term: "lighting", regex: /\blighting\b/i },
+  { term: "fee", regex: /\bfees?\b/i },
+  { term: "lot size", regex: /\blot\s*size\b/i },
+  { term: "frontage", regex: /\bfrontage\b/i },
+  { term: "buffer", regex: /\bbuffer\b/i },
+  { term: "septic", regex: /\bseptic\b/i },
+  { term: "impervious", regex: /\bimpervious\b/i },
+  { term: "driveway", regex: /\bdriveways?\b/i },
+  { term: "height", regex: /\bheight\b/i },
+  { term: "density", regex: /\bdensity\b/i },
+  { term: "wetland", regex: /\bwetlands?\b/i },
+  { term: "variance", regex: /\bvariance\b/i },
+  { term: "waiver", regex: /\bwaivers?\b/i },
+  { term: "stormwater", regex: /\bstormwater\b/i },
+  { term: "access", regex: /\baccess\b/i },
+  { term: "screening", regex: /\bscreening\b/i },
+  { term: "landscaping", regex: /\blandscaping\b/i },
+  { term: "abutter", regex: /\babutter\b/i },
+  { term: "conditional use", regex: /\bconditional\s*use\b/i },
+  { term: "site plan", regex: /\bsite\s*plan\b/i },
+  { term: "subdivision", regex: /\bsubdivision\b/i },
+];
+
+export function computeOrdinanceHitList(apps: SitePlanApplication[], limit = 8): OrdinanceHitListEntry[] {
+  const relevantApps = apps.filter(app => {
+    const cats = (app.frictionCategories || []).map(normalizeFrictionCategory);
+    return cats.includes("Procedural/Incomplete") || cats.includes("Zoning/Dimensional");
+  });
+
+  if (relevantApps.length === 0) return [];
+
+  const hits = new Map<string, { count: number; examples: string[] }>();
+
+  for (const app of relevantApps) {
+    const reason = app.primaryFrictionReason;
+    if (!reason || reason === "unknown" || reason === "N/A" || reason === "none") continue;
+
+    for (const { term, regex } of ORDINANCE_KEYWORDS) {
+      if (regex.test(reason)) {
+        const entry = hits.get(term) || { count: 0, examples: [] };
+        entry.count++;
+        if (entry.examples.length < 2 && !entry.examples.includes(app.entityName)) {
+          entry.examples.push(app.entityName);
+        }
+        hits.set(term, entry);
+      }
+    }
+  }
+
+  return Array.from(hits.entries())
+    .map(([keyword, data]) => ({
+      keyword,
+      count: data.count,
+      percentage: Math.round((data.count / relevantApps.length) * 100),
+      exampleProjects: data.examples,
+    }))
+    .filter(e => e.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+export interface DeveloperScorecardEntry {
+  applicantName: string;
+  projectCount: number;
+  avgContinuances: number;
+  avgDaysToDecision: number;
+  approvalRate: number;
+  topFrictionCategories: string[];
+}
+
+export function computeDeveloperScorecard(apps: SitePlanApplication[], limit = 5): DeveloperScorecardEntry[] {
+  const applicantGroups = new Map<string, SitePlanApplication[]>();
+
+  for (const app of apps) {
+    if (!app.applicant || app.applicant.trim() === "" || app.applicant.toLowerCase() === "unknown") continue;
+    let name = app.applicant.toLowerCase().trim()
+      .replace(/,?\s*(llc|inc|corp|ltd|co|company|enterprises?|associates?|partners?|group)\b\.?/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (name.length < 2) continue;
+    const existing = applicantGroups.get(name);
+    if (existing) existing.push(app);
+    else applicantGroups.set(name, [app]);
+  }
+
+  const entries: DeveloperScorecardEntry[] = [];
+
+  for (const [normalizedName, group] of applicantGroups) {
+    if (group.length <= 2) continue;
+
+    const displayName = group.reduce((best, app) =>
+      (app.applicant || "").length > best.length ? (app.applicant || "") : best, "");
+
+    const totalCont = group.reduce((s, a) => s + a.totalContinuances, 0);
+    const avgCont = Math.round((totalCont / group.length) * 10) / 10;
+
+    const daysArr: number[] = [];
+    for (const app of group) {
+      const d = daysBetween(app.initialAppearanceDate || "", app.lastAppearanceDate || "");
+      if (d !== null && d >= 0) daysArr.push(d);
+    }
+    const avgDays = daysArr.length > 0
+      ? Math.round(daysArr.reduce((s, d) => s + d, 0) / daysArr.length)
+      : 0;
+
+    const approved = group.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions").length;
+    const rate = Math.round((approved / group.length) * 100);
+
+    const catCounts = new Map<string, number>();
+    for (const app of group) {
+      for (const cat of (app.frictionCategories || []).map(normalizeFrictionCategory)) {
+        catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+      }
+    }
+    const topCats = Array.from(catCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat]) => cat);
+
+    entries.push({
+      applicantName: displayName || normalizedName,
+      projectCount: group.length,
+      avgContinuances: avgCont,
+      avgDaysToDecision: avgDays,
+      approvalRate: rate,
+      topFrictionCategories: topCats,
+    });
+  }
+
+  return entries
+    .sort((a, b) => b.avgContinuances - a.avgContinuances || b.avgDaysToDecision - a.avgDaysToDecision)
+    .slice(0, limit);
+}
+
 export interface ComputedStats {
   totalApps: number;
   rawAppCount: number;
@@ -451,6 +597,8 @@ export interface ComputedStats {
   frictionDistribution: FrictionAggregation[];
   timeToDecision: TimeToDecisionStats;
   frequentFlyers: FrequentFlyer[];
+  ordinanceHitList: OrdinanceHitListEntry[];
+  developerScorecard: DeveloperScorecardEntry[];
   yearlyTrend: Array<{ year: number; total: number; approved: number; denied: number }>;
 }
 
@@ -504,6 +652,8 @@ export function computeAllStats(
     frictionDistribution: aggregateFrictionMatrix(deduplicatedApps),
     timeToDecision: computeTimeToDecision(deduplicatedApps),
     frequentFlyers: computeFrequentFlyers(deduplicatedApps),
+    ordinanceHitList: computeOrdinanceHitList(deduplicatedApps),
+    developerScorecard: computeDeveloperScorecard(deduplicatedApps),
     yearlyTrend,
   };
 }
@@ -531,6 +681,20 @@ export function buildInsightPromptData(stats: ComputedStats): string {
   lines.push("Top Bottleneck Projects:");
   for (const f of stats.frequentFlyers.slice(0, 5)) {
     lines.push(`- "${f.entityName}" at ${f.address || "unknown address"}: ${f.meetingCount} meetings, ${f.daysElapsed} days, outcome: ${f.outcome}, friction: ${f.frictionCategories.join(", ")}`);
+  }
+  if (stats.ordinanceHitList.length > 0) {
+    lines.push("");
+    lines.push("Ordinance Hit List (specific rules causing friction):");
+    for (const h of stats.ordinanceHitList.slice(0, 5)) {
+      lines.push(`- "${h.keyword}": ${h.count} apps (${h.percentage}%), e.g. ${h.exampleProjects.join(", ")}`);
+    }
+  }
+  if (stats.developerScorecard.length > 0) {
+    lines.push("");
+    lines.push("Developer Scorecard (applicants with most friction):");
+    for (const d of stats.developerScorecard.slice(0, 5)) {
+      lines.push(`- ${d.applicantName}: ${d.projectCount} projects, avg ${d.avgContinuances} continuances, avg ${d.avgDaysToDecision} days, ${d.approvalRate}% approval, friction: ${d.topFrictionCategories.join(", ")}`);
+    }
   }
   if (stats.yearlyTrend.length > 1) {
     lines.push("");

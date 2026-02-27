@@ -842,6 +842,8 @@ async function buildReportData(
     applications: deduplicatedApps,
     timeToDecision: stats.timeToDecision,
     frequentFlyers: stats.frequentFlyers,
+    ordinanceHitList: stats.ordinanceHitList,
+    developerScorecard: stats.developerScorecard,
   };
 }
 
