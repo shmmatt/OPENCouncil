@@ -5,7 +5,7 @@ import * as schema from '../../shared/schema';
 import { crawlerDocuments, crawlerTowns, crawlerRuns, crawlerStateSources, crawlerStateSourceRuns, crawlerStateDocuments } from '../../shared/crawler-schema';
 import type { CrawlerTown, CrawlerRun, CrawlRunSummary, FailureType, CrawlerStateSource, CrawlerStateSourceRun, InsertCrawlerStateDocument } from '../../shared/crawler-schema';
 import { classifyError } from '../../shared/crawler-schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import {
   generateS3Key,
   extractFilename,
@@ -338,7 +338,7 @@ async function bridgeToFileBlob(crawlerDocId: string, opts: {
   filename: string;
   mimeType: string;
   sizeBytes: number;
-}): Promise<void> {
+}): Promise<string | null> {
   try {
     const rawHash = `s3:${opts.s3Key}`;
     const existing = await db.execute(
@@ -371,8 +371,117 @@ async function bridgeToFileBlob(crawlerDocId: string, opts: {
       UPDATE crawler_documents SET file_blob_id = ${fileBlobId} WHERE id = ${crawlerDocId} AND file_blob_id IS NULL
     `);
     await tryExtractAndStoreText(fileBlobId, opts.s3Key, opts.mimeType || 'application/pdf');
+    return fileBlobId;
   } catch (e: any) {
     console.warn(`[CrawlerEngine] bridgeToFileBlob failed for ${opts.s3Key}: ${e.message}`);
+    return null;
+  }
+}
+
+function crawlerExtractDateFromFilename(filename: string): Date | null {
+  const m1 = filename.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+  if (m1) {
+    const d = new Date(`${m1[1]}-${m1[2]}-${m1[3]}`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const m2 = filename.match(/(\d{1,2})[-_](\d{1,2})[-_](\d{2,4})/);
+  if (m2) {
+    const y = m2[3].length === 4 ? m2[3] : parseInt(m2[3], 10) > 50 ? `19${m2[3]}` : `20${m2[3]}`;
+    const d = new Date(`${y}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`);
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1990 && d.getFullYear() <= 2030) return d;
+  }
+  const m3 = filename.match(/(\d{2})(\d{2})(\d{4})/);
+  if (m3) {
+    const d = new Date(`${m3[3]}-${m3[1]}-${m3[2]}`);
+    if (!isNaN(d.getTime()) && d.getFullYear() >= 1990 && d.getFullYear() <= 2030) return d;
+  }
+  return null;
+}
+
+function crawlerExtractYear(filename: string, s3Key: string): string | null {
+  const d = crawlerExtractDateFromFilename(filename);
+  if (d) return String(d.getFullYear());
+  const m = filename.match(/\b(20\d{2}|19\d{2})\b/) || s3Key.match(/\b(20\d{2}|19\d{2})\b/);
+  return m ? m[1] : null;
+}
+
+const CRAWLER_BOARD_MAP: Record<string, string> = {
+  Planning_Board: "Planning Board",
+  Zoning_Board: "Zoning Board of Adjustment",
+  Zoning_Board_of_Adjustment: "Zoning Board of Adjustment",
+  Board_of_Selectmen: "Board of Selectmen",
+  Select_Board: "Board of Selectmen",
+  Budget_Committee: "Budget Committee",
+  Conservation_Commission: "Conservation Commission",
+  School_Board: "School Board",
+  Historic_District_Commission: "Historic District Commission",
+};
+
+function normalizeCrawlerBoard(board: string | undefined): string {
+  if (!board || !board.trim()) return "Needs Review";
+  if (CRAWLER_BOARD_MAP[board]) return CRAWLER_BOARD_MAP[board];
+  return board.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function bridgeToLogicalDocument(fileBlobId: string, opts: {
+  townName: string;
+  board?: string;
+  category?: string;
+  s3Key: string;
+  filename: string;
+  year?: string;
+}): Promise<void> {
+  try {
+    const board = normalizeCrawlerBoard(opts.board);
+    const town = opts.townName.charAt(0).toUpperCase() + opts.townName.slice(1).toLowerCase();
+    const category = opts.category || "meeting_minutes";
+    const meetingDate = crawlerExtractDateFromFilename(opts.filename);
+    const year = opts.year || crawlerExtractYear(opts.filename, opts.s3Key);
+    const canonicalTitle = opts.filename;
+    const isMinutes = category === "minutes" || category === "meeting_minutes";
+
+    const existingVersion = await db.execute(sql`
+      SELECT dv.id FROM document_versions dv WHERE dv.file_blob_id = ${fileBlobId} LIMIT 1
+    `);
+    if (existingVersion.rows.length > 0) return;
+
+    let logicalDoc = await db.query.logicalDocuments.findFirst({
+      where: and(
+        eq(schema.logicalDocuments.canonicalTitle, canonicalTitle),
+        eq(schema.logicalDocuments.town, town)
+      ),
+    });
+
+    if (!logicalDoc) {
+      [logicalDoc] = await db
+        .insert(schema.logicalDocuments)
+        .values({
+          canonicalTitle,
+          town,
+          category: isMinutes ? "meeting_minutes" : category,
+          board,
+        })
+        .returning();
+    }
+
+    const [version] = await db
+      .insert(schema.documentVersions)
+      .values({
+        documentId: logicalDoc.id,
+        fileBlobId,
+        year,
+        isCurrent: true,
+        isMinutes,
+        meetingDate,
+      })
+      .returning();
+
+    await db
+      .update(schema.logicalDocuments)
+      .set({ currentVersionId: version.id })
+      .where(eq(schema.logicalDocuments.id, logicalDoc.id));
+  } catch (e: any) {
+    console.warn(`[CrawlerEngine] bridgeToLogicalDocument failed for ${opts.s3Key}: ${e.message}`);
   }
 }
 
@@ -1530,7 +1639,10 @@ async function executeCrawl(
             discoveredFrom: docInfo.foundOnPage,
             s3UploadedAt: new Date(),
           });
-          await bridgeToFileBlob(existDoc.id, { s3Key, filename: pdfName, mimeType: 'application/pdf', sizeBytes: 0 });
+          const existBlobId = await bridgeToFileBlob(existDoc.id, { s3Key, filename: pdfName, mimeType: 'application/pdf', sizeBytes: 0 });
+          if (existBlobId) {
+            await bridgeToLogicalDocument(existBlobId, { townName: town.name, board: driveBoard, category: 'minutes', s3Key, filename: pdfName, year: driveYear });
+          }
           progress.duplicatesSkipped++;
           summary.duplicates++;
           continue;
@@ -1553,7 +1665,10 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
-        await bridgeToFileBlob(newDriveDoc.id, { s3Key, filename: pdfName, mimeType: driveDoc.contentType, sizeBytes: driveDoc.size });
+        const newDriveBlobId = await bridgeToFileBlob(newDriveDoc.id, { s3Key, filename: pdfName, mimeType: driveDoc.contentType, sizeBytes: driveDoc.size });
+        if (newDriveBlobId) {
+          await bridgeToLogicalDocument(newDriveBlobId, { townName: town.name, board: driveBoard, category: 'minutes', s3Key, filename: pdfName, year: driveYear });
+        }
         progress.documentsDownloaded++;
         summary.newDocuments++;
         if (driveBoard) {
@@ -1647,7 +1762,10 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
-        await bridgeToFileBlob(existDoc.id, { s3Key, filename, mimeType: 'application/pdf', sizeBytes: 0 });
+        const existBlobId2 = await bridgeToFileBlob(existDoc.id, { s3Key, filename, mimeType: 'application/pdf', sizeBytes: 0 });
+        if (existBlobId2) {
+          await bridgeToLogicalDocument(existBlobId2, { townName: town.name, board: metadata.board, category: metadata.category, s3Key, filename, year: metadata.year });
+        }
         progress.duplicatesSkipped++;
         summary.duplicates++;
         continue;
@@ -1738,7 +1856,10 @@ async function executeCrawl(
           discoveredFrom: docInfo.foundOnPage,
           s3UploadedAt: new Date(),
         });
-        await bridgeToFileBlob(newDoc.id, { s3Key, filename, mimeType: doc.contentType, sizeBytes: doc.size });
+        const newBlobId = await bridgeToFileBlob(newDoc.id, { s3Key, filename, mimeType: doc.contentType, sizeBytes: doc.size });
+        if (newBlobId) {
+          await bridgeToLogicalDocument(newBlobId, { townName: town.name, board: metadata.board, category: metadata.category, s3Key, filename, year: metadata.year });
+        }
         progress.documentsDownloaded++;
         summary.newDocuments++;
         if (downloadIndex % 10 === 0 || progress.documentsDownloaded <= 5) {

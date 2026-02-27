@@ -49,7 +49,14 @@ Dashboard shows: Applications Found, Documents Analyzed, Agenda Items extracted,
 
 ### Ingestion Scripts (crawler/scripts/)
 - `bridge-ossipee-minutes.ts` — Bridges crawled documents in `crawler_documents` to `s3_gemini_sync` for the ingestion pipeline
-- `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled documents that already have OCR text but were never linked to the unified document schema. Extracts meeting dates from OCR text headers.
+- `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled Ossipee PB/ZBA documents. Extracts meeting dates from OCR text headers.
+- `ingest-all-gapped-docs.ts` — General-purpose backfill script that links ALL gapped crawler_documents (any town) to logical_documents. Extracts board names from crawler metadata, S3 path, filename prefixes, and OCR text headers. Supports `--dry-run`, `--limit=N`, and `--town=Name` flags.
+
+### Pipeline Fix (crawlerEngine.ts)
+- `bridgeToFileBlob` now returns the fileBlobId (was void)
+- New `bridgeToLogicalDocument` function creates logical_documents + document_versions entries immediately after file_blob creation
+- Called at all 4 `bridgeToFileBlob` call sites (Google Drive duplicates, Drive new downloads, regular duplicates, regular new downloads)
+- Prevents future "dark data" — crawled documents are immediately linked to the unified document schema
 
 ## External Dependencies
 
