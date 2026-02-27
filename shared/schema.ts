@@ -719,7 +719,7 @@ export type ResearchReportStatus = typeof RESEARCH_REPORT_STATUS[number];
 export const RESEARCH_REPORT_TYPES = ['friction'] as const;
 export type ResearchReportType = typeof RESEARCH_REPORT_TYPES[number];
 
-export const SITE_PLAN_OUTCOMES = ['approved', 'approved_with_conditions', 'denied', 'withdrawn', 'pending', 'unknown'] as const;
+export const SITE_PLAN_OUTCOMES = ['approved', 'approved_with_conditions', 'denied', 'withdrawn', 'abandoned', 'pending', 'unknown'] as const;
 export type SitePlanOutcome = typeof SITE_PLAN_OUTCOMES[number];
 
 export const APPEAL_PATHS = ['zba', 'superior_court', 'none', 'unknown'] as const;
@@ -794,6 +794,28 @@ export interface DeveloperScorecardData {
   topFrictionCategories: string[];
 }
 
+export interface YearlyBreakdown {
+  year: number;
+  total: number;
+  approved: number;
+  denied: number;
+  withdrawn: number;
+  abandoned: number;
+  avgDays: number;
+  avgContinuances: number;
+}
+
+export interface YoYDeltas {
+  volumePct: number;
+  ttdPct: number;
+  continuancesPct: number;
+}
+
+export interface TemporalTrendsData {
+  yearlyBreakdown: YearlyBreakdown[];
+  yoyDeltas: YoYDeltas | null;
+}
+
 export interface FrictionReportData {
   townName: string;
   dateRangeStart?: string;
@@ -810,6 +832,7 @@ export interface FrictionReportData {
   frequentFlyers?: FrequentFlyerData[];
   ordinanceHitList?: OrdinanceHitListData[];
   developerScorecard?: DeveloperScorecardData[];
+  temporalTrends?: TemporalTrendsData;
 }
 
 export const researchReports = pgTable("research_reports", {

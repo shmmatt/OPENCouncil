@@ -38,8 +38,10 @@ import {
   Flame,
   Target,
   Users,
+  TrendingUp,
+  Ghost,
 } from "lucide-react";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData } from "@shared/schema";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData, TemporalTrendsData, YoYDeltas } from "@shared/schema";
 
 interface TownOption {
   name: string;
@@ -312,7 +314,12 @@ export default function AdminResearch() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
+                    {reportData.temporalTrends?.yoyDeltas && (
+                      <YoYBadge value={reportData.temporalTrends.yoyDeltas.volumePct} label="vs last year" />
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Unique Projects
                     {reportData.rawApplicationCount ? ` (from ${reportData.rawApplicationCount.toLocaleString()} appearances)` : ""}
@@ -366,7 +373,7 @@ export default function AdminResearch() {
             )}
 
             {reportData.timeToDecision && reportData.timeToDecision.overall.avgDays > 0 && (
-              <TimeToDecisionCard data={reportData.timeToDecision} />
+              <TimeToDecisionCard data={reportData.timeToDecision} yoyDeltas={reportData.temporalTrends?.yoyDeltas} />
             )}
 
             {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
@@ -523,6 +530,19 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
+function YoYBadge({ value, label, invertColor }: { value: number; label?: string; invertColor?: boolean }) {
+  if (value === 0) return null;
+  const isUp = value > 0;
+  const isGood = invertColor ? !isUp : isUp;
+  const colorClass = isGood ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300";
+  const arrow = isUp ? "\u2191" : "\u2193";
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-md font-medium ${colorClass}`} data-testid={`badge-yoy-${label || "delta"}`}>
+      {arrow} {Math.abs(value)}%{label ? ` ${label}` : ""}
+    </span>
+  );
+}
+
 function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 
@@ -542,9 +562,11 @@ function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
             const isTop = i === 0;
             const isDenied = stage.label.toLowerCase().includes("denied");
             const isAppeal = stage.label.toLowerCase().includes("appeal");
+            const isGhost = stage.label.toLowerCase().includes("withdrawn") || stage.label.toLowerCase().includes("abandoned");
 
             let barColor = "bg-primary/80";
-            if (isDenied) barColor = "bg-destructive/70";
+            if (isGhost) barColor = "bg-muted-foreground/50";
+            else if (isDenied) barColor = "bg-destructive/70";
             else if (isAppeal) barColor = "bg-amber-500/70 dark:bg-amber-400/70";
             else if (!isTop) barColor = "bg-primary/60";
 
@@ -619,7 +641,7 @@ function FrictionMatrixCard({ matrix }: { matrix: FrictionCategory[] }) {
   );
 }
 
-function TimeToDecisionCard({ data }: { data: TimeToDecisionData }) {
+function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoyDeltas?: YoYDeltas | null }) {
   return (
     <Card>
       <CardHeader>
@@ -632,7 +654,10 @@ function TimeToDecisionCard({ data }: { data: TimeToDecisionData }) {
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-avg-days">{data.overall.avgDays}</div>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <div className="text-2xl font-bold" data-testid="text-avg-days">{data.overall.avgDays}</div>
+              {yoyDeltas && <YoYBadge value={yoyDeltas.ttdPct} label="vs last year" invertColor />}
+            </div>
             <p className="text-sm text-muted-foreground">Avg Days</p>
           </div>
           <div className="text-center p-3 bg-muted rounded-md">
@@ -640,7 +665,10 @@ function TimeToDecisionCard({ data }: { data: TimeToDecisionData }) {
             <p className="text-sm text-muted-foreground">Median Days</p>
           </div>
           <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-avg-continuances">{data.overall.avgContinuances}</div>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <div className="text-2xl font-bold" data-testid="text-avg-continuances">{data.overall.avgContinuances}</div>
+              {yoyDeltas && <YoYBadge value={yoyDeltas.continuancesPct} label="vs last year" invertColor />}
+            </div>
             <p className="text-sm text-muted-foreground">Avg Continuances</p>
           </div>
         </div>

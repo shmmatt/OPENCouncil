@@ -12,6 +12,7 @@ import type {
 import {
   resolveEntities,
   normalizeDatesOnApps,
+  detectAbandonedProjects,
   computeAllStats,
   buildInsightPromptData,
   aggregateFrictionMatrix,
@@ -303,7 +304,8 @@ router.post("/friction-report/:id/reanalyze", async (req, res) => {
 
     try {
       const normalized = normalizeDatesOnApps(rawApps);
-      const deduped = alreadyDeduped ? normalized : resolveEntities(normalized);
+      const resolved = alreadyDeduped ? normalized : resolveEntities(normalized);
+      const deduped = detectAbandonedProjects(resolved);
       logInfo(`Reanalyze: ${rawApps.length} apps → ${deduped.length} ${alreadyDeduped ? "(already deduped, re-computing stats)" : "deduplicated"}`, { stage: "research" });
 
       const reportData = await buildReportData(
@@ -722,7 +724,7 @@ async function runFrictionPipeline(reportId: string, townName: string): Promise<
     let mergedApplications: SitePlanApplication[];
     if (allExtracted.length > 0) {
       const normalizedExtracted = normalizeDatesOnApps(allExtracted);
-      mergedApplications = resolveEntities(normalizedExtracted);
+      mergedApplications = detectAbandonedProjects(resolveEntities(normalizedExtracted));
       logInfo(`REDUCE phase complete: ${allExtracted.length} raw → ${mergedApplications.length} deduplicated applications`, { stage: "research" });
     } else {
       mergedApplications = [];
@@ -812,12 +814,14 @@ async function buildReportData(
   const stats = computeAllStats(deduplicatedApps, rawAppCount);
 
   const pct = (n: number) => (stats.totalApps > 0 ? Math.round((n / stats.totalApps) * 100) : 0);
+  const ghostCount = stats.withdrawn + stats.abandoned;
   const funnelStages: FunnelStage[] = [
     { label: "Total Applications", count: stats.totalApps, percentage: 100 },
     { label: "Delayed (2+ Continuances)", count: stats.delayed, percentage: pct(stats.delayed) },
     { label: "Approved Without Conditions", count: stats.approvedClean, percentage: pct(stats.approvedClean) },
     { label: "Approved With Conditions", count: stats.approvedWithConditions, percentage: pct(stats.approvedWithConditions) },
     { label: "Denied", count: stats.denied, percentage: pct(stats.denied) },
+    { label: "Withdrawn / Abandoned", count: ghostCount, percentage: pct(ghostCount), description: `${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned (ghost projects)` },
     { label: "Appeals Filed", count: stats.appealed, percentage: pct(stats.appealed) },
     { label: "Appeal Successes", count: stats.appealWon, percentage: pct(stats.appealWon) },
   ];
@@ -844,6 +848,7 @@ async function buildReportData(
     frequentFlyers: stats.frequentFlyers,
     ordinanceHitList: stats.ordinanceHitList,
     developerScorecard: stats.developerScorecard,
+    temporalTrends: stats.temporalTrends,
   };
 }
 

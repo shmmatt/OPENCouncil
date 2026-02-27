@@ -1,4 +1,4 @@
-import type { SitePlanApplication } from "../../shared/schema";
+import type { SitePlanApplication, YearlyBreakdown, YoYDeltas } from "../../shared/schema";
 
 const STREET_ABBREVIATIONS: Record<string, string> = {
   "rd": "road", "rd.": "road", "st": "street", "st.": "street",
@@ -225,6 +225,24 @@ export function normalizeDatesOnApps(applications: SitePlanApplication[]): SiteP
       initialAppearanceDate: initISO || app.initialAppearanceDate,
       lastAppearanceDate: lastISO || app.lastAppearanceDate,
     };
+  });
+}
+
+export function detectAbandonedProjects(applications: SitePlanApplication[]): SitePlanApplication[] {
+  const now = new Date();
+  const cutoffMs = 365 * 24 * 60 * 60 * 1000;
+
+  return applications.map(app => {
+    if (app.outcome === "pending" || app.outcome === "unknown") {
+      const lastDate = parseToISO(app.lastAppearanceDate) || parseToISO(app.initialAppearanceDate);
+      if (lastDate) {
+        const lastMs = new Date(lastDate).getTime();
+        if (!isNaN(lastMs) && (now.getTime() - lastMs) > cutoffMs) {
+          return { ...app, outcome: "abandoned" as const };
+        }
+      }
+    }
+    return app;
   });
 }
 
@@ -581,6 +599,78 @@ export function computeDeveloperScorecard(apps: SitePlanApplication[], limit = 5
     .slice(0, limit);
 }
 
+export interface TemporalTrendsResult {
+  yearlyBreakdown: YearlyBreakdown[];
+  yoyDeltas: YoYDeltas | null;
+}
+
+export function computeTemporalTrends(apps: SitePlanApplication[]): TemporalTrendsResult {
+  const yearMap = new Map<number, {
+    total: number; approved: number; denied: number; withdrawn: number; abandoned: number;
+    daysArr: number[]; contArr: number[];
+  }>();
+
+  for (const app of apps) {
+    const isoDate = parseToISO(app.initialAppearanceDate);
+    if (!isoDate) continue;
+    const year = parseInt(isoDate.slice(0, 4));
+    if (isNaN(year) || year < 1990 || year > 2100) continue;
+
+    const entry = yearMap.get(year) || {
+      total: 0, approved: 0, denied: 0, withdrawn: 0, abandoned: 0,
+      daysArr: [], contArr: [],
+    };
+    entry.total++;
+    if (app.outcome === "approved" || app.outcome === "approved_with_conditions") entry.approved++;
+    if (app.outcome === "denied") entry.denied++;
+    if (app.outcome === "withdrawn") entry.withdrawn++;
+    if (app.outcome === "abandoned") entry.abandoned++;
+
+    entry.contArr.push(app.totalContinuances);
+    const initISO = parseToISO(app.initialAppearanceDate);
+    const lastISO = parseToISO(app.lastAppearanceDate);
+    if (initISO && lastISO) {
+      const days = daysBetween(initISO, lastISO);
+      if (days !== null && days >= 0) entry.daysArr.push(days);
+    }
+    yearMap.set(year, entry);
+  }
+
+  const yearlyBreakdown: YearlyBreakdown[] = Array.from(yearMap.entries())
+    .map(([year, d]) => ({
+      year,
+      total: d.total,
+      approved: d.approved,
+      denied: d.denied,
+      withdrawn: d.withdrawn,
+      abandoned: d.abandoned,
+      avgDays: d.daysArr.length > 0 ? Math.round(d.daysArr.reduce((s, v) => s + v, 0) / d.daysArr.length) : 0,
+      avgContinuances: d.contArr.length > 0
+        ? Math.round((d.contArr.reduce((s, v) => s + v, 0) / d.contArr.length) * 10) / 10
+        : 0,
+    }))
+    .sort((a, b) => a.year - b.year);
+
+  let yoyDeltas: YoYDeltas | null = null;
+  const currentYear = new Date().getFullYear();
+  const completedYears = yearlyBreakdown.filter(y => y.year < currentYear);
+  if (completedYears.length >= 2) {
+    const recent = completedYears[completedYears.length - 1];
+    const prev = completedYears[completedYears.length - 2];
+
+    const pctChange = (curr: number, prior: number) =>
+      prior > 0 ? Math.round(((curr - prior) / prior) * 100) : 0;
+
+    yoyDeltas = {
+      volumePct: pctChange(recent.total, prev.total),
+      ttdPct: pctChange(recent.avgDays, prev.avgDays),
+      continuancesPct: pctChange(recent.avgContinuances, prev.avgContinuances),
+    };
+  }
+
+  return { yearlyBreakdown, yoyDeltas };
+}
+
 export interface ComputedStats {
   totalApps: number;
   rawAppCount: number;
@@ -591,6 +681,7 @@ export interface ComputedStats {
   denied: number;
   pending: number;
   withdrawn: number;
+  abandoned: number;
   delayed: number;
   appealed: number;
   appealWon: number;
@@ -599,7 +690,7 @@ export interface ComputedStats {
   frequentFlyers: FrequentFlyer[];
   ordinanceHitList: OrdinanceHitListEntry[];
   developerScorecard: DeveloperScorecardEntry[];
-  yearlyTrend: Array<{ year: number; total: number; approved: number; denied: number }>;
+  temporalTrends: TemporalTrendsResult;
 }
 
 export function computeAllStats(
@@ -612,29 +703,12 @@ export function computeAllStats(
   const denied = deduplicatedApps.filter(a => a.outcome === "denied").length;
   const pending = deduplicatedApps.filter(a => a.outcome === "pending" || a.outcome === "unknown").length;
   const withdrawn = deduplicatedApps.filter(a => a.outcome === "withdrawn").length;
+  const abandoned = deduplicatedApps.filter(a => a.outcome === "abandoned").length;
   const delayed = deduplicatedApps.filter(a => a.totalContinuances >= 2).length;
   const appealed = deduplicatedApps.filter(a => a.appealPath !== "none" && a.appealPath !== "unknown").length;
   const appealWon = deduplicatedApps.filter(
     a => a.appealPath !== "none" && a.appealOutcome?.toLowerCase().includes("approved")
   ).length;
-
-  const yearMap = new Map<number, { total: number; approved: number; denied: number }>();
-  for (const app of deduplicatedApps) {
-    const isoDate = parseToISO(app.initialAppearanceDate);
-    if (isoDate) {
-      const year = parseInt(isoDate.slice(0, 4));
-      if (!isNaN(year) && year >= 1990 && year <= 2100) {
-        const entry = yearMap.get(year) || { total: 0, approved: 0, denied: 0 };
-        entry.total++;
-        if (app.outcome === "approved" || app.outcome === "approved_with_conditions") entry.approved++;
-        if (app.outcome === "denied") entry.denied++;
-        yearMap.set(year, entry);
-      }
-    }
-  }
-  const yearlyTrend = Array.from(yearMap.entries())
-    .map(([year, data]) => ({ year, ...data }))
-    .sort((a, b) => a.year - b.year);
 
   return {
     totalApps: total,
@@ -646,6 +720,7 @@ export function computeAllStats(
     denied,
     pending,
     withdrawn,
+    abandoned,
     delayed,
     appealed,
     appealWon,
@@ -654,7 +729,7 @@ export function computeAllStats(
     frequentFlyers: computeFrequentFlyers(deduplicatedApps),
     ordinanceHitList: computeOrdinanceHitList(deduplicatedApps),
     developerScorecard: computeDeveloperScorecard(deduplicatedApps),
-    yearlyTrend,
+    temporalTrends: computeTemporalTrends(deduplicatedApps),
   };
 }
 
@@ -663,7 +738,7 @@ export function buildInsightPromptData(stats: ComputedStats): string {
   lines.push(`Town Friction Report Summary (${stats.totalApps} unique projects from ${stats.rawAppCount} meeting appearances):`);
   lines.push(`- Approval Rate: ${stats.approvalRate}% (${stats.approvedClean} clean + ${stats.approvedWithConditions} with conditions)`);
   lines.push(`- Denial Rate: ${stats.denialRate}% (${stats.denied} denied)`);
-  lines.push(`- Pending/Unknown: ${stats.pending}, Withdrawn: ${stats.withdrawn}`);
+  lines.push(`- Pending/Unknown: ${stats.pending}, Withdrawn: ${stats.withdrawn}, Abandoned (Ghost Projects >365 days stale): ${stats.abandoned}`);
   lines.push(`- Delayed (2+ continuances): ${stats.delayed} (${stats.totalApps > 0 ? Math.round((stats.delayed / stats.totalApps) * 100) : 0}%)`);
   lines.push(`- Appeals Filed: ${stats.appealed}, Appeal Successes: ${stats.appealWon}`);
   lines.push("");
@@ -696,12 +771,21 @@ export function buildInsightPromptData(stats: ComputedStats): string {
       lines.push(`- ${d.applicantName}: ${d.projectCount} projects, avg ${d.avgContinuances} continuances, avg ${d.avgDaysToDecision} days, ${d.approvalRate}% approval, friction: ${d.topFrictionCategories.join(", ")}`);
     }
   }
-  if (stats.yearlyTrend.length > 1) {
+  if (stats.temporalTrends.yearlyBreakdown.length > 1) {
     lines.push("");
-    lines.push("Year-over-Year:");
-    for (const y of stats.yearlyTrend) {
-      lines.push(`- ${y.year}: ${y.total} apps, ${y.approved} approved, ${y.denied} denied`);
+    lines.push("Year-over-Year Trends:");
+    for (const y of stats.temporalTrends.yearlyBreakdown) {
+      lines.push(`- ${y.year}: ${y.total} apps, ${y.approved} approved, ${y.denied} denied, ${y.withdrawn} withdrawn, ${y.abandoned} abandoned, avg ${y.avgDays} days, avg ${y.avgContinuances} continuances`);
     }
+    if (stats.temporalTrends.yoyDeltas) {
+      const d = stats.temporalTrends.yoyDeltas;
+      lines.push(`YoY Changes (most recent vs prior year): Volume ${d.volumePct >= 0 ? "+" : ""}${d.volumePct}%, Time-to-Decision ${d.ttdPct >= 0 ? "+" : ""}${d.ttdPct}%, Continuances ${d.continuancesPct >= 0 ? "+" : ""}${d.continuancesPct}%`);
+    }
+  }
+  const totalGhosts = stats.withdrawn + stats.abandoned;
+  if (totalGhosts > 0) {
+    lines.push("");
+    lines.push(`Ghost Projects: ${totalGhosts} total (${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned). Shadow denial rate: ${stats.totalApps > 0 ? Math.round((totalGhosts / stats.totalApps) * 100) : 0}% of all projects never reached a formal decision.`);
   }
   return lines.join("\n");
 }

@@ -48,7 +48,15 @@ The OC Research tab (`/admin/research`) provides analytical tools for municipal 
 6. **Narrative Insights** — Compact stats summary (~2KB) sent to Gemini for 5 data-driven insight paragraphs. Structured JSON response with `responseMimeType: "application/json"`. Fallback to code-generated insights on Gemini failure.
 7. **Re-analyze Endpoint** — `POST /api/admin/research/friction-report/:id/reanalyze` re-runs entity resolution + stats + Gemini insights on existing report data without re-crawling. Detects already-deduped data and normalizes dates.
 
-Dashboard shows: Unique Projects (from N appearances), Documents Analyzed, Agenda Items, Date Range, Approval Rate, Site Plan Funnel, Ordinance Heatmap (8-category friction matrix), Ordinance Hit List (keyword frequency on primaryFrictionReason with `\b` word boundaries — parking, setback, variance, etc.), Time-to-Decision card (avg/median + by-category breakdown), Most Contested Projects (frequent flyers with meeting counts, days elapsed, outcome badges), Developer Scorecard (applicants with >2 projects ranked by avg continuances/days), Predictive Insights (5 narrative paragraphs), and expandable applications table. Data stored in `research_reports` table.
+Dashboard shows: Unique Projects (from N appearances, with YoY volume badge), Documents Analyzed, Agenda Items, Date Range, Approval Rate, Site Plan Funnel (with "Withdrawn / Abandoned" ghost project stage — muted gray bar, count breakdown in description), Ordinance Heatmap (8-category friction matrix), Ordinance Hit List (keyword frequency on primaryFrictionReason with `\b` word boundaries), Time-to-Decision card (avg/median + by-category breakdown, with YoY TTD and continuances delta badges — green=improving, red=degrading), Most Contested Projects (frequent flyers), Developer Scorecard (applicants with >2 projects), Predictive Insights (5 narrative paragraphs), and expandable applications table. Data stored in `research_reports` table.
+
+#### Temporal Trends & Ghost Projects (Phase 2)
+- `SitePlanOutcome` now includes `'abandoned'` alongside existing `'withdrawn'`
+- `detectAbandonedProjects()` — Post-dedup pass: if `lastAppearanceDate` >365 days stale AND outcome is `pending`/`unknown` → force outcome to `abandoned`
+- `computeTemporalTrends()` — Groups apps by year of `initialAppearanceDate`, computes per-year volume/approved/denied/withdrawn/abandoned/avgDays/avgContinuances. YoY deltas compare last two *completed* years (excludes current partial year)
+- `TemporalTrendsData` schema: `yearlyBreakdown[]` + `yoyDeltas: {volumePct, ttdPct, continuancesPct} | null`
+- Funnel includes combined "Withdrawn / Abandoned" stage with ghost project description
+- `buildInsightPromptData` feeds YoY deltas and shadow denial rate to Gemini for trend-aware narratives
 
 #### Canonical Friction Categories
 Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushback, State vs. Local Clash, Traffic/Access, Infrastructure, Other
