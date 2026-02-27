@@ -207,6 +207,27 @@ function splitGroupIntoRuns(group: SitePlanApplication[]): SitePlanApplication[]
   return runs;
 }
 
+function deduplicateRefsByDate(refs: string[]): string[] {
+  const byDate = new Map<string, string>();
+  const noDate: Set<string> = new Set();
+
+  for (const ref of refs) {
+    const dates = extractDatesFromRefs([ref]);
+    if (dates.length === 0) {
+      noDate.add(ref);
+      continue;
+    }
+    const isoDate = dates[0];
+    const existing = byDate.get(isoDate);
+    if (!existing || ref.length > existing.length) {
+      byDate.set(isoDate, ref);
+    }
+  }
+
+  const dated = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(e => e[1]);
+  return [...dated, ...noDate];
+}
+
 function mergeGroup(group: SitePlanApplication[]): SitePlanApplication {
   if (group.length === 1) return group[0];
 
@@ -215,7 +236,8 @@ function mergeGroup(group: SitePlanApplication[]): SitePlanApplication {
     .filter((d): d is string => d !== null)
     .sort();
 
-  const allRefs = [...new Set(group.flatMap(a => a.meetingReferences))];
+  const rawRefs = [...new Set(group.flatMap(a => a.meetingReferences))];
+  const allRefs = deduplicateRefsByDate(rawRefs);
   const allConditions = [...new Set(group.flatMap(a => a.conditions || []))];
   const allFrictionCats = [...new Set(group.flatMap(a => a.frictionCategories || []))];
 
@@ -334,13 +356,19 @@ export function splitOvermergedEntities(applications: SitePlanApplication[]): Si
       continue;
     }
 
-    const refDates = extractDatesFromRefs(app.meetingReferences);
+    const dedupedRefs = deduplicateRefsByDate(app.meetingReferences);
+
+    const refDates = extractDatesFromRefs(dedupedRefs);
     if (refDates.length <= 1) {
-      result.push(app);
+      result.push({
+        ...app,
+        meetingReferences: dedupedRefs,
+        totalContinuances: Math.max(0, dedupedRefs.length - 1),
+      });
       continue;
     }
 
-    const sorted = [...refDates].sort();
+    const sorted = [...new Set(refDates)].sort();
     const splitPoints: number[] = [0];
 
     for (let i = 1; i < sorted.length; i++) {
@@ -352,7 +380,11 @@ export function splitOvermergedEntities(applications: SitePlanApplication[]): Si
     }
 
     if (splitPoints.length === 1) {
-      result.push(app);
+      result.push({
+        ...app,
+        meetingReferences: dedupedRefs,
+        totalContinuances: Math.max(0, dedupedRefs.length - 1),
+      });
       continue;
     }
 
@@ -360,9 +392,10 @@ export function splitOvermergedEntities(applications: SitePlanApplication[]): Si
       const startIdx = splitPoints[s];
       const endIdx = s + 1 < splitPoints.length ? splitPoints[s + 1] : sorted.length;
       const segmentDates = sorted.slice(startIdx, endIdx);
-      const segmentRefs = app.meetingReferences.filter(ref => {
+      const segmentDateSet = new Set(segmentDates);
+      const segmentRefs = dedupedRefs.filter(ref => {
         const refDate = extractDatesFromRefs([ref]);
-        return refDate.length > 0 && segmentDates.includes(refDate[0]);
+        return refDate.length > 0 && segmentDateSet.has(refDate[0]);
       });
 
       result.push({
@@ -370,7 +403,7 @@ export function splitOvermergedEntities(applications: SitePlanApplication[]): Si
         initialAppearanceDate: segmentDates[0],
         lastAppearanceDate: segmentDates[segmentDates.length - 1],
         totalContinuances: Math.max(0, segmentRefs.length - 1),
-        meetingReferences: segmentRefs.length > 0 ? segmentRefs : [app.meetingReferences[0]],
+        meetingReferences: segmentRefs.length > 0 ? segmentRefs : [dedupedRefs[0]],
         outcome: s < splitPoints.length - 1 ? "unknown" : app.outcome,
       });
     }

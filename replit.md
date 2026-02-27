@@ -56,7 +56,8 @@ Dashboard shows: Unique Projects (from N appearances, with YoY volume badge), Do
 - **Re-analyze pipeline**: `normalize → splitOvermergedEntities → resolveEntities → detectAbandoned → stats → Gemini`
 - **UI label fixes**: Funnel "Delayed" → "Approved After Delay (2+ Continuances)"; "Developer Scorecard" → "Frequent Applicants & Property Owners"
 - **Micro-copy**: Info icon tooltips on Ghost Projects (365-day abandonment) and Procedural/Incomplete friction category; YoY badges say "vs. prev year"
-- **Ossipee results after Phase 2.5**: 2,319 unique projects (was 1,939), Avg Days 46 (was 242), 1,162 ghost projects (50% shadow denial rate)
+- **Meeting ref dedup** (`deduplicateRefsByDate`): Groups refs by normalized ISO date, keeps longest/most descriptive ref per date. Applied in both `mergeGroup` and `splitOvermergedEntities`. Fixes 3-5x inflated meeting counts from duplicate document extractions.
+- **Ossipee results after Phase 2.5**: 2,319 unique projects (was 1,939), Avg Days 46 (was 242), 1,162 ghost projects (50% shadow denial rate), top contested project 31 meetings (was 125)
 
 #### Temporal Trends & Ghost Projects (Phase 2)
 - `SitePlanOutcome` now includes `'abandoned'` alongside existing `'withdrawn'`
