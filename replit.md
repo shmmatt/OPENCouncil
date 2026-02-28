@@ -85,6 +85,7 @@ Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushb
 - **FK migration**: `document_chunks.document_id` FK moved from old `documents` table → `logical_documents`; old unique constraint on `(document_id, chunk_index)` dropped
 - **Backfill results**: 226,041/226,949 chunks linked (99.6%). All 17 Carroll County towns at 97-100%. Statewide 19,196/19,315 (99%), unknown 2,596/2,647 (98%)
 - `bridge-statewide-blobs.ts` — Created logical_documents for 1,583 statewide orphan blobs using agency names derived from S3 keys: NH DRA (784), NHMA (273), NH Supreme Court (197), NH OSI (179), NH RSAs (13), NH DES (10), NH Admin Rules (9)
+- **Statewide citation URL fallback**: `getCrawledUrlByFileBlobId` in `server/storage/documents.ts` now falls back to resolving agency homepage URLs from `file_blobs.s3_key` for statewide docs that have no `crawler_documents` entries. Maps S3 key prefixes (e.g. `statewide/nh-dra/`) to agency homepages (e.g. `revenue.nh.gov`)
 
 ### Pipeline Fix (crawlerEngine.ts)
 - `bridgeToFileBlob` now returns the fileBlobId (was void)

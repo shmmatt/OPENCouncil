@@ -279,19 +279,45 @@ export async function getCrawledUrlByFileBlobId(fileBlobId: string): Promise<str
   }
 
   const fbResult = await db.execute(sql`
-    SELECT fb.original_filename, ld.town
+    SELECT fb.original_filename, fb.s3_key, ld.town
     FROM file_blobs fb
     JOIN document_versions dv ON dv.file_blob_id = fb.id
     JOIN logical_documents ld ON dv.document_id = ld.id
     WHERE fb.id = ${fileBlobId}
     LIMIT 1
   `);
-  const fbRow = fbResult.rows?.[0] as { original_filename: string; town: string } | undefined;
+  const fbRow = fbResult.rows?.[0] as { original_filename: string; s3_key: string | null; town: string } | undefined;
   if (fbRow?.original_filename && fbRow?.town) {
-    return resolveUrlByStemCandidates(fbRow.original_filename, fbRow.town);
+    const stemUrl = await resolveUrlByStemCandidates(fbRow.original_filename, fbRow.town);
+    if (stemUrl) return stemUrl;
+  }
+
+  if (fbRow?.s3_key) {
+    const agencyUrl = resolveStatewideAgencyUrl(fbRow.s3_key);
+    if (agencyUrl) return agencyUrl;
   }
 
   return null;
+}
+
+const STATEWIDE_AGENCY_URLS: Record<string, string> = {
+  "nh-dra": "https://www.revenue.nh.gov",
+  "nh-osi": "https://www.nh.gov/osi",
+  "nh-muni-assoc": "https://www.nhmunicipal.org",
+  "nh-des": "https://www.des.nh.gov",
+  "nh-rsas": "https://www.gencourt.state.nh.us/rsa/html/indexes/default.html",
+  "nh-supreme-court": "https://www.courts.nh.gov/our-courts/supreme-court",
+  "nh-admin-rules": "https://www.gencourt.state.nh.us/rules/",
+};
+
+function resolveStatewideAgencyUrl(s3Key: string): string | null {
+  if (!s3Key.startsWith("statewide/") && !s3Key.startsWith("state/")) {
+    return null;
+  }
+  const parts = s3Key.split("/");
+  if (parts.length < 2) return null;
+  const agencySlug = parts[1];
+  return STATEWIDE_AGENCY_URLS[agencySlug] || null;
 }
 
 async function resolveUrlByStemCandidates(filename: string, townIdOrName: string): Promise<string | null> {
