@@ -1,9 +1,11 @@
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import { applyPlugin } from "jspdf-autotable";
 import type {
   FrictionReportData,
   SitePlanApplication,
 } from "@shared/schema";
+
+applyPlugin(jsPDF);
 
 declare module "jspdf" {
   interface jsPDF {
