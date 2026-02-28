@@ -1,9 +1,16 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 import type {
   FrictionReportData,
   SitePlanApplication,
 } from "@shared/schema";
+
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: (options: any) => void;
+    lastAutoTable: { finalY: number } | null;
+  }
+}
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -99,7 +106,7 @@ export function exportFrictionReportPDF(
     ["Date Range", dateRange],
     ["Approval Rate", computeApprovalRate(apps)],
   ];
-  autoTable(doc, {
+  doc.autoTable({
     startY: y,
     head: [["Metric", "Value"]],
     body: statsRows,
@@ -108,7 +115,7 @@ export function exportFrictionReportPDF(
     headStyles: { fillColor: [59, 130, 246] },
     theme: "grid",
   });
-  y = (doc as any).lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable!.finalY + 8;
 
   const funnelStages = reportData.funnelStages || [];
   const frictionMatrix = reportData.frictionMatrix || [];
@@ -116,7 +123,7 @@ export function exportFrictionReportPDF(
 
   if (funnelStages.length > 0) {
     sectionTitle("Site Plan Approval Funnel");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Stage", "Count", "Percentage"]],
       body: funnelStages.map((s) => [
@@ -129,12 +136,12 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [59, 130, 246] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 8;
   }
 
   if (frictionMatrix.length > 0) {
     sectionTitle("Ordinance Friction Heatmap");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Category", "Count", "Percentage"]],
       body: frictionMatrix.map((f) => [
@@ -147,12 +154,12 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [217, 119, 6] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 8;
   }
 
   if (reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0) {
     sectionTitle("Ordinance Hit List");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Keyword", "Frequency", "Percentage"]],
       body: reportData.ordinanceHitList.map((o) => [
@@ -165,7 +172,7 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [217, 119, 6] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 8;
   }
 
   if (reportData.timeToDecision) {
@@ -176,7 +183,7 @@ export function exportFrictionReportPDF(
       ["Median Days", String(Math.round(ttd.overall.medianDays))],
       ["Avg Continuances", String(ttd.overall.avgContinuances.toFixed(1))],
     ];
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Metric", "Value"]],
       body: overviewRows,
@@ -185,7 +192,7 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [59, 130, 246] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = doc.lastAutoTable!.finalY + 6;
 
     if (ttd.byCategory.length > 0) {
       addPageIfNeeded(60);
@@ -194,7 +201,7 @@ export function exportFrictionReportPDF(
       doc.text("Breakdown by Friction Category", margin, y + 4);
       y += 10;
       doc.setFont("helvetica", "normal");
-      autoTable(doc, {
+      doc.autoTable({
         startY: y,
         head: [["Category", "Avg Days", "Count"]],
         body: ttd.byCategory.map((c) => [
@@ -207,13 +214,13 @@ export function exportFrictionReportPDF(
         headStyles: { fillColor: [107, 114, 128] },
         theme: "grid",
       });
-      y = (doc as any).lastAutoTable.finalY + 8;
+      y = doc.lastAutoTable!.finalY + 8;
     }
   }
 
   if (reportData.frequentFlyers && reportData.frequentFlyers.length > 0) {
     sectionTitle("Most Contested Projects");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Project", "Address", "Meetings", "Days", "Outcome"]],
       body: reportData.frequentFlyers.map((f) => [
@@ -229,12 +236,12 @@ export function exportFrictionReportPDF(
       columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 120 } },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 8;
   }
 
   if (reportData.developerScorecard && reportData.developerScorecard.length > 0) {
     sectionTitle("Frequent Applicants & Property Owners");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Applicant", "Projects", "Approval Rate", "Avg Days", "Avg Continuances"]],
       body: reportData.developerScorecard.map((d) => [
@@ -249,12 +256,12 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [59, 130, 246] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 8;
   }
 
   if (reportData.temporalTrends && reportData.temporalTrends.yearlyBreakdown.length > 0) {
     sectionTitle("Year-over-Year Trends");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Year", "Total", "Approved", "Denied", "Withdrawn", "Abandoned", "Avg Days"]],
       body: reportData.temporalTrends.yearlyBreakdown.map((yr) => [
@@ -271,7 +278,7 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [107, 114, 128] },
       theme: "grid",
     });
-    y = (doc as any).lastAutoTable.finalY + 6;
+    y = doc.lastAutoTable!.finalY + 6;
 
     if (reportData.temporalTrends.yoyDeltas) {
       const d = reportData.temporalTrends.yoyDeltas;
@@ -305,7 +312,7 @@ export function exportFrictionReportPDF(
 
   if (apps.length > 0) {
     sectionTitle("All Extracted Applications");
-    autoTable(doc, {
+    doc.autoTable({
       startY: y,
       head: [["Entity", "Address", "Applicant", "Outcome", "First Seen", "Last Seen", "Continuances", "Friction"]],
       body: apps.map((a) => [
@@ -333,7 +340,8 @@ export function exportFrictionReportPDF(
   }
 
   const safeFilename = townName.replace(/[^a-zA-Z0-9]/g, "_");
-  doc.save(`Friction_Report_${safeFilename}.pdf`);
+  const pdfBlob = doc.output("blob");
+  triggerDownload(pdfBlob, `Friction_Report_${safeFilename}.pdf`);
 }
 
 function escapeCsvField(value: string): string {

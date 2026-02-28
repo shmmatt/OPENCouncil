@@ -314,7 +314,14 @@ export default function AdminResearch() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportFrictionReportPDF(reportData, reportData.townName)}
+                  onClick={() => {
+                    try {
+                      exportFrictionReportPDF(reportData, reportData.townName);
+                    } catch (err) {
+                      console.error("PDF export error:", err);
+                      toast({ title: "Export failed", description: err instanceof Error ? err.message : "Could not generate PDF", variant: "destructive" });
+                    }
+                  }}
                   data-testid="button-export-pdf"
                 >
                   <Download className="w-4 h-4 mr-1" />
@@ -323,7 +330,14 @@ export default function AdminResearch() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportFrictionReportCSV(reportData, reportData.townName)}
+                  onClick={() => {
+                    try {
+                      exportFrictionReportCSV(reportData, reportData.townName);
+                    } catch (err) {
+                      console.error("CSV export error:", err);
+                      toast({ title: "Export failed", description: err instanceof Error ? err.message : "Could not generate CSV", variant: "destructive" });
+                    }
+                  }}
                   data-testid="button-export-csv"
                 >
                   <FileSpreadsheet className="w-4 h-4 mr-1" />
