@@ -44,9 +44,10 @@ The OC Research tab provides analytical tools for municipal data analysis, inclu
 2.  Detect agenda-item boundaries via LLM analysis.
 3.  Extract structured JSON data from each agenda item using Gemini.
 4.  Perform deterministic entity resolution to deduplicate and merge project timelines, handling address normalization and temporal gaps.
-5.  Compute statistical insights like time-to-decision, friction categories, and frequent applicants.
-6.  Generate narrative insights using Gemini based on the computed statistics.
-7.  Support re-analysis of existing report data without re-crawling.
+5.  Classify each application by `projectType` (Residential/Commercial/Mixed-Use) and `applicantType` (Citizen/Owner vs Professional) using keyword-based heuristics.
+6.  Compute statistical insights including: time-to-decision, friction categories, representation gap (citizen vs. pro outcomes), residential vs. commercial timelines, attrition curve (where abandoned projects exit), delay breakdown (board vs. external/state delays), and standard conditions of approval.
+7.  Generate narrative insights using Gemini based on the computed statistics.
+8.  Support re-analysis of existing report data without re-crawling.
 
 #### Report Export
 Friction reports are exportable in two formats from the report dashboard:

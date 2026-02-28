@@ -725,6 +725,12 @@ export type SitePlanOutcome = typeof SITE_PLAN_OUTCOMES[number];
 export const APPEAL_PATHS = ['zba', 'superior_court', 'none', 'unknown'] as const;
 export type AppealPath = typeof APPEAL_PATHS[number];
 
+export const PROJECT_TYPES = ['Residential', 'Commercial', 'Mixed-Use'] as const;
+export type ProjectType = typeof PROJECT_TYPES[number];
+
+export const APPLICANT_TYPES = ['Citizen/Owner', 'Professional'] as const;
+export type ApplicantType = typeof APPLICANT_TYPES[number];
+
 export interface SitePlanApplication {
   entityName: string;
   address?: string;
@@ -739,6 +745,8 @@ export interface SitePlanApplication {
   appealPath: AppealPath;
   appealOutcome?: string;
   meetingReferences: string[];
+  projectType?: ProjectType;
+  applicantType?: ApplicantType;
 }
 
 export interface FunnelStage {
@@ -816,6 +824,59 @@ export interface TemporalTrendsData {
   yoyDeltas: YoYDeltas | null;
 }
 
+export interface RepresentationGapGroupStats {
+  count: number;
+  continuanceRate: number;
+  approvalRate: number;
+  abandonmentRate: number;
+  avgDaysToDecision: number;
+}
+
+export interface RepresentationGapData {
+  citizenStats: RepresentationGapGroupStats;
+  proStats: RepresentationGapGroupStats;
+  delta: {
+    continuanceRate: number;
+    approvalRate: number;
+    abandonmentRate: number;
+    avgDaysToDecision: number;
+  };
+}
+
+export interface ProjectTypeGroupStats {
+  avgDays: number;
+  avgContinuances: number;
+  count: number;
+  topFriction: string[];
+}
+
+export interface ProjectTypeComparisonData {
+  residential: ProjectTypeGroupStats;
+  commercial: ProjectTypeGroupStats;
+  mixedUse: ProjectTypeGroupStats;
+}
+
+export interface AttritionCurveEntry {
+  stage: string;
+  count: number;
+  percentage: number;
+  examples: string[];
+}
+
+export interface DelayBreakdownData {
+  avgBoardDays: number;
+  avgExternalDays: number;
+  avgTotalDays: number;
+  externalReasons: Array<{ reason: string; count: number }>;
+}
+
+export interface StandardConditionEntry {
+  condition: string;
+  count: number;
+  percentage: number;
+  exampleProjects: string[];
+}
+
 export interface FrictionReportData {
   townName: string;
   dateRangeStart?: string;
@@ -833,6 +894,11 @@ export interface FrictionReportData {
   ordinanceHitList?: OrdinanceHitListData[];
   developerScorecard?: DeveloperScorecardData[];
   temporalTrends?: TemporalTrendsData;
+  representationGap?: RepresentationGapData;
+  projectTypeComparison?: ProjectTypeComparisonData;
+  attritionCurve?: AttritionCurveEntry[];
+  delayBreakdown?: DelayBreakdownData;
+  standardConditions?: StandardConditionEntry[];
 }
 
 export const researchReports = pgTable("research_reports", {

@@ -39,14 +39,11 @@ function formatDate(dateStr?: string): string {
 }
 
 function computeApprovalRate(apps: SitePlanApplication[]): string {
-  const decided = apps.filter((a) =>
-    ["approved", "approved_with_conditions", "denied"].includes(a.outcome)
-  );
-  if (decided.length === 0) return "N/A";
-  const approved = decided.filter((a) =>
+  if (apps.length === 0) return "N/A";
+  const approved = apps.filter((a) =>
     ["approved", "approved_with_conditions"].includes(a.outcome)
   );
-  return `${Math.round((approved.length / decided.length) * 100)}%`;
+  return `${Math.round((approved.length / apps.length) * 100)}%`;
 }
 
 export function exportFrictionReportPDF(
@@ -249,7 +246,7 @@ export function exportFrictionReportPDF(
       body: reportData.developerScorecard.map((d) => [
         d.applicantName,
         String(d.projectCount),
-        `${Math.round(d.approvalRate * 100)}%`,
+        `${d.approvalRate}%`,
         String(Math.round(d.avgDaysToDecision)),
         String(d.avgContinuances.toFixed(1)),
       ]),

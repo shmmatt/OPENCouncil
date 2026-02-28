@@ -1,4 +1,10 @@
-import type { SitePlanApplication, YearlyBreakdown, YoYDeltas } from "../../shared/schema";
+import type {
+  SitePlanApplication, YearlyBreakdown, YoYDeltas,
+  ProjectType, ApplicantType,
+  RepresentationGapData, RepresentationGapGroupStats,
+  ProjectTypeComparisonData, ProjectTypeGroupStats,
+  AttritionCurveEntry, DelayBreakdownData, StandardConditionEntry,
+} from "../../shared/schema";
 
 const STREET_ABBREVIATIONS: Record<string, string> = {
   "rd": "road", "rd.": "road", "st": "street", "st.": "street",
@@ -861,6 +867,257 @@ export function computeTemporalTrends(apps: SitePlanApplication[]): TemporalTren
   return { yearlyBreakdown, yoyDeltas };
 }
 
+const COMMERCIAL_SIGNALS = /\b(commercial|retail|office|plaza|warehouse|business|industrial|gas\s*station|restaurant|hotel|motel|storage\s*facility|shopping|convenience\s*store|bank|medical|dental|pharmacy|auto\s*repair|car\s*wash|self[- ]storage)\b/i;
+const RESIDENTIAL_SIGNALS = /\b(residential|subdivision|lot\s*line|dwelling|single[- ]family|duplex|accessory\s*dwelling|adu|home|house|condo|apartment|townhouse|multi[- ]family|mobile\s*home|modular)\b/i;
+const MIXED_USE_SIGNAL = /\b(mixed[- ]use)\b/i;
+
+export function classifyProjectType(app: SitePlanApplication): ProjectType {
+  const text = [
+    app.entityName, app.address, app.primaryFrictionReason,
+    ...(app.conditions || []), ...(app.frictionCategories || []),
+  ].filter(Boolean).join(" ");
+
+  if (MIXED_USE_SIGNAL.test(text)) return "Mixed-Use";
+
+  const hasCommercial = COMMERCIAL_SIGNALS.test(text);
+  const hasResidential = RESIDENTIAL_SIGNALS.test(text);
+
+  if (hasCommercial && hasResidential) return "Mixed-Use";
+  if (hasCommercial) return "Commercial";
+  return "Residential";
+}
+
+const PROFESSIONAL_SIGNALS = /\b(engineering|engineers|associates|surveyors?|consultants?|llc|inc|corp|law\s*office|attorney|esq\.?|architect|design\s*group|planners?|pllc|p\.?a\.?|civil|land\s*use\s*counsel|surveying|& associates)\b/i;
+const REPRESENTATION_SIGNALS = /\b(represented\s*by|agent\s*for|on\s*behalf\s*of|counsel\s*for)\b/i;
+
+export function classifyApplicantType(app: SitePlanApplication): ApplicantType {
+  const applicantText = app.applicant || "";
+  if (PROFESSIONAL_SIGNALS.test(applicantText)) return "Professional";
+
+  const contextText = [
+    app.primaryFrictionReason,
+    ...(app.conditions || []),
+  ].filter(Boolean).join(" ");
+  if (REPRESENTATION_SIGNALS.test(contextText)) return "Professional";
+
+  return "Citizen/Owner";
+}
+
+export function classifyAllApps(apps: SitePlanApplication[]): void {
+  for (const app of apps) {
+    app.projectType = classifyProjectType(app);
+    app.applicantType = classifyApplicantType(app);
+  }
+}
+
+function computeGroupStats(apps: SitePlanApplication[]): RepresentationGapGroupStats {
+  const count = apps.length;
+  if (count === 0) return { count: 0, continuanceRate: 0, approvalRate: 0, abandonmentRate: 0, avgDaysToDecision: 0 };
+  const withContinuances = apps.filter(a => a.totalContinuances >= 2).length;
+  const approved = apps.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions").length;
+  const abandoned = apps.filter(a => a.outcome === "withdrawn" || a.outcome === "abandoned").length;
+  const daysArr: number[] = [];
+  for (const a of apps) {
+    const d = daysBetween(a.initialAppearanceDate || "", a.lastAppearanceDate || "");
+    if (d !== null && d >= 0) daysArr.push(d);
+  }
+  const avgDays = daysArr.length > 0 ? Math.round(daysArr.reduce((s, v) => s + v, 0) / daysArr.length) : 0;
+  return {
+    count,
+    continuanceRate: Math.round((withContinuances / count) * 100),
+    approvalRate: Math.round((approved / count) * 100),
+    abandonmentRate: Math.round((abandoned / count) * 100),
+    avgDaysToDecision: avgDays,
+  };
+}
+
+export function computeRepresentationGap(apps: SitePlanApplication[]): RepresentationGapData {
+  const citizens = apps.filter(a => (a.applicantType || classifyApplicantType(a)) === "Citizen/Owner");
+  const pros = apps.filter(a => (a.applicantType || classifyApplicantType(a)) === "Professional");
+  const citizenStats = computeGroupStats(citizens);
+  const proStats = computeGroupStats(pros);
+  return {
+    citizenStats,
+    proStats,
+    delta: {
+      continuanceRate: proStats.continuanceRate - citizenStats.continuanceRate,
+      approvalRate: proStats.approvalRate - citizenStats.approvalRate,
+      abandonmentRate: proStats.abandonmentRate - citizenStats.abandonmentRate,
+      avgDaysToDecision: proStats.avgDaysToDecision - citizenStats.avgDaysToDecision,
+    },
+  };
+}
+
+function computeProjectGroupStats(apps: SitePlanApplication[]): ProjectTypeGroupStats {
+  if (apps.length === 0) return { avgDays: 0, avgContinuances: 0, count: 0, topFriction: [] };
+  const daysArr: number[] = [];
+  for (const a of apps) {
+    const d = daysBetween(a.initialAppearanceDate || "", a.lastAppearanceDate || "");
+    if (d !== null && d >= 0) daysArr.push(d);
+  }
+  const avgDays = daysArr.length > 0 ? Math.round(daysArr.reduce((s, v) => s + v, 0) / daysArr.length) : 0;
+  const avgCont = Math.round((apps.reduce((s, a) => s + a.totalContinuances, 0) / apps.length) * 10) / 10;
+  const catCounts = new Map<string, number>();
+  for (const a of apps) {
+    for (const cat of (a.frictionCategories || []).map(normalizeFrictionCategory)) {
+      catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
+    }
+  }
+  const topFriction = Array.from(catCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+  return { avgDays, avgContinuances: avgCont, count: apps.length, topFriction };
+}
+
+export function computeProjectTypeComparison(apps: SitePlanApplication[]): ProjectTypeComparisonData {
+  return {
+    residential: computeProjectGroupStats(apps.filter(a => (a.projectType || classifyProjectType(a)) === "Residential")),
+    commercial: computeProjectGroupStats(apps.filter(a => (a.projectType || classifyProjectType(a)) === "Commercial")),
+    mixedUse: computeProjectGroupStats(apps.filter(a => (a.projectType || classifyProjectType(a)) === "Mixed-Use")),
+  };
+}
+
+const EXTERNAL_TRIGGERS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\b(traffic\s*study|traffic\s*impact)\b/i, label: "Pending traffic study" },
+  { pattern: /\b(nhdes|nh\s*des|dept\.?\s*of\s*environmental|wetland\s*permit|alteration\s*of\s*terrain|aot)\b/i, label: "Pending NHDES permit" },
+  { pattern: /\b(nhdot|nh\s*dot|driveway\s*permit|highway\s*access|state\s*highway)\b/i, label: "Pending NHDOT permit" },
+  { pattern: /\b(wetland\s*delineation|vernal\s*pool|wetland\s*scientist)\b/i, label: "Pending wetland delineation" },
+  { pattern: /\b(peer\s*review|third[- ]party\s*review|independent\s*review)\b/i, label: "Pending peer review" },
+  { pattern: /\b(applicant\s*revision|revised\s*plan|plan\s*revision|updated\s*plan)\b/i, label: "Applicant revision requested" },
+  { pattern: /\b(fire\s*marshal|fire\s*department|fire\s*chief)\b/i, label: "Pending fire department review" },
+];
+
+export function computeAttritionCurve(apps: SitePlanApplication[]): AttritionCurveEntry[] {
+  const exitApps = apps.filter(a => a.outcome === "withdrawn" || a.outcome === "abandoned");
+  if (exitApps.length === 0) return [];
+
+  const stageCounts = new Map<string, { count: number; examples: string[] }>();
+
+  for (const app of exitApps) {
+    let stage = "After initial filing";
+    const reasonText = [app.primaryFrictionReason, ...(app.conditions || [])].filter(Boolean).join(" ");
+
+    let externalMatch = false;
+    for (const trigger of EXTERNAL_TRIGGERS) {
+      if (trigger.pattern.test(reasonText)) {
+        stage = trigger.label;
+        externalMatch = true;
+        break;
+      }
+    }
+
+    if (!externalMatch) {
+      if (app.totalContinuances === 0) stage = "After initial filing";
+      else if (app.totalContinuances === 1) stage = "After first hearing";
+      else stage = "After multiple hearings";
+    }
+
+    const entry = stageCounts.get(stage);
+    const exampleName = app.entityName.length > 40 ? app.entityName.slice(0, 37) + "..." : app.entityName;
+    if (entry) {
+      entry.count++;
+      if (entry.examples.length < 3) entry.examples.push(exampleName);
+    } else {
+      stageCounts.set(stage, { count: 1, examples: [exampleName] });
+    }
+  }
+
+  return Array.from(stageCounts.entries())
+    .map(([stage, data]) => ({
+      stage,
+      count: data.count,
+      percentage: Math.round((data.count / exitApps.length) * 100),
+      examples: data.examples,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+const EXTERNAL_DELAY_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /\b(nhdot|nh\s*dot|driveway\s*permit|state\s*highway|highway\s*access)\b/i, reason: "NHDOT review" },
+  { pattern: /\b(nhdes|nh\s*des|alteration\s*of\s*terrain|aot|wetland\s*permit)\b/i, reason: "NHDES review" },
+  { pattern: /\b(traffic\s*study|traffic\s*impact|traffic\s*analysis)\b/i, reason: "Traffic study" },
+  { pattern: /\b(wetland\s*delineation|vernal\s*pool|wetland\s*scientist)\b/i, reason: "Wetland delineation" },
+  { pattern: /\b(peer\s*review|third[- ]party\s*review|independent\s*review)\b/i, reason: "Third-party peer review" },
+  { pattern: /\b(applicant\s*revision|revised\s*plan|plan\s*revision|updated\s*plan|resubmit)\b/i, reason: "Applicant plan revision" },
+  { pattern: /\b(fire\s*marshal|fire\s*department)\b/i, reason: "Fire department review" },
+  { pattern: /\b(state\s*permit|state\s*approval|state\s*review)\b/i, reason: "Other state permit" },
+];
+
+export function computeDelayBreakdown(apps: SitePlanApplication[]): DelayBreakdownData {
+  const reasonCounts = new Map<string, number>();
+  const boardDays: number[] = [];
+  const externalDays: number[] = [];
+  const totalDays: number[] = [];
+
+  for (const app of apps) {
+    const d = daysBetween(app.initialAppearanceDate || "", app.lastAppearanceDate || "");
+    if (d === null || d < 0) continue;
+
+    const text = [app.primaryFrictionReason, ...(app.conditions || [])].filter(Boolean).join(" ");
+    let hasExternalDelay = false;
+
+    for (const { pattern, reason } of EXTERNAL_DELAY_PATTERNS) {
+      if (pattern.test(text)) {
+        reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+        hasExternalDelay = true;
+      }
+    }
+
+    totalDays.push(d);
+    if (hasExternalDelay) {
+      const estimatedExternal = Math.round(d * 0.4);
+      externalDays.push(estimatedExternal);
+      boardDays.push(d - estimatedExternal);
+    } else {
+      boardDays.push(d);
+      externalDays.push(0);
+    }
+  }
+
+  const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
+
+  return {
+    avgBoardDays: avg(boardDays),
+    avgExternalDays: avg(externalDays),
+    avgTotalDays: avg(totalDays),
+    externalReasons: Array.from(reasonCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count),
+  };
+}
+
+export function computeStandardConditions(apps: SitePlanApplication[]): StandardConditionEntry[] {
+  const approvedApps = apps.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions");
+  if (approvedApps.length === 0) return [];
+
+  const condCounts = new Map<string, { count: number; projects: string[] }>();
+
+  for (const app of approvedApps) {
+    for (const cond of (app.conditions || [])) {
+      const normalized = cond.toLowerCase().trim().replace(/\s+/g, " ").replace(/[.;,]+$/, "");
+      if (normalized.length < 5) continue;
+
+      const existing = condCounts.get(normalized);
+      const projectLabel = app.entityName.length > 30 ? app.entityName.slice(0, 27) + "..." : app.entityName;
+      if (existing) {
+        existing.count++;
+        if (existing.projects.length < 3) existing.projects.push(projectLabel);
+      } else {
+        condCounts.set(normalized, { count: 1, projects: [projectLabel] });
+      }
+    }
+  }
+
+  return Array.from(condCounts.entries())
+    .filter(([, data]) => data.count >= 2)
+    .map(([condition, data]) => ({
+      condition: condition.charAt(0).toUpperCase() + condition.slice(1),
+      count: data.count,
+      percentage: Math.round((data.count / approvedApps.length) * 100),
+      exampleProjects: data.projects,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+}
+
 export interface ComputedStats {
   totalApps: number;
   rawAppCount: number;
@@ -881,12 +1138,19 @@ export interface ComputedStats {
   ordinanceHitList: OrdinanceHitListEntry[];
   developerScorecard: DeveloperScorecardEntry[];
   temporalTrends: TemporalTrendsResult;
+  representationGap: RepresentationGapData;
+  projectTypeComparison: ProjectTypeComparisonData;
+  attritionCurve: AttritionCurveEntry[];
+  delayBreakdown: DelayBreakdownData;
+  standardConditions: StandardConditionEntry[];
 }
 
 export function computeAllStats(
   deduplicatedApps: SitePlanApplication[],
   rawAppCount: number
 ): ComputedStats {
+  classifyAllApps(deduplicatedApps);
+
   const total = deduplicatedApps.length;
   const approvedClean = deduplicatedApps.filter(a => a.outcome === "approved").length;
   const approvedCond = deduplicatedApps.filter(a => a.outcome === "approved_with_conditions").length;
@@ -920,6 +1184,11 @@ export function computeAllStats(
     ordinanceHitList: computeOrdinanceHitList(deduplicatedApps),
     developerScorecard: computeDeveloperScorecard(deduplicatedApps),
     temporalTrends: computeTemporalTrends(deduplicatedApps),
+    representationGap: computeRepresentationGap(deduplicatedApps),
+    projectTypeComparison: computeProjectTypeComparison(deduplicatedApps),
+    attritionCurve: computeAttritionCurve(deduplicatedApps),
+    delayBreakdown: computeDelayBreakdown(deduplicatedApps),
+    standardConditions: computeStandardConditions(deduplicatedApps),
   };
 }
 
@@ -976,6 +1245,52 @@ export function buildInsightPromptData(stats: ComputedStats): string {
   if (totalGhosts > 0) {
     lines.push("");
     lines.push(`Ghost Projects: ${totalGhosts} total (${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned). Shadow denial rate: ${stats.totalApps > 0 ? Math.round((totalGhosts / stats.totalApps) * 100) : 0}% of all projects never reached a formal decision.`);
+  }
+
+  const gap = stats.representationGap;
+  if (gap.citizenStats.count > 0 || gap.proStats.count > 0) {
+    lines.push("");
+    lines.push("Representation Gap (Citizen/Owner vs. Professional):");
+    lines.push(`- Citizen/Owner (${gap.citizenStats.count} apps): ${gap.citizenStats.approvalRate}% approval, ${gap.citizenStats.continuanceRate}% continuance rate, ${gap.citizenStats.abandonmentRate}% abandonment, avg ${gap.citizenStats.avgDaysToDecision} days`);
+    lines.push(`- Professional (${gap.proStats.count} apps): ${gap.proStats.approvalRate}% approval, ${gap.proStats.continuanceRate}% continuance rate, ${gap.proStats.abandonmentRate}% abandonment, avg ${gap.proStats.avgDaysToDecision} days`);
+    lines.push(`- Delta: approval ${gap.delta.approvalRate > 0 ? "+" : ""}${gap.delta.approvalRate}pp, abandonment ${gap.delta.abandonmentRate > 0 ? "+" : ""}${gap.delta.abandonmentRate}pp, days ${gap.delta.avgDaysToDecision > 0 ? "+" : ""}${gap.delta.avgDaysToDecision}`);
+  }
+
+  const ptc = stats.projectTypeComparison;
+  if (ptc.residential.count > 0 || ptc.commercial.count > 0) {
+    lines.push("");
+    lines.push("Residential vs. Commercial Timelines:");
+    lines.push(`- Residential (${ptc.residential.count} apps): avg ${ptc.residential.avgDays} days, avg ${ptc.residential.avgContinuances} continuances, top friction: ${ptc.residential.topFriction.join(", ") || "none"}`);
+    lines.push(`- Commercial (${ptc.commercial.count} apps): avg ${ptc.commercial.avgDays} days, avg ${ptc.commercial.avgContinuances} continuances, top friction: ${ptc.commercial.topFriction.join(", ") || "none"}`);
+    if (ptc.mixedUse.count > 0) {
+      lines.push(`- Mixed-Use (${ptc.mixedUse.count} apps): avg ${ptc.mixedUse.avgDays} days, avg ${ptc.mixedUse.avgContinuances} continuances`);
+    }
+  }
+
+  if (stats.attritionCurve.length > 0) {
+    lines.push("");
+    lines.push("Attrition Curve (where projects die):");
+    for (const entry of stats.attritionCurve.slice(0, 5)) {
+      lines.push(`- ${entry.stage}: ${entry.count} apps (${entry.percentage}%), e.g. ${entry.examples.join(", ")}`);
+    }
+  }
+
+  const db = stats.delayBreakdown;
+  if (db.avgTotalDays > 0) {
+    lines.push("");
+    lines.push("Delay Breakdown (Board vs. External):");
+    lines.push(`- Avg total: ${db.avgTotalDays} days, est. board review: ${db.avgBoardDays} days, est. external/state delays: ${db.avgExternalDays} days`);
+    if (db.externalReasons.length > 0) {
+      lines.push(`- Top external causes: ${db.externalReasons.slice(0, 5).map(r => `${r.reason} (${r.count})`).join(", ")}`);
+    }
+  }
+
+  if (stats.standardConditions.length > 0) {
+    lines.push("");
+    lines.push("Standard Conditions of Approval (most frequently applied):");
+    for (const c of stats.standardConditions.slice(0, 5)) {
+      lines.push(`- "${c.condition}": ${c.count} apps (${c.percentage}%), e.g. ${c.exampleProjects.join(", ")}`);
+    }
   }
   return lines.join("\n");
 }

@@ -850,6 +850,11 @@ async function buildReportData(
     ordinanceHitList: stats.ordinanceHitList,
     developerScorecard: stats.developerScorecard,
     temporalTrends: stats.temporalTrends,
+    representationGap: stats.representationGap,
+    projectTypeComparison: stats.projectTypeComparison,
+    attritionCurve: stats.attritionCurve,
+    delayBreakdown: stats.delayBreakdown,
+    standardConditions: stats.standardConditions,
   };
 }
 
