@@ -41,8 +41,11 @@ import {
   TrendingUp,
   Ghost,
   Info,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData, TemporalTrendsData, YoYDeltas } from "@shared/schema";
+import { exportFrictionReportPDF, exportFrictionReportCSV } from "@/lib/exportFrictionReport";
 
 interface TownOption {
   name: string;
@@ -307,9 +310,29 @@ export default function AdminResearch() {
               <h2 className="text-lg font-semibold" data-testid="text-report-title">
                 Friction Report: {reportData.townName}
               </h2>
-              <Button variant="outline" size="sm" onClick={() => setViewingReport(null)} data-testid="button-close-report">
-                Back to Reports
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportFrictionReportPDF(reportData, reportData.townName)}
+                  data-testid="button-export-pdf"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Export PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportFrictionReportCSV(reportData, reportData.townName)}
+                  data-testid="button-export-csv"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-1" />
+                  Export CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setViewingReport(null)} data-testid="button-close-report">
+                  Back to Reports
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">

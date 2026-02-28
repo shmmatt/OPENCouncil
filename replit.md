@@ -48,6 +48,11 @@ The OC Research tab provides analytical tools for municipal data analysis, inclu
 6.  Generate narrative insights using Gemini based on the computed statistics.
 7.  Support re-analysis of existing report data without re-crawling.
 
+#### Report Export
+Friction reports are exportable in two formats from the report dashboard:
+- **PDF** (`jspdf` + `jspdf-autotable`): Structured multi-page document with summary stats, funnel, friction matrix, ordinance hit list, time-to-decision, contested projects, frequent applicants, YoY trends, predictive insights, and full applications table. Generated client-side via `client/src/lib/exportFrictionReport.ts`.
+- **CSV**: Applications table with all fields (entity, address, applicant, dates, outcome, continuances, friction categories, conditions, meeting references). Includes BOM for Excel compatibility.
+
 ## External Dependencies
 
 *   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.
