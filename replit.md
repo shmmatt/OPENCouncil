@@ -75,6 +75,8 @@ Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushb
 - `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled Ossipee PB/ZBA documents. Extracts meeting dates from OCR text headers.
 - `ingest-all-gapped-docs.ts` — General-purpose backfill script that links ALL gapped crawler_documents (any town) to logical_documents. Extracts board names from crawler metadata, S3 path, filename prefixes, and OCR text headers. Supports `--dry-run`, `--limit=N`, and `--town=Name` flags.
 - `classify-unknown-boards.ts` — Gemini-powered classification script for "Unknown Board" minutes documents. Uses `gemini-2.5-flash` with `responseMimeType: "application/json"` to classify board names from OCR text headers and extract meeting dates. Concurrency 2, exponential backoff retries. Successfully classified all 342 Unknown Board docs across 14 towns into 52 distinct board types. Zero Unknown Board minutes remaining.
+- `backfill-conway-dates.ts` — Backfills `meeting_date` on Conway `document_versions` by extracting dates from filenames (PB: `N_pb_mon_DD_YYYY.pdf`, ZBA: `N_ZBA_Mon_DD_YYYY.pdf`, BOS: `YYYYMMDD_Adopted_Minutes.pdf` or `MonthName_DD_YYYY.pdf`). Falls back to OCR text header parsing. Also deduplicates document_versions with identical (document_id, file_blob_id). Results: PB 151/151, ZBA 75/75, BOS 275/277 dated; 429 duplicate versions removed.
+- `probe-conway-agendacenter.ts` — Probes Conway CivicPlus site for AgendaCenter/DocumentCenter endpoints. Result: all 404s — Conway has no AgendaCenter; pre-2020 PB/ZBA minutes don't exist online.
 
 ### Pipeline Fix (crawlerEngine.ts)
 - `bridgeToFileBlob` now returns the fileBlobId (was void)
