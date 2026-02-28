@@ -77,6 +77,13 @@ Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushb
 - `classify-unknown-boards.ts` — Gemini-powered classification script for "Unknown Board" minutes documents. Uses `gemini-2.5-flash` with `responseMimeType: "application/json"` to classify board names from OCR text headers and extract meeting dates. Concurrency 2, exponential backoff retries. Successfully classified all 342 Unknown Board docs across 14 towns into 52 distinct board types. Zero Unknown Board minutes remaining.
 - `backfill-conway-dates.ts` — Backfills `meeting_date` on Conway `document_versions` by extracting dates from filenames (PB: `N_pb_mon_DD_YYYY.pdf`, ZBA: `N_ZBA_Mon_DD_YYYY.pdf`, BOS: `YYYYMMDD_Adopted_Minutes.pdf` or `MonthName_DD_YYYY.pdf`). Falls back to OCR text header parsing. Also deduplicates document_versions with identical (document_id, file_blob_id). Results: PB 151/151, ZBA 75/75, BOS 275/277 dated; 429 duplicate versions removed.
 - `probe-conway-agendacenter.ts` — Probes Conway CivicPlus site for AgendaCenter/DocumentCenter endpoints. Result: all 404s — Conway has no AgendaCenter; pre-2020 PB/ZBA minutes don't exist online.
+- `backfill-chunk-linkage.ts` — Fixes null `document_id` on `document_chunks` table. Root cause: `embeddingPipeline.ts` hardcoded `null` for `document_id` on insert. Script: drops stale FK (→ old `documents` table), clears stale refs, backfills `document_id` via `file_blob_id → document_versions → logical_documents` join, adds new FK (→ `logical_documents`).
+- `bridge-orphan-blobs.ts` — Creates `logical_documents` + `document_versions` for orphan `file_blobs` that have `document_chunks` but no `document_version` entry. Bulk SQL approach using `crawler_documents` metadata for town/board/filename. Then re-links chunks.
+
+### Chunk Linkage Fix (embeddingPipeline.ts + backfill)
+- **Root cause**: `insertChunk()` in `embeddingPipeline.ts` hardcoded `${null}` for `document_id` — fixed to use `${c.documentId || null}`
+- **FK migration**: `document_chunks.document_id` FK moved from old `documents` table → `logical_documents`; old unique constraint on `(document_id, chunk_index)` dropped
+- **Backfill results**: 15/17 towns at 100% chunk linkage; Conway 30,762/30,764 (100%), Ossipee 27,369/28,104 (97%); only "statewide" (11%) and "unknown" (0%) remain partially linked
 
 ### Pipeline Fix (crawlerEngine.ts)
 - `bridgeToFileBlob` now returns the fileBlobId (was void)

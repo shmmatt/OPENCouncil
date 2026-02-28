@@ -176,7 +176,7 @@ async function insertChunk(c: ChunkData & { embedding: number[] }): Promise<void
 
   await db.execute(sql`
     INSERT INTO document_chunks (document_id, file_blob_id, chunk_index, content, embedding, metadata)
-    VALUES (${null}, ${c.fileBlobId}, ${c.chunkIndex}, ${c.content}, ${embeddingStr}::vector, ${metadataJson}::jsonb)
+    VALUES (${c.documentId || null}, ${c.fileBlobId}, ${c.chunkIndex}, ${c.content}, ${embeddingStr}::vector, ${metadataJson}::jsonb)
   `);
 }
 
