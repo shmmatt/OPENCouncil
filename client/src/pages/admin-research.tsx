@@ -20,7 +20,6 @@ import {
   FileText,
   GitBranch,
   FolderUp,
-  BarChart3,
   ScanLine,
   Globe,
   Loader2,
@@ -40,11 +39,12 @@ import {
   Users,
   TrendingUp,
   Ghost,
+  BarChart3,
   Info,
   Download,
   FileSpreadsheet,
 } from "lucide-react";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, DeveloperScorecardData, TemporalTrendsData, YoYDeltas } from "@shared/schema";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DelayBreakdownData, StandardConditionEntry } from "@shared/schema";
 import { exportFrictionReportPDF, exportFrictionReportCSV } from "@/lib/exportFrictionReport";
 
 interface TownOption {
@@ -349,7 +349,7 @@ export default function AdminResearch() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -362,18 +362,6 @@ export default function AdminResearch() {
                     Unique Projects
                     {reportData.rawApplicationCount ? ` (from ${reportData.rawApplicationCount.toLocaleString()} appearances)` : ""}
                   </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-2xl font-bold" data-testid="text-stat-documents">{reportData.documentsAnalyzed ?? reportData.batchesProcessed}</div>
-                  <p className="text-sm text-muted-foreground">Documents Analyzed</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-2xl font-bold" data-testid="text-stat-chunks">{reportData.chunksAnalyzed}</div>
-                  <p className="text-sm text-muted-foreground">Agenda Items</p>
                 </CardContent>
               </Card>
               <Card>
@@ -393,13 +381,29 @@ export default function AdminResearch() {
                       ? `${Math.round((reportData.applications.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions").length / reportData.applications.length) * 100)}%`
                       : "N/A"}
                   </div>
-                  <p className="text-sm text-muted-foreground">Approval Rate</p>
+                  <p className="text-sm text-muted-foreground">Approval Rate (all applications)</p>
                 </CardContent>
               </Card>
             </div>
 
             {reportData.funnelStages.length > 0 && (
               <FunnelVisualization stages={reportData.funnelStages} />
+            )}
+
+            {reportData.representationGap && (reportData.representationGap.citizenStats.count > 0 || reportData.representationGap.proStats.count > 0) && (
+              <RepresentationGapCard data={reportData.representationGap} />
+            )}
+
+            {reportData.projectTypeComparison && (
+              <ProjectTypeComparisonCard data={reportData.projectTypeComparison} />
+            )}
+
+            {reportData.attritionCurve && reportData.attritionCurve.length > 0 && (
+              <AttritionCurveCard entries={reportData.attritionCurve} />
+            )}
+
+            {reportData.delayBreakdown && reportData.delayBreakdown.avgTotalDays > 0 && (
+              <DelayBreakdownCard data={reportData.delayBreakdown} />
             )}
 
             {reportData.frictionMatrix.length > 0 && (
@@ -414,12 +418,12 @@ export default function AdminResearch() {
               <TimeToDecisionCard data={reportData.timeToDecision} yoyDeltas={reportData.temporalTrends?.yoyDeltas} />
             )}
 
-            {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
-              <FrequentFlyersCard flyers={reportData.frequentFlyers} />
+            {reportData.standardConditions && reportData.standardConditions.length > 0 && (
+              <StandardConditionsCard entries={reportData.standardConditions} />
             )}
 
-            {reportData.developerScorecard && reportData.developerScorecard.length > 0 && (
-              <DeveloperScorecardCard entries={reportData.developerScorecard} />
+            {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
+              <FrequentFlyersCard flyers={reportData.frequentFlyers} />
             )}
 
             {reportData.predictiveInsights.length > 0 && (
@@ -842,41 +846,106 @@ function OrdinanceHitListCard({ entries }: { entries: OrdinanceHitListData[] }) 
   );
 }
 
-function DeveloperScorecardCard({ entries }: { entries: DeveloperScorecardData[] }) {
+function RepresentationGapCard({ data }: { data: RepresentationGapData }) {
+  const metrics = [
+    { label: "Approval Rate", citizen: `${data.citizenStats.approvalRate}%`, pro: `${data.proStats.approvalRate}%`, delta: data.delta.approvalRate, suffix: "pp", invertColor: false },
+    { label: "Continuance Rate", citizen: `${data.citizenStats.continuanceRate}%`, pro: `${data.proStats.continuanceRate}%`, delta: data.delta.continuanceRate, suffix: "pp", invertColor: true },
+    { label: "Abandonment Rate", citizen: `${data.citizenStats.abandonmentRate}%`, pro: `${data.proStats.abandonmentRate}%`, delta: data.delta.abandonmentRate, suffix: "pp", invertColor: true },
+    { label: "Avg Days to Decision", citizen: `${data.citizenStats.avgDaysToDecision}`, pro: `${data.proStats.avgDaysToDecision}`, delta: data.delta.avgDaysToDecision, suffix: " days", invertColor: true },
+  ];
+
+  const deltaColor = (val: number, invert: boolean) => {
+    if (val === 0) return "text-muted-foreground";
+    const isGood = invert ? val < 0 : val > 0;
+    return isGood ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2" data-testid="title-representation-gap">
           <Users className="w-5 h-5" />
-          Frequent Applicants & Property Owners
+          The Representation Gap
         </CardTitle>
-        <CardDescription>Entities submitting the highest volume of applications and their respective friction rates.</CardDescription>
+        <CardDescription>How unrepresented citizens fare vs. professionally represented applicants</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-lg font-bold" data-testid="text-citizen-count">{data.citizenStats.count}</div>
+            <p className="text-sm text-muted-foreground">Citizen/Owner Apps</p>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-lg font-bold" data-testid="text-pro-count">{data.proStats.count}</div>
+            <p className="text-sm text-muted-foreground">Professional Apps</p>
+          </div>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Metric</TableHead>
+              <TableHead className="text-right">Citizen/Owner</TableHead>
+              <TableHead className="text-right">Professional</TableHead>
+              <TableHead className="text-right">Delta</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {metrics.map((m, i) => (
+              <TableRow key={i} data-testid={`row-gap-${i}`}>
+                <TableCell className="font-medium">{m.label}</TableCell>
+                <TableCell className="text-right tabular-nums">{m.citizen}</TableCell>
+                <TableCell className="text-right tabular-nums">{m.pro}</TableCell>
+                <TableCell className={`text-right tabular-nums font-medium ${deltaColor(m.delta, m.invertColor)}`}>
+                  {m.delta > 0 ? "+" : ""}{m.delta}{m.suffix}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProjectTypeComparisonCard({ data }: { data: ProjectTypeComparisonData }) {
+  const rows: Array<{ label: string; stats: ProjectTypeGroupStats }> = [
+    { label: "Residential", stats: data.residential },
+    { label: "Commercial", stats: data.commercial },
+    { label: "Mixed-Use", stats: data.mixedUse },
+  ].filter(r => r.stats.count > 0);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2" data-testid="title-project-type">
+          <BarChart3 className="w-5 h-5" />
+          Residential vs. Commercial Timelines
+        </CardTitle>
+        <CardDescription>How project type affects processing time and friction sources</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Applicant</TableHead>
-              <TableHead className="text-right">Projects</TableHead>
-              <TableHead className="text-right">Avg Cont.</TableHead>
+              <TableHead>Project Type</TableHead>
+              <TableHead className="text-right">Count</TableHead>
               <TableHead className="text-right">Avg Days</TableHead>
-              <TableHead className="text-right">Approval</TableHead>
+              <TableHead className="text-right">Avg Cont.</TableHead>
               <TableHead>Top Friction</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((entry, i) => (
-              <TableRow key={i} data-testid={`scorecard-row-${i}`}>
-                <TableCell className="font-medium max-w-[200px] truncate" title={entry.applicantName}>
-                  {entry.applicantName}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{entry.projectCount}</TableCell>
-                <TableCell className="text-right tabular-nums">{entry.avgContinuances}</TableCell>
-                <TableCell className="text-right tabular-nums">{entry.avgDaysToDecision}</TableCell>
-                <TableCell className="text-right tabular-nums">{entry.approvalRate}%</TableCell>
+            {rows.map((r, i) => (
+              <TableRow key={i} data-testid={`row-ptype-${i}`}>
+                <TableCell className="font-medium">{r.label}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.stats.count}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.stats.avgDays}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.stats.avgContinuances}</TableCell>
                 <TableCell>
                   <div className="flex gap-1 flex-wrap">
-                    {entry.topFrictionCategories.slice(0, 2).map((cat, ci) => (
+                    {r.stats.topFriction.slice(0, 2).map((cat, ci) => (
                       <Badge key={ci} variant="outline" className="text-xs">{cat}</Badge>
                     ))}
                   </div>
@@ -885,6 +954,163 @@ function DeveloperScorecardCard({ entries }: { entries: DeveloperScorecardData[]
             ))}
           </TableBody>
         </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AttritionCurveCard({ entries }: { entries: AttritionCurveEntry[] }) {
+  const maxCount = Math.max(...entries.map(e => e.count), 1);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2" data-testid="title-attrition-curve">
+          <Ghost className="w-5 h-5" />
+          The Attrition Curve
+        </CardTitle>
+        <CardDescription>Where abandoned and withdrawn projects exit the process</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {entries.map((entry, i) => {
+            const widthPct = Math.max((entry.count / maxCount) * 100, 4);
+            return (
+              <div key={entry.stage} className="space-y-1" data-testid={`attrition-stage-${i}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{entry.stage}</span>
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {entry.count} ({entry.percentage}%)
+                  </span>
+                </div>
+                <div className="h-6 w-full bg-muted rounded-md overflow-hidden">
+                  <div
+                    className="h-full rounded-md bg-destructive/60 transition-all"
+                    style={{ width: `${widthPct}%` }}
+                  />
+                </div>
+                {entry.examples.length > 0 && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    e.g. {entry.examples.join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DelayBreakdownCard({ data }: { data: DelayBreakdownData }) {
+  const boardPct = data.avgTotalDays > 0 ? Math.round((data.avgBoardDays / data.avgTotalDays) * 100) : 0;
+  const externalPct = 100 - boardPct;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2" data-testid="title-delay-breakdown">
+          <Clock className="w-5 h-5" />
+          State vs. Local Delays
+        </CardTitle>
+        <CardDescription>Estimated split between board review time and external/state agency waiting time</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-board-days">{data.avgBoardDays}</div>
+            <p className="text-sm text-muted-foreground">Est. Board Days</p>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-external-days">{data.avgExternalDays}</div>
+            <p className="text-sm text-muted-foreground">Est. External Days</p>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-md">
+            <div className="text-2xl font-bold" data-testid="text-total-days">{data.avgTotalDays}</div>
+            <p className="text-sm text-muted-foreground">Avg Total Days</p>
+          </div>
+        </div>
+        <div className="h-8 w-full bg-muted rounded-md overflow-hidden flex mb-2">
+          <div
+            className="h-full bg-primary/70 transition-all flex items-center justify-center text-xs font-medium text-primary-foreground"
+            style={{ width: `${boardPct}%` }}
+          >
+            {boardPct > 10 && `${boardPct}%`}
+          </div>
+          <div
+            className="h-full bg-amber-500/70 dark:bg-amber-400/70 transition-all flex items-center justify-center text-xs font-medium"
+            style={{ width: `${externalPct}%` }}
+          >
+            {externalPct > 10 && `${externalPct}%`}
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4 flex-wrap">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary/70 inline-block" /> Board Review</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-500/70 dark:bg-amber-400/70 inline-block" /> External/State Delays</span>
+        </div>
+        {data.externalReasons.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 text-muted-foreground">Top External Delay Reasons</h4>
+            <div className="space-y-2">
+              {data.externalReasons.map((r, i) => (
+                <div key={i} className="flex items-center justify-between gap-2" data-testid={`delay-reason-${i}`}>
+                  <span className="text-sm">{r.reason}</span>
+                  <Badge variant="outline" className="text-xs tabular-nums">{r.count} apps</Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground mt-3 italic">
+          External delay estimates are approximated from keyword analysis of friction reasons and conditions.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StandardConditionsCard({ entries }: { entries: StandardConditionEntry[] }) {
+  const maxCount = entries.length > 0 ? entries[0].count : 1;
+  const top5 = entries.slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2" data-testid="title-standard-conditions">
+          <Target className="w-5 h-5" />
+          Standard Conditions — Pre-Application Checklist Candidates
+        </CardTitle>
+        <CardDescription>Conditions applied so frequently they should be moved to a pre-application checklist to save board time</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {top5.map((entry, i) => {
+            const widthPct = Math.max((entry.count / maxCount) * 100, 4);
+            return (
+              <div key={i} className="space-y-1" data-testid={`condition-row-${i}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-sm font-medium">{entry.condition}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm tabular-nums text-muted-foreground">{entry.count} apps</span>
+                    <Badge variant="outline" className="text-xs tabular-nums">{entry.percentage}%</Badge>
+                  </div>
+                </div>
+                <div className="w-full bg-muted rounded-md h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-md transition-all"
+                    style={{ width: `${widthPct}%` }}
+                  />
+                </div>
+                {entry.exampleProjects.length > 0 && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    e.g. {entry.exampleProjects.join(", ")}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

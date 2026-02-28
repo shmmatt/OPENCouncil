@@ -49,10 +49,29 @@ The OC Research tab provides analytical tools for municipal data analysis, inclu
 7.  Generate narrative insights using Gemini based on the computed statistics.
 8.  Support re-analysis of existing report data without re-crawling.
 
-#### Report Export
+#### Dashboard Widgets (Phase 3 — Actionable Intelligence)
+The friction report dashboard displays widgets in this order:
+1. Summary stats grid (3 cards: Unique Projects, Date Range, Approval Rate)
+2. Funnel Visualization
+3. **The Representation Gap** — Citizen/Owner vs Professional applicant outcomes
+4. **Residential vs. Commercial Timelines** — Project type comparison table
+5. **The Attrition Curve** — Where abandoned/withdrawn projects exit
+6. **State vs. Local Delays** — Board review days vs external/state delay estimates
+7. Friction Matrix / Ordinance Heatmap
+8. Ordinance Hit List
+9. Time-to-Decision
+10. **Standard Conditions — Pre-Application Checklist Candidates**
+11. Most Contested Projects (FrequentFlyers)
+12. Predictive Insights
+13. Extracted Applications table
+
+Removed vanity widgets: "Documents Analyzed", "Agenda Items", "Frequent Applicants & Property Owners" (DeveloperScorecard).
+
+#### Report Export (Phase 4)
 Friction reports are exportable in two formats from the report dashboard:
-- **PDF** (`jspdf` + `jspdf-autotable`): Structured multi-page document with summary stats, funnel, friction matrix, ordinance hit list, time-to-decision, contested projects, frequent applicants, YoY trends, predictive insights, and full applications table. Generated client-side via `client/src/lib/exportFrictionReport.ts`.
-- **CSV**: Applications table with all fields (entity, address, applicant, dates, outcome, continuances, friction categories, conditions, meeting references). Includes BOM for Excel compatibility.
+- **PDF** (`jspdf` + `jspdf-autotable`): Structured multi-page document with summary stats, funnel, friction matrix, ordinance hit list, time-to-decision, contested projects, representation gap, project type comparison, attrition curve, delay breakdown, standard conditions, YoY trends, predictive insights, and full applications table. Generated client-side via `client/src/lib/exportFrictionReport.ts`.
+- **CSV**: Applications table with all fields including 3 new columns: Project Type, Applicant Type, Attrition Stage (exit stage for withdrawn/abandoned apps only). Includes BOM for Excel compatibility.
+- **Percentage convention**: All percentage values from the backend are 0-100 integers. Frontend renders with `${value}%` — never `Math.round(value * 100)`.
 
 ## External Dependencies
 

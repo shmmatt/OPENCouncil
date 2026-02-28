@@ -3,6 +3,11 @@ import { applyPlugin } from "jspdf-autotable";
 import type {
   FrictionReportData,
   SitePlanApplication,
+  RepresentationGapData,
+  ProjectTypeComparisonData,
+  AttritionCurveEntry,
+  DelayBreakdownData,
+  StandardConditionEntry,
 } from "@shared/schema";
 
 applyPlugin(jsPDF);
@@ -100,10 +105,8 @@ export function exportFrictionReportPDF(
   const apps = reportData.applications || [];
   const statsRows = [
     ["Unique Projects", String(apps.length)],
-    ["Documents Analyzed", String(reportData.documentsAnalyzed ?? reportData.batchesProcessed ?? 0)],
-    ["Agenda Items", String(reportData.chunksAnalyzed ?? 0)],
     ["Date Range", dateRange],
-    ["Approval Rate", computeApprovalRate(apps)],
+    ["Approval Rate (all apps)", computeApprovalRate(apps)],
   ];
   doc.autoTable({
     startY: y,
@@ -238,21 +241,110 @@ export function exportFrictionReportPDF(
     y = doc.lastAutoTable!.finalY + 8;
   }
 
-  if (reportData.developerScorecard && reportData.developerScorecard.length > 0) {
-    sectionTitle("Frequent Applicants & Property Owners");
+  if (reportData.representationGap && (reportData.representationGap.citizenStats.count > 0 || reportData.representationGap.proStats.count > 0)) {
+    sectionTitle("The Representation Gap");
+    const gap = reportData.representationGap;
     doc.autoTable({
       startY: y,
-      head: [["Applicant", "Projects", "Approval Rate", "Avg Days", "Avg Continuances"]],
-      body: reportData.developerScorecard.map((d) => [
-        d.applicantName,
-        String(d.projectCount),
-        `${d.approvalRate}%`,
-        String(Math.round(d.avgDaysToDecision)),
-        String(d.avgContinuances.toFixed(1)),
+      head: [["Metric", "Citizen/Owner", "Professional", "Delta"]],
+      body: [
+        ["Approval Rate", `${gap.citizenStats.approvalRate}%`, `${gap.proStats.approvalRate}%`, `${gap.delta.approvalRate > 0 ? "+" : ""}${gap.delta.approvalRate}pp`],
+        ["Continuance Rate", `${gap.citizenStats.continuanceRate}%`, `${gap.proStats.continuanceRate}%`, `${gap.delta.continuanceRate > 0 ? "+" : ""}${gap.delta.continuanceRate}pp`],
+        ["Abandonment Rate", `${gap.citizenStats.abandonmentRate}%`, `${gap.proStats.abandonmentRate}%`, `${gap.delta.abandonmentRate > 0 ? "+" : ""}${gap.delta.abandonmentRate}pp`],
+        ["Avg Days to Decision", String(gap.citizenStats.avgDaysToDecision), String(gap.proStats.avgDaysToDecision), `${gap.delta.avgDaysToDecision > 0 ? "+" : ""}${gap.delta.avgDaysToDecision} days`],
+      ],
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [59, 130, 246] },
+      theme: "grid",
+    });
+    y = doc.lastAutoTable!.finalY + 8;
+  }
+
+  if (reportData.projectTypeComparison) {
+    const ptc = reportData.projectTypeComparison;
+    const ptcRows: string[][] = [];
+    if (ptc.residential.count > 0) ptcRows.push(["Residential", String(ptc.residential.count), String(ptc.residential.avgDays), String(ptc.residential.avgContinuances), ptc.residential.topFriction.join(", ") || "—"]);
+    if (ptc.commercial.count > 0) ptcRows.push(["Commercial", String(ptc.commercial.count), String(ptc.commercial.avgDays), String(ptc.commercial.avgContinuances), ptc.commercial.topFriction.join(", ") || "—"]);
+    if (ptc.mixedUse.count > 0) ptcRows.push(["Mixed-Use", String(ptc.mixedUse.count), String(ptc.mixedUse.avgDays), String(ptc.mixedUse.avgContinuances), ptc.mixedUse.topFriction.join(", ") || "—"]);
+    if (ptcRows.length > 0) {
+      sectionTitle("Residential vs. Commercial Timelines");
+      doc.autoTable({
+        startY: y,
+        head: [["Project Type", "Count", "Avg Days", "Avg Cont.", "Top Friction"]],
+        body: ptcRows,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [59, 130, 246] },
+        theme: "grid",
+      });
+      y = doc.lastAutoTable!.finalY + 8;
+    }
+  }
+
+  if (reportData.attritionCurve && reportData.attritionCurve.length > 0) {
+    sectionTitle("The Attrition Curve");
+    doc.autoTable({
+      startY: y,
+      head: [["Exit Stage", "Count", "Percentage"]],
+      body: reportData.attritionCurve.map((e) => [
+        e.stage,
+        String(e.count),
+        `${e.percentage}%`,
       ]),
       margin: { left: margin, right: margin },
-      styles: { fontSize: 8, cellPadding: 3 },
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [239, 68, 68] },
+      theme: "grid",
+    });
+    y = doc.lastAutoTable!.finalY + 8;
+  }
+
+  if (reportData.delayBreakdown && reportData.delayBreakdown.avgTotalDays > 0) {
+    sectionTitle("State vs. Local Delays (Estimated)");
+    const db = reportData.delayBreakdown;
+    doc.autoTable({
+      startY: y,
+      head: [["Metric", "Days"]],
+      body: [
+        ["Est. Board Review Days", String(db.avgBoardDays)],
+        ["Est. External/State Delay Days", String(db.avgExternalDays)],
+        ["Total Avg Days", String(db.avgTotalDays)],
+      ],
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [217, 119, 6] },
+      theme: "grid",
+    });
+    y = doc.lastAutoTable!.finalY + 4;
+    if (db.externalReasons.length > 0) {
+      doc.autoTable({
+        startY: y,
+        head: [["External Delay Reason", "Applications"]],
+        body: db.externalReasons.map((r) => [r.reason, String(r.count)]),
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [217, 119, 6] },
+        theme: "grid",
+      });
+      y = doc.lastAutoTable!.finalY + 8;
+    }
+  }
+
+  if (reportData.standardConditions && reportData.standardConditions.length > 0) {
+    sectionTitle("Standard Conditions — Pre-Application Checklist Candidates");
+    doc.autoTable({
+      startY: y,
+      head: [["Condition", "Count", "% of Approved"]],
+      body: reportData.standardConditions.map((c) => [
+        c.condition,
+        String(c.count),
+        `${c.percentage}%`,
+      ]),
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" as const },
       headStyles: { fillColor: [59, 130, 246] },
+      columnStyles: { 0: { cellWidth: 300 } },
       theme: "grid",
     });
     y = doc.lastAutoTable!.finalY + 8;
@@ -354,13 +446,38 @@ export function exportFrictionReportCSV(
   reportData: FrictionReportData,
   townName: string
 ) {
+  const EXTERNAL_TRIGGERS = [
+    "nhdot", "nhdes", "nhb", "state", "dot review", "des review",
+    "wetland", "shoreland", "alteration of terrain", "aot",
+    "traffic study", "traffic impact", "peer review",
+    "nh fish", "fish and game",
+  ];
+
+  function computeAttritionStage(app: SitePlanApplication): string {
+    if (app.outcome !== "withdrawn" && app.outcome !== "abandoned") return "";
+    const cont = app.totalContinuances ?? 0;
+    const frictionLower = (app.primaryFrictionReason || "").toLowerCase();
+    const conditionsLower = (app.conditions || []).join(" ").toLowerCase();
+    const combined = frictionLower + " " + conditionsLower;
+    if (EXTERNAL_TRIGGERS.some((t) => combined.includes(t))) {
+      return "External/State Trigger";
+    }
+    if (cont === 0) return "Before First Hearing";
+    if (cont === 1) return "After 1 Continuance";
+    if (cont <= 3) return "After 2-3 Continuances";
+    return "After 4+ Continuances";
+  }
+
   const headers = [
     "Entity Name",
     "Address",
     "Applicant",
+    "Project Type",
+    "Applicant Type",
     "Initial Appearance",
     "Last Appearance",
     "Outcome",
+    "Attrition Stage",
     "Total Continuances",
     "Primary Friction Reason",
     "Friction Categories",
@@ -374,9 +491,12 @@ export function exportFrictionReportCSV(
     a.entityName || "",
     a.address || "",
     a.applicant || "",
+    a.projectType || "",
+    a.applicantType || "",
     a.initialAppearanceDate || "",
     a.lastAppearanceDate || "",
     a.outcome || "",
+    computeAttritionStage(a),
     String(a.totalContinuances ?? 0),
     a.primaryFrictionReason || "",
     (a.frictionCategories || []).join("; "),
