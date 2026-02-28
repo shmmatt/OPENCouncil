@@ -83,7 +83,8 @@ Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushb
 ### Chunk Linkage Fix (embeddingPipeline.ts + backfill)
 - **Root cause**: `insertChunk()` in `embeddingPipeline.ts` hardcoded `${null}` for `document_id` — fixed to use `${c.documentId || null}`
 - **FK migration**: `document_chunks.document_id` FK moved from old `documents` table → `logical_documents`; old unique constraint on `(document_id, chunk_index)` dropped
-- **Backfill results**: 15/17 towns at 100% chunk linkage; Conway 30,762/30,764 (100%), Ossipee 27,369/28,104 (97%); only "statewide" (11%) and "unknown" (0%) remain partially linked
+- **Backfill results**: 226,041/226,949 chunks linked (99.6%). All 17 Carroll County towns at 97-100%. Statewide 19,196/19,315 (99%), unknown 2,596/2,647 (98%)
+- `bridge-statewide-blobs.ts` — Created logical_documents for 1,583 statewide orphan blobs using agency names derived from S3 keys: NH DRA (784), NHMA (273), NH Supreme Court (197), NH OSI (179), NH RSAs (13), NH DES (10), NH Admin Rules (9)
 
 ### Pipeline Fix (crawlerEngine.ts)
 - `bridgeToFileBlob` now returns the fileBlobId (was void)
