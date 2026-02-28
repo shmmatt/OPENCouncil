@@ -83,6 +83,7 @@ export interface IStorage {
   // Chat message operations
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
   getMessagesBySessionId(sessionId: string): Promise<ChatMessage[]>;
+  updateChatMessage(messageId: string, data: { citations?: string }): Promise<void>;
   updateMessageFeedback(messageId: string, feedback: string | null): Promise<void>;
   getMessageById(messageId: string): Promise<ChatMessage | undefined>;
 
@@ -225,6 +226,7 @@ export class DatabaseStorage implements IStorage {
   // Chat messages
   createChatMessage = chat.createChatMessage;
   getMessagesBySessionId = chat.getMessagesBySessionId;
+  updateChatMessage = chat.updateChatMessage;
   updateMessageFeedback = chat.updateMessageFeedback;
   getMessageById = chat.getMessageById;
 

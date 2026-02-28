@@ -1,7 +1,7 @@
 # OPENCouncil - NH Municipal Governance Assistant
 
 ## Overview
-OPENCouncil is an AI-powered assistant designed for New Hampshire elected officials and municipal workers. Its primary purpose is to provide instant, accurate answers to governance questions. It achieves this by synthesizing information using Google's Gemini AI and performing semantic searches over official municipal documents. The project's vision is to enhance local governance efficiency and transparency by making municipal information easily accessible and actionable.
+OPENCouncil is an AI-powered assistant designed to support New Hampshire elected officials and municipal workers. Its core function is to provide instant, accurate answers to governance questions by leveraging Google's Gemini AI and performing semantic searches over official municipal documents. The project aims to improve local governance efficiency and transparency by making municipal information readily accessible and actionable.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -9,96 +9,51 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend
-The frontend is built with React and TypeScript, utilizing Vite, `shadcn/ui`, and Tailwind CSS for a modern, responsive user interface. State management is handled by TanStack Query, and client-side routing uses `wouter`.
+The frontend is built with React, TypeScript, Vite, `shadcn/ui`, and Tailwind CSS, ensuring a modern and responsive user interface. State management uses TanStack Query, and client-side routing is handled by `wouter`.
 
 ### Backend
-The backend is an Express.js application written in TypeScript, providing a RESTful API. It includes JWT for authentication, bcrypt for password hashing, and Multer for file uploads, ensuring secure and efficient data handling.
+The backend is an Express.js application written in TypeScript, providing a secure RESTful API with JWT for authentication, bcrypt for password hashing, and Multer for file uploads.
 
 ### Data Storage
-PostgreSQL is the primary database, accessed via Neon and Drizzle ORM. It stores various municipal data including chat sessions, documents, and document chunks with pgvector embeddings for efficient retrieval.
+PostgreSQL, hosted on Neon and accessed via Drizzle ORM, stores chat sessions, documents, and document chunks with pgvector embeddings for efficient retrieval.
 
 ### Retrieval Backend
-A hybrid retrieval system combines pgvector-based semantic search with PostgreSQL full-text search. This system uses Reciprocal Rank Fusion (RRF) to merge results, and incorporates temporal re-ranking and document-type weighting for enhanced relevance.
+A hybrid retrieval system combines pgvector-based semantic search with PostgreSQL full-text search. It uses Reciprocal Rank Fusion (RRF) to merge results, incorporating temporal re-ranking and document-type weighting for enhanced relevance.
 
 ### AI Integration
-Google Gemini is central to the system, providing capabilities for answer synthesis, embedding generation, metadata extraction, and sophisticated query planning for multi-query retrieval.
+Google Gemini powers answer synthesis, embedding generation, metadata extraction, and sophisticated query planning for multi-query retrieval.
 
 ### Chat Pipeline (V3)
-The V3 chat pipeline implements a self-reflective RAG (Retrieval Augmented Generation) approach. It processes user queries through stages including situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It also features a conditional "second hop" retrieval for refining answers when initial context is insufficient.
+The V3 chat pipeline implements a self-reflective RAG (Retrieval Augmented Generation) approach. It processes user queries through stages including situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It also features a conditional "second hop" retrieval for refining answers and optimizes for latency through parallel retrieval, streaming responses via Server-Sent Events (SSE), and asynchronous follow-up generation.
 
 ### Document Ingestion Pipeline (V2)
-This pipeline manages document lifecycle from upload to indexing, featuring duplicate detection, AI-powered metadata suggestion, and a multi-tier town detection system.
+This pipeline manages the document lifecycle from upload to indexing, featuring duplicate detection, AI-powered metadata suggestion, and a multi-tier town detection system.
 
 ### OCR Pipeline
-A dual-provider OCR system uses Tesseract.js for low-text PDFs and AWS Textract for production-grade asynchronous OCR, ensuring comprehensive text extraction from diverse document formats.
+A dual-provider OCR system utilizes Tesseract.js for low-text PDFs and AWS Textract for production-grade asynchronous OCR, ensuring comprehensive text extraction from various document formats.
 
 ### Persistent Object Storage
-Document files are stored in Replit Object Storage, providing scalable and secure storage for all municipal documents.
+Document files are stored in Replit Object Storage, providing scalable and secure storage.
 
 ### Crawler / Data Collection
-A sophisticated crawler system is responsible for data collection, featuring multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements), hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching, interstitial detection, and crash resilience. It supports both town-level and state-level document collection, including Google Drive and CourtListener API integrations.
+A sophisticated crawler system collects data using multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching. It supports town-level and state-level document collection, including integrations with Google Drive and CourtListener API.
 
 ### OC Research Module
-The OC Research tab (`/admin/research`) provides analytical tools for municipal data analysis. The **Development Friction Report** uses a full-document pipeline that:
-1. **Phase 1** — Retrieves full meeting text from `logical_documents → document_versions → file_blobs` (bypassing pre-chunked RAG segments), filtering by town, board type (Planning/ZBA), and `isMinutes` flag
-2. **Phase 2** — Detects agenda-item boundaries via LLM analysis with heuristic regex fallback, splitting each meeting into discrete application discussions
-3. **Phase 3** — Sends each agenda item to Gemini (`gemini-2.5-flash`) for structured JSON extraction of site plan applications, with 15k-char sliding windows for oversized items and 3-concurrent-call throttling
-4. **Entity Resolution** (`server/services/entityResolution.ts`) — Deterministic, code-based deduplication (no LLM). Multi-key strategy: address normalization (strips Tax Map/Lot suffixes, normalizes street abbreviations), groups by normalized address then applicant name. **Dual-key breaker**: `splitGroupIntoRuns()` sub-splits each group using 270-day time gaps AND `namesAreCompatible()` scope checks (SCOPE_KEYWORDS divergence). `splitOvermergedEntities()` retroactively splits already-stored merged data by meeting reference date gaps >270 days during re-analysis. Merges timelines, picks chronological outcomes, unions friction categories and meeting references. Date normalization via `parseToISO` handles MM/DD/YYYY, ISO, and written-out date formats. Fallback date extraction from meeting reference strings.
-5. **Stats Engine** (`entityResolution.ts`) — Computes: 8-category canonical friction matrix from `frictionCategories` arrays, time-to-decision (avg/median overall + by friction category), frequent flyers (top contested projects), funnel stages, year-over-year trends. All deterministic — no LLM.
-6. **Narrative Insights** — Compact stats summary (~2KB) sent to Gemini for 5 data-driven insight paragraphs. Structured JSON response with `responseMimeType: "application/json"`. Fallback to code-generated insights on Gemini failure.
-7. **Re-analyze Endpoint** — `POST /api/admin/research/friction-report/:id/reanalyze` re-runs entity resolution + stats + Gemini insights on existing report data without re-crawling. Detects already-deduped data and normalizes dates.
-
-Dashboard shows: Unique Projects (from N appearances, with YoY volume badge), Documents Analyzed, Agenda Items, Date Range, Approval Rate, Site Plan Funnel (with "Approved After Delay (2+ Continuances)" and "Withdrawn / Abandoned" ghost project stage — muted gray bar, count breakdown in description, info icon tooltip), Ordinance Heatmap (8-category friction matrix with info icon on Procedural/Incomplete), Ordinance Hit List (keyword frequency on primaryFrictionReason with `\b` word boundaries), Time-to-Decision card (avg/median + by-category breakdown, with YoY TTD and continuances delta badges — green=improving, red=degrading, "vs. prev year" labels), Most Contested Projects (frequent flyers), Frequent Applicants & Property Owners (applicants with >2 projects), Predictive Insights (5 narrative paragraphs), and expandable applications table. Data stored in `research_reports` table.
-
-#### Phase 2.5: Data Integrity & UI Clarity
-- **Dual-key breaker** (`splitGroupIntoRuns`): 270-day time gap + scope keyword/name compatibility check prevents over-merging distinct projects at same address
-- **`splitOvermergedEntities()`**: Retroactively splits stored merged entities by meeting reference date gaps >270 days — runs in re-analyze pipeline before `resolveEntities`
-- **Re-analyze pipeline**: `normalize → splitOvermergedEntities → resolveEntities → detectAbandoned → stats → Gemini`
-- **UI label fixes**: Funnel "Delayed" → "Approved After Delay (2+ Continuances)"; "Developer Scorecard" → "Frequent Applicants & Property Owners"
-- **Micro-copy**: Info icon tooltips on Ghost Projects (365-day abandonment) and Procedural/Incomplete friction category; YoY badges say "vs. prev year"
-- **Meeting ref dedup** (`deduplicateRefsByDate`): Groups refs by normalized ISO date, keeps longest/most descriptive ref per date. Applied in both `mergeGroup` and `splitOvermergedEntities`. Fixes 3-5x inflated meeting counts from duplicate document extractions.
-- **Ossipee results after Phase 2.5**: 2,319 unique projects (was 1,939), Avg Days 46 (was 242), 1,162 ghost projects (50% shadow denial rate), top contested project 31 meetings (was 125)
-
-#### Temporal Trends & Ghost Projects (Phase 2)
-- `SitePlanOutcome` now includes `'abandoned'` alongside existing `'withdrawn'`
-- `detectAbandonedProjects()` — Post-dedup pass: if `lastAppearanceDate` >365 days stale AND outcome is `pending`/`unknown` → force outcome to `abandoned`
-- `computeTemporalTrends()` — Groups apps by year of `initialAppearanceDate`, computes per-year volume/approved/denied/withdrawn/abandoned/avgDays/avgContinuances. YoY deltas compare last two *completed* years (excludes current partial year)
-- `TemporalTrendsData` schema: `yearlyBreakdown[]` + `yoyDeltas: {volumePct, ttdPct, continuancesPct} | null`
-- Funnel includes combined "Withdrawn / Abandoned" stage with ghost project description
-- `buildInsightPromptData` feeds YoY deltas and shadow denial rate to Gemini for trend-aware narratives
-
-#### Canonical Friction Categories
-Procedural/Incomplete, Zoning/Dimensional, Environmental/Drainage, Abutter Pushback, State vs. Local Clash, Traffic/Access, Infrastructure, Other
-
-### Ingestion Scripts (crawler/scripts/)
-- `bridge-ossipee-minutes.ts` — Bridges crawled documents in `crawler_documents` to `s3_gemini_sync` for the ingestion pipeline
-- `ingest-ossipee-minutes.ts` — Creates `logical_documents` → `document_versions` → `file_blobs` links for crawled Ossipee PB/ZBA documents. Extracts meeting dates from OCR text headers.
-- `ingest-all-gapped-docs.ts` — General-purpose backfill script that links ALL gapped crawler_documents (any town) to logical_documents. Extracts board names from crawler metadata, S3 path, filename prefixes, and OCR text headers. Supports `--dry-run`, `--limit=N`, and `--town=Name` flags.
-- `classify-unknown-boards.ts` — Gemini-powered classification script for "Unknown Board" minutes documents. Uses `gemini-2.5-flash` with `responseMimeType: "application/json"` to classify board names from OCR text headers and extract meeting dates. Concurrency 2, exponential backoff retries. Successfully classified all 342 Unknown Board docs across 14 towns into 52 distinct board types. Zero Unknown Board minutes remaining.
-- `backfill-conway-dates.ts` — Backfills `meeting_date` on Conway `document_versions` by extracting dates from filenames (PB: `N_pb_mon_DD_YYYY.pdf`, ZBA: `N_ZBA_Mon_DD_YYYY.pdf`, BOS: `YYYYMMDD_Adopted_Minutes.pdf` or `MonthName_DD_YYYY.pdf`). Falls back to OCR text header parsing. Also deduplicates document_versions with identical (document_id, file_blob_id). Results: PB 151/151, ZBA 75/75, BOS 275/277 dated; 429 duplicate versions removed.
-- `probe-conway-agendacenter.ts` — Probes Conway CivicPlus site for AgendaCenter/DocumentCenter endpoints. Result: all 404s — Conway has no AgendaCenter; pre-2020 PB/ZBA minutes don't exist online.
-- `backfill-chunk-linkage.ts` — Fixes null `document_id` on `document_chunks` table. Root cause: `embeddingPipeline.ts` hardcoded `null` for `document_id` on insert. Script: drops stale FK (→ old `documents` table), clears stale refs, backfills `document_id` via `file_blob_id → document_versions → logical_documents` join, adds new FK (→ `logical_documents`).
-- `bridge-orphan-blobs.ts` — Creates `logical_documents` + `document_versions` for orphan `file_blobs` that have `document_chunks` but no `document_version` entry. Bulk SQL approach using `crawler_documents` metadata for town/board/filename. Then re-links chunks.
-
-### Chunk Linkage Fix (embeddingPipeline.ts + backfill)
-- **Root cause**: `insertChunk()` in `embeddingPipeline.ts` hardcoded `${null}` for `document_id` — fixed to use `${c.documentId || null}`
-- **FK migration**: `document_chunks.document_id` FK moved from old `documents` table → `logical_documents`; old unique constraint on `(document_id, chunk_index)` dropped
-- **Backfill results**: 226,041/226,949 chunks linked (99.6%). All 17 Carroll County towns at 97-100%. Statewide 19,196/19,315 (99%), unknown 2,596/2,647 (98%)
-- `bridge-statewide-blobs.ts` — Created logical_documents for 1,583 statewide orphan blobs using agency names derived from S3 keys: NH DRA (784), NHMA (273), NH Supreme Court (197), NH OSI (179), NH RSAs (13), NH DES (10), NH Admin Rules (9)
-- **Statewide citation URL fallback**: `getCrawledUrlByFileBlobId` in `server/storage/documents.ts` now falls back to resolving agency homepage URLs from `file_blobs.s3_key` for statewide docs that have no `crawler_documents` entries. Maps S3 key prefixes (e.g. `statewide/nh-dra/`) to agency homepages (e.g. `revenue.nh.gov`)
-
-### Pipeline Fix (crawlerEngine.ts)
-- `bridgeToFileBlob` now returns the fileBlobId (was void)
-- New `bridgeToLogicalDocument` function creates logical_documents + document_versions entries immediately after file_blob creation
-- Called at all 4 `bridgeToFileBlob` call sites (Google Drive duplicates, Drive new downloads, regular duplicates, regular new downloads)
-- Prevents future "dark data" — crawled documents are immediately linked to the unified document schema
+The OC Research tab provides analytical tools for municipal data analysis, including a **Development Friction Report**. This report uses a multi-phase pipeline to:
+1.  Retrieve full meeting text documents.
+2.  Detect agenda-item boundaries via LLM analysis.
+3.  Extract structured JSON data from each agenda item using Gemini.
+4.  Perform deterministic entity resolution to deduplicate and merge project timelines, handling address normalization and temporal gaps.
+5.  Compute statistical insights like time-to-decision, friction categories, and frequent applicants.
+6.  Generate narrative insights using Gemini based on the computed statistics.
+7.  Support re-analysis of existing report data without re-crawling.
 
 ## External Dependencies
 
-1.  **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.
-2.  **Neon PostgreSQL**: Database hosting with pgvector extension.
-3.  **Google Fonts CDN**: For web fonts.
-4.  **AWS Textract**: For production-grade OCR processing.
-5.  **Web Scraping API (ZenRows/Scrapfly)**: For handling protected websites during crawling.
-6.  **Google Drive API v3**: For crawling public Google Drive folders.
-7.  **CourtListener REST API**: For fetching NH Supreme Court slip opinions.
+*   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.
+*   **Neon PostgreSQL**: Database hosting with pgvector extension.
+*   **Google Fonts CDN**: For web fonts.
+*   **AWS Textract**: For production-grade OCR processing.
+*   **Web Scraping API (ZenRows/Scrapfly)**: For handling protected websites during crawling.
+*   **Google Drive API v3**: For crawling public Google Drive folders.
+*   **CourtListener REST API**: For fetching NH Supreme Court slip opinions.

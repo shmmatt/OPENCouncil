@@ -77,6 +77,7 @@ export interface V3OrchestratorOptions {
   sessionSources?: SessionSource[];
   logContext?: PipelineLogContext;
   templateContext?: string | null;
+  onStageChange?: (stage: string) => void;
 }
 
 export async function runChatV3Pipeline(
@@ -90,9 +91,11 @@ export async function runChatV3Pipeline(
     sessionSources,
     logContext,
     templateContext,
+    onStageChange,
   } = options;
 
   const startTime = Date.now();
+  const notifyStage = (stage: string) => { if (onStageChange) onStageChange(stage); };
 
   // =====================================================
   // STAGE 0: SITUATION RELEVANCE GATE
@@ -125,6 +128,7 @@ export async function runChatV3Pipeline(
   // =====================================================
   // STAGE 1: PLAN
   // =====================================================
+  notifyStage("planning");
   const plannerResult = await runPlannerV3({
     userMessage,
     sessionSources,
@@ -155,6 +159,7 @@ export async function runChatV3Pipeline(
   // =====================================================
   // STAGE 2: RETRIEVE
   // =====================================================
+  notifyStage("retrieving");
   logInfo("v3_retrieval_pgvector", {
     requestId: logContext?.requestId,
     stage: "v3_retrieval",
@@ -202,6 +207,7 @@ export async function runChatV3Pipeline(
   // =====================================================
   // STAGE 3: SYNTHESIZE
   // =====================================================
+  notifyStage("synthesizing");
   const sessionSourceText = sessionSources?.length
     ? getSessionSourceTextForContext(sessionSources, chatConfigV3.MAX_SESSION_SOURCE_CHARS)
     : undefined;
@@ -360,6 +366,7 @@ export async function runChatV3Pipeline(
   // STAGE 4: AUDIT + REPAIR
   // =====================================================
   if (chatConfigV3.ENABLE_AUDIT) {
+    notifyStage("auditing");
     const stateChunkCount = effectiveStateChunks.length;
     
     const auditResult = auditAnswer({

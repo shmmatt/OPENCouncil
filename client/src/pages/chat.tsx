@@ -499,82 +499,20 @@ function MessageBubble({
 interface TypingIndicatorProps {
   hasFile?: boolean;
   messageContent?: string;
+  pipelineStage?: string | null;
 }
 
-const STATUS_PHRASES = {
-  initial: ["Thinking..."],
-  document: [
-    "Analyzing your document...",
-    "Extracting key information...",
-    "Cross-referencing sources...",
-    "Finding relevant sections...",
-  ],
-  search: [
-    "Searching through documents...",
-    "Finding relevant information...",
-    "Reviewing municipal records...",
-    "Gathering insights...",
-  ],
-  general: [
-    "Formulating response...",
-    "Analyzing your question...",
-    "Preparing your answer...",
-    "Putting it all together...",
-  ],
-  deepSearch: [
-    "Running a deeper search...",
-    "Looking for additional evidence...",
-    "Cross-referencing related documents...",
-    "Gathering more context...",
-    "Verifying details across records...",
-  ],
+const STAGE_LABELS: Record<string, string> = {
+  planning: "Analyzing your question...",
+  retrieving: "Searching through documents...",
+  synthesizing: "Writing your answer...",
+  auditing: "Verifying accuracy...",
 };
 
-function getContextType(hasFile?: boolean, messageContent?: string): keyof typeof STATUS_PHRASES {
-  if (hasFile) return "document";
-  
-  const content = (messageContent || "").toLowerCase();
-  const searchTerms = ["find", "search", "look for", "where", "what", "when", "who", "meeting", "minutes", "document", "report"];
-  
-  if (searchTerms.some(term => content.includes(term))) {
-    return "search";
-  }
-  
-  return "general";
-}
-
-function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [showPhrase, setShowPhrase] = useState(false);
-  const [isDeepSearch, setIsDeepSearch] = useState(false);
-  const contextType = getContextType(hasFile, messageContent);
-  const phrases = isDeepSearch ? STATUS_PHRASES.deepSearch : STATUS_PHRASES[contextType];
-
-  useEffect(() => {
-    const initialTimer = setTimeout(() => {
-      setShowPhrase(true);
-    }, 800);
-
-    const deepSearchTimer = setTimeout(() => {
-      setIsDeepSearch(true);
-      setPhraseIndex(0);
-    }, 8000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearTimeout(deepSearchTimer);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!showPhrase) return;
-
-    const interval = setInterval(() => {
-      setPhraseIndex((prev) => (prev + 1) % phrases.length);
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [showPhrase, phrases.length]);
+function TypingIndicator({ hasFile, messageContent, pipelineStage }: TypingIndicatorProps) {
+  const displayText = pipelineStage && STAGE_LABELS[pipelineStage]
+    ? STAGE_LABELS[pipelineStage]
+    : "Thinking...";
 
   return (
     <div className="flex gap-4 justify-start">
@@ -589,14 +527,12 @@ function TypingIndicator({ hasFile, messageContent }: TypingIndicatorProps) {
               <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
               <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
-            {showPhrase && (
-              <span 
-                className="text-sm text-muted-foreground animate-in fade-in duration-300"
-                data-testid="text-typing-status"
-              >
-                {phrases[phraseIndex]}
-              </span>
-            )}
+            <span 
+              className="text-sm text-muted-foreground animate-in fade-in duration-300"
+              data-testid="text-typing-status"
+            >
+              {displayText}
+            </span>
           </div>
         </div>
       </div>
@@ -612,6 +548,8 @@ export default function Chat() {
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
+  const [pipelineStage, setPipelineStage] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -758,6 +696,89 @@ export default function Chat() {
     processSharedLink();
   }, [sharedLinkQuestion, isProcessingSharedLink, sendToSession, toast]);
 
+  const sendStreamingMessage = useCallback(async (content: string) => {
+    if (!activeSessionId) return;
+    setIsStreaming(true);
+    setPipelineStage(null);
+
+    try {
+      const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+        credentials: "include",
+      });
+
+      if (!response.ok || !response.body) {
+        const errText = await response.text().catch(() => "Stream failed");
+        throw new Error(errText);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamDone = false;
+      let sseError: Error | null = null;
+
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = "";
+        let dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+            dataLines = [];
+          } else if (line.startsWith("data: ")) {
+            dataLines.push(line.slice(6));
+          } else if (line === "" && eventType && dataLines.length > 0) {
+            const rawData = dataLines.join("\n");
+            try {
+              const data = JSON.parse(rawData);
+              if (eventType === "status") {
+                setPipelineStage(data.stage || null);
+              } else if (eventType === "answer") {
+                setPendingMessage(null);
+                setPipelineStage(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+              } else if (eventType === "followups") {
+                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+              } else if (eventType === "error") {
+                sseError = new Error(data.message || "An error occurred");
+                streamDone = true;
+              } else if (eventType === "done") {
+                streamDone = true;
+              }
+            } catch {
+            }
+            eventType = "";
+            dataLines = [];
+          }
+        }
+      }
+
+      reader.cancel().catch(() => {});
+      if (sseError) throw sseError;
+    } catch (error) {
+      setPendingMessage(null);
+      toast({
+        title: "Failed to send message",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStreaming(false);
+      setPipelineStage(null);
+    }
+  }, [activeSessionId, toast]);
+
   const sendMessageMutation = useMutation({
     mutationFn: async ({ content, file }: { content: string; file: File | null }) => {
       if (!activeSessionId) {
@@ -789,17 +810,20 @@ export default function Chat() {
           throw error;
         }
       } else {
-        return await apiRequest("POST", `/api/chat/v2/sessions/${activeSessionId}/messages`, { 
-          content 
-        });
+        sendStreamingMessage(content);
+        return null;
       }
     },
-    onSuccess: () => {
-      setPendingMessage(null);
-      setSelectedFile(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+    onSuccess: (result) => {
+      if (result !== null) {
+        setPendingMessage(null);
+        setSelectedFile(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+      } else {
+        setSelectedFile(null);
+      }
     },
     onError: (error) => {
       setPendingMessage(null);
@@ -1039,10 +1063,11 @@ export default function Chat() {
                     </div>
                   </div>
                 )}
-                {sendMessageMutation.isPending && (
+                {(sendMessageMutation.isPending || isStreaming) && (
                   <TypingIndicator 
                     hasFile={!!selectedFile} 
-                    messageContent={pendingMessage || inputValue} 
+                    messageContent={pendingMessage || inputValue}
+                    pipelineStage={pipelineStage}
                   />
                 )}
                 <div ref={messagesEndRef} />
@@ -1089,7 +1114,7 @@ export default function Chat() {
                 size="icon"
                 className="h-[60px] w-[60px] flex-shrink-0"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={!activeSessionId || sendMessageMutation.isPending}
+                disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
                 data-testid="button-attach-file"
               >
                 <Paperclip className="w-5 h-5" />
@@ -1100,17 +1125,17 @@ export default function Chat() {
                 onKeyDown={handleKeyDown}
                 placeholder={selectedFile ? "Ask a question about this document..." : "Ask about your municipal documents..."}
                 className="min-h-[60px] resize-none"
-                disabled={!activeSessionId || sendMessageMutation.isPending}
+                disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
                 data-testid="input-message"
               />
               <Button
                 type="submit"
                 size="icon"
-                disabled={!activeSessionId || (!inputValue.trim() && !selectedFile) || sendMessageMutation.isPending}
+                disabled={!activeSessionId || (!inputValue.trim() && !selectedFile) || sendMessageMutation.isPending || isStreaming}
                 className="h-[60px] w-[60px]"
                 data-testid="button-send"
               >
-                {sendMessageMutation.isPending ? (
+                {(sendMessageMutation.isPending || isStreaming) ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <Send className="w-5 h-5" />

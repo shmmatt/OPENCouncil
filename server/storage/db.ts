@@ -13,8 +13,8 @@ import * as schema from "@shared/schema";
 // Configure WebSocket for Neon serverless
 neonConfig.webSocketConstructor = ws;
 
-// Create connection pool
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Create connection pool with explicit max size to support parallel retrieval queries
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 20 });
 
 // Create drizzle instance with schema
 export const db = drizzle({ client: pool, schema });

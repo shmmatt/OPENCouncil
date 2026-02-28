@@ -243,39 +243,41 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   const localQueries = plan.local.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
   const stateQueries = plan.state.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
 
-  const allLocalChunks: PgvectorLaneChunk[] = [];
-  const allStateChunks: PgvectorLaneChunk[] = [];
-  const localQueriesUsed: string[] = [];
-  const stateQueriesUsed: string[] = [];
-
   const laneOpts: LaneQueryOptions = {
     keywordTerms: plan.keywordTerms && plan.keywordTerms.length > 0 ? plan.keywordTerms : undefined,
     temporalFilter: plan.temporalFilter,
     queryFocus: plan.queryFocus,
   };
 
-  async function runLaneSequentially(queries: string[], lane: "local" | "state", k: number) {
-    const chunks: PgvectorLaneChunk[] = [];
-    const queriesUsed: string[] = [];
-    for (const query of queries) {
-      try {
-        const result = await executeQueryOnLane(query, lane, townPreference || null, k, laneOpts);
-        chunks.push(...result);
-        if (result.length > 0) queriesUsed.push(query);
-      } catch (err) {
-        logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
-      }
+  const allQueryPromises = [
+    ...localQueries.map(query => ({ query, lane: "local" as const, k: plan.local.k })),
+    ...stateQueries.map(query => ({ query, lane: "state" as const, k: plan.state.k })),
+  ].map(async ({ query, lane, k }) => {
+    try {
+      const result = await executeQueryOnLane(query, lane, townPreference || null, k, laneOpts);
+      return { chunks: result, query, lane, success: true };
+    } catch (err) {
+      logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
+      return { chunks: [] as PgvectorLaneChunk[], query, lane, success: false };
     }
-    return { chunks, queriesUsed };
+  });
+
+  const queryResults = await Promise.all(allQueryPromises);
+
+  const allLocalChunks: PgvectorLaneChunk[] = [];
+  const allStateChunks: PgvectorLaneChunk[] = [];
+  const localQueriesUsed: string[] = [];
+  const stateQueriesUsed: string[] = [];
+
+  for (const result of queryResults) {
+    if (result.lane === "local") {
+      allLocalChunks.push(...result.chunks);
+      if (result.success && result.chunks.length > 0) localQueriesUsed.push(result.query);
+    } else {
+      allStateChunks.push(...result.chunks);
+      if (result.success && result.chunks.length > 0) stateQueriesUsed.push(result.query);
+    }
   }
-
-  const localResult = await runLaneSequentially(localQueries, "local", plan.local.k);
-  const stateResult = await runLaneSequentially(stateQueries, "state", plan.state.k);
-
-  allLocalChunks.push(...localResult.chunks);
-  localQueriesUsed.push(...localResult.queriesUsed);
-  allStateChunks.push(...stateResult.chunks);
-  stateQueriesUsed.push(...stateResult.queriesUsed);
 
   const dedupedLocal = dedupeChunksByContent(allLocalChunks);
   const dedupedState = dedupeChunksByContent(allStateChunks);

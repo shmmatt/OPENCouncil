@@ -130,39 +130,12 @@ export function registerChatV2Routes(app: Express): void {
           return res.json(response);
         }
 
-        logDebug("chat_v2_duplicate_waiting", {
+        logInfo("chat_v2_duplicate_rejected", {
           ...logCtx,
           stage: "dedup",
+          message: "Duplicate request while previous is still processing",
         });
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-
-        const refreshedMessages = await storage.getMessagesBySessionId(sessionId);
-        const laterResponses = refreshedMessages.filter(
-          (m) => new Date(m.createdAt) > new Date(recentDuplicate.createdAt) && m.role === "assistant"
-        );
-
-        if (laterResponses.length > 0) {
-          const existingResponse = laterResponses[0];
-          logInfo("chat_v2_cached_response_after_wait", {
-            ...logCtx,
-            stage: "dedup",
-          });
-
-          const cachedData = parseCachedV2Response(existingResponse.citations);
-          const response: ChatV2Response = {
-            message: {
-              id: existingResponse.id,
-              sessionId,
-              role: "assistant",
-              content: existingResponse.content,
-              createdAt: existingResponse.createdAt.toISOString(),
-            },
-            answerMeta: cachedData.answerMeta,
-            sources: cachedData.sources,
-            suggestedFollowUps: cachedData.suggestedFollowUps,
-          };
-          return res.json(response);
-        }
+        return res.status(409).json({ message: "This message is already being processed. Please wait for the response." });
       }
 
       const userMessage = await storage.createChatMessage({
@@ -368,26 +341,7 @@ export function registerChatV2Routes(app: Express): void {
         pipelineDurationMs = pipelineResult.durationMs;
       }
       
-      // Generate follow-up suggestions
-      const suggestedFollowUps = await generateFollowups({
-        userQuestion: trimmedContent,
-        answerText,
-        townPreference: resolvedTown,
-        detectedDomains: [],
-        logContext: logCtx,
-      });
-
-      logDebug("pipeline_complete_with_followups", {
-        ...logCtx,
-        stage: chatConfigV3.ENABLE_V3_PIPELINE ? "v3_pipeline" : "unified_pipeline",
-        answerLength: answerText.length,
-        sourceCount: sourceDocumentNames.length,
-        followUpCount: suggestedFollowUps.length,
-        retrievedChunkCount,
-        durationMs: pipelineDurationMs,
-      });
-
-      // Map sources to citations
+      // Map sources to citations (fast DB lookups, keep on critical path)
       const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
 
       const answerMeta: FinalAnswerMeta = {
@@ -400,7 +354,7 @@ export function registerChatV2Routes(app: Express): void {
         v2: true,
         answerMeta,
         sources,
-        suggestedFollowUps,
+        suggestedFollowUps: [] as string[],
         notices: [] as ChatNotice[],
       };
 
@@ -426,7 +380,7 @@ export function registerChatV2Routes(app: Express): void {
         },
         answerMeta,
         sources,
-        suggestedFollowUps,
+        suggestedFollowUps: [],
       };
 
       const duration = Date.now() - startTime;
@@ -435,7 +389,6 @@ export function registerChatV2Routes(app: Express): void {
         ...logCtx,
         stage: "exit",
         sourceCount: sources.length,
-        suggestedFollowUpCount: suggestedFollowUps.length,
         durationMs: duration,
         answerLength: answerText.length,
         docSourceType,
@@ -443,7 +396,47 @@ export function registerChatV2Routes(app: Express): void {
         retrievedChunkCount,
       });
 
-      return res.json(response);
+      res.json(response);
+
+      // Fire follow-ups asynchronously after response is sent (T004: decoupled)
+      generateFollowups({
+        userQuestion: trimmedContent,
+        answerText,
+        townPreference: resolvedTown,
+        detectedDomains: [],
+        logContext: logCtx,
+      }).then(async (suggestedFollowUps) => {
+        if (suggestedFollowUps.length > 0) {
+          try {
+            const updatedMetadata = {
+              ...v2Metadata,
+              suggestedFollowUps,
+            };
+            await storage.updateChatMessage(assistantMessage.id, {
+              citations: JSON.stringify(updatedMetadata),
+            });
+            logDebug("followups_stored_async", {
+              ...logCtx,
+              stage: "followups",
+              count: suggestedFollowUps.length,
+            });
+          } catch (err) {
+            logError("followups_store_error", {
+              ...logCtx,
+              stage: "followups",
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }).catch((err) => {
+        logError("followups_generation_error", {
+          ...logCtx,
+          stage: "followups",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+      return;
     } catch (error) {
       const duration = Date.now() - startTime;
 
@@ -534,6 +527,302 @@ export function registerChatV2Routes(app: Express): void {
           message: error instanceof Error ? error.message : "Failed to process message",
         });
       }
+    }
+  });
+
+  // =====================================================
+  // SSE STREAMING ENDPOINT (T003)
+  // Streams pipeline progress events to the client
+  // =====================================================
+  app.post("/api/chat/v2/sessions/:sessionId/messages/stream", chatMessageLimiter, async (req: IdentityRequest, res: Response) => {
+    const startTime = Date.now();
+    const requestId = randomUUID();
+    const { sessionId } = req.params;
+    const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
+
+    let aborted = false;
+    req.on("close", () => {
+      aborted = true;
+      logInfo("sse_client_disconnected", { ...logCtx, stage: "sse" });
+    });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    function sendEvent(event: string, data: any) {
+      if (aborted) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+
+    try {
+      const { content, metadata }: ChatV2Request = req.body;
+
+      if (!content || !content.trim()) {
+        sendEvent("error", { message: "Message content is required" });
+        res.end();
+        return;
+      }
+
+      const session = await storage.getChatSessionById(sessionId);
+      if (!session) {
+        sendEvent("error", { message: "Chat session not found" });
+        res.end();
+        return;
+      }
+
+      if (aborted) { res.end(); return; }
+
+      const allMessages = await storage.getMessagesBySessionId(sessionId);
+      const trimmedContent = content.trim();
+      const now = Date.now();
+      const recentDuplicateWindow = 120000;
+
+      const recentDuplicate = allMessages.find((m) => {
+        if (m.role !== "user") return false;
+        if (m.content !== trimmedContent) return false;
+        const messageAge = now - new Date(m.createdAt).getTime();
+        return messageAge < recentDuplicateWindow;
+      });
+
+      if (recentDuplicate) {
+        const messagesAfterDuplicate = allMessages.filter(
+          (m) => new Date(m.createdAt) > new Date(recentDuplicate.createdAt) && m.role === "assistant"
+        );
+        if (messagesAfterDuplicate.length > 0) {
+          const existingResponse = messagesAfterDuplicate[0];
+          const cachedData = parseCachedV2Response(existingResponse.citations);
+          sendEvent("answer", {
+            message: {
+              id: existingResponse.id,
+              sessionId,
+              role: "assistant",
+              content: existingResponse.content,
+              createdAt: existingResponse.createdAt.toISOString(),
+            },
+            answerMeta: cachedData.answerMeta,
+            sources: cachedData.sources,
+            suggestedFollowUps: cachedData.suggestedFollowUps,
+          });
+          sendEvent("done", {});
+          res.end();
+          return;
+        }
+
+        sendEvent("error", { message: "This message is already being processed." });
+        res.end();
+        return;
+      }
+
+      const userMessage = await storage.createChatMessage({
+        sessionId,
+        role: "user",
+        content: trimmedContent,
+        citations: null,
+      });
+
+      const chatHistory: ChatHistoryMessage[] = allMessages
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+      const resolvedTown = await resolveTownPreference({
+        explicitTown: metadata?.town,
+        sessionId,
+        actor: req.actor,
+      });
+
+      let sessionSources: SessionSource[] = [];
+      if (chatConfig.ENABLE_SESSION_SOURCES) {
+        const sessionSourceResult = detectSessionSource(trimmedContent);
+        if (sessionSourceResult.isSessionSource && sessionSourceResult.source) {
+          await storage.addSessionSource(sessionId, sessionSourceResult.source);
+        }
+        sessionSources = await storage.getSessionSources(sessionId);
+      }
+
+      let situationContext: SituationContext | null = null;
+      const hasUserArtifact = sessionSources.length > 0;
+      if (chatConfig.ENABLE_SITUATION_ANCHORING) {
+        const existingContext = await storage.getSessionSituationContext(sessionId);
+        const extractionResult = extractSituationHeuristic(trimmedContent, existingContext, hasUserArtifact);
+        if (extractionResult.shouldUpdate && extractionResult.newContext) {
+          situationContext = extractionResult.newContext;
+          await storage.setSessionSituationContext(sessionId, situationContext);
+        } else if (existingContext) {
+          situationContext = existingContext;
+        }
+      }
+
+      if (aborted) { res.end(); return; }
+
+      const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
+
+      let templateContext: string | null = null;
+      if ((session as any).templateId) {
+        try {
+          const template = await getChatTemplateById((session as any).templateId);
+          if (template?.generatedPayload) {
+            const payload = typeof template.generatedPayload === "string"
+              ? JSON.parse(template.generatedPayload)
+              : template.generatedPayload;
+            templateContext = `This chat was launched from a document template: "${template.title}" for ${template.town}. The template covers the following document sections:\n${(payload.sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+          }
+        } catch (err) {
+          logDebug("template_context_error", { ...logCtx, stage: "template_lookup", error: String(err) });
+        }
+      }
+
+      let answerText: string;
+      let sourceDocumentNames: string[];
+      let docSourceType: DocSourceType;
+      let docSourceTown: string | null;
+      let retrievedChunkCount: number;
+
+      if (chatConfigV3.ENABLE_V3_PIPELINE) {
+        sendEvent("status", { stage: "planning" });
+        if (aborted) { res.end(); return; }
+
+        const v3Result = await runChatV3Pipeline({
+          userMessage: trimmedContent,
+          sessionHistory: trimmedHistory,
+          townPreference: resolvedTown,
+          situationContext,
+          sessionSources,
+          logContext: logCtx,
+          templateContext,
+          onStageChange: (stage: string) => {
+            sendEvent("status", { stage });
+          },
+        });
+
+        answerText = v3Result.answerText;
+        sourceDocumentNames = v3Result.sourceDocumentNames;
+        docSourceType = v3Result.docSourceType;
+        docSourceTown = v3Result.docSourceTown;
+        retrievedChunkCount = v3Result.retrievedChunkCount;
+      } else {
+        sendEvent("status", { stage: "synthesizing" });
+        const pipelineResult = await runUnifiedChatPipeline({
+          question: trimmedContent,
+          sessionHistory: trimmedHistory,
+          townPreference: resolvedTown,
+          situationContext,
+          sessionSources,
+          logContext: logCtx,
+        });
+        answerText = pipelineResult.answerText;
+        sourceDocumentNames = pipelineResult.sourceDocumentNames;
+        docSourceType = pipelineResult.docSourceType;
+        docSourceTown = pipelineResult.docSourceTown;
+        retrievedChunkCount = pipelineResult.retrievedChunkCount;
+      }
+
+      if (aborted) { res.end(); return; }
+
+      const sources = await mapFileSearchDocumentsToCitations(sourceDocumentNames);
+
+      const answerMeta: FinalAnswerMeta = {
+        complexity: "simple",
+        requiresClarification: false,
+        criticScore: { relevance: 1, completeness: 1, clarity: 1, riskOfMisleading: 0 },
+      };
+
+      const v2Metadata = {
+        v2: true,
+        answerMeta,
+        sources,
+        suggestedFollowUps: [] as string[],
+        notices: [] as ChatNotice[],
+      };
+
+      const assistantMessage = await storage.createChatMessage({
+        sessionId,
+        role: "assistant",
+        content: answerText,
+        citations: JSON.stringify(v2Metadata),
+      });
+
+      if (chatHistory.filter((m) => m.role === "user").length === 0) {
+        const title = trimmedContent.slice(0, 60) + (trimmedContent.length > 60 ? "..." : "");
+        await storage.updateChatSession(sessionId, { title });
+      }
+
+      sendEvent("answer", {
+        message: {
+          id: assistantMessage.id,
+          sessionId,
+          role: "assistant",
+          content: answerText,
+          createdAt: assistantMessage.createdAt.toISOString(),
+        },
+        answerMeta,
+        sources,
+        suggestedFollowUps: [],
+      });
+
+      const duration = Date.now() - startTime;
+      logInfo("sse_response_ready", {
+        ...logCtx,
+        stage: "exit",
+        sourceCount: sources.length,
+        durationMs: duration,
+        answerLength: answerText.length,
+        docSourceType,
+        docSourceTown,
+        retrievedChunkCount,
+      });
+
+      // Fire follow-ups asynchronously, stream to client when ready
+      generateFollowups({
+        userQuestion: trimmedContent,
+        answerText,
+        townPreference: resolvedTown,
+        detectedDomains: [],
+        logContext: logCtx,
+      }).then(async (suggestedFollowUps) => {
+        if (suggestedFollowUps.length > 0) {
+          sendEvent("followups", suggestedFollowUps);
+          try {
+            const updatedMetadata = { ...v2Metadata, suggestedFollowUps };
+            await storage.updateChatMessage(assistantMessage.id, {
+              citations: JSON.stringify(updatedMetadata),
+            });
+          } catch (err) {
+            logError("sse_followups_store_error", {
+              ...logCtx, stage: "followups",
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        sendEvent("done", {});
+        res.end();
+      }).catch((err) => {
+        logError("sse_followups_error", {
+          ...logCtx, stage: "followups",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        sendEvent("done", {});
+        res.end();
+      });
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+
+      if (error instanceof GeminiQuotaExceededError) {
+        sendEvent("error", { message: getQuotaExceededMessage() });
+      } else {
+        logError("sse_pipeline_error", {
+          ...logCtx, stage: "error",
+          error: error instanceof Error ? error.message : String(error),
+          durationMs: duration,
+        });
+        sendEvent("error", { message: error instanceof Error ? error.message : "Failed to process message" });
+      }
+
+      sendEvent("done", {});
+      res.end();
     }
   });
 

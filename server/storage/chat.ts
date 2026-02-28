@@ -96,6 +96,13 @@ export async function getMessagesBySessionId(sessionId: string): Promise<ChatMes
     .orderBy(schema.chatMessages.createdAt);
 }
 
+export async function updateChatMessage(messageId: string, data: { citations?: string }): Promise<void> {
+  await db
+    .update(schema.chatMessages)
+    .set(data)
+    .where(eq(schema.chatMessages.id, messageId));
+}
+
 // ============================================================
 // MESSAGE FEEDBACK
 // ============================================================
