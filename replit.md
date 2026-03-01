@@ -45,33 +45,34 @@ The OC Research tab provides analytical tools for municipal data analysis, inclu
 3.  Extract structured JSON data from each agenda item using Gemini.
 4.  Perform deterministic entity resolution to deduplicate and merge project timelines, handling address normalization and temporal gaps.
 5.  Classify each application by `projectType` (Residential/Commercial/Mixed-Use) and `applicantType` (Citizen/Owner vs Professional) using keyword-based heuristics.
-6.  Compute statistical insights including: time-to-decision, friction categories, representation gap (citizen vs. pro outcomes), residential vs. commercial timelines, attrition curve (where abandoned projects exit), delay breakdown (board vs. external/state delays), and standard conditions of approval.
+6.  Compute statistical insights including: time-to-decision, friction categories, representation gap (citizen vs. pro outcomes), residential vs. commercial timelines, attrition curve (chronological milestones only), and average days added by constraint.
 7.  Generate narrative insights using Gemini based on the computed statistics.
 8.  Support re-analysis of existing report data without re-crawling.
 
-#### Dashboard Widgets (Phase 3 — Actionable Intelligence)
-The friction report dashboard displays widgets in this order:
-1. Summary stats grid (3 cards: Unique Projects, Date Range, Approval Rate)
-2. Funnel Visualization
-3. **The Representation Gap** — Citizen/Owner vs Professional applicant outcomes
-4. **Residential vs. Commercial Timelines** — Project type comparison table
-5. **The Attrition Curve** — Where abandoned/withdrawn projects exit
-6. **State vs. Local Delays** — Board review days vs external/state delay estimates
-7. Friction Matrix / Ordinance Heatmap
-8. Ordinance Hit List
-9. Time-to-Decision
-10. **Standard Conditions — Pre-Application Checklist Candidates**
-11. Most Contested Projects (FrequentFlyers)
-12. Predictive Insights
-13. Extracted Applications table
+#### Key Data Structures
+- **Approval Funnel**: Base outcomes (Approved, Denied, Withdrawn/Abandoned) as % of total apps. Overlapping modifiers (Approved w/ Conditions, Approved After Delay, Appeals Filed, Appeal Successes) stored separately in `applicationModifiers`.
+- **Attrition Curve**: Chronological milestones only (Pre-Hearing, After 1st Hearing, After Multiple Hearings) with static descriptions.
+- **Days Added by Constraint**: `daysAddedByConstraint` correlates friction triggers with avg timeline deltas.
+- **Terminology**: "Ghost Projects" renamed to "Withdrawn/Abandoned" throughout.
 
-Removed vanity widgets: "Documents Analyzed", "Agenda Items", "Frequent Applicants & Property Owners" (DeveloperScorecard).
+#### Dashboard Widgets
+1. Summary stats grid (Unique Projects, Date Range, Approval Rate)
+2. Funnel Visualization + Application Modifiers
+3. The Representation Gap (no Delta column)
+4. Residential vs. Commercial Timelines (no Top Friction column)
+5. The Attrition Curve (descriptions, no example projects)
+6. Average Days Added by Constraint (horizontal bar chart)
+7. Top Friction Triggers (consolidated from Friction Matrix + Ordinance Hit List)
+8. Time-to-Decision (line chart + category breakdown)
+9. Predictive Insights
+10. Extracted Applications (closed accordion)
 
-#### Report Export (Phase 4)
-Friction reports are exportable in two formats from the report dashboard:
-- **PDF** (`jspdf` + `jspdf-autotable`): Structured multi-page document with summary stats, funnel, friction matrix, ordinance hit list, time-to-decision, contested projects, representation gap, project type comparison, attrition curve, delay breakdown, standard conditions, YoY trends, predictive insights, and full applications table. Generated client-side via `client/src/lib/exportFrictionReport.ts`.
-- **CSV**: Applications table with all fields including 3 new columns: Project Type, Applicant Type, Attrition Stage (exit stage for withdrawn/abandoned apps only). Includes BOM for Excel compatibility.
-- **Percentage convention**: All percentage values from the backend are 0-100 integers. Frontend renders with `${value}%` — never `Math.round(value * 100)`.
+Removed: Standard Conditions, Most Contested Projects, State vs. Local Delays.
+
+#### Report Export
+- **PDF**: Summary, funnel+modifiers, top friction triggers, time-to-decision trends, days added by constraint, representation gap, project type comparison, attrition curve, YoY trends, predictive insights. No extracted applications in PDF.
+- **CSV**: Full applications table (unchanged).
+- **Percentage convention**: 0-100 integers, rendered with `${value}%`.
 
 ## External Dependencies
 

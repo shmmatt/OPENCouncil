@@ -3,8 +3,9 @@ import type {
   ProjectType, ApplicantType,
   RepresentationGapData, RepresentationGapGroupStats,
   ProjectTypeComparisonData, ProjectTypeGroupStats,
-  AttritionCurveEntry, DelayBreakdownData, StandardConditionEntry,
+  AttritionCurveEntry, DaysAddedEntry,
 } from "../../shared/schema";
+
 
 const STREET_ABBREVIATIONS: Record<string, string> = {
   "rd": "road", "rd.": "road", "st": "street", "st.": "street",
@@ -989,133 +990,75 @@ export function computeAttritionCurve(apps: SitePlanApplication[]): AttritionCur
   const exitApps = apps.filter(a => a.outcome === "withdrawn" || a.outcome === "abandoned");
   if (exitApps.length === 0) return [];
 
-  const stageCounts = new Map<string, { count: number; examples: string[] }>();
+  const STAGE_DESCRIPTIONS: Record<string, string> = {
+    "Pre-Hearing": "Applications withdrawn before or at the initial board hearing, often due to applicants realizing requirements won't be met.",
+    "After 1st Hearing": "Applications withdrawn after the first hearing, typically after receiving board or public feedback on issues.",
+    "After Multiple Hearings": "Applications withdrawn after two or more hearings, often due to accumulated conditions, costs, or opposition.",
+  };
+
+  const stageCounts = new Map<string, number>();
 
   for (const app of exitApps) {
-    let stage = "After initial filing";
-    const reasonText = [app.primaryFrictionReason, ...(app.conditions || [])].filter(Boolean).join(" ");
+    let stage: string;
+    if (app.totalContinuances === 0) stage = "Pre-Hearing";
+    else if (app.totalContinuances === 1) stage = "After 1st Hearing";
+    else stage = "After Multiple Hearings";
 
-    let externalMatch = false;
-    for (const trigger of EXTERNAL_TRIGGERS) {
-      if (trigger.pattern.test(reasonText)) {
-        stage = trigger.label;
-        externalMatch = true;
-        break;
-      }
-    }
-
-    if (!externalMatch) {
-      if (app.totalContinuances === 0) stage = "After initial filing";
-      else if (app.totalContinuances === 1) stage = "After first hearing";
-      else stage = "After multiple hearings";
-    }
-
-    const entry = stageCounts.get(stage);
-    const exampleName = app.entityName.length > 40 ? app.entityName.slice(0, 37) + "..." : app.entityName;
-    if (entry) {
-      entry.count++;
-      if (entry.examples.length < 3) entry.examples.push(exampleName);
-    } else {
-      stageCounts.set(stage, { count: 1, examples: [exampleName] });
-    }
+    stageCounts.set(stage, (stageCounts.get(stage) || 0) + 1);
   }
 
-  return Array.from(stageCounts.entries())
-    .map(([stage, data]) => ({
+  const stageOrder = ["Pre-Hearing", "After 1st Hearing", "After Multiple Hearings"];
+
+  return stageOrder
+    .filter(stage => stageCounts.has(stage))
+    .map(stage => ({
       stage,
-      count: data.count,
-      percentage: Math.round((data.count / exitApps.length) * 100),
-      examples: data.examples,
-    }))
-    .sort((a, b) => b.count - a.count);
+      count: stageCounts.get(stage)!,
+      percentage: Math.round((stageCounts.get(stage)! / exitApps.length) * 100),
+      description: STAGE_DESCRIPTIONS[stage],
+    }));
 }
 
-const EXTERNAL_DELAY_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\b(nhdot|nh\s*dot|driveway\s*permit|state\s*highway|highway\s*access)\b/i, reason: "NHDOT review" },
-  { pattern: /\b(nhdes|nh\s*des|alteration\s*of\s*terrain|aot|wetland\s*permit)\b/i, reason: "NHDES review" },
-  { pattern: /\b(traffic\s*study|traffic\s*impact|traffic\s*analysis)\b/i, reason: "Traffic study" },
-  { pattern: /\b(wetland\s*delineation|vernal\s*pool|wetland\s*scientist)\b/i, reason: "Wetland delineation" },
-  { pattern: /\b(peer\s*review|third[- ]party\s*review|independent\s*review)\b/i, reason: "Third-party peer review" },
-  { pattern: /\b(applicant\s*revision|revised\s*plan|plan\s*revision|updated\s*plan|resubmit)\b/i, reason: "Applicant plan revision" },
-  { pattern: /\b(fire\s*marshal|fire\s*department)\b/i, reason: "Fire department review" },
-  { pattern: /\b(state\s*permit|state\s*approval|state\s*review)\b/i, reason: "Other state permit" },
+
+const CONSTRAINT_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\b(wetlands?|wetland\s*permit|wetland\s*delineation|vernal\s*pool)\b/i, label: "Wetlands" },
+  { pattern: /\b(fire\s*marshal|fire\s*department|fire\s*chief)\b/i, label: "Fire Dept Review" },
+  { pattern: /\b(nhdes|nh\s*des|dept\.?\s*of\s*environmental|alteration\s*of\s*terrain|aot)\b/i, label: "NHDES Permit" },
+  { pattern: /\b(nhdot|nh\s*dot|driveway\s*permit|state\s*highway|highway\s*access)\b/i, label: "NHDOT Review" },
+  { pattern: /\b(traffic\s*study|traffic\s*impact|traffic\s*analysis)\b/i, label: "Traffic Study" },
+  { pattern: /\b(peer\s*review|third[- ]party\s*review|independent\s*review)\b/i, label: "Peer Review" },
+  { pattern: /\b(drainage|stormwater)\b/i, label: "Drainage/Stormwater" },
+  { pattern: /\b(setbacks?|dimensional)\b/i, label: "Setback/Dimensional" },
+  { pattern: /\b(parking)\b/i, label: "Parking Requirements" },
+  { pattern: /\b(abutter|neighbor|opposition)\b/i, label: "Abutter Opposition" },
 ];
 
-export function computeDelayBreakdown(apps: SitePlanApplication[]): DelayBreakdownData {
-  const reasonCounts = new Map<string, number>();
-  const boardDays: number[] = [];
-  const externalDays: number[] = [];
-  const totalDays: number[] = [];
+export function computeDaysAddedByConstraint(apps: SitePlanApplication[]): DaysAddedEntry[] {
+  const constraintDays = new Map<string, number[]>();
 
   for (const app of apps) {
     const d = daysBetween(app.initialAppearanceDate || "", app.lastAppearanceDate || "");
     if (d === null || d < 0) continue;
 
-    const text = [app.primaryFrictionReason, ...(app.conditions || [])].filter(Boolean).join(" ");
-    let hasExternalDelay = false;
+    const text = [app.primaryFrictionReason, ...(app.frictionCategories || []), ...(app.conditions || [])].filter(Boolean).join(" ");
 
-    for (const { pattern, reason } of EXTERNAL_DELAY_PATTERNS) {
+    for (const { pattern, label } of CONSTRAINT_PATTERNS) {
       if (pattern.test(text)) {
-        reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
-        hasExternalDelay = true;
-      }
-    }
-
-    totalDays.push(d);
-    if (hasExternalDelay) {
-      const estimatedExternal = Math.round(d * 0.4);
-      externalDays.push(estimatedExternal);
-      boardDays.push(d - estimatedExternal);
-    } else {
-      boardDays.push(d);
-      externalDays.push(0);
-    }
-  }
-
-  const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
-
-  return {
-    avgBoardDays: avg(boardDays),
-    avgExternalDays: avg(externalDays),
-    avgTotalDays: avg(totalDays),
-    externalReasons: Array.from(reasonCounts.entries())
-      .map(([reason, count]) => ({ reason, count }))
-      .sort((a, b) => b.count - a.count),
-  };
-}
-
-export function computeStandardConditions(apps: SitePlanApplication[]): StandardConditionEntry[] {
-  const approvedApps = apps.filter(a => a.outcome === "approved" || a.outcome === "approved_with_conditions");
-  if (approvedApps.length === 0) return [];
-
-  const condCounts = new Map<string, { count: number; projects: string[] }>();
-
-  for (const app of approvedApps) {
-    for (const cond of (app.conditions || [])) {
-      const normalized = cond.toLowerCase().trim().replace(/\s+/g, " ").replace(/[.;,]+$/, "");
-      if (normalized.length < 5) continue;
-
-      const existing = condCounts.get(normalized);
-      const projectLabel = app.entityName.length > 30 ? app.entityName.slice(0, 27) + "..." : app.entityName;
-      if (existing) {
-        existing.count++;
-        if (existing.projects.length < 3) existing.projects.push(projectLabel);
-      } else {
-        condCounts.set(normalized, { count: 1, projects: [projectLabel] });
+        const existing = constraintDays.get(label);
+        if (existing) existing.push(d);
+        else constraintDays.set(label, [d]);
       }
     }
   }
 
-  return Array.from(condCounts.entries())
-    .filter(([, data]) => data.count >= 2)
-    .map(([condition, data]) => ({
-      condition: condition.charAt(0).toUpperCase() + condition.slice(1),
-      count: data.count,
-      percentage: Math.round((data.count / approvedApps.length) * 100),
-      exampleProjects: data.projects,
+  return Array.from(constraintDays.entries())
+    .map(([constraint, days]) => ({
+      constraint,
+      avgDaysAdded: Math.round(days.reduce((s, v) => s + v, 0) / days.length),
+      count: days.length,
     }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+    .filter(e => e.count >= 2)
+    .sort((a, b) => b.avgDaysAdded - a.avgDaysAdded);
 }
 
 export interface ComputedStats {
@@ -1141,8 +1084,7 @@ export interface ComputedStats {
   representationGap: RepresentationGapData;
   projectTypeComparison: ProjectTypeComparisonData;
   attritionCurve: AttritionCurveEntry[];
-  delayBreakdown: DelayBreakdownData;
-  standardConditions: StandardConditionEntry[];
+  daysAddedByConstraint: DaysAddedEntry[];
 }
 
 export function computeAllStats(
@@ -1187,8 +1129,7 @@ export function computeAllStats(
     representationGap: computeRepresentationGap(deduplicatedApps),
     projectTypeComparison: computeProjectTypeComparison(deduplicatedApps),
     attritionCurve: computeAttritionCurve(deduplicatedApps),
-    delayBreakdown: computeDelayBreakdown(deduplicatedApps),
-    standardConditions: computeStandardConditions(deduplicatedApps),
+    daysAddedByConstraint: computeDaysAddedByConstraint(deduplicatedApps),
   };
 }
 
@@ -1197,7 +1138,7 @@ export function buildInsightPromptData(stats: ComputedStats): string {
   lines.push(`Town Friction Report Summary (${stats.totalApps} unique projects from ${stats.rawAppCount} meeting appearances):`);
   lines.push(`- Approval Rate: ${stats.approvalRate}% (${stats.approvedClean} clean + ${stats.approvedWithConditions} with conditions)`);
   lines.push(`- Denial Rate: ${stats.denialRate}% (${stats.denied} denied)`);
-  lines.push(`- Pending/Unknown: ${stats.pending}, Withdrawn: ${stats.withdrawn}, Abandoned (Ghost Projects >365 days stale): ${stats.abandoned}`);
+  lines.push(`- Pending/Unknown: ${stats.pending}, Withdrawn: ${stats.withdrawn}, Withdrawn/Abandoned (>365 days stale): ${stats.abandoned}`);
   lines.push(`- Delayed (2+ continuances): ${stats.delayed} (${stats.totalApps > 0 ? Math.round((stats.delayed / stats.totalApps) * 100) : 0}%)`);
   lines.push(`- Appeals Filed: ${stats.appealed}, Appeal Successes: ${stats.appealWon}`);
   lines.push("");
@@ -1241,10 +1182,10 @@ export function buildInsightPromptData(stats: ComputedStats): string {
       lines.push(`YoY Changes (most recent vs prior year): Volume ${d.volumePct >= 0 ? "+" : ""}${d.volumePct}%, Time-to-Decision ${d.ttdPct >= 0 ? "+" : ""}${d.ttdPct}%, Continuances ${d.continuancesPct >= 0 ? "+" : ""}${d.continuancesPct}%`);
     }
   }
-  const totalGhosts = stats.withdrawn + stats.abandoned;
-  if (totalGhosts > 0) {
+  const totalWithdrawnAbandoned = stats.withdrawn + stats.abandoned;
+  if (totalWithdrawnAbandoned > 0) {
     lines.push("");
-    lines.push(`Ghost Projects: ${totalGhosts} total (${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned). Shadow denial rate: ${stats.totalApps > 0 ? Math.round((totalGhosts / stats.totalApps) * 100) : 0}% of all projects never reached a formal decision.`);
+    lines.push(`Withdrawn/Abandoned: ${totalWithdrawnAbandoned} total (${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned). Shadow denial rate: ${stats.totalApps > 0 ? Math.round((totalWithdrawnAbandoned / stats.totalApps) * 100) : 0}% of all projects never reached a formal decision.`);
   }
 
   const gap = stats.representationGap;
@@ -1269,28 +1210,19 @@ export function buildInsightPromptData(stats: ComputedStats): string {
 
   if (stats.attritionCurve.length > 0) {
     lines.push("");
-    lines.push("Attrition Curve (where projects die):");
-    for (const entry of stats.attritionCurve.slice(0, 5)) {
-      lines.push(`- ${entry.stage}: ${entry.count} apps (${entry.percentage}%), e.g. ${entry.examples.join(", ")}`);
+    lines.push("Attrition Curve (where projects exit):");
+    for (const entry of stats.attritionCurve) {
+      lines.push(`- ${entry.stage}: ${entry.count} apps (${entry.percentage}%) — ${entry.description}`);
     }
   }
 
-  const db = stats.delayBreakdown;
-  if (db.avgTotalDays > 0) {
+  if (stats.daysAddedByConstraint.length > 0) {
     lines.push("");
-    lines.push("Delay Breakdown (Board vs. External):");
-    lines.push(`- Avg total: ${db.avgTotalDays} days, est. board review: ${db.avgBoardDays} days, est. external/state delays: ${db.avgExternalDays} days`);
-    if (db.externalReasons.length > 0) {
-      lines.push(`- Top external causes: ${db.externalReasons.slice(0, 5).map(r => `${r.reason} (${r.count})`).join(", ")}`);
+    lines.push("Average Days Added by Constraint:");
+    for (const c of stats.daysAddedByConstraint.slice(0, 8)) {
+      lines.push(`- ${c.constraint}: avg ${c.avgDaysAdded} days (${c.count} apps affected)`);
     }
   }
 
-  if (stats.standardConditions.length > 0) {
-    lines.push("");
-    lines.push("Standard Conditions of Approval (most frequently applied):");
-    for (const c of stats.standardConditions.slice(0, 5)) {
-      lines.push(`- "${c.condition}": ${c.count} apps (${c.percentage}%), e.g. ${c.exampleProjects.join(", ")}`);
-    }
-  }
   return lines.join("\n");
 }

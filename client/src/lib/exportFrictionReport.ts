@@ -3,11 +3,7 @@ import { applyPlugin } from "jspdf-autotable";
 import type {
   FrictionReportData,
   SitePlanApplication,
-  RepresentationGapData,
-  ProjectTypeComparisonData,
-  AttritionCurveEntry,
-  DelayBreakdownData,
-  StandardConditionEntry,
+  DaysAddedEntry,
 } from "@shared/schema";
 
 applyPlugin(jsPDF);
@@ -127,7 +123,7 @@ export function exportFrictionReportPDF(
     sectionTitle("Site Plan Approval Funnel");
     doc.autoTable({
       startY: y,
-      head: [["Stage", "Count", "Percentage"]],
+      head: [["Outcome", "Count", "Percentage"]],
       body: funnelStages.map((s) => [
         s.label,
         String(s.count),
@@ -138,19 +134,52 @@ export function exportFrictionReportPDF(
       headStyles: { fillColor: [59, 130, 246] },
       theme: "grid",
     });
-    y = doc.lastAutoTable!.finalY + 8;
+    y = doc.lastAutoTable!.finalY + 6;
+
+    if (reportData.applicationModifiers) {
+      const mods = reportData.applicationModifiers;
+      addPageIfNeeded(60);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "italic");
+      doc.text("Application Modifiers (overlapping, not additive to base funnel)", margin, y + 4);
+      y += 10;
+      doc.setFont("helvetica", "normal");
+      doc.autoTable({
+        startY: y,
+        head: [["Modifier", "Count"]],
+        body: [
+          ["Approved With Conditions", String(mods.approvedWithConditions)],
+          ["Approved After Delay (2+ Continuances)", String(mods.approvedAfterDelay)],
+          ["Appeals Filed", String(mods.appealsFiled)],
+          ["Appeal Successes", String(mods.appealSuccesses)],
+        ],
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [107, 114, 128] },
+        theme: "grid",
+      });
+      y = doc.lastAutoTable!.finalY + 8;
+    }
   }
 
-  if (frictionMatrix.length > 0) {
-    sectionTitle("Ordinance Friction Heatmap");
+  if (frictionMatrix.length > 0 || (reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0)) {
+    sectionTitle("Top Friction Triggers");
+    const triggerRows: string[][] = [];
+    for (const f of frictionMatrix) {
+      triggerRows.push([f.category, String(f.count), `${f.percentage.toFixed(1)}%`]);
+    }
+    if (reportData.ordinanceHitList) {
+      for (const o of reportData.ordinanceHitList) {
+        const exists = triggerRows.some((r) => r[0].toLowerCase() === o.keyword.toLowerCase());
+        if (!exists) {
+          triggerRows.push([o.keyword.charAt(0).toUpperCase() + o.keyword.slice(1), String(o.count), `${o.percentage.toFixed(1)}%`]);
+        }
+      }
+    }
     doc.autoTable({
       startY: y,
-      head: [["Category", "Count", "Percentage"]],
-      body: frictionMatrix.map((f) => [
-        f.category,
-        String(f.count),
-        `${f.percentage.toFixed(1)}%`,
-      ]),
+      head: [["Category / Trigger", "Count", "Percentage"]],
+      body: triggerRows,
       margin: { left: margin, right: margin },
       styles: { fontSize: 9 },
       headStyles: { fillColor: [217, 119, 6] },
@@ -159,30 +188,50 @@ export function exportFrictionReportPDF(
     y = doc.lastAutoTable!.finalY + 8;
   }
 
-  if (reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0) {
-    sectionTitle("Ordinance Hit List");
+  if (reportData.timeToDecision && reportData.temporalTrends && reportData.temporalTrends.yearlyBreakdown.length > 0) {
+    sectionTitle("Time-to-Decision Trends");
     doc.autoTable({
       startY: y,
-      head: [["Keyword", "Frequency", "Percentage"]],
-      body: reportData.ordinanceHitList.map((o) => [
-        o.keyword,
-        String(o.count),
-        `${o.percentage.toFixed(1)}%`,
+      head: [["Year", "Avg Days to Decision", "Avg Continuances"]],
+      body: reportData.temporalTrends.yearlyBreakdown.map((yr) => [
+        String(yr.year),
+        String(Math.round(yr.avgDays)),
+        String(yr.avgContinuances.toFixed(1)),
       ]),
       margin: { left: margin, right: margin },
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [217, 119, 6] },
+      headStyles: { fillColor: [59, 130, 246] },
       theme: "grid",
     });
-    y = doc.lastAutoTable!.finalY + 8;
-  }
+    y = doc.lastAutoTable!.finalY + 6;
 
-  if (reportData.timeToDecision) {
+    if (reportData.timeToDecision.byCategory.length > 0) {
+      addPageIfNeeded(60);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "italic");
+      doc.text("Breakdown by Friction Category", margin, y + 4);
+      y += 10;
+      doc.setFont("helvetica", "normal");
+      doc.autoTable({
+        startY: y,
+        head: [["Category", "Avg Days", "Count"]],
+        body: reportData.timeToDecision.byCategory.map((c) => [
+          c.category,
+          String(Math.round(c.avgDays)),
+          String(c.count),
+        ]),
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [107, 114, 128] },
+        theme: "grid",
+      });
+      y = doc.lastAutoTable!.finalY + 8;
+    }
+  } else if (reportData.timeToDecision) {
     sectionTitle("Time-to-Decision");
     const ttd = reportData.timeToDecision;
     const overviewRows = [
       ["Average Days", String(Math.round(ttd.overall.avgDays))],
-      ["Median Days", String(Math.round(ttd.overall.medianDays))],
       ["Avg Continuances", String(ttd.overall.avgContinuances.toFixed(1))],
     ];
     doc.autoTable({
@@ -220,22 +269,19 @@ export function exportFrictionReportPDF(
     }
   }
 
-  if (reportData.frequentFlyers && reportData.frequentFlyers.length > 0) {
-    sectionTitle("Most Contested Projects");
+  if (reportData.daysAddedByConstraint && reportData.daysAddedByConstraint.length > 0) {
+    sectionTitle("Average Days Added by Constraint");
     doc.autoTable({
       startY: y,
-      head: [["Project", "Address", "Meetings", "Days", "Outcome"]],
-      body: reportData.frequentFlyers.map((f) => [
-        f.entityName,
-        f.address || "N/A",
-        String(f.meetingCount),
-        String(f.daysElapsed),
-        f.outcome,
+      head: [["Constraint", "Avg Days Added", "Projects Affected"]],
+      body: reportData.daysAddedByConstraint.map((d: DaysAddedEntry) => [
+        d.constraint,
+        String(d.avgDaysAdded),
+        String(d.count),
       ]),
       margin: { left: margin, right: margin },
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [239, 68, 68] },
-      columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 120 } },
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [217, 119, 6] },
       theme: "grid",
     });
     y = doc.lastAutoTable!.finalY + 8;
@@ -246,12 +292,12 @@ export function exportFrictionReportPDF(
     const gap = reportData.representationGap;
     doc.autoTable({
       startY: y,
-      head: [["Metric", "Citizen/Owner", "Professional", "Delta"]],
+      head: [["Metric", "Citizen/Owner", "Professional"]],
       body: [
-        ["Approval Rate", `${gap.citizenStats.approvalRate}%`, `${gap.proStats.approvalRate}%`, `${gap.delta.approvalRate > 0 ? "+" : ""}${gap.delta.approvalRate}pp`],
-        ["Continuance Rate", `${gap.citizenStats.continuanceRate}%`, `${gap.proStats.continuanceRate}%`, `${gap.delta.continuanceRate > 0 ? "+" : ""}${gap.delta.continuanceRate}pp`],
-        ["Abandonment Rate", `${gap.citizenStats.abandonmentRate}%`, `${gap.proStats.abandonmentRate}%`, `${gap.delta.abandonmentRate > 0 ? "+" : ""}${gap.delta.abandonmentRate}pp`],
-        ["Avg Days to Decision", String(gap.citizenStats.avgDaysToDecision), String(gap.proStats.avgDaysToDecision), `${gap.delta.avgDaysToDecision > 0 ? "+" : ""}${gap.delta.avgDaysToDecision} days`],
+        ["Approval Rate", `${gap.citizenStats.approvalRate}%`, `${gap.proStats.approvalRate}%`],
+        ["Continuance Rate", `${gap.citizenStats.continuanceRate}%`, `${gap.proStats.continuanceRate}%`],
+        ["Abandonment Rate", `${gap.citizenStats.abandonmentRate}%`, `${gap.proStats.abandonmentRate}%`],
+        ["Avg Days to Decision", String(gap.citizenStats.avgDaysToDecision), String(gap.proStats.avgDaysToDecision)],
       ],
       margin: { left: margin, right: margin },
       styles: { fontSize: 9 },
@@ -264,14 +310,14 @@ export function exportFrictionReportPDF(
   if (reportData.projectTypeComparison) {
     const ptc = reportData.projectTypeComparison;
     const ptcRows: string[][] = [];
-    if (ptc.residential.count > 0) ptcRows.push(["Residential", String(ptc.residential.count), String(ptc.residential.avgDays), String(ptc.residential.avgContinuances), ptc.residential.topFriction.join(", ") || "—"]);
-    if (ptc.commercial.count > 0) ptcRows.push(["Commercial", String(ptc.commercial.count), String(ptc.commercial.avgDays), String(ptc.commercial.avgContinuances), ptc.commercial.topFriction.join(", ") || "—"]);
-    if (ptc.mixedUse.count > 0) ptcRows.push(["Mixed-Use", String(ptc.mixedUse.count), String(ptc.mixedUse.avgDays), String(ptc.mixedUse.avgContinuances), ptc.mixedUse.topFriction.join(", ") || "—"]);
+    if (ptc.residential.count > 0) ptcRows.push(["Residential", String(ptc.residential.count), String(ptc.residential.avgDays), String(ptc.residential.avgContinuances)]);
+    if (ptc.commercial.count > 0) ptcRows.push(["Commercial", String(ptc.commercial.count), String(ptc.commercial.avgDays), String(ptc.commercial.avgContinuances)]);
+    if (ptc.mixedUse.count > 0) ptcRows.push(["Mixed-Use", String(ptc.mixedUse.count), String(ptc.mixedUse.avgDays), String(ptc.mixedUse.avgContinuances)]);
     if (ptcRows.length > 0) {
       sectionTitle("Residential vs. Commercial Timelines");
       doc.autoTable({
         startY: y,
-        head: [["Project Type", "Count", "Avg Days", "Avg Cont.", "Top Friction"]],
+        head: [["Project Type", "Count", "Avg Days", "Avg Cont."]],
         body: ptcRows,
         margin: { left: margin, right: margin },
         styles: { fontSize: 9 },
@@ -286,11 +332,12 @@ export function exportFrictionReportPDF(
     sectionTitle("The Attrition Curve");
     doc.autoTable({
       startY: y,
-      head: [["Exit Stage", "Count", "Percentage"]],
+      head: [["Exit Stage", "Count", "Percentage", "Description"]],
       body: reportData.attritionCurve.map((e) => [
         e.stage,
         String(e.count),
         `${e.percentage}%`,
+        e.description || "",
       ]),
       margin: { left: margin, right: margin },
       styles: { fontSize: 9 },
@@ -300,57 +347,7 @@ export function exportFrictionReportPDF(
     y = doc.lastAutoTable!.finalY + 8;
   }
 
-  if (reportData.delayBreakdown && reportData.delayBreakdown.avgTotalDays > 0) {
-    sectionTitle("State vs. Local Delays (Estimated)");
-    const db = reportData.delayBreakdown;
-    doc.autoTable({
-      startY: y,
-      head: [["Metric", "Days"]],
-      body: [
-        ["Est. Board Review Days", String(db.avgBoardDays)],
-        ["Est. External/State Delay Days", String(db.avgExternalDays)],
-        ["Total Avg Days", String(db.avgTotalDays)],
-      ],
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [217, 119, 6] },
-      theme: "grid",
-    });
-    y = doc.lastAutoTable!.finalY + 4;
-    if (db.externalReasons.length > 0) {
-      doc.autoTable({
-        startY: y,
-        head: [["External Delay Reason", "Applications"]],
-        body: db.externalReasons.map((r) => [r.reason, String(r.count)]),
-        margin: { left: margin, right: margin },
-        styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [217, 119, 6] },
-        theme: "grid",
-      });
-      y = doc.lastAutoTable!.finalY + 8;
-    }
-  }
-
-  if (reportData.standardConditions && reportData.standardConditions.length > 0) {
-    sectionTitle("Standard Conditions — Pre-Application Checklist Candidates");
-    doc.autoTable({
-      startY: y,
-      head: [["Condition", "Count", "% of Approved"]],
-      body: reportData.standardConditions.map((c) => [
-        c.condition,
-        String(c.count),
-        `${c.percentage}%`,
-      ]),
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" as const },
-      headStyles: { fillColor: [59, 130, 246] },
-      columnStyles: { 0: { cellWidth: 300 } },
-      theme: "grid",
-    });
-    y = doc.lastAutoTable!.finalY + 8;
-  }
-
-  if (reportData.temporalTrends && reportData.temporalTrends.yearlyBreakdown.length > 0) {
+  if (reportData.temporalTrends && reportData.temporalTrends.yearlyBreakdown.length > 0 && !reportData.timeToDecision) {
     sectionTitle("Year-over-Year Trends");
     doc.autoTable({
       startY: y,
@@ -398,35 +395,6 @@ export function exportFrictionReportPDF(
       addPageIfNeeded(lines.length * 12 + 8);
       doc.text(lines, margin, y);
       y += lines.length * 12 + 6;
-    });
-  }
-
-  if (apps.length > 0) {
-    sectionTitle("All Extracted Applications");
-    doc.autoTable({
-      startY: y,
-      head: [["Entity", "Address", "Applicant", "Outcome", "First Seen", "Last Seen", "Continuances", "Friction"]],
-      body: apps.map((a) => [
-        a.entityName,
-        a.address || "",
-        a.applicant || "",
-        a.outcome,
-        formatDate(a.initialAppearanceDate),
-        formatDate(a.lastAppearanceDate),
-        String(a.totalContinuances),
-        a.primaryFrictionReason || "",
-      ]),
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
-      headStyles: { fillColor: [59, 130, 246], fontSize: 7 },
-      columnStyles: {
-        0: { cellWidth: 90 },
-        1: { cellWidth: 75 },
-        2: { cellWidth: 65 },
-        3: { cellWidth: 55 },
-        7: { cellWidth: 80 },
-      },
-      theme: "grid",
     });
   }
 

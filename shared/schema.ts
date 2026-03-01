@@ -860,21 +860,20 @@ export interface AttritionCurveEntry {
   stage: string;
   count: number;
   percentage: number;
-  examples: string[];
+  description: string;
 }
 
-export interface DelayBreakdownData {
-  avgBoardDays: number;
-  avgExternalDays: number;
-  avgTotalDays: number;
-  externalReasons: Array<{ reason: string; count: number }>;
-}
-
-export interface StandardConditionEntry {
-  condition: string;
+export interface DaysAddedEntry {
+  constraint: string;
+  avgDaysAdded: number;
   count: number;
-  percentage: number;
-  exampleProjects: string[];
+}
+
+export interface ApplicationModifiers {
+  approvedWithConditions: number;
+  approvedAfterDelay: number;
+  appealsFiled: number;
+  appealSuccesses: number;
 }
 
 export interface FrictionReportData {
@@ -886,6 +885,7 @@ export interface FrictionReportData {
   documentsAnalyzed?: number;
   rawApplicationCount?: number;
   funnelStages: FunnelStage[];
+  applicationModifiers?: ApplicationModifiers;
   frictionMatrix: FrictionCategory[];
   predictiveInsights: string[];
   applications: SitePlanApplication[];
@@ -897,8 +897,7 @@ export interface FrictionReportData {
   representationGap?: RepresentationGapData;
   projectTypeComparison?: ProjectTypeComparisonData;
   attritionCurve?: AttritionCurveEntry[];
-  delayBreakdown?: DelayBreakdownData;
-  standardConditions?: StandardConditionEntry[];
+  daysAddedByConstraint?: DaysAddedEntry[];
 }
 
 export const researchReports = pgTable("research_reports", {

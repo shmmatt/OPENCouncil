@@ -13,6 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import {
   FlaskConical,
@@ -34,17 +40,26 @@ import {
   Clock,
   Lightbulb,
   Timer,
-  Flame,
-  Target,
   Users,
-  TrendingUp,
-  Ghost,
   BarChart3,
   Info,
   Download,
   FileSpreadsheet,
 } from "lucide-react";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, FrequentFlyerData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DelayBreakdownData, StandardConditionEntry } from "@shared/schema";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+} from "recharts";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DaysAddedEntry, ApplicationModifiers } from "@shared/schema";
 import { exportFrictionReportPDF, exportFrictionReportCSV } from "@/lib/exportFrictionReport";
 
 interface TownOption {
@@ -352,12 +367,7 @@ export default function AdminResearch() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
-                    {reportData.temporalTrends?.yoyDeltas && (
-                      <YoYBadge value={reportData.temporalTrends.yoyDeltas.volumePct} label="vs. prev year" />
-                    )}
-                  </div>
+                  <div className="text-2xl font-bold" data-testid="text-stat-applications">{reportData.applications.length}</div>
                   <p className="text-sm text-muted-foreground">
                     Unique Projects
                     {reportData.rawApplicationCount ? ` (from ${reportData.rawApplicationCount.toLocaleString()} appearances)` : ""}
@@ -387,7 +397,7 @@ export default function AdminResearch() {
             </div>
 
             {reportData.funnelStages.length > 0 && (
-              <FunnelVisualization stages={reportData.funnelStages} />
+              <FunnelVisualization stages={reportData.funnelStages} applicationModifiers={reportData.applicationModifiers} />
             )}
 
             {reportData.representationGap && (reportData.representationGap.citizenStats.count > 0 || reportData.representationGap.proStats.count > 0) && (
@@ -402,28 +412,16 @@ export default function AdminResearch() {
               <AttritionCurveCard entries={reportData.attritionCurve} />
             )}
 
-            {reportData.delayBreakdown && reportData.delayBreakdown.avgTotalDays > 0 && (
-              <DelayBreakdownCard data={reportData.delayBreakdown} />
+            {reportData.daysAddedByConstraint && reportData.daysAddedByConstraint.length > 0 && (
+              <DaysAddedCard entries={reportData.daysAddedByConstraint} />
             )}
 
-            {reportData.frictionMatrix.length > 0 && (
-              <FrictionMatrixCard matrix={reportData.frictionMatrix} />
-            )}
-
-            {reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0 && (
-              <OrdinanceHitListCard entries={reportData.ordinanceHitList} />
+            {(reportData.frictionMatrix.length > 0 || (reportData.ordinanceHitList && reportData.ordinanceHitList.length > 0)) && (
+              <TopFrictionTriggersCard matrix={reportData.frictionMatrix} hitList={reportData.ordinanceHitList} />
             )}
 
             {reportData.timeToDecision && reportData.timeToDecision.overall.avgDays > 0 && (
-              <TimeToDecisionCard data={reportData.timeToDecision} yoyDeltas={reportData.temporalTrends?.yoyDeltas} />
-            )}
-
-            {reportData.standardConditions && reportData.standardConditions.length > 0 && (
-              <StandardConditionsCard entries={reportData.standardConditions} />
-            )}
-
-            {reportData.frequentFlyers && reportData.frequentFlyers.length > 0 && (
-              <FrequentFlyersCard flyers={reportData.frequentFlyers} />
+              <TimeToDecisionCard data={reportData.timeToDecision} temporalTrends={reportData.temporalTrends} />
             )}
 
             {reportData.predictiveInsights.length > 0 && (
@@ -449,22 +447,27 @@ export default function AdminResearch() {
 
             {reportData.applications.length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Extracted Applications ({reportData.applications.length})</CardTitle>
-                  <CardDescription>Individual site plan applications identified from meeting minutes</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {reportData.applications.map((app, idx) => (
-                      <ApplicationRow
-                        key={idx}
-                        app={app}
-                        idx={idx}
-                        expanded={expandedApps.has(idx)}
-                        onToggle={() => toggleAppExpand(idx)}
-                      />
-                    ))}
-                  </div>
+                <CardContent className="pt-4 pb-0">
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value="raw-applications" className="border-b-0">
+                      <AccordionTrigger data-testid="button-toggle-raw-apps">
+                        View Raw Application Data ({reportData.applications.length})
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-2 pt-2">
+                          {reportData.applications.map((app, idx) => (
+                            <ApplicationRow
+                              key={idx}
+                              app={app}
+                              idx={idx}
+                              expanded={expandedApps.has(idx)}
+                              onToggle={() => toggleAppExpand(idx)}
+                            />
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
                 </CardContent>
               </Card>
             )}
@@ -585,7 +588,7 @@ function YoYBadge({ value, label, invertColor }: { value: number; label?: string
   );
 }
 
-function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
+function FunnelVisualization({ stages, applicationModifiers }: { stages: FunnelStage[]; applicationModifiers?: ApplicationModifiers }) {
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 
   return (
@@ -595,30 +598,28 @@ function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
           <TrendingDown className="w-5 h-5" />
           Site Plan Approval Funnel
         </CardTitle>
-        <CardDescription>Attrition rate of site plans through the municipal approval process</CardDescription>
+        <CardDescription>Base outcomes sum to 100% of all applications</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
           {stages.map((stage, i) => {
             const widthPct = Math.max((stage.count / maxCount) * 100, 4);
-            const isTop = i === 0;
             const isDenied = stage.label.toLowerCase().includes("denied");
-            const isAppeal = stage.label.toLowerCase().includes("appeal");
-            const isGhost = stage.label.toLowerCase().includes("withdrawn") || stage.label.toLowerCase().includes("abandoned");
+            const isWithdrawn = stage.label.toLowerCase().includes("withdrawn") || stage.label.toLowerCase().includes("abandoned");
+            const isPending = stage.label.toLowerCase().includes("pending");
 
             let barColor = "bg-primary/80";
-            if (isGhost) barColor = "bg-muted-foreground/50";
+            if (isWithdrawn) barColor = "bg-muted-foreground/50";
             else if (isDenied) barColor = "bg-destructive/70";
-            else if (isAppeal) barColor = "bg-amber-500/70 dark:bg-amber-400/70";
-            else if (!isTop) barColor = "bg-primary/60";
+            else if (isPending) barColor = "bg-amber-500/70 dark:bg-amber-400/70";
 
             return (
               <div key={stage.label} className="space-y-1" data-testid={`funnel-stage-${i}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium flex items-center gap-1">
                     {stage.label}
-                    {isGhost && (
-                      <Info className="w-3.5 h-3.5 text-muted-foreground" title="Applications that were never formally approved or denied, but saw no board action for over 365 days, effectively abandoning the project." data-testid="info-ghost-projects" />
+                    {isWithdrawn && (
+                      <span data-testid="info-withdrawn-projects"><Info className="w-3.5 h-3.5 text-muted-foreground" /></span>
                     )}
                   </span>
                   <span className="text-sm text-muted-foreground tabular-nums">
@@ -638,62 +639,129 @@ function FunnelVisualization({ stages }: { stages: FunnelStage[] }) {
             );
           })}
         </div>
+
+        {applicationModifiers && (
+          <div className="mt-6 pt-4 border-t">
+            <h4 className="text-sm font-medium mb-3 text-muted-foreground">Application Modifiers (overlapping, not additive)</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="text-center p-3 bg-muted rounded-md" data-testid="modifier-approved-with-conditions">
+                <div className="text-lg font-bold">{applicationModifiers.approvedWithConditions}</div>
+                <p className="text-xs text-muted-foreground">Approved w/ Conditions</p>
+              </div>
+              <div className="text-center p-3 bg-muted rounded-md" data-testid="modifier-approved-after-delay">
+                <div className="text-lg font-bold">{applicationModifiers.approvedAfterDelay}</div>
+                <p className="text-xs text-muted-foreground">Approved After Delay</p>
+              </div>
+              <div className="text-center p-3 bg-muted rounded-md" data-testid="modifier-appeals-filed">
+                <div className="text-lg font-bold">{applicationModifiers.appealsFiled}</div>
+                <p className="text-xs text-muted-foreground">Appeals Filed</p>
+              </div>
+              <div className="text-center p-3 bg-muted rounded-md" data-testid="modifier-appeal-successes">
+                <div className="text-lg font-bold">{applicationModifiers.appealSuccesses}</div>
+                <p className="text-xs text-muted-foreground">Appeal Successes</p>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function FrictionMatrixCard({ matrix }: { matrix: FrictionCategory[] }) {
-  const maxPct = Math.max(...matrix.map((m) => m.percentage), 1);
+function TopFrictionTriggersCard({ matrix, hitList }: { matrix: FrictionCategory[]; hitList?: OrdinanceHitListData[] }) {
+  const grouped = new Map<string, { count: number; percentage: number; keywords: string[] }>();
+
+  for (const item of matrix) {
+    grouped.set(item.category, { count: item.count, percentage: item.percentage, keywords: [] });
+  }
+
+  if (hitList) {
+    for (const entry of hitList) {
+      let matched = false;
+      const groupedKeys = Array.from(grouped.keys());
+      for (const cat of groupedKeys) {
+        const data = grouped.get(cat)!;
+        if (entry.keyword.toLowerCase().includes(cat.toLowerCase()) || cat.toLowerCase().includes(entry.keyword.toLowerCase())) {
+          data.keywords.push(entry.keyword);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        const existing = grouped.get("Other");
+        if (existing) {
+          existing.keywords.push(entry.keyword);
+        } else {
+          grouped.set(entry.keyword, { count: entry.count, percentage: entry.percentage, keywords: [] });
+        }
+      }
+    }
+  }
+
+  const entries = Array.from(grouped.entries()).sort((a, b) => b[1].count - a[1].count);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2" data-testid="title-top-friction-triggers">
           <AlertTriangle className="w-5 h-5" />
-          Ordinance Heatmap
+          Top Friction Triggers
         </CardTitle>
-        <CardDescription>Where your zoning and land use regulations create the most friction</CardDescription>
+        <CardDescription>Consolidated view of zoning, procedural, and regulatory friction sources</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {matrix.map((item, i) => {
-            const widthPct = Math.max((item.percentage / maxPct) * 100, 4);
-
-            return (
-              <div key={item.category} className="space-y-1" data-testid={`friction-category-${i}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    {item.category}
-                    {item.category === "Procedural/Incomplete" && (
-                      <Info className="w-3.5 h-3.5 text-muted-foreground" title="Delays caused by missing paperwork, unpaid fees, or incomplete site maps prior to substantive project review." data-testid="info-procedural" />
-                    )}
-                  </span>
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    {item.count} ({item.percentage}%)
-                  </span>
-                </div>
-                <div className="h-6 w-full bg-muted rounded-md overflow-hidden">
-                  <div
-                    className="h-full rounded-md bg-amber-500/70 dark:bg-amber-400/70 transition-all"
-                    style={{ width: `${widthPct}%` }}
-                  />
-                </div>
-                {item.examples && item.examples.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Examples: {item.examples.join(", ")}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Category</TableHead>
+              <TableHead className="text-right">Count</TableHead>
+              <TableHead className="text-right">%</TableHead>
+              <TableHead>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map(([category, data], i) => (
+              <TableRow key={category} data-testid={`row-friction-${i}`}>
+                <TableCell className="font-medium">{category}</TableCell>
+                <TableCell className="text-right tabular-nums">{data.count}</TableCell>
+                <TableCell className="text-right tabular-nums">{data.percentage}%</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {data.keywords.length > 0
+                    ? data.keywords.join(", ")
+                    : frictionDescription(category)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
 }
 
-function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoyDeltas?: YoYDeltas | null }) {
+function frictionDescription(category: string): string {
+  const descriptions: Record<string, string> = {
+    "Wetlands/Environmental": "Delays from wetland setback reviews, DES permits, and environmental impact assessments",
+    "Zoning Setback": "Non-conforming setback distances requiring variances or redesign",
+    "Procedural/Incomplete": "Missing paperwork, unpaid fees, or incomplete site plans delaying substantive review",
+    "Drainage/Stormwater": "Stormwater management plan reviews and drainage engineering requirements",
+    "Fire Dept": "Fire department access, hydrant placement, and safety code compliance reviews",
+    "NHDES": "State environmental permits and NH Department of Environmental Services coordination",
+    "Access/Traffic": "Driveway permits, traffic studies, and road access safety reviews",
+    "Septic/Water": "Septic system design approvals and water supply adequacy reviews",
+    "Landscaping/Screening": "Buffer zone, screening, and landscaping plan requirements",
+  };
+  return descriptions[category] || "Regulatory friction from this category of requirements";
+}
+
+function TimeToDecisionCard({ data, temporalTrends }: { data: TimeToDecisionData; temporalTrends?: TemporalTrendsData }) {
+  const yearlyData = temporalTrends?.yearlyBreakdown ?? [];
+  const chartData = yearlyData.map(y => ({
+    year: y.year.toString(),
+    avgDays: y.avgDays,
+    avgContinuances: y.avgContinuances,
+  }));
+
   return (
     <Card>
       <CardHeader>
@@ -704,26 +772,37 @@ function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoy
         <CardDescription>How long applications take from submission to final decision</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="flex items-center justify-center gap-2 flex-wrap">
+        {chartData.length > 1 ? (
+          <div className="mb-6" data-testid="chart-time-to-decision">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="year" className="text-xs" />
+                <YAxis yAxisId="days" className="text-xs" />
+                <YAxis yAxisId="cont" orientation="right" className="text-xs" />
+                <RechartsTooltip />
+                <Legend />
+                <Line yAxisId="days" type="monotone" dataKey="avgDays" name="Average Days to Decision" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} />
+                <Line yAxisId="cont" type="monotone" dataKey="avgContinuances" name="Average Continuances" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="text-center p-3 bg-muted rounded-md">
               <div className="text-2xl font-bold" data-testid="text-avg-days">{data.overall.avgDays}</div>
-              {yoyDeltas && <YoYBadge value={yoyDeltas.ttdPct} label="vs. prev year" invertColor />}
+              <p className="text-sm text-muted-foreground">Avg Days</p>
             </div>
-            <p className="text-sm text-muted-foreground">Avg Days</p>
-          </div>
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-median-days">{data.overall.medianDays}</div>
-            <p className="text-sm text-muted-foreground">Median Days</p>
-          </div>
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="flex items-center justify-center gap-2 flex-wrap">
+            <div className="text-center p-3 bg-muted rounded-md">
+              <div className="text-2xl font-bold" data-testid="text-median-days">{data.overall.medianDays}</div>
+              <p className="text-sm text-muted-foreground">Median Days</p>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-md">
               <div className="text-2xl font-bold" data-testid="text-avg-continuances">{data.overall.avgContinuances}</div>
-              {yoyDeltas && <YoYBadge value={yoyDeltas.continuancesPct} label="vs. prev year" invertColor />}
+              <p className="text-sm text-muted-foreground">Avg Continuances</p>
             </div>
-            <p className="text-sm text-muted-foreground">Avg Continuances</p>
           </div>
-        </div>
+        )}
         {data.byCategory.length > 0 && (
           <div>
             <h4 className="text-sm font-medium mb-3 text-muted-foreground">Breakdown by Friction Type</h4>
@@ -752,100 +831,6 @@ function TimeToDecisionCard({ data, yoyDeltas }: { data: TimeToDecisionData; yoy
   );
 }
 
-function FrequentFlyersCard({ flyers }: { flyers: FrequentFlyerData[] }) {
-  const outcomeVariant = (outcome: string) => {
-    switch (outcome) {
-      case "approved": return "default" as const;
-      case "approved_with_conditions": return "secondary" as const;
-      case "denied": return "destructive" as const;
-      default: return "outline" as const;
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Flame className="w-5 h-5" />
-          Most Contested Projects
-        </CardTitle>
-        <CardDescription>Projects requiring the most board meetings before resolution</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {flyers.map((flyer, i) => (
-            <div key={i} className="flex items-start justify-between gap-3 p-3 border rounded-md" data-testid={`flyer-row-${i}`}>
-              <div className="space-y-1 min-w-0">
-                <div className="font-medium truncate">{flyer.entityName}</div>
-                {flyer.address && (
-                  <div className="text-sm text-muted-foreground truncate">{flyer.address}</div>
-                )}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant={outcomeVariant(flyer.outcome)} className="text-xs">
-                    {flyer.outcome.replace(/_/g, " ")}
-                  </Badge>
-                  {flyer.frictionCategories.slice(0, 3).map((cat, ci) => (
-                    <Badge key={ci} variant="outline" className="text-xs">{cat}</Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="text-right shrink-0 space-y-1">
-                <div className="text-lg font-bold tabular-nums">{flyer.meetingCount}</div>
-                <div className="text-xs text-muted-foreground">meetings</div>
-                {flyer.daysElapsed > 0 && (
-                  <div className="text-xs text-muted-foreground tabular-nums">{flyer.daysElapsed} days</div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function OrdinanceHitListCard({ entries }: { entries: OrdinanceHitListData[] }) {
-  const maxCount = entries.length > 0 ? entries[0].count : 1;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Target className="w-5 h-5" />
-          Ordinance Hit List
-        </CardTitle>
-        <CardDescription>Specific zoning and procedural rules causing the most friction</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {entries.map((entry, i) => (
-            <div key={entry.keyword} className="space-y-1" data-testid={`hitlist-row-${i}`}>
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <span className="font-medium capitalize">{entry.keyword}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm tabular-nums text-muted-foreground">{entry.count} apps</span>
-                  <Badge variant="outline" className="text-xs tabular-nums">{entry.percentage}%</Badge>
-                </div>
-              </div>
-              <div className="w-full bg-muted rounded-md h-2 overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-md transition-all"
-                  style={{ width: `${Math.round((entry.count / maxCount) * 100)}%` }}
-                />
-              </div>
-              {entry.exampleProjects.length > 0 && (
-                <p className="text-xs text-muted-foreground truncate">
-                  e.g. {entry.exampleProjects.join(", ")}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function RepresentationGapCard({ data }: { data: RepresentationGapData }) {
   const metrics = [
     { label: "Approval Rate", citizen: `${data.citizenStats.approvalRate}%`, pro: `${data.proStats.approvalRate}%`, delta: data.delta.approvalRate, suffix: "pp", invertColor: false },
@@ -853,12 +838,6 @@ function RepresentationGapCard({ data }: { data: RepresentationGapData }) {
     { label: "Abandonment Rate", citizen: `${data.citizenStats.abandonmentRate}%`, pro: `${data.proStats.abandonmentRate}%`, delta: data.delta.abandonmentRate, suffix: "pp", invertColor: true },
     { label: "Avg Days to Decision", citizen: `${data.citizenStats.avgDaysToDecision}`, pro: `${data.proStats.avgDaysToDecision}`, delta: data.delta.avgDaysToDecision, suffix: " days", invertColor: true },
   ];
-
-  const deltaColor = (val: number, invert: boolean) => {
-    if (val === 0) return "text-muted-foreground";
-    const isGood = invert ? val < 0 : val > 0;
-    return isGood ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
-  };
 
   return (
     <Card>
@@ -886,7 +865,6 @@ function RepresentationGapCard({ data }: { data: RepresentationGapData }) {
               <TableHead>Metric</TableHead>
               <TableHead className="text-right">Citizen/Owner</TableHead>
               <TableHead className="text-right">Professional</TableHead>
-              <TableHead className="text-right">Delta</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -895,9 +873,6 @@ function RepresentationGapCard({ data }: { data: RepresentationGapData }) {
                 <TableCell className="font-medium">{m.label}</TableCell>
                 <TableCell className="text-right tabular-nums">{m.citizen}</TableCell>
                 <TableCell className="text-right tabular-nums">{m.pro}</TableCell>
-                <TableCell className={`text-right tabular-nums font-medium ${deltaColor(m.delta, m.invertColor)}`}>
-                  {m.delta > 0 ? "+" : ""}{m.delta}{m.suffix}
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -933,7 +908,6 @@ function ProjectTypeComparisonCard({ data }: { data: ProjectTypeComparisonData }
               <TableHead className="text-right">Count</TableHead>
               <TableHead className="text-right">Avg Days</TableHead>
               <TableHead className="text-right">Avg Cont.</TableHead>
-              <TableHead>Top Friction</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -943,13 +917,6 @@ function ProjectTypeComparisonCard({ data }: { data: ProjectTypeComparisonData }
                 <TableCell className="text-right tabular-nums">{r.stats.count}</TableCell>
                 <TableCell className="text-right tabular-nums">{r.stats.avgDays}</TableCell>
                 <TableCell className="text-right tabular-nums">{r.stats.avgContinuances}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1 flex-wrap">
-                    {r.stats.topFriction.slice(0, 2).map((cat, ci) => (
-                      <Badge key={ci} variant="outline" className="text-xs">{cat}</Badge>
-                    ))}
-                  </div>
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -966,7 +933,7 @@ function AttritionCurveCard({ entries }: { entries: AttritionCurveEntry[] }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2" data-testid="title-attrition-curve">
-          <Ghost className="w-5 h-5" />
+          <TrendingDown className="w-5 h-5" />
           The Attrition Curve
         </CardTitle>
         <CardDescription>Where abandoned and withdrawn projects exit the process</CardDescription>
@@ -989,10 +956,8 @@ function AttritionCurveCard({ entries }: { entries: AttritionCurveEntry[] }) {
                     style={{ width: `${widthPct}%` }}
                   />
                 </div>
-                {entry.examples.length > 0 && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    e.g. {entry.examples.join(", ")}
-                  </p>
+                {entry.description && (
+                  <p className="text-xs text-muted-foreground">{entry.description}</p>
                 )}
               </div>
             );
@@ -1003,114 +968,51 @@ function AttritionCurveCard({ entries }: { entries: AttritionCurveEntry[] }) {
   );
 }
 
-function DelayBreakdownCard({ data }: { data: DelayBreakdownData }) {
-  const boardPct = data.avgTotalDays > 0 ? Math.round((data.avgBoardDays / data.avgTotalDays) * 100) : 0;
-  const externalPct = 100 - boardPct;
+function DaysAddedCard({ entries }: { entries: DaysAddedEntry[] }) {
+  const chartData = entries.map(e => ({
+    constraint: e.constraint,
+    avgDaysAdded: e.avgDaysAdded,
+    count: e.count,
+  }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2" data-testid="title-delay-breakdown">
+        <CardTitle className="flex items-center gap-2" data-testid="title-days-added">
           <Clock className="w-5 h-5" />
-          State vs. Local Delays
+          Average Days Added by Constraint
         </CardTitle>
-        <CardDescription>Estimated split between board review time and external/state agency waiting time</CardDescription>
+        <CardDescription>How many extra days each friction trigger adds to the approval timeline</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-board-days">{data.avgBoardDays}</div>
-            <p className="text-sm text-muted-foreground">Est. Board Days</p>
-          </div>
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-external-days">{data.avgExternalDays}</div>
-            <p className="text-sm text-muted-foreground">Est. External Days</p>
-          </div>
-          <div className="text-center p-3 bg-muted rounded-md">
-            <div className="text-2xl font-bold" data-testid="text-total-days">{data.avgTotalDays}</div>
-            <p className="text-sm text-muted-foreground">Avg Total Days</p>
-          </div>
-        </div>
-        <div className="h-8 w-full bg-muted rounded-md overflow-hidden flex mb-2">
-          <div
-            className="h-full bg-primary/70 transition-all flex items-center justify-center text-xs font-medium text-primary-foreground"
-            style={{ width: `${boardPct}%` }}
-          >
-            {boardPct > 10 && `${boardPct}%`}
-          </div>
-          <div
-            className="h-full bg-amber-500/70 dark:bg-amber-400/70 transition-all flex items-center justify-center text-xs font-medium"
-            style={{ width: `${externalPct}%` }}
-          >
-            {externalPct > 10 && `${externalPct}%`}
-          </div>
-        </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4 flex-wrap">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-primary/70 inline-block" /> Board Review</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-500/70 dark:bg-amber-400/70 inline-block" /> External/State Delays</span>
-        </div>
-        {data.externalReasons.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium mb-2 text-muted-foreground">Top External Delay Reasons</h4>
-            <div className="space-y-2">
-              {data.externalReasons.map((r, i) => (
-                <div key={i} className="flex items-center justify-between gap-2" data-testid={`delay-reason-${i}`}>
-                  <span className="text-sm">{r.reason}</span>
-                  <Badge variant="outline" className="text-xs tabular-nums">{r.count} apps</Badge>
+        {chartData.length > 0 && (
+          <div data-testid="chart-days-added">
+            <ResponsiveContainer width="100%" height={Math.max(entries.length * 44, 200)}>
+              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
+                <XAxis type="number" className="text-xs" />
+                <YAxis type="category" dataKey="constraint" width={140} className="text-xs" tick={{ fontSize: 12 }} />
+                <RechartsTooltip formatter={(value: number, name: string) => [
+                  name === "avgDaysAdded" ? `${value} days` : `${value} apps`,
+                  name === "avgDaysAdded" ? "Avg Days Added" : "Applications"
+                ]} />
+                <Bar dataKey="avgDaysAdded" name="Avg Days Added" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
+                  {chartData.map((_, index) => (
+                    <Cell key={index} fillOpacity={0.8} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-3 space-y-1">
+              {entries.map((e, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-sm" data-testid={`days-added-row-${i}`}>
+                  <span className="text-muted-foreground">{e.constraint}</span>
+                  <span className="tabular-nums font-medium">{e.avgDaysAdded} days avg ({e.count} apps)</span>
                 </div>
               ))}
             </div>
           </div>
         )}
-        <p className="text-xs text-muted-foreground mt-3 italic">
-          External delay estimates are approximated from keyword analysis of friction reasons and conditions.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StandardConditionsCard({ entries }: { entries: StandardConditionEntry[] }) {
-  const maxCount = entries.length > 0 ? entries[0].count : 1;
-  const top5 = entries.slice(0, 5);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2" data-testid="title-standard-conditions">
-          <Target className="w-5 h-5" />
-          Standard Conditions — Pre-Application Checklist Candidates
-        </CardTitle>
-        <CardDescription>Conditions applied so frequently they should be moved to a pre-application checklist to save board time</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {top5.map((entry, i) => {
-            const widthPct = Math.max((entry.count / maxCount) * 100, 4);
-            return (
-              <div key={i} className="space-y-1" data-testid={`condition-row-${i}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-sm font-medium">{entry.condition}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm tabular-nums text-muted-foreground">{entry.count} apps</span>
-                    <Badge variant="outline" className="text-xs tabular-nums">{entry.percentage}%</Badge>
-                  </div>
-                </div>
-                <div className="w-full bg-muted rounded-md h-2 overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-md transition-all"
-                    style={{ width: `${widthPct}%` }}
-                  />
-                </div>
-                {entry.exampleProjects.length > 0 && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    e.g. {entry.exampleProjects.join(", ")}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
       </CardContent>
     </Card>
   );

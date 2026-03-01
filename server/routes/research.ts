@@ -19,6 +19,7 @@ import {
   aggregateFrictionMatrix,
   computeTimeToDecision,
   computeFrequentFlyers,
+  computeDaysAddedByConstraint,
 } from "../services/entityResolution";
 import { logInfo, logError } from "../utils/logger";
 
@@ -814,18 +815,29 @@ async function buildReportData(
 ): Promise<FrictionReportData> {
   const stats = computeAllStats(deduplicatedApps, rawAppCount);
 
+  const totalApproved = stats.approvedClean + stats.approvedWithConditions;
+  const totalWithdrawnAbandoned = stats.withdrawn + stats.abandoned;
   const pct = (n: number) => (stats.totalApps > 0 ? Math.round((n / stats.totalApps) * 100) : 0);
-  const ghostCount = stats.withdrawn + stats.abandoned;
+
   const funnelStages: FunnelStage[] = [
-    { label: "Total Applications", count: stats.totalApps, percentage: 100 },
-    { label: "Approved After Delay (2+ Continuances)", count: stats.delayed, percentage: pct(stats.delayed) },
-    { label: "Approved Without Conditions", count: stats.approvedClean, percentage: pct(stats.approvedClean) },
-    { label: "Approved With Conditions", count: stats.approvedWithConditions, percentage: pct(stats.approvedWithConditions) },
+    { label: "Approved", count: totalApproved, percentage: pct(totalApproved), description: `${stats.approvedClean} without conditions + ${stats.approvedWithConditions} with conditions` },
     { label: "Denied", count: stats.denied, percentage: pct(stats.denied) },
-    { label: "Withdrawn / Abandoned", count: ghostCount, percentage: pct(ghostCount), description: `${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned (ghost projects)` },
-    { label: "Appeals Filed", count: stats.appealed, percentage: pct(stats.appealed) },
-    { label: "Appeal Successes", count: stats.appealWon, percentage: pct(stats.appealWon) },
+    { label: "Withdrawn/Abandoned", count: totalWithdrawnAbandoned, percentage: pct(totalWithdrawnAbandoned), description: `${stats.withdrawn} withdrawn + ${stats.abandoned} abandoned` },
   ];
+  if (stats.pending > 0) {
+    funnelStages.push({ label: "Pending/Unknown", count: stats.pending, percentage: pct(stats.pending) });
+  }
+
+  const approvedAfterDelay = deduplicatedApps.filter(
+    a => (a.outcome === "approved" || a.outcome === "approved_with_conditions") && a.totalContinuances >= 2
+  ).length;
+
+  const applicationModifiers = {
+    approvedWithConditions: stats.approvedWithConditions,
+    approvedAfterDelay,
+    appealsFiled: stats.appealed,
+    appealSuccesses: stats.appealWon,
+  };
 
   let predictiveInsights: string[];
   try {
@@ -842,6 +854,7 @@ async function buildReportData(
     documentsAnalyzed,
     rawApplicationCount: rawAppCount,
     funnelStages,
+    applicationModifiers,
     frictionMatrix: stats.frictionDistribution,
     predictiveInsights,
     applications: deduplicatedApps,
@@ -853,8 +866,7 @@ async function buildReportData(
     representationGap: stats.representationGap,
     projectTypeComparison: stats.projectTypeComparison,
     attritionCurve: stats.attritionCurve,
-    delayBreakdown: stats.delayBreakdown,
-    standardConditions: stats.standardConditions,
+    daysAddedByConstraint: stats.daysAddedByConstraint,
   };
 }
 
