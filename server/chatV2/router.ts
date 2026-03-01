@@ -4,19 +4,9 @@ import { logLlmRequest, logLlmResponse, logLlmError } from "../utils/llmLogging"
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { getModelForStage } from "../llm/modelRegistry";
+import { NH_TOWNS } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
-
-const NH_TOWNS = [
-  "Ossipee", "Conway", "Bartlett", "Madison", "Tamworth", "Freedom", "Effingham",
-  "Moultonborough", "Sandwich", "Wolfeboro", "Wakefield", "Milton", "Farmington",
-  "Rochester", "Dover", "Portsmouth", "Exeter", "Hampton", "Concord", "Manchester",
-  "Nashua", "Keene", "Laconia", "Berlin", "Littleton", "Plymouth", "Hanover",
-  "Lebanon", "Claremont", "Franklin", "Tilton", "Meredith", "Ashland", "Holderness",
-  "Campton", "Thornton", "Lincoln", "Woodstock", "Franconia", "Sugar Hill", "Lisbon",
-  "Bethlehem", "Whitefield", "Lancaster", "Gorham", "Jackson", "Albany", "Eaton",
-  "Chatham", "Brookfield"
-];
 
 const RSA_PATTERNS = [
   /\bRSA\b/i,

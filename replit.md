@@ -38,6 +38,10 @@ Document files are stored in Replit Object Storage, providing scalable and secur
 ### Crawler / Data Collection
 A sophisticated crawler system collects data using multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching. It supports town-level and state-level document collection, including integrations with Google Drive and CourtListener API.
 
+**County Coverage:** Carroll, Coos, Grafton, and Belknap counties (northern NH and Lakes Region). County town data files live in `crawler/scripts/{county}-county-towns.json`. New counties can be seeded into the database via `npx tsx crawler/scripts/seed-new-counties.ts`.
+
+**Town Name Registry:** `NH_TOWNS` in `shared/schema.ts` is the single source of truth for all known NH town names. All other files (chatV2 router, simpleAnswer, etc.) import from there — no duplicate lists.
+
 ### OC Research Module
 The OC Research tab provides analytical tools for municipal data analysis, including a **Development Friction Report**. This report uses a multi-phase pipeline to:
 1.  Retrieve full meeting text documents.

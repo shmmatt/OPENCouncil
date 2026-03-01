@@ -21,6 +21,7 @@ import {
   buildTwoLaneSnippetText,
   classifyTwoLaneDocSource,
 } from "./twoLaneRetrieve";
+import { NH_TOWNS } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
@@ -574,47 +575,6 @@ const STATEWIDE_PATTERNS = [
   /\bstate law\b/i,
 ];
 
-/**
- * List of known NH town names for automatic detection when no townHint is provided.
- * This helps classify documents correctly for simple path questions that mention
- * towns by name but don't have metadata.town set.
- */
-const KNOWN_NH_TOWNS = [
-  "Acworth", "Albany", "Alexandria", "Allenstown", "Alstead", "Alton", "Amherst",
-  "Andover", "Antrim", "Ashland", "Atkinson", "Auburn", "Barnstead", "Barrington",
-  "Bartlett", "Bath", "Bedford", "Belmont", "Bennington", "Benton", "Berlin",
-  "Bethlehem", "Boscawen", "Bow", "Bradford", "Brentwood", "Bridgewater", "Bristol",
-  "Brookfield", "Brookline", "Campton", "Canaan", "Candia", "Canterbury", "Carroll",
-  "Center Harbor", "Charlestown", "Chatham", "Chester", "Chesterfield", "Chichester",
-  "Claremont", "Clarksville", "Colebrook", "Columbia", "Concord", "Conway", "Cornish",
-  "Croydon", "Dalton", "Danbury", "Danville", "Deerfield", "Deering", "Derry",
-  "Dorchester", "Dover", "Dublin", "Dummer", "Dunbarton", "Durham", "East Kingston",
-  "Easton", "Eaton", "Effingham", "Ellsworth", "Enfield", "Epping", "Epsom", "Errol",
-  "Exeter", "Farmington", "Fitzwilliam", "Francestown", "Franconia", "Franklin",
-  "Freedom", "Fremont", "Gilford", "Gilmanton", "Gilsum", "Goffstown", "Gorham",
-  "Goshen", "Grafton", "Grantham", "Greenfield", "Greenland", "Greenville", "Groton",
-  "Hampstead", "Hampton", "Hampton Falls", "Hancock", "Hanover", "Harrisville", "Hart's Location",
-  "Haverhill", "Hebron", "Henniker", "Hill", "Hillsborough", "Hinsdale", "Holderness",
-  "Hollis", "Hooksett", "Hopkinton", "Hudson", "Jackson", "Jaffrey", "Jefferson",
-  "Keene", "Kensington", "Kingston", "Laconia", "Lancaster", "Landaff", "Langdon",
-  "Lebanon", "Lee", "Lempster", "Lincoln", "Lisbon", "Litchfield", "Littleton",
-  "Londonderry", "Loudon", "Lyman", "Lyme", "Lyndeborough", "Madbury", "Madison",
-  "Manchester", "Marlborough", "Marlow", "Mason", "Meredith", "Merrimack", "Middleton",
-  "Milan", "Milford", "Milton", "Monroe", "Mont Vernon", "Moultonborough", "Nashua",
-  "Nelson", "New Boston", "New Castle", "New Durham", "New Hampton", "New Ipswich",
-  "New London", "Newbury", "Newfields", "Newington", "Newmarket", "Newport", "Newton",
-  "North Hampton", "Northfield", "Northumberland", "Northwood", "Nottingham", "Orange",
-  "Orford", "Ossipee", "Pelham", "Pembroke", "Peterborough", "Piermont", "Pittsburg",
-  "Pittsfield", "Plainfield", "Plaistow", "Plymouth", "Portsmouth", "Randolph", "Raymond",
-  "Richmond", "Rindge", "Rochester", "Rollinsford", "Roxbury", "Rumney", "Rye",
-  "Salem", "Salisbury", "Sanbornton", "Sandown", "Sandwich", "Seabrook", "Sharon",
-  "Shelburne", "Somersworth", "South Hampton", "Springfield", "Stark", "Stewartstown",
-  "Stoddard", "Strafford", "Stratford", "Stratham", "Sugar Hill", "Sullivan", "Sunapee",
-  "Surry", "Sutton", "Swanzey", "Tamworth", "Temple", "Thornton", "Tilton", "Troy",
-  "Tuftonboro", "Unity", "Wakefield", "Walpole", "Warner", "Warren", "Washington",
-  "Waterville Valley", "Weare", "Webster", "Wentworth", "Westmoreland", "Whitefield",
-  "Wilmot", "Wilton", "Winchester", "Windham", "Windsor", "Wolfeboro", "Woodstock"
-];
 
 /**
  * Try to detect a town name from document names/URIs when no explicit townHint is provided.
@@ -624,7 +584,7 @@ function detectTownFromDocuments(docNames: string[]): string | null {
   const combinedText = docNames.join(" ").toLowerCase();
   
   // Check for known NH towns in document names
-  for (const town of KNOWN_NH_TOWNS) {
+  for (const town of NH_TOWNS) {
     const townLower = town.toLowerCase();
     // Use word boundary matching to avoid partial matches
     const regex = new RegExp(`\\b${townLower}\\b`, 'i');
@@ -640,7 +600,7 @@ function detectTownFromDocuments(docNames: string[]): string | null {
     if (match && match[1]) {
       const extractedTown = match[1].trim();
       // Verify it's a known town
-      const knownMatch = KNOWN_NH_TOWNS.find(t => t.toLowerCase() === extractedTown.toLowerCase());
+      const knownMatch = NH_TOWNS.find(t => t.toLowerCase() === extractedTown.toLowerCase());
       if (knownMatch) {
         return knownMatch;
       }
