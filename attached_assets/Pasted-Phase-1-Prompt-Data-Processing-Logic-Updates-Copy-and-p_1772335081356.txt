@@ -1,0 +1,41 @@
+Phase 1 Prompt: Data Processing & Logic Updates
+Copy and paste this into your Replit agent first to get the backend math right.
+
+Markdown
+We need to update the data processing logic for our Development Friction Report. Please make the following adjustments to how we process the underlying CSV data:
+
+1. **Top-Level Metrics:** Ensure the "Unique Projects" metric reflects the absolute total number of rows/projects in the dataset. Remove any year-over-year increase calculations for this specific metric.
+2. **Terminology:** Do a global find-and-replace in the data output labels to change any instances of "Ghost Projects" to "Withdrawn/Abandoned".
+3. **Approval Funnel Recalculation:** Restructure the Approval Funnel logic so that the base outcomes ("Approved", "Denied", "Withdrawn/Abandoned") sum to exactly 100%. Move overlapping modifiers (e.g., "Approved After Delay", "Approved With Conditions", "Appeals Filed") into a separate data object called `application_modifiers` so they don't break the base funnel percentages.
+4. **Attrition Curve Restructuring:** Filter the Attrition Stage data to ONLY include chronological milestones (e.g., "Pre-Hearing", "After 1st Hearing", "After Multiple Hearings"). Remove conditional/pending statuses (like "Pending NHDES"). 
+5. **Calculate "Days Added":** Create a new function that correlates specific "Primary Friction Reasons" (e.g., Wetlands, Fire Dept, NHDES) with the delta between `Initial Appearance` and `Last Appearance`. Calculate the average number of days added to a project timeline for each distinct friction trigger.
+Phase 2 Prompt: Charting & Visualizations
+Run this once Phase 1 is functioning correctly.
+
+Markdown
+Now we need to update the visualizations and charts on the report dashboard using the updated data logic from the previous step.
+
+1. **Time to Decision Chart:** Remove the static "Median Days" metric. Replace it with a Line Graph. The X-axis should be years (spanning the dataset), and the Y-axis should plot two lines: "Average Days to Decision" and "Average Continuances". 
+2. **"Days Added" Infographic:** Remove the "State vs. Local Delays" segment entirely. Replace it with a new horizontal bar chart or infographic titled "Average Days Added by Constraint". Use the 'Days Added' calculation we created previously to show how many days specific constraints (e.g., NHDES review, Wetlands delineation, Traffic studies) add to the average timeline. 
+3. **Dynamic Predictive Insights:** Ensure the "Predictive Insights" text block is hooked up to a state listener so that it automatically regenerates whenever the user re-analyzes the data or changes date/category filters.
+Phase 3 Prompt: UI Cleanups & Table Consolidations
+Run this to clean up the front-end layout.
+
+Markdown
+Let's clean up the layout and remove unnecessary columns/sections from the UI:
+
+1. **Representation Gap Table:** Remove the "Delta" column from this table.
+2. **Residential vs. Commercial Table:** Remove the "Top Friction" column from this table.
+3. **Consolidate Ordinance Friction:** Combine the "Ordinance Heat Map" and the specific ordinance hit list into a single table called "Top Friction Triggers". The table should group by category (Zoning, Procedural, etc.) and list a short, generated description of the ordinance impact. Remove any references to specific "Example Projects" from this table.
+4. **Attrition Curve Descriptions:** In the Attrition Curve UI, remove the "Example Projects" and replace them with a short, static description of what that attrition stage means.
+5. **Section Removals:** Completely remove the "Standard Conditions" segment and the "Most Contested Projects" segment from the UI.
+6. **Extracted Applications Accordion:** Hide the raw list of extracted applications by default. Wrap this section in a closed, expandable accordion labeled "View Raw Application Data". 
+Phase 4 Prompt: PDF Export Generation
+Run this last to ensure the downloadable asset matches the new UI.
+
+Markdown
+Finally, update the PDF generation script to match the new UI layout and optimize the document length:
+
+1. Ensure the PDF layout reflects all the updated charts (Line graph for Time to Decision, new "Days Added" infographic).
+2. Ensure the removed sections (Standard Conditions, Contested Projects, Delta columns, etc.) are also stripped from the PDF template.
+3. **Omit Raw Data:** Completely remove the "Extracted Applications" list from the PDF export to save pages. (Users will still be able to access this via the downloadable CSV). Ensure the CSV export functionality remains intact.
