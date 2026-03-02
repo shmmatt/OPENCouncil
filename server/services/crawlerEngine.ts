@@ -296,7 +296,17 @@ function detectProtection(html: string): string | null {
   if (lower.includes('<title>access denied</title>') && lower.includes('reference&#32;')) {
     return 'akamai';
   }
-  if (lower.includes('captcha') || lower.includes('recaptcha') || lower.includes('hcaptcha')) {
+  if (lower.includes('hcaptcha') || lower.includes('h-captcha')) {
+    return 'captcha';
+  }
+  const hasRecaptchaV3 = lower.includes('recaptcha/api.js?render=') || lower.includes('grecaptcha.execute');
+  const hasRecaptchaV2 = lower.includes('class="g-recaptcha"') || lower.includes("class='g-recaptcha'") ||
+    (lower.includes('recaptcha/api.js') && !lower.includes('recaptcha/api.js?render='));
+  if (hasRecaptchaV2 && !hasRecaptchaV3) {
+    return 'captcha';
+  }
+  if (!hasRecaptchaV2 && !hasRecaptchaV3 && lower.includes('captcha') &&
+      (lower.includes('<form') || lower.includes('challenge') || lower.includes('verify'))) {
     return 'captcha';
   }
   if (lower.includes('incapsula') || lower.includes('imperva')) {
@@ -324,6 +334,12 @@ function isDocumentUrl(url: string): boolean {
   if (lower.includes('getfile') || lower.includes('viewdocument')) return true;
 
   if (/\/(minutes|agenda)\/(minutes|agenda)-\d+/i.test(lower)) return true;
+
+  if (lower.includes('/fs/resource-manager/view/')) return true;
+  if (lower.includes('resources.finalsite.net/')) return true;
+
+  if (lower.includes('drive.google.com/file/d/')) return true;
+  if (lower.includes('drive.google.com/open?')) return true;
 
   return false;
 }
@@ -3846,14 +3862,66 @@ async function executeSauCrawl(
     downloadIndex++;
 
     if (isExternalDocumentLink(docUrl)) {
-      await recordSauDocState({
-        sourceId: source.id,
-        url: docUrl,
-        urlHash: hashUrl(docUrl),
-        filename: extractFilename(docUrl),
-        status: 'discovered',
-        discoveredFrom: docInfo.foundOnPage,
-      });
+      const driveFileMatch = docUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      const driveOpenMatch = !driveFileMatch ? docUrl.match(/drive\.google\.com\/open\?.*id=([a-zA-Z0-9_-]+)/) : null;
+      const driveUcMatch = (!driveFileMatch && !driveOpenMatch) ? docUrl.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/) : null;
+      const driveFileId = driveFileMatch?.[1] || driveOpenMatch?.[1] || driveUcMatch?.[1];
+      if (driveFileId) {
+        const drivePdfName = `gdrive-${driveFileId}.pdf`;
+        const driveS3Key = generateSauS3Key(source.slug, docUrl, drivePdfName);
+        try {
+          if (await s3KeyExists(s3, driveS3Key)) {
+            const existDriveDoc = await recordSauDocState({
+              sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: drivePdfName,
+              s3Key: driveS3Key, status: 'uploaded', discoveredFrom: docInfo.foundOnPage,
+              s3UploadedAt: new Date(), title: docInfo.linkText || undefined,
+            });
+            await bridgeSauDocToFileBlob(existDriveDoc.id, { s3Key: driveS3Key, filename: drivePdfName, mimeType: 'application/pdf', sizeBytes: 0, sourceSlug: source.slug, sauId: source.sauId });
+            progress.duplicatesSkipped++;
+            summary.duplicates++;
+          } else {
+            const exportUrl = `https://drive.google.com/uc?export=download&id=${driveFileId}`;
+            const driveDoc = await fetchDocument(exportUrl, signal, docInfo.foundOnPage);
+            if (driveDoc && driveDoc.size > 0) {
+              const driveCt = (driveDoc.contentType || '').split(';')[0].trim().toLowerCase();
+              if (driveCt === 'text/html' || driveCt === 'application/xhtml+xml') {
+                addLog(progress, `DRIVE SKIP [${downloadIndex}/${docsSeen.size}]: ${drivePdfName} — response was HTML (virus scan or permission page)`);
+                await recordSauDocState({
+                  sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: drivePdfName,
+                  status: 'failed', errorMessage: 'Drive returned HTML instead of document (likely requires sign-in or virus scan confirmation)',
+                  discoveredFrom: docInfo.foundOnPage,
+                }).catch(() => {});
+                progress.documentsFailed++;
+              } else {
+                await uploadToS3(s3, driveS3Key, driveDoc.buffer, driveDoc.contentType);
+                const newDriveDoc = await recordSauDocState({
+                  sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: drivePdfName,
+                  s3Key: driveS3Key, sizeBytes: driveDoc.size, mimeType: driveDoc.contentType,
+                  status: 'uploaded', discoveredFrom: docInfo.foundOnPage, s3UploadedAt: new Date(),
+                  title: docInfo.linkText || undefined,
+                });
+                await bridgeSauDocToFileBlob(newDriveDoc.id, { s3Key: driveS3Key, filename: drivePdfName, mimeType: driveDoc.contentType, sizeBytes: driveDoc.size, sourceSlug: source.slug, sauId: source.sauId });
+                progress.documentsDownloaded++;
+                summary.newDocuments++;
+                addLog(progress, `DRIVE OK [${downloadIndex}/${docsSeen.size}]: ${drivePdfName} (${Math.round(driveDoc.size / 1024)}KB)`);
+              }
+            }
+          }
+        } catch (e: any) {
+          progress.documentsFailed++;
+          summary.errors.push({ url: docUrl, error: e.message || 'Drive download failed', failureType: classifyError(e) });
+          await recordSauDocState({
+            sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: drivePdfName,
+            status: 'failed', errorMessage: e.message, discoveredFrom: docInfo.foundOnPage,
+          }).catch(() => {});
+          addLog(progress, `DRIVE FAIL [${downloadIndex}/${docsSeen.size}]: ${drivePdfName} - ${e.message}`);
+        }
+      } else {
+        await recordSauDocState({
+          sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl),
+          filename: extractFilename(docUrl), status: 'discovered', discoveredFrom: docInfo.foundOnPage,
+        });
+      }
       continue;
     }
 
@@ -3938,6 +4006,16 @@ async function executeSauCrawl(
       }
 
       if (doc && !doc.isInterstitial && doc.size > 0) {
+        const ct = (doc.contentType || '').split(';')[0].trim().toLowerCase();
+        if (ct === 'text/html' || ct === 'application/xhtml+xml') {
+          addLog(progress, `SKIP [${downloadIndex}/${docsSeen.size}]: ${filename} — response was HTML, not a document`);
+          await recordSauDocState({
+            sourceId: source.id, url: docUrl, urlHash, filename,
+            status: 'failed', errorMessage: 'Response Content-Type was text/html, not a document',
+            discoveredFrom: docInfo.foundOnPage,
+          }).catch(() => {});
+          continue;
+        }
         await uploadToS3(s3, s3Key, doc.buffer, doc.contentType);
         const newDoc = await recordSauDocState({
           sourceId: source.id,

@@ -2,6 +2,18 @@ import { db } from '../storage/db';
 import { crawlerSauSources } from '../../shared/crawler-schema';
 import { sql } from 'drizzle-orm';
 
+const BROADENED_LINK_PATTERNS = [
+  "budget", "minutes", "agenda", "annual-report", "school-board", "warrant", "policy",
+  "report", "form", "agreement", "contract", "handbook", "plan", "assessment",
+  "finance", "enrollment", "annual", "meeting", "document", "memo", "notice",
+  "superintendent",
+];
+
+const TIGHTENED_EXCLUDE_PATTERNS = [
+  "/athletics/", "/lunch-menu", "/sports/", "/calendar/month", "/calendar/week",
+  "/calendar/day", "/lunch/menu", "/breakfast-menu",
+];
+
 const SAU_SOURCES = [
   {
     name: "SAU 9 - Mt. Washington Valley",
@@ -13,52 +25,55 @@ const SAU_SOURCES = [
     county: "Carroll",
     state: "NH",
     targetPaths: [
-      "/school-board", "/school-board/meeting-minutes", "/school-board/agendas",
-      "/budget", "/annual-report", "/superintendent",
-      "/policies", "/district-information",
+      "/school-boards", "/school-boards-home", "/sau9-reports",
+      "/forms", "/district", "/district-home", "/departments", "/curriculum",
+      "/negotiated-agreements-personnel-pol", "/evaluations", "/benefits",
+      "/sau9", "/staff",
     ],
-    linkPatterns: ["budget", "minutes", "agenda", "annual-report", "school-board", "warrant", "policy", "superintendent"],
-    excludePatterns: ["calendar", "lunch-menu", "athletics", "sports"],
+    linkPatterns: BROADENED_LINK_PATTERNS,
+    excludePatterns: TIGHTENED_EXCLUDE_PATTERNS,
     maxPages: 300,
-    notes: "Largest Carroll County SAU — 10 member towns. Conway is the hub.",
+    notes: "Largest Carroll County SAU — 10 member towns. Conway is the hub. Uses SmartSites/ParentSquare CMS with reCAPTCHA v3 (non-blocking).",
   },
   {
     name: "SAU 49 - Governor Wentworth Regional",
     slug: "sau-49",
     sauId: "SAU 49",
-    baseUrl: "https://www.gwrsd.org",
+    baseUrl: "https://gwrsd.sau49nh.gov",
     description: "Governor Wentworth Regional School District serving 6 Carroll/Strafford County towns",
     memberTowns: ["Wolfeboro", "Ossipee", "Tuftonboro", "Effingham", "Brookfield", "New Durham"],
     county: "Carroll",
     state: "NH",
     targetPaths: [
-      "/school-board", "/school-board/minutes", "/school-board/agendas",
-      "/budget", "/annual-reports", "/superintendent",
-      "/policies", "/district",
+      "/school-board", "/school-board/meeting-minutes", "/school-board/meeting-minutes-clone",
+      "/school-board/agendas", "/school-board/annual-meeting",
+      "/school-board/school-board-policy", "/school-board/school-board-committees",
+      "/about-gwrsd/sau-office", "/about-gwrsd/budget-finance",
+      "/about-gwrsd/district-reports",
     ],
-    linkPatterns: ["budget", "minutes", "agenda", "annual-report", "school-board", "warrant", "policy"],
-    excludePatterns: ["calendar", "lunch", "athletics", "sports"],
+    linkPatterns: BROADENED_LINK_PATTERNS,
+    excludePatterns: TIGHTENED_EXCLUDE_PATTERNS,
     maxPages: 300,
-    notes: "Governor Wentworth Regional — Wolfeboro is the hub. Note: Wakefield is NOT in SAU 49 (it's SAU 101).",
+    notes: "Governor Wentworth Regional — Wolfeboro is the hub. Uses Finalsite CMS (docs via /fs/resource-manager/view/). gwrsd.org redirects to gwrsd.sau49nh.gov. Note: Wakefield is NOT in SAU 49 (it's SAU 101).",
   },
   {
     name: "SAU 45 - Moultonborough",
     slug: "sau-45",
     sauId: "SAU 45",
-    baseUrl: "https://www.moultonboroughschool.com",
+    baseUrl: "https://sau45.org/en-US",
     description: "Moultonborough School District — single-town SAU",
     memberTowns: ["Moultonborough"],
     county: "Carroll",
     state: "NH",
     targetPaths: [
-      "/school-board", "/school-board/minutes", "/school-board/agendas",
-      "/budget", "/annual-report", "/superintendent",
-      "/policies",
+      "/en-US/school-board-355f9053", "/en-US/pages/355f9053-9876-4f0a-b85e-522d0fdffb7b",
+      "/en-US/pages/95ecc2a1-e316-41f8-991c-f11dd5bd6adc",
+      "/employment", "/for-staff",
     ],
-    linkPatterns: ["budget", "minutes", "agenda", "annual-report", "school-board", "warrant", "policy"],
-    excludePatterns: ["calendar", "lunch", "athletics", "sports"],
+    linkPatterns: BROADENED_LINK_PATTERNS,
+    excludePatterns: TIGHTENED_EXCLUDE_PATTERNS,
     maxPages: 200,
-    notes: "Single-town SAU — Moultonborough only.",
+    notes: "Single-town SAU — Moultonborough only. Uses SchoolBlocks CMS. Documents often hosted on Google Drive. SAU admin site is sau45.org, not ma-hs.sau45.org (which is the school campus site).",
   },
   {
     name: "SAU 2 - Inter-Lakes",
@@ -71,13 +86,15 @@ const SAU_SOURCES = [
     state: "NH",
     targetPaths: [
       "/school-board", "/school-board/minutes", "/school-board/agendas",
-      "/budget", "/annual-report", "/superintendent",
-      "/policies", "/district",
+      "/school-board/school-board-documents",
+      "/departments/human-resources", "/departments/human-resources/collective-bargaining-agreements",
+      "/departments/human-resources/forms", "/departments/human-resources/jlmc-minutes",
+      "/family-resources",
     ],
-    linkPatterns: ["budget", "minutes", "agenda", "annual-report", "school-board", "warrant", "policy"],
-    excludePatterns: ["calendar", "lunch", "athletics", "sports"],
+    linkPatterns: BROADENED_LINK_PATTERNS,
+    excludePatterns: TIGHTENED_EXCLUDE_PATTERNS,
     maxPages: 250,
-    notes: "Inter-Lakes — spans Belknap/Carroll county lines. Meredith is the hub.",
+    notes: "Inter-Lakes — spans Belknap/Carroll county lines. Meredith is the hub. Uses Finalsite CMS (docs via /fs/resource-manager/view/ and resources.finalsite.net).",
   },
 ];
 

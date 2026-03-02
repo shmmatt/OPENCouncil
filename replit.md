@@ -67,6 +67,9 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `startSauCrawl(source, options)` / `executeSauCrawl()`: 5-phase crawl (sitemap → known paths → BFS → document download → file_blob bridging)
 - `generateSauS3Key(slug, url, filename)`: S3 key pattern `sau/{slug}/{subpath}/{filename}`
 - `bridgeSauDocToFileBlob(sauDocId)`: Bridges SAU docs to main file_blobs table for embedding pipeline
+- `detectProtection()`: Distinguishes reCAPTCHA v3 (invisible, non-blocking) from v2 (visible challenge, blocking). Only flags v2/hCAPTCHA as CAPTCHA protection.
+- `isDocumentUrl()`: Recognizes Finalsite `/fs/resource-manager/view/` and `resources.finalsite.net` patterns, plus Google Drive file links
+- Download phase: Google Drive files are downloaded via export URL conversion (`/uc?export=download&id=`), supports `/file/d/`, `/open?id=`, and `/uc?id=` patterns. MIME type validation skips HTML responses.
 
 **Crawl State** (`server/services/crawlerState.ts`): Extended with `recordSauDocument`, `batchRecordSauDocuments`, `getAllSauDocumentUrls`, `getResumableSauDocuments`, `updateSauRunProgress`.
 
@@ -80,9 +83,9 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `POST /api/crawler-intel/sau-sources/:slug/abort`: Abort active crawl
 
 **Seeded Carroll County SAUs** (via `server/scripts/seed-sau-sources.ts`):
-- SAU 9 (Mt. Washington Valley): Conway, Albany, Bartlett, Chatham, Eaton, Freedom, Hart's Location, Jackson, Madison, Tamworth — https://www.sau9.org
-- SAU 49 (Governor Wentworth Regional): Wolfeboro, Ossipee, Tuftonboro, Effingham, Brookfield, New Durham — https://www.gwrsd.org
-- SAU 45 (Moultonborough): Moultonborough only — https://www.moultonboroughschool.com
+- SAU 9 (Mt. Washington Valley): Conway hub, 10 member towns — https://www.sau9.org (SmartSites/ParentSquare CMS, reCAPTCHA v3 non-blocking)
+- SAU 49 (Governor Wentworth Regional): Wolfeboro hub, 6 member towns — https://gwrsd.sau49nh.gov (Finalsite CMS, gwrsd.org redirects here)
+- SAU 45 (Moultonborough): Single-town SAU — https://sau45.org/en-US (SchoolBlocks CMS, docs via Google Drive)
 - SAU 2 (Inter-Lakes): Meredith, Center Harbor, Sandwich — https://www.interlakes.org
 
 **Embedding Pipeline Integration** (`server/services/embeddingPipeline.ts`):
