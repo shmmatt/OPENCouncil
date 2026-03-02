@@ -40,6 +40,8 @@ A sophisticated crawler system collects data using multi-strategy discovery (sit
 
 **County Coverage:** Carroll, Coos, Grafton, and Belknap counties (northern NH and Lakes Region). County town data files live in `crawler/scripts/{county}-county-towns.json`. New counties can be seeded into the database via `npx tsx crawler/scripts/seed-new-counties.ts`.
 
+**Crawl Queue:** The crawler engine enforces a max of 3 concurrent crawls (`MAX_CONCURRENT_CRAWLS` in `server/services/crawlerEngine.ts`). Batch crawls (trigger-all, county batch) use `enqueueCrawl()` which queues excess towns and auto-dequeues as slots free up. Queue status is available via `GET /api/admin/crawler/queue` and clearable via `POST /api/admin/crawler/queue/clear`. The admin panel shows county filtering, batch county crawl buttons, and a queue status badge.
+
 **Town Name Registry:** `NH_TOWNS` in `shared/schema.ts` is the single source of truth for all known NH town names. All other files (chatV2 router, simpleAnswer, etc.) import from there — no duplicate lists.
 
 ### OC Research Module

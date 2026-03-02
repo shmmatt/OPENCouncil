@@ -139,6 +139,86 @@ function getDomainDelay(url: string): number {
 
 export const activeCrawls = new Map<string, CrawlJob>();
 
+const MAX_CONCURRENT_CRAWLS = 3;
+
+interface QueuedCrawl {
+  town: CrawlerTown;
+  run: CrawlerRun;
+  options: { maxPages?: number; mode?: string };
+  queuedAt: Date;
+}
+
+const crawlQueue: QueuedCrawl[] = [];
+
+function getRunningCrawlCount(): number {
+  let count = 0;
+  for (const job of activeCrawls.values()) {
+    if (job.progress.status === 'running') count++;
+  }
+  return count;
+}
+
+function processQueue(): void {
+  while (crawlQueue.length > 0 && getRunningCrawlCount() < MAX_CONCURRENT_CRAWLS) {
+    const next = crawlQueue.shift();
+    if (!next) break;
+    const alreadyRunning = getActiveCrawls().some(c => c.townId === next.town.id && c.status === 'running');
+    if (alreadyRunning) {
+      console.log(`[CrawlQueue] Skipping ${next.town.name} — already has an active crawl`);
+      continue;
+    }
+    console.log(`[CrawlQueue] Dequeuing ${next.town.name} (${crawlQueue.length} remaining in queue)`);
+    startCrawl(next.town, next.run, next.options).catch(err => {
+      console.error(`[CrawlQueue] Failed to start dequeued crawl for ${next.town.name}:`, err.message);
+    });
+  }
+}
+
+export function enqueueCrawl(
+  town: CrawlerTown,
+  run: CrawlerRun,
+  options: { maxPages?: number; mode?: string } = {}
+): { status: 'started' | 'queued' | 'already_running'; position?: number; runId: string } {
+  const alreadyRunning = getActiveCrawls().some(c => c.townId === town.id && c.status === 'running');
+  if (alreadyRunning) {
+    return { status: 'already_running', runId: run.id };
+  }
+
+  if (getRunningCrawlCount() < MAX_CONCURRENT_CRAWLS) {
+    startCrawl(town, run, options).catch(err => {
+      console.error(`[CrawlQueue] Failed to start crawl for ${town.name}:`, err.message);
+    });
+    return { status: 'started', runId: run.id };
+  }
+
+  crawlQueue.push({ town, run, options, queuedAt: new Date() });
+  const position = crawlQueue.length;
+  console.log(`[CrawlQueue] Queued ${town.name} at position ${position} (${getRunningCrawlCount()} active)`);
+  return { status: 'queued', position, runId: run.id };
+}
+
+export function getQueueStatus() {
+  return {
+    maxConcurrent: MAX_CONCURRENT_CRAWLS,
+    activeCrawls: getRunningCrawlCount(),
+    queuedCount: crawlQueue.length,
+    queue: crawlQueue.map((q, i) => ({
+      position: i + 1,
+      townId: q.town.id,
+      townName: q.town.name,
+      runId: q.run.id,
+      queuedAt: q.queuedAt.toISOString(),
+    })),
+  };
+}
+
+export function clearQueue(): number {
+  const count = crawlQueue.length;
+  crawlQueue.length = 0;
+  console.log(`[CrawlQueue] Cleared ${count} queued crawls`);
+  return count;
+}
+
 export interface CrawlProgress {
   runId: string;
   townId: string;
@@ -961,6 +1041,7 @@ export async function startCrawl(
     }
 
     setTimeout(() => activeCrawls.delete(runId), 300000);
+    processQueue();
   });
 
   return runId;
@@ -2038,6 +2119,7 @@ async function executeCrawl(
   setTimeout(() => {
     activeCrawls.delete(run.id);
   }, 300000);
+  processQueue();
 }
 
 export function getCrawlProgress(runId: string): CrawlProgress | null {

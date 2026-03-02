@@ -141,6 +141,7 @@ interface TownOverview {
   slug: string;
   url: string;
   cms: string | null;
+  county: string | null;
   status: string;
   totalDocuments: number;
   totalUploaded: number;
@@ -296,6 +297,7 @@ function TownsDashboard({
 }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [countyFilter, setCountyFilter] = useState<string>("all");
 
   const { data: towns, isLoading } = useQuery<TownOverview[]>({
     queryKey: ["/api/admin/crawler/towns"],
@@ -353,13 +355,31 @@ function TownsDashboard({
     );
   }
 
+  const counties = Array.from(new Set((towns || []).map(t => t.county).filter(Boolean))).sort() as string[];
+  const filteredTowns = countyFilter === "all" ? (towns || []) : (towns || []).filter(t => t.county === countyFilter);
+
   return (
-    <ScrollArea className="w-full">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Town</TableHead>
-            <TableHead>Status</TableHead>
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Select value={countyFilter} onValueChange={setCountyFilter} data-testid="select-county-filter">
+          <SelectTrigger className="w-[200px]" data-testid="select-county-filter">
+            <SelectValue placeholder="All Counties" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Counties</SelectItem>
+            {counties.map((county) => (
+              <SelectItem key={county} value={county}>{county}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <ScrollArea className="w-full">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Town</TableHead>
+              <TableHead>County</TableHead>
+              <TableHead>Status</TableHead>
             <TableHead>CMS</TableHead>
             <TableHead>URLs</TableHead>
             <TableHead>Docs (Uploaded/Total)</TableHead>
@@ -369,7 +389,7 @@ function TownsDashboard({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {(towns || []).map((town) => {
+          {filteredTowns.map((town) => {
             const totalDocs = Object.values(town.documentsByStatus).reduce((a, b) => a + b, 0);
             const uploaded = town.documentsByStatus["uploaded"] || 0;
             return (
@@ -388,6 +408,7 @@ function TownsDashboard({
                     </div>
                   </div>
                 </TableCell>
+                <TableCell className="text-sm">{town.county || "-"}</TableCell>
                 <TableCell>{getTownStatusBadge(town.status)}</TableCell>
                 <TableCell className="text-sm">{town.cms || "-"}</TableCell>
                 <TableCell>{formatNumber(town.urlCount)}</TableCell>
@@ -432,8 +453,9 @@ function TownsDashboard({
             );
           })}
         </TableBody>
-      </Table>
-    </ScrollArea>
+        </Table>
+      </ScrollArea>
+    </div>
   );
 }
 
@@ -3082,6 +3104,7 @@ export default function AdminCrawler() {
   const [selectedTown, setSelectedTown] = useState<TownOverview | null>(null);
   const [selectedSource, setSelectedSource] = useState<StateSource | null>(null);
   const [activeTab, setActiveTab] = useState("towns");
+  const [batchCounty, setBatchCounty] = useState<string>("");
   const { toast } = useToast();
 
   const { data: stats, isLoading: statsLoading } = useQuery<CrawlerStats>({
@@ -3099,6 +3122,28 @@ export default function AdminCrawler() {
       return res.json();
     },
     refetchInterval: 30000,
+  });
+
+  const { data: towns } = useQuery<TownOverview[]>({
+    queryKey: ["/api/admin/crawler/towns"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/towns");
+      if (!res.ok) throw new Error("Failed to fetch towns");
+      return res.json();
+    },
+    refetchInterval: 15000,
+  });
+
+  const batchCounties = Array.from(new Set((towns || []).map(t => t.county).filter(Boolean))).sort() as string[];
+
+  const { data: queueStatus } = useQuery<{ queuedCount: number; activeCrawls: number }>({
+    queryKey: ["/api/admin/crawler/queue"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/queue");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: 5000,
   });
 
   const resetOrphaned = useMutation({
@@ -3120,7 +3165,7 @@ export default function AdminCrawler() {
     mutationFn: async () => {
       const res = await adminFetch("/api/admin/crawler/trigger-all", {
         method: "POST",
-        body: JSON.stringify({ mode: "full" }),
+        body: JSON.stringify({ mode: "full", ...(batchCounty ? { county: batchCounty } : {}) }),
       });
       if (!res.ok) throw new Error((await res.json()).message);
       return res.json();
@@ -3128,6 +3173,21 @@ export default function AdminCrawler() {
     onSuccess: (data: any) => {
       toast({ title: "Batch Crawl", description: data.message });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearQueue = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/queue/clear", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Queue Cleared", description: data.message || "Queue has been cleared" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/queue"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -3147,18 +3207,46 @@ export default function AdminCrawler() {
               </Link>
               <h1 className="text-xl font-bold">Crawler Management</h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {(stats?.activeRuns || 0) > 0 && (
                 <Badge variant="outline" className="text-blue-600 border-blue-600">
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                   {stats?.activeRuns} active
                 </Badge>
               )}
+              {(queueStatus?.queuedCount || 0) > 0 && (
+                <Badge variant="outline" className="text-amber-600 border-amber-600" data-testid="badge-queue-status">
+                  {queueStatus?.queuedCount} queued
+                </Badge>
+              )}
+              {(queueStatus?.queuedCount || 0) > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => clearQueue.mutate()}
+                  disabled={clearQueue.isPending}
+                  data-testid="button-clear-queue"
+                >
+                  <XCircle className="w-3 h-3 mr-1" />
+                  Clear Queue
+                </Button>
+              )}
+              <Select value={batchCounty} onValueChange={setBatchCounty} data-testid="select-batch-county">
+                <SelectTrigger className="w-[160px]" data-testid="select-batch-county">
+                  <SelectValue placeholder="All Counties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Counties</SelectItem>
+                  {batchCounties.map((county) => (
+                    <SelectItem key={county} value={county}>{county}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 variant="default"
                 size="sm"
                 onClick={() => triggerAllCrawls.mutate()}
-                disabled={triggerAllCrawls.isPending || (stats?.activeRuns || 0) > 3}
+                disabled={triggerAllCrawls.isPending || (queueStatus?.activeCrawls ?? stats?.activeRuns ?? 0) >= 3}
                 data-testid="button-crawl-all-towns"
               >
                 {triggerAllCrawls.isPending ? (
@@ -3166,7 +3254,7 @@ export default function AdminCrawler() {
                 ) : (
                   <Play className="w-3 h-3 mr-1" />
                 )}
-                Crawl All Towns
+                {batchCounty ? `Crawl ${batchCounty} County` : "Crawl All Towns"}
               </Button>
               <Button
                 variant="outline"

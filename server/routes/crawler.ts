@@ -19,6 +19,9 @@ import {
   getCrawlProgress,
   getActiveCrawls,
   abortCrawl,
+  enqueueCrawl,
+  getQueueStatus,
+  clearQueue,
 } from "../services/crawlerEngine";
 
 const router = Router();
@@ -230,19 +233,23 @@ router.post("/trigger", async (req, res) => {
 
 router.post("/trigger-all", async (req, res) => {
   try {
-    const { maxPages, mode = 'full', delayBetweenTowns = 5000 } = req.body || {};
+    const { maxPages, mode = 'full', county } = req.body || {};
     const towns = await crawlerStorage.getCrawlerTowns();
-    const activeTowns = towns.filter(t => t.status === 'active');
+    let activeTowns = towns.filter(t => t.status === 'active');
+
+    if (county) {
+      activeTowns = activeTowns.filter(t => t.county?.toLowerCase() === county.toLowerCase());
+    }
     
     if (activeTowns.length === 0) {
-      return res.json({ message: "No active towns to crawl", started: 0 });
+      return res.json({ message: county ? `No active towns in ${county} County` : "No active towns to crawl", started: 0, queued: 0 });
     }
 
-    const activeCrawls = getActiveCrawls();
+    const currentActive = getActiveCrawls();
     const results: Array<{ townId: string; townName: string; runId?: string; status: string }> = [];
 
     for (const town of activeTowns) {
-      const existing = activeCrawls.find(c => c.townId === town.id && c.status === 'running');
+      const existing = currentActive.find(c => c.townId === town.id && c.status === 'running');
       if (existing) {
         results.push({ townId: town.id, townName: town.name, runId: existing.runId, status: 'already_running' });
         continue;
@@ -255,27 +262,43 @@ router.post("/trigger-all", async (req, res) => {
           "manual",
           maxPages || town.maxPages || undefined
         );
-        const runId = await startCrawl(town, run, {
+        const result = enqueueCrawl(town, run, {
           maxPages: maxPages || town.maxPages || undefined,
           mode,
         });
-        results.push({ townId: town.id, townName: town.name, runId, status: 'started' });
-        
-        if (delayBetweenTowns > 0) {
-          await new Promise(r => setTimeout(r, delayBetweenTowns));
-        }
+        results.push({ townId: town.id, townName: town.name, runId: result.runId, status: result.status });
       } catch (err: any) {
         results.push({ townId: town.id, townName: town.name, status: 'error: ' + err.message });
       }
     }
 
     const started = results.filter(r => r.status === 'started').length;
+    const queued = results.filter(r => r.status === 'queued').length;
+    const label = county ? `${county} County` : "all";
     res.json({ 
-      message: `Started ${started} crawls out of ${activeTowns.length} active towns`,
+      message: `${started} started, ${queued} queued out of ${activeTowns.length} active towns (${label})`,
       results,
       started,
+      queued,
       total: activeTowns.length,
     });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/queue", async (_req, res) => {
+  try {
+    res.json(getQueueStatus());
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/queue/clear", async (_req, res) => {
+  try {
+    const cleared = clearQueue();
+    res.json({ message: `Cleared ${cleared} queued crawls`, cleared });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
