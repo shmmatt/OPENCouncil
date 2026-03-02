@@ -14,7 +14,7 @@ import {
 import { hashUrl, recordDocument, batchRecordDocuments, getAllTownDocumentUrls, getResumableDocuments, recordStateDocument, batchRecordStateDocuments, getAllStateDocumentUrls, getResumableStateDocuments, updateStateRunProgress, recordSauDocument as recordSauDocState, batchRecordSauDocuments, getAllSauDocumentUrls, getResumableSauDocuments, updateSauRunProgress } from './crawlerState';
 import type { InsertCrawlerDocument } from '../../shared/crawler-schema';
 import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDocumentWithCookies, extractFinalUrlFromInterstitial, resolveRedirectViaAPI } from './scrapingApiClient';
-import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile } from './googleDriveClient';
+import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile, parseDriveFolderUrl } from './googleDriveClient';
 import { completeStateSourceRun } from '../storage/crawler';
 import { completeSauSourceRun } from '../storage/crawlerSau';
 
@@ -341,11 +341,40 @@ function isDocumentUrl(url: string): boolean {
   if (lower.includes('drive.google.com/file/d/')) return true;
   if (lower.includes('drive.google.com/open?')) return true;
 
+  if (lower.includes('files.smartsites.parentsquare.com/') && docExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?'))) return true;
+
   return false;
 }
 
 function isCivicPlusRedirectUrl(url: string): boolean {
   return /\/(minutes|agenda)\/(minutes|agenda)-\d+/i.test(url.toLowerCase());
+}
+
+function isDriveFolderLink(url: string): boolean {
+  return parseDriveFolderUrl(url) !== null;
+}
+
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/rtf', 'text/csv', 'text/plain',
+  'application/vnd.google-apps.document', 'application/vnd.google-apps.spreadsheet',
+  'application/vnd.google-apps.presentation',
+]);
+
+function isDocumentMimeType(mimeType: string): boolean {
+  const clean = (mimeType || '').split(';')[0].trim().toLowerCase();
+  if (DOCUMENT_MIME_TYPES.has(clean)) return true;
+  if (clean.startsWith('application/vnd.google-apps.')) return true;
+  return false;
+}
+
+function hasDocumentExtension(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  const docExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.rtf', '.csv', '.txt'];
+  return docExts.some(ext => lower.endsWith(ext));
 }
 
 function isExternalDocumentLink(url: string): boolean {
@@ -355,7 +384,105 @@ function isExternalDocumentLink(url: string): boolean {
   if (lower.includes('dropbox.com') && (lower.includes('/s/') || lower.includes('/scl/'))) return true;
   if (lower.includes('onedrive.live.com') || lower.includes('1drv.ms')) return true;
   if (lower.includes('sharepoint.com') && lower.includes('/Documents/')) return true;
+  if (lower.includes('files.smartsites.parentsquare.com/') && hasDocumentExtension(url)) return true;
+  if (isDriveFolderLink(url)) return true;
   return false;
+}
+
+interface DriveFolderFile {
+  fileId: string;
+  filename: string;
+  folderName: string;
+}
+
+async function crawlDriveFolderHtml(
+  folderId: string,
+  signal?: AbortSignal,
+  depth: number = 0,
+  maxDepth: number = 2,
+  folderName: string = '',
+): Promise<DriveFolderFile[]> {
+  if (depth >= maxDepth || signal?.aborted) return [];
+
+  const url = `https://drive.google.com/drive/folders/${folderId}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)] },
+      signal: signal || AbortSignal.timeout(30000),
+      redirect: 'follow',
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+
+    const files: DriveFolderFile[] = [];
+    const seenIds = new Set<string>();
+    const subfolderIds: { id: string; name: string }[] = [];
+
+    const dataIdMatches = html.matchAll(/data-id="([a-zA-Z0-9_-]{20,})"/g);
+    for (const m of dataIdMatches) {
+      const id = m[1];
+      if (id === '_gd' || seenIds.has(id)) continue;
+      seenIds.add(id);
+    }
+
+    const folderPattern = /drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]{20,})/g;
+    const folderMatches = html.matchAll(folderPattern);
+    const childFolderIds = new Set<string>();
+    for (const m of folderMatches) {
+      if (m[1] !== folderId) childFolderIds.add(m[1]);
+    }
+
+    const folderNamePattern = /"([^"]{3,80})\s+Shared folder"|>([^<]{3,80})<\/strong>/g;
+    const folderNameMatches = [...html.matchAll(folderNamePattern)];
+
+    const filenamePattern = />([^<]{3,120}\.(pdf|docx?|xlsx?|pptx?|csv|rtf|txt))\s*<?\/?(?:strong|span|div)/gi;
+    const filenameMatches = [...html.matchAll(filenamePattern)];
+    const filenameMap = new Map<number, string>();
+    for (const fm of filenameMatches) {
+      filenameMap.set(fm.index!, fm[1].trim());
+    }
+
+    for (const childId of childFolderIds) {
+      if (seenIds.has(childId)) {
+        seenIds.delete(childId);
+      }
+      let childName = '';
+      for (const fnm of folderNameMatches) {
+        childName = (fnm[1] || fnm[2] || '').trim();
+        if (childName) break;
+      }
+      subfolderIds.push({ id: childId, name: childName || `subfolder-${childId.substring(0, 8)}` });
+    }
+
+    for (const id of seenIds) {
+      let bestFilename = `gdrive-${id}.pdf`;
+      const idPos = html.indexOf(`data-id="${id}"`);
+      if (idPos >= 0) {
+        const searchRegion = html.substring(Math.max(0, idPos - 200), Math.min(html.length, idPos + 800));
+        const fnMatch = searchRegion.match(/>([^<]{3,120}\.(pdf|docx?|xlsx?|pptx?|csv|rtf|txt))\s*<?\/?/i);
+        if (fnMatch) {
+          bestFilename = fnMatch[1].trim();
+        } else {
+          const strongMatch = searchRegion.match(/>([^<]{3,80})<\/strong>/);
+          if (strongMatch && !strongMatch[1].includes('Shared folder')) {
+            bestFilename = strongMatch[1].trim();
+          }
+        }
+      }
+      files.push({ fileId: id, filename: bestFilename, folderName: folderName || folderId });
+    }
+
+    for (const sub of subfolderIds) {
+      if (signal?.aborted) break;
+      await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
+      const subFiles = await crawlDriveFolderHtml(sub.id, signal, depth + 1, maxDepth, sub.name);
+      files.push(...subFiles);
+    }
+
+    return files;
+  } catch (e: any) {
+    return [];
+  }
 }
 
 function isNavigationLink(url: string, baseHostname: string): boolean {
@@ -2758,6 +2885,12 @@ async function executeStateCrawl(
           progress.documentsDiscovered++;
           pathDocsCount++;
           targetPathDocsFound++;
+        } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+          docsSeen.set(link.href, { foundOnPage: fullUrl, strategy: 'external', linkText: link.text });
+          stats.external = (stats.external || 0) + 1;
+          progress.documentsDiscovered++;
+          pathDocsCount++;
+          targetPathDocsFound++;
         } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
           const prio = isHighPriorityUrl(link.href) ? 1 : 3;
           queue.push({ url: link.href, depth: 1, priority: prio });
@@ -2909,6 +3042,11 @@ async function executeStateCrawl(
         docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'breadthFirst', linkText: link.text });
         pageDocsFound++;
         stats.breadthFirst++;
+        progress.documentsDiscovered++;
+      } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+        docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'external', linkText: link.text });
+        stats.external = (stats.external || 0) + 1;
+        pageDocsFound++;
         progress.documentsDiscovered++;
       }
 
@@ -3641,6 +3779,12 @@ async function executeSauCrawl(
           progress.documentsDiscovered++;
           pathDocsCount++;
           targetPathDocsFound++;
+        } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+          docsSeen.set(link.href, { foundOnPage: fullUrl, strategy: 'external', linkText: link.text });
+          stats.external = (stats.external || 0) + 1;
+          progress.documentsDiscovered++;
+          pathDocsCount++;
+          targetPathDocsFound++;
         } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
           const prio = isHighPriorityUrl(link.href) ? 1 : 3;
           queue.push({ url: link.href, depth: 1, priority: prio });
@@ -3793,6 +3937,11 @@ async function executeSauCrawl(
         pageDocsFound++;
         stats.breadthFirst++;
         progress.documentsDiscovered++;
+      } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+        docsSeen.set(link.href, { foundOnPage: pageUrl, strategy: 'external', linkText: link.text });
+        stats.external = (stats.external || 0) + 1;
+        pageDocsFound++;
+        progress.documentsDiscovered++;
       }
 
       if (depth < 4 && !visited.has(link.href) && isNavigationLink(link.href, baseHostname)) {
@@ -3915,6 +4064,132 @@ async function executeSauCrawl(
             status: 'failed', errorMessage: e.message, discoveredFrom: docInfo.foundOnPage,
           }).catch(() => {});
           addLog(progress, `DRIVE FAIL [${downloadIndex}/${docsSeen.size}]: ${drivePdfName} - ${e.message}`);
+        }
+      } else if (isDriveFolderLink(docUrl)) {
+        const folderId = parseDriveFolderUrl(docUrl);
+        if (folderId) {
+          addLog(progress, `DRIVE FOLDER [${downloadIndex}/${docsSeen.size}]: Crawling folder ${folderId}...`);
+          try {
+            interface FolderFileWithMime extends DriveFolderFile { mimeType?: string; }
+            let folderFiles: FolderFileWithMime[] = [];
+            if (isGoogleDriveConfigured()) {
+              const apiFiles = await listFolderRecursive(folderId, undefined, '', signal, 0, 3);
+              folderFiles = apiFiles
+                .filter(f => isDocumentMimeType(f.mimeType) || hasDocumentExtension(f.name))
+                .map(f => ({ fileId: f.id, filename: f.name, folderName: f.folderPath, mimeType: f.mimeType }));
+              if (apiFiles.length > folderFiles.length) {
+                addLog(progress, `DRIVE FOLDER: Filtered ${apiFiles.length - folderFiles.length} non-document files`);
+              }
+            } else {
+              folderFiles = await crawlDriveFolderHtml(folderId, signal, 0, 3);
+            }
+            addLog(progress, `DRIVE FOLDER: Found ${folderFiles.length} document files in folder ${folderId}`);
+
+            for (const gf of folderFiles) {
+              if (signal.aborted) break;
+              const fileUrl = `https://drive.google.com/file/d/${gf.fileId}/view`;
+              const sanitizedName = gf.filename.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 100) || `gdrive-${gf.fileId}.pdf`;
+              const gfS3Key = generateSauS3Key(source.slug, fileUrl, sanitizedName);
+              try {
+                if (await s3KeyExists(s3, gfS3Key)) {
+                  const existDoc = await recordSauDocState({
+                    sourceId: source.id, url: fileUrl, urlHash: hashUrl(fileUrl), filename: sanitizedName,
+                    s3Key: gfS3Key, status: 'uploaded', discoveredFrom: docUrl,
+                    s3UploadedAt: new Date(), title: gf.filename,
+                  });
+                  await bridgeSauDocToFileBlob(existDoc.id, { s3Key: gfS3Key, filename: sanitizedName, mimeType: 'application/pdf', sizeBytes: 0, sourceSlug: source.slug, sauId: source.sauId });
+                  progress.duplicatesSkipped++;
+                  summary.duplicates++;
+                } else {
+                  let gfDoc: { buffer: Buffer; contentType: string; size: number } | null = null;
+                  if (isGoogleDriveConfigured()) {
+                    const realMime = gf.mimeType || 'application/pdf';
+                    const apiResult = await downloadDriveFile(gf.fileId, realMime, undefined, signal);
+                    gfDoc = apiResult;
+                  } else {
+                    const exportUrl = `https://drive.google.com/uc?export=download&id=${gf.fileId}`;
+                    gfDoc = await fetchDocument(exportUrl, signal, docUrl);
+                  }
+                  if (gfDoc && gfDoc.size > 0) {
+                    const gfCt = (gfDoc.contentType || '').split(';')[0].trim().toLowerCase();
+                    if (gfCt === 'text/html' || gfCt === 'application/xhtml+xml') {
+                      await recordSauDocState({
+                        sourceId: source.id, url: fileUrl, urlHash: hashUrl(fileUrl), filename: sanitizedName,
+                        status: 'failed', errorMessage: 'Drive returned HTML instead of document',
+                        discoveredFrom: docUrl,
+                      }).catch(() => {});
+                      progress.documentsFailed++;
+                    } else {
+                      await uploadToS3(s3, gfS3Key, gfDoc.buffer, gfDoc.contentType);
+                      const newGfDoc = await recordSauDocState({
+                        sourceId: source.id, url: fileUrl, urlHash: hashUrl(fileUrl), filename: sanitizedName,
+                        s3Key: gfS3Key, sizeBytes: gfDoc.size, mimeType: gfDoc.contentType,
+                        status: 'uploaded', discoveredFrom: docUrl, s3UploadedAt: new Date(),
+                        title: gf.filename,
+                      });
+                      await bridgeSauDocToFileBlob(newGfDoc.id, { s3Key: gfS3Key, filename: sanitizedName, mimeType: gfDoc.contentType, sizeBytes: gfDoc.size, sourceSlug: source.slug, sauId: source.sauId });
+                      progress.documentsDownloaded++;
+                      summary.newDocuments++;
+                      addLog(progress, `DRIVE FOLDER FILE OK: ${gf.filename} (${Math.round(gfDoc.size / 1024)}KB) from ${gf.folderName}`);
+                    }
+                  }
+                }
+                await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+              } catch (gfErr: any) {
+                progress.documentsFailed++;
+                summary.errors.push({ url: fileUrl, error: gfErr.message || 'Drive folder file download failed', failureType: classifyError(gfErr) });
+                await recordSauDocState({
+                  sourceId: source.id, url: fileUrl, urlHash: hashUrl(fileUrl), filename: sanitizedName,
+                  status: 'failed', errorMessage: gfErr.message, discoveredFrom: docUrl,
+                }).catch(() => {});
+              }
+            }
+          } catch (folderErr: any) {
+            addLog(progress, `DRIVE FOLDER FAIL [${downloadIndex}/${docsSeen.size}]: ${folderId} - ${folderErr.message}`);
+            summary.errors.push({ url: docUrl, error: folderErr.message || 'Drive folder crawl failed', failureType: classifyError(folderErr) });
+          }
+        }
+      } else if (docUrl.includes('files.smartsites.parentsquare.com/')) {
+        const smFilename = extractFilename(docUrl);
+        const smS3Key = generateSauS3Key(source.slug, docUrl, smFilename);
+        try {
+          if (await s3KeyExists(s3, smS3Key)) {
+            const existDoc = await recordSauDocState({
+              sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: smFilename,
+              s3Key: smS3Key, status: 'uploaded', discoveredFrom: docInfo.foundOnPage,
+              s3UploadedAt: new Date(), title: docInfo.linkText || undefined,
+            });
+            await bridgeSauDocToFileBlob(existDoc.id, { s3Key: smS3Key, filename: smFilename, mimeType: 'application/pdf', sizeBytes: 0, sourceSlug: source.slug, sauId: source.sauId });
+            progress.duplicatesSkipped++;
+            summary.duplicates++;
+          } else {
+            const smDoc = await fetchDocument(docUrl, signal, docInfo.foundOnPage);
+            if (smDoc && smDoc.size > 0) {
+              const smCt = (smDoc.contentType || '').split(';')[0].trim().toLowerCase();
+              if (smCt === 'text/html' || smCt === 'application/xhtml+xml') {
+                progress.documentsFailed++;
+              } else {
+                await uploadToS3(s3, smS3Key, smDoc.buffer, smDoc.contentType);
+                const newSmDoc = await recordSauDocState({
+                  sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: smFilename,
+                  s3Key: smS3Key, sizeBytes: smDoc.size, mimeType: smDoc.contentType,
+                  status: 'uploaded', discoveredFrom: docInfo.foundOnPage, s3UploadedAt: new Date(),
+                  title: docInfo.linkText || undefined,
+                });
+                await bridgeSauDocToFileBlob(newSmDoc.id, { s3Key: smS3Key, filename: smFilename, mimeType: smDoc.contentType, sizeBytes: smDoc.size, sourceSlug: source.slug, sauId: source.sauId });
+                progress.documentsDownloaded++;
+                summary.newDocuments++;
+                addLog(progress, `SMARTSITES OK [${downloadIndex}/${docsSeen.size}]: ${smFilename} (${Math.round(smDoc.size / 1024)}KB)`);
+              }
+            }
+          }
+        } catch (smErr: any) {
+          progress.documentsFailed++;
+          summary.errors.push({ url: docUrl, error: smErr.message || 'SmartSites download failed', failureType: classifyError(smErr) });
+          await recordSauDocState({
+            sourceId: source.id, url: docUrl, urlHash: hashUrl(docUrl), filename: smFilename,
+            status: 'failed', errorMessage: smErr.message, discoveredFrom: docInfo.foundOnPage,
+          }).catch(() => {});
         }
       } else {
         await recordSauDocState({

@@ -68,8 +68,9 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `generateSauS3Key(slug, url, filename)`: S3 key pattern `sau/{slug}/{subpath}/{filename}`
 - `bridgeSauDocToFileBlob(sauDocId)`: Bridges SAU docs to main file_blobs table for embedding pipeline
 - `detectProtection()`: Distinguishes reCAPTCHA v3 (invisible, non-blocking) from v2 (visible challenge, blocking). Only flags v2/hCAPTCHA as CAPTCHA protection.
-- `isDocumentUrl()`: Recognizes Finalsite `/fs/resource-manager/view/` and `resources.finalsite.net` patterns, plus Google Drive file links
-- Download phase: Google Drive files are downloaded via export URL conversion (`/uc?export=download&id=`), supports `/file/d/`, `/open?id=`, and `/uc?id=` patterns. MIME type validation skips HTML responses.
+- `isDocumentUrl()`: Recognizes Finalsite `/fs/resource-manager/view/` and `resources.finalsite.net` patterns, Google Drive file links, and SmartSites/ParentSquare PDF hosting (`files.smartsites.parentsquare.com`)
+- `crawlDriveFolderHtml()`: HTML-based Google Drive folder crawler — extracts file IDs from `data-id` attributes, recursively follows subfolders (max depth 3). Used as fallback when Google Drive API key is not configured.
+- Download phase: Google Drive individual files downloaded via export URL conversion, supports `/file/d/`, `/open?id=`, and `/uc?id=` patterns. Drive **folders** are crawled (via API or HTML scraping), then each document file is downloaded individually. Document MIME type filtering applied to API results. MIME validation skips HTML responses.
 
 **Crawl State** (`server/services/crawlerState.ts`): Extended with `recordSauDocument`, `batchRecordSauDocuments`, `getAllSauDocumentUrls`, `getResumableSauDocuments`, `updateSauRunProgress`.
 
@@ -83,7 +84,7 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `POST /api/crawler-intel/sau-sources/:slug/abort`: Abort active crawl
 
 **Seeded Carroll County SAUs** (via `server/scripts/seed-sau-sources.ts`):
-- SAU 9 (Mt. Washington Valley): Conway hub, 10 member towns — https://www.sau9.org (SmartSites/ParentSquare CMS, reCAPTCHA v3 non-blocking)
+- SAU 9 (Mt. Washington Valley): Conway hub, 10 member towns — https://www.sau9.org (SmartSites/ParentSquare CMS, reCAPTCHA v3 non-blocking). Target paths include all town pages (`/albany`, `/bartlett`, etc.) which link to Google Drive folders containing minutes, warrants, annual reports per town.
 - SAU 49 (Governor Wentworth Regional): Wolfeboro hub, 6 member towns — https://gwrsd.sau49nh.gov (Finalsite CMS, gwrsd.org redirects here)
 - SAU 45 (Moultonborough): Single-town SAU — https://sau45.org/en-US (SchoolBlocks CMS, docs via Google Drive)
 - SAU 2 (Inter-Lakes): Meredith, Center Harbor, Sandwich — https://www.interlakes.org
