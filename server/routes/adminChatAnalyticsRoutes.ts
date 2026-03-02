@@ -27,6 +27,8 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
         const filterMaxDocScore = parseInt(req.query.filterMaxDocScore as string) || 10;
         const filterMinAnswerScore = parseInt(req.query.filterMinAnswerScore as string) || 0;
         const filterMaxAnswerScore = parseInt(req.query.filterMaxAnswerScore as string) || 10;
+        const filterGapCategory = (req.query.filterGapCategory as string) || undefined;
+        const filterCriticalDomainError = req.query.filterCriticalDomainError as string | undefined;
 
         const result = await getChatAnalyticsList({
           page,
@@ -40,6 +42,8 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
           filterMaxDocScore,
           filterMinAnswerScore,
           filterMaxAnswerScore,
+          filterGapCategory: filterGapCategory || undefined,
+          filterCriticalDomainError: filterCriticalDomainError === "true" ? true : undefined,
         });
 
         res.json(result);

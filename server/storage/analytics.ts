@@ -91,6 +91,12 @@ export async function upsertChatAnalytics(analytics: InsertChatAnalytics): Promi
         missingDocsSuggestions: analytics.missingDocsSuggestions,
         documentQualityScore: analytics.documentQualityScore,
         answerQualityScore: analytics.answerQualityScore,
+        gapCategory: analytics.gapCategory,
+        pipelineStage: analytics.pipelineStage,
+        criticalDomainError: analytics.criticalDomainError,
+        userIntent: analytics.userIntent,
+        promptingSuggestions: analytics.promptingSuggestions,
+        pipelineSuggestions: analytics.pipelineSuggestions,
         analyzedAt: new Date(),
       })
       .where(eq(schema.chatAnalytics.sessionId, analytics.sessionId));

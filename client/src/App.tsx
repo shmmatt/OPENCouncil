@@ -13,6 +13,7 @@ import AdminDocumentsV2 from "@/pages/admin-documents-v2";
 import AdminRecentMinutes from "@/pages/admin-recent-minutes";
 import AdminUsageDashboard from "@/pages/admin-usage";
 import AdminChatAnalytics from "@/pages/admin-chat-analytics";
+import AdminReviewRuns from "@/pages/admin-review-runs";
 import AdminOcrPipeline from "@/pages/admin-ocr-pipeline";
 import AdminCrawler from "@/pages/admin-crawler";
 import AdminTemplates from "@/pages/admin-templates";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/admin/documents-v2" component={AdminDocumentsV2} />
       <Route path="/admin/recent-minutes" component={AdminRecentMinutes} />
       <Route path="/admin/usage" component={AdminUsageDashboard} />
+      <Route path="/admin/chat-analytics/review-runs" component={AdminReviewRuns} />
       <Route path="/admin/chat-analytics" component={AdminChatAnalytics} />
       <Route path="/admin/ocr-pipeline" component={AdminOcrPipeline} />
       <Route path="/admin/crawler" component={AdminCrawler} />

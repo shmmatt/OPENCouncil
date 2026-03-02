@@ -44,17 +44,20 @@ import {
   ChevronUp,
   ArrowUpDown,
   MessageSquare,
-  DollarSign,
   FileWarning,
   Sparkles,
   RefreshCw,
   BarChart3,
   FileText,
-  CheckCircle2,
-  XCircle,
   ChevronLeft,
   ChevronRight,
   Loader2,
+  AlertTriangle,
+  Target,
+  Wrench,
+  Database,
+  Brain,
+  Lightbulb,
 } from "lucide-react";
 
 interface ChatAnalyticsListItem {
@@ -74,6 +77,14 @@ interface ChatAnalyticsListItem {
   documentQualityScore: number | null;
   answerQualityScore: number | null;
   analyzedAt: string | null;
+  thumbsUpCount: number;
+  thumbsDownCount: number;
+  gapCategory: string | null;
+  pipelineStage: string | null;
+  criticalDomainError: boolean;
+  userIntent: string | null;
+  promptingSuggestions: string | null;
+  pipelineSuggestions: string | null;
 }
 
 interface ChatAnalyticsListResult {
@@ -112,6 +123,12 @@ interface SessionDetails {
     documentQualityScore: number | null;
     answerQualityScore: number | null;
     analyzedAt: string;
+    gapCategory: string | null;
+    pipelineStage: string | null;
+    criticalDomainError: boolean;
+    userIntent: string | null;
+    promptingSuggestions: string | null;
+    pipelineSuggestions: string | null;
   } | null;
 }
 
@@ -125,6 +142,38 @@ function ScoreBadge({ score, label }: { score: number | null; label: string }) {
   return (
     <Badge variant={variant} className="min-w-[3rem] justify-center">
       {score}/10
+    </Badge>
+  );
+}
+
+const GAP_CATEGORY_LABELS: Record<string, { label: string; icon: typeof Target }> = {
+  prompting: { label: "Prompting", icon: Lightbulb },
+  system_prompt: { label: "System Prompt", icon: FileText },
+  algorithm: { label: "Algorithm", icon: Wrench },
+  missing_docs: { label: "Missing Docs", icon: Database },
+  embedding_quality: { label: "Embedding", icon: Brain },
+  other: { label: "Other", icon: Target },
+};
+
+function GapCategoryBadge({ category }: { category: string | null }) {
+  if (!category) return null;
+  const config = GAP_CATEGORY_LABELS[category];
+  if (!config) return <Badge variant="outline">{category}</Badge>;
+  const Icon = config.icon;
+  return (
+    <Badge variant="secondary" className="gap-1" data-testid={`badge-gap-${category}`}>
+      <Icon className="h-3 w-3" />
+      {config.label}
+    </Badge>
+  );
+}
+
+function PipelineStageBadge({ stage }: { stage: string | null }) {
+  if (!stage) return null;
+  const display = stage.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return (
+    <Badge variant="outline" className="text-xs" data-testid={`badge-stage-${stage}`}>
+      {display}
     </Badge>
   );
 }
@@ -160,6 +209,8 @@ export default function AdminChatAnalytics() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [filterAnalyzed, setFilterAnalyzed] = useState<string>("all");
+  const [filterGapCategory, setFilterGapCategory] = useState<string>("all");
+  const [filterCriticalOnly, setFilterCriticalOnly] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -197,9 +248,15 @@ export default function AdminChatAnalytics() {
   if (filterAnalyzed !== "all") {
     queryParams.set("filterAnalyzed", filterAnalyzed);
   }
+  if (filterGapCategory !== "all") {
+    queryParams.set("filterGapCategory", filterGapCategory);
+  }
+  if (filterCriticalOnly) {
+    queryParams.set("filterCriticalDomainError", "true");
+  }
 
   const { data, isLoading, refetch } = useQuery<ChatAnalyticsListResult>({
-    queryKey: ["/api/admin/chat-analytics", page, pageSize, sortField, sortOrder, search, filterAnalyzed],
+    queryKey: ["/api/admin/chat-analytics", page, pageSize, sortField, sortOrder, search, filterAnalyzed, filterGapCategory, filterCriticalOnly],
     queryFn: () => fetchWithAuth(`/api/admin/chat-analytics?${queryParams.toString()}`),
     enabled: !!token,
   });
@@ -217,7 +274,7 @@ export default function AdminChatAnalytics() {
       });
     },
     onSuccess: () => {
-      toast({ title: "Analysis complete", description: "Chat session has been analyzed." });
+      toast({ title: "Analysis complete", description: "Chat session has been analyzed with Gemini 3.1 Pro." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-analytics"] });
     },
     onError: () => {
@@ -227,18 +284,16 @@ export default function AdminChatAnalytics() {
 
   const batchAnalyzeMutation = useMutation({
     mutationFn: async (sessionIds: string[]) => {
-      return fetchWithAuth("/api/admin/chat-analytics/batch-analyze", {
+      return fetchWithAuth("/api/admin/chat-analytics/batch-with-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionIds }),
       });
     },
-    onSuccess: (results: { sessionId: string; success: boolean; error?: string }[]) => {
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
+    onSuccess: () => {
       toast({
-        title: "Batch analysis complete",
-        description: `${successful} succeeded, ${failed} failed`,
+        title: "Batch review complete",
+        description: "All sessions analyzed and rollup summary generated.",
       });
       setSelectedSessions(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-analytics"] });
@@ -310,7 +365,7 @@ export default function AdminChatAnalytics() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
           <div className="flex items-center gap-4">
             <Link href="/admin/documents">
               <Button variant="ghost" size="icon" data-testid="button-back">
@@ -318,17 +373,23 @@ export default function AdminChatAnalytics() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-semibold">Chat Analytics</h1>
+              <h1 className="text-2xl font-semibold" data-testid="text-page-title">Chat Analytics</h1>
               <p className="text-sm text-muted-foreground">
-                Review and analyze all user chat sessions
+                Deep analysis powered by Gemini 3.1 Pro
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/admin/chat-analytics/review-runs">
+              <Button variant="outline" size="sm" data-testid="button-review-runs">
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Review Runs
+              </Button>
+            </Link>
             <Link href="/admin/usage">
               <Button variant="outline" size="sm" data-testid="button-usage">
                 <BarChart3 className="h-4 w-4 mr-2" />
-                Usage Dashboard
+                Usage
               </Button>
             </Link>
           </div>
@@ -337,7 +398,7 @@ export default function AdminChatAnalytics() {
         <Card className="mb-6">
           <CardHeader className="pb-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -353,17 +414,43 @@ export default function AdminChatAnalytics() {
                   Search
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Select value={filterAnalyzed} onValueChange={(v) => { setFilterAnalyzed(v); setPage(1); }}>
-                  <SelectTrigger className="w-40" data-testid="select-filter-analyzed">
-                    <SelectValue placeholder="Filter" />
+                  <SelectTrigger className="w-36" data-testid="select-filter-analyzed">
+                    <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Sessions</SelectItem>
-                    <SelectItem value="true">Analyzed Only</SelectItem>
+                    <SelectItem value="true">Analyzed</SelectItem>
                     <SelectItem value="false">Not Analyzed</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={filterGapCategory} onValueChange={(v) => { setFilterGapCategory(v); setPage(1); }}>
+                  <SelectTrigger className="w-40" data-testid="select-filter-gap">
+                    <SelectValue placeholder="Gap Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="prompting">Prompting</SelectItem>
+                    <SelectItem value="system_prompt">System Prompt</SelectItem>
+                    <SelectItem value="algorithm">Algorithm</SelectItem>
+                    <SelectItem value="missing_docs">Missing Docs</SelectItem>
+                    <SelectItem value="embedding_quality">Embedding</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1.5">
+                  <Checkbox
+                    id="critical-filter"
+                    checked={filterCriticalOnly}
+                    onCheckedChange={(checked) => { setFilterCriticalOnly(checked === true); setPage(1); }}
+                    data-testid="checkbox-critical-filter"
+                  />
+                  <label htmlFor="critical-filter" className="text-sm text-destructive font-medium cursor-pointer flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Critical Only
+                  </label>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -377,7 +464,7 @@ export default function AdminChatAnalytics() {
           </CardHeader>
           <CardContent>
             {selectedSessions.size > 0 && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md">
+              <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md flex-wrap">
                 <span className="text-sm font-medium">
                   {selectedSessions.size} selected
                 </span>
@@ -392,7 +479,7 @@ export default function AdminChatAnalytics() {
                   ) : (
                     <Sparkles className="h-4 w-4 mr-2" />
                   )}
-                  Analyze Selected
+                  Batch Review
                 </Button>
                 <Button variant="ghost" size="sm" onClick={deselectAll} data-testid="button-deselect-all">
                   Clear Selection
@@ -437,7 +524,6 @@ export default function AdminChatAnalytics() {
                         </Button>
                       </TableHead>
                       <TableHead>Chat Title</TableHead>
-                      <TableHead>User</TableHead>
                       <TableHead>
                         <Button
                           variant="ghost"
@@ -446,19 +532,7 @@ export default function AdminChatAnalytics() {
                           onClick={() => handleSort("messages")}
                           data-testid="button-sort-messages"
                         >
-                          Messages
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 p-0 font-medium"
-                          onClick={() => handleSort("cost")}
-                          data-testid="button-sort-cost"
-                        >
-                          Cost
+                          Msgs
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
@@ -470,7 +544,7 @@ export default function AdminChatAnalytics() {
                           onClick={() => handleSort("docScore")}
                           data-testid="button-sort-doc-score"
                         >
-                          Doc Score
+                          Doc
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
@@ -482,10 +556,11 @@ export default function AdminChatAnalytics() {
                           onClick={() => handleSort("answerScore")}
                           data-testid="button-sort-answer-score"
                         >
-                          Answer Score
+                          Answer
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
+                      <TableHead>Gap</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -521,26 +596,24 @@ export default function AdminChatAnalytics() {
                               {formatDate(item.updatedAt)}
                             </TableCell>
                             <TableCell className="max-w-xs truncate font-medium">
-                              {item.title}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {item.userId ? (
-                                <Badge variant="secondary">User</Badge>
-                              ) : (
-                                <Badge variant="outline">Anon</Badge>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {item.criticalDomainError && (
+                                  <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" data-testid={`icon-critical-${item.sessionId}`} />
+                                )}
+                                <span className="truncate">{item.title}</span>
+                              </div>
                             </TableCell>
                             <TableCell className="text-sm">
                               {item.messageCount}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {formatCost(item.totalCost)}
                             </TableCell>
                             <TableCell>
                               <ScoreBadge score={item.documentQualityScore} label="Doc" />
                             </TableCell>
                             <TableCell>
                               <ScoreBadge score={item.answerQualityScore} label="Answer" />
+                            </TableCell>
+                            <TableCell>
+                              <GapCategoryBadge category={item.gapCategory} />
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -570,22 +643,73 @@ export default function AdminChatAnalytics() {
                           </TableRow>
                           <CollapsibleContent asChild>
                             <TableRow className="bg-muted/30">
-                              <TableCell colSpan={10} className="p-4">
+                              <TableCell colSpan={9} className="p-4">
                                 {item.isAnalyzed ? (
-                                  <div className="grid gap-4 md:grid-cols-3">
-                                    <div>
-                                      <h4 className="font-medium text-sm mb-1">Summary</h4>
-                                      <p className="text-sm text-muted-foreground">{item.summary}</p>
+                                  <div className="space-y-4">
+                                    {item.criticalDomainError && (
+                                      <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md" data-testid={`alert-critical-${item.sessionId}`}>
+                                        <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium text-destructive">Critical Domain Error Detected</p>
+                                          <p className="text-xs text-muted-foreground">This response contains a factual error about NH municipal governance that requires immediate attention.</p>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <GapCategoryBadge category={item.gapCategory} />
+                                      <PipelineStageBadge stage={item.pipelineStage} />
                                     </div>
-                                    <div>
-                                      <h4 className="font-medium text-sm mb-1">Critique</h4>
-                                      <p className="text-sm text-muted-foreground">{item.critique}</p>
+
+                                    {item.userIntent && (
+                                      <div>
+                                        <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                                          <Target className="h-3.5 w-3.5" />
+                                          User Intent
+                                        </h4>
+                                        <p className="text-sm text-muted-foreground">{item.userIntent}</p>
+                                      </div>
+                                    )}
+
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                      <div>
+                                        <h4 className="font-medium text-sm mb-1">Summary</h4>
+                                        <p className="text-sm text-muted-foreground">{item.summary}</p>
+                                      </div>
+                                      <div>
+                                        <h4 className="font-medium text-sm mb-1">Critique</h4>
+                                        <p className="text-sm text-muted-foreground">{item.critique}</p>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <h4 className="font-medium text-sm mb-1">Missing Docs</h4>
-                                      <p className="text-sm text-muted-foreground">
-                                        {item.missingDocsSuggestions || "None identified"}
-                                      </p>
+
+                                    <div className="grid gap-4 md:grid-cols-3">
+                                      <div>
+                                        <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                                          <Database className="h-3.5 w-3.5" />
+                                          Missing Docs
+                                        </h4>
+                                        <p className="text-sm text-muted-foreground">
+                                          {item.missingDocsSuggestions || "None identified"}
+                                        </p>
+                                      </div>
+                                      {item.promptingSuggestions && (
+                                        <div>
+                                          <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                                            <Lightbulb className="h-3.5 w-3.5" />
+                                            Prompting Suggestions
+                                          </h4>
+                                          <p className="text-sm text-muted-foreground">{item.promptingSuggestions}</p>
+                                        </div>
+                                      )}
+                                      {item.pipelineSuggestions && (
+                                        <div>
+                                          <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                                            <Wrench className="h-3.5 w-3.5" />
+                                            Pipeline Suggestions
+                                          </h4>
+                                          <p className="text-sm text-muted-foreground">{item.pipelineSuggestions}</p>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 ) : (
@@ -616,7 +740,7 @@ export default function AdminChatAnalytics() {
               </div>
             )}
 
-            <div className="flex items-center justify-between mt-4">
+            <div className="flex items-center justify-between gap-2 mt-4 flex-wrap">
               <div className="text-sm text-muted-foreground">
                 Showing {items.length} of {total} sessions
               </div>
@@ -667,24 +791,80 @@ export default function AdminChatAnalytics() {
                 {sessionDetails.analytics && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-sm">Analysis Results</CardTitle>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <CardTitle className="text-sm">Analysis Results</CardTitle>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {sessionDetails.analytics.criticalDomainError && (
+                            <Badge variant="destructive" className="gap-1" data-testid="badge-critical-detail">
+                              <AlertTriangle className="h-3 w-3" />
+                              Critical Domain Error
+                            </Badge>
+                          )}
+                          <GapCategoryBadge category={sessionDetails.analytics.gapCategory} />
+                          <PipelineStageBadge stage={sessionDetails.analytics.pipelineStage} />
+                        </div>
+                      </div>
                     </CardHeader>
-                    <CardContent className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <h4 className="font-medium text-sm mb-1">Summary</h4>
-                        <p className="text-sm text-muted-foreground">{sessionDetails.analytics.summary}</p>
+                    <CardContent className="space-y-4">
+                      {sessionDetails.analytics.criticalDomainError && (
+                        <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md" data-testid="alert-critical-detail">
+                          <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+                          <p className="text-sm text-destructive">This response contains a factual error about NH municipal governance. Review the critique for details.</p>
+                        </div>
+                      )}
+
+                      {sessionDetails.analytics.userIntent && (
+                        <div>
+                          <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                            <Target className="h-3.5 w-3.5" />
+                            User Intent
+                          </h4>
+                          <p className="text-sm text-muted-foreground" data-testid="text-user-intent">{sessionDetails.analytics.userIntent}</p>
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <h4 className="font-medium text-sm mb-1">Summary</h4>
+                          <p className="text-sm text-muted-foreground" data-testid="text-summary">{sessionDetails.analytics.summary}</p>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-sm mb-1">Critique</h4>
+                          <p className="text-sm text-muted-foreground" data-testid="text-critique">{sessionDetails.analytics.critique}</p>
+                        </div>
                       </div>
+
                       <div>
-                        <h4 className="font-medium text-sm mb-1">Critique</h4>
-                        <p className="text-sm text-muted-foreground">{sessionDetails.analytics.critique}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-sm mb-1">Missing Documents</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                          <Database className="h-3.5 w-3.5" />
+                          Missing Documents
+                        </h4>
+                        <p className="text-sm text-muted-foreground" data-testid="text-missing-docs">
                           {sessionDetails.analytics.missingDocsSuggestions || "None identified"}
                         </p>
                       </div>
-                      <div className="flex gap-4">
+
+                      {sessionDetails.analytics.promptingSuggestions && (
+                        <div>
+                          <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                            <Lightbulb className="h-3.5 w-3.5" />
+                            Prompting Suggestions
+                          </h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-prompting-suggestions">{sessionDetails.analytics.promptingSuggestions}</p>
+                        </div>
+                      )}
+
+                      {sessionDetails.analytics.pipelineSuggestions && (
+                        <div>
+                          <h4 className="font-medium text-sm mb-1 flex items-center gap-1.5">
+                            <Wrench className="h-3.5 w-3.5" />
+                            Pipeline Suggestions
+                          </h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-pipeline-suggestions">{sessionDetails.analytics.pipelineSuggestions}</p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-4 flex-wrap">
                         <div>
                           <h4 className="font-medium text-sm mb-1">Document Score</h4>
                           <ScoreBadge score={sessionDetails.analytics.documentQualityScore} label="Doc" />
@@ -713,7 +893,7 @@ export default function AdminChatAnalytics() {
                               : "bg-muted mr-8"
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <Badge variant={msg.role === "user" ? "default" : "secondary"}>
                               {msg.role === "user" ? "User" : "Assistant"}
                             </Badge>

@@ -328,8 +328,14 @@ export const chatAnalytics = pgTable("chat_analytics", {
   summary: text("summary").notNull(),
   critique: text("critique").notNull(),
   missingDocsSuggestions: text("missing_docs_suggestions"),
-  documentQualityScore: integer("document_quality_score"), // 1-10 scale
-  answerQualityScore: integer("answer_quality_score"), // 1-10 scale
+  documentQualityScore: integer("document_quality_score"),
+  answerQualityScore: integer("answer_quality_score"),
+  gapCategory: text("gap_category"),
+  pipelineStage: text("pipeline_stage"),
+  criticalDomainError: boolean("critical_domain_error").default(false).notNull(),
+  userIntent: text("user_intent"),
+  promptingSuggestions: text("prompting_suggestions"),
+  pipelineSuggestions: text("pipeline_suggestions"),
   analyzedAt: timestamp("analyzed_at").defaultNow().notNull(),
 });
 
