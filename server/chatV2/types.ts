@@ -28,7 +28,7 @@ export type RenderStyle = "PROSE" | "LIST";
  * Explicit document source tracking for scope note selection.
  * This ensures the scope note accurately reflects which documents were used.
  */
-export type DocSourceType = "none" | "local" | "statewide" | "mixed";
+export type DocSourceType = "none" | "local" | "statewide" | "sau" | "mixed";
 
 /**
  * Context about document sources used in the answer.
@@ -255,6 +255,7 @@ export interface LanePlan {
 export interface RetrievalPlanV3 {
   local: LanePlan;
   state: LanePlan;
+  sau?: LanePlan;
   mustInclude: {
     minState?: number;
     minLocalFacts?: number;
@@ -264,6 +265,8 @@ export interface RetrievalPlanV3 {
   temporalFilter?: TemporalTarget;
   keywordTerms: string[];
   queryFocus: QueryFocus;
+  sauId?: string;
+  sauTowns?: string[];
 }
 
 /**
@@ -292,7 +295,7 @@ export type ChunkAuthority = "rsa" | "nhma" | "official" | "minutes" | "news" | 
  * Enhanced chunk metadata for v3 pipeline
  */
 export interface ChunkMetadataV3 {
-  lane: "local" | "state";
+  lane: "local" | "state" | "sau";
   authority: ChunkAuthority;
   topicTags: string[];
   situationMatchScore?: number;
@@ -348,6 +351,7 @@ export interface SynthesisInputV3 {
   sessionSourceText?: string;
   localChunks: LabeledChunk[];
   stateChunks: LabeledChunk[];
+  sauChunks: LabeledChunk[];
   recordStrength: RecordStrength;
   history: ChatHistoryMessage[];
   templateContext?: string | null;
@@ -357,10 +361,10 @@ export interface SynthesisInputV3 {
  * Labeled chunk for citation tracking in synthesis
  */
 export interface LabeledChunk {
-  label: string; // e.g., "[L1]" or "[S2]"
+  label: string; // e.g., "[L1]", "[S2]", or "[A1]"
   title: string;
   content: string;
-  lane: "local" | "state";
+  lane: "local" | "state" | "sau";
   authority: ChunkAuthority;
   year?: string;
   category?: string;
@@ -379,12 +383,15 @@ export interface V3DebugInfo {
   planQueries: {
     local: string[];
     state: string[];
+    sau?: string[];
   };
   retrievalCounts: {
     localRetrieved: number;
     localSelected: number;
     stateRetrieved: number;
     stateSelected: number;
+    sauRetrieved?: number;
+    sauSelected?: number;
   };
   recordStrengthTier: "A" | "B" | "C";
   auditFlags: string[];

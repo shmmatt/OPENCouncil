@@ -15,6 +15,7 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { isQuotaError, GeminiQuotaExceededError } from "../utils/geminiErrors";
 import { logDebug } from "../utils/logger";
 import { chatConfigV3 } from "./chatConfigV3";
+import { shouldTriggerSauLane, getSauIdForTown, getTownsForSau, buildSauLaneQueries } from "./sauMapping";
 import type { 
   IssueMap, 
   RetrievalPlanV3, 
@@ -204,7 +205,7 @@ Return valid JSON only.`;
       .replace(/```\n?/g, "")
       .trim();
 
-    const parsed = parseAndValidatePlannerOutput(cleanedText, userMessage, sessionSourceText, logContext, templateContext);
+    const parsed = parseAndValidatePlannerOutput(cleanedText, userMessage, sessionSourceText, logContext, templateContext, townHint);
     return parsed;
 
   } catch (error) {
@@ -238,6 +239,7 @@ function parseAndValidatePlannerOutput(
   sessionSourceText: string,
   logContext?: PipelineLogContext,
   templateContext?: string | null,
+  townHint?: string,
 ): PlannerOutput {
   const validationWarnings: string[] = [];
   const combinedSourceText = (userMessage + ' ' + sessionSourceText).toLowerCase();
@@ -337,6 +339,22 @@ function parseAndValidatePlannerOutput(
       statePlan.queries = statePlan.queries.slice(0, 2);
     }
 
+    const effectiveTown = issueMap.town || townHint;
+    if (shouldTriggerSauLane(userMessage, issueMap) && effectiveTown) {
+      const sauId = getSauIdForTown(effectiveTown);
+      if (sauId) {
+        const sauTowns = getTownsForSau(sauId);
+        retrievalPlan.sau = {
+          queries: buildSauLaneQueries(userMessage, sauId),
+          k: 8,
+          cap: 5,
+        };
+        retrievalPlan.sauId = sauId;
+        retrievalPlan.sauTowns = sauTowns;
+        validationWarnings.push(`SAU lane activated: ${sauId} (${sauTowns.length} member towns)`);
+      }
+    }
+
     logDebug("planner_v3_validated", {
       requestId: logContext?.requestId,
       sessionId: logContext?.sessionId,
@@ -344,6 +362,8 @@ function parseAndValidatePlannerOutput(
       entityCount: issueMap.entities.length,
       localQueryCount: localPlan.queries.length,
       stateQueryCount: statePlan.queries.length,
+      sauQueryCount: retrievalPlan.sau?.queries.length || 0,
+      sauId: retrievalPlan.sauId || null,
       legalSalience: issueMap.legalSalience,
       plannerConfidence: issueMap.plannerConfidence,
       warningCount: validationWarnings.length,
@@ -404,6 +424,20 @@ function getFallbackPlannerOutput(userMessage: string, townHint?: string): Plann
     keywordTerms: hardEntities,
     queryFocus: issueMap.queryFocus,
   };
+
+  if (shouldTriggerSauLane(userMessage, issueMap) && townHint) {
+    const sauId = getSauIdForTown(townHint);
+    if (sauId) {
+      const sauTowns = getTownsForSau(sauId);
+      retrievalPlan.sau = {
+        queries: buildSauLaneQueries(userMessage, sauId),
+        k: 8,
+        cap: 5,
+      };
+      retrievalPlan.sauId = sauId;
+      retrievalPlan.sauTowns = sauTowns;
+    }
+  }
 
   return {
     issueMap,

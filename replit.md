@@ -24,7 +24,16 @@ A hybrid retrieval system combines pgvector-based semantic search with PostgreSQ
 Google Gemini powers answer synthesis, embedding generation, metadata extraction, and sophisticated query planning for multi-query retrieval.
 
 ### Chat Pipeline (V3)
-The V3 chat pipeline implements a self-reflective RAG (Retrieval Augmented Generation) approach. It processes user queries through stages including situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It also features a conditional "second hop" retrieval for refining answers and optimizes for latency through parallel retrieval, streaming responses via Server-Sent Events (SSE), and asynchronous follow-up generation.
+The V3 chat pipeline implements a self-reflective RAG (Retrieval Augmented Generation) approach with **three-lane parallel retrieval**: Local, Statewide, and SAU (School Administrative Unit). It processes user queries through stages including situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It also features a conditional "second hop" retrieval for refining answers and optimizes for latency through parallel retrieval, streaming responses via Server-Sent Events (SSE), and asynchronous follow-up generation.
+
+#### SAU Lane (Third Retrieval Lane)
+SAUs (School Administrative Units) are regional school districts that span multiple NH towns and administer a large share of local property taxes. The SAU lane enables retrieval of school-related documents across all member towns of a user's SAU.
+
+- **Town-to-SAU Mapping** (`server/chatV2/sauMapping.ts`): Maps NH towns to their SAU IDs (e.g., "Ossipee" → "SAU 49") and provides inverse lookups (SAU → member towns). Covers Carroll, Coos, Grafton, and Belknap counties.
+- **Intent-Based Gating** (`shouldTriggerSauLane()`): The SAU lane only activates when the user's question involves school/education topics (keywords: budget, tax, school, education, SAU, superintendent, school board, tuition, adequacy aid, etc.).
+- **Multi-Town Retrieval**: When active, the SAU lane queries documents tagged with any member town of the SAU using the existing `towns[]` filter in the pgvector search.
+- **Citation Labels**: SAU documents use `[A1]`, `[A2]`, etc. (A for Administrative unit), distinct from `[L1]` (Local) and `[S1]` (State).
+- **Synthesis**: The synthesizer explicitly distinguishes between town/municipal actions and SAU/school district actions in its guidance to the LLM.
 
 ### Document Ingestion Pipeline (V2)
 This pipeline manages the document lifecycle from upload to indexing, featuring duplicate detection, AI-powered metadata suggestion, and a multi-tier town detection system.

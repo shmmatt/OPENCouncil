@@ -12,7 +12,7 @@
 import { logDebug, logInfo } from "../utils/logger";
 import { runPlannerV3 } from "./plannerV3";
 import { type V3RetrievalResult } from "./twoLaneRetrieve";
-import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane, dedupeChunksByContent } from "./pgvectorRetrieveAdapter";
+import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane } from "./pgvectorRetrieveAdapter";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
@@ -175,7 +175,7 @@ export async function runChatV3Pipeline(
     },
   );
 
-  const totalChunks = retrievalResult.localCount + retrievalResult.stateCount;
+  const totalChunks = retrievalResult.localCount + retrievalResult.stateCount + retrievalResult.sauCount;
 
   if (totalChunks === 0) {
     logInfo("v3_retrieval_empty", {
@@ -198,6 +198,7 @@ export async function runChatV3Pipeline(
     stage: "v3_retrieval",
     localSelected: retrievalResult.localCount,
     stateSelected: retrievalResult.stateCount,
+    sauSelected: retrievalResult.sauCount,
     situationAlignment: retrievalResult.situationAlignment,
     legalTopicCoverage: retrievalResult.legalTopicCoverage,
     authoritativeStatePresent: retrievalResult.authoritativeStatePresent,
@@ -216,7 +217,8 @@ export async function runChatV3Pipeline(
     retrievalResult.localChunks,
     retrievalResult.stateChunks,
     issueMap,
-    retrievalResult.situationAlignment
+    retrievalResult.situationAlignment,
+    retrievalResult.sauChunks
   );
 
   const answerType = detectAnswerType(userMessage, issueMap);
@@ -237,12 +239,14 @@ export async function runChatV3Pipeline(
     sessionSourceText,
     localChunks: retrievalResult.localChunks,
     stateChunks: retrievalResult.stateChunks,
+    sauChunks: retrievalResult.sauChunks,
     recordStrength,
     history: historyForSynthesis,
     logContext,
     answerType,
     renderStyle,
     templateContext,
+    sauId: retrievalPlan.sauId,
   });
 
   let answerText = synthesisResult.answerText;
@@ -257,6 +261,7 @@ export async function runChatV3Pipeline(
 
   let effectiveLocalChunks = retrievalResult.localChunks;
   let effectiveStateChunks = retrievalResult.stateChunks;
+  let effectiveSauChunks = retrievalResult.sauChunks;
   let effectiveRecordStrength = recordStrength;
 
   // =====================================================
@@ -297,7 +302,18 @@ export async function runChatV3Pipeline(
       );
 
       const originalLocalCount = effectiveLocalChunks.length;
-      const mergedLocal = dedupeChunksByContent([...effectiveLocalChunks, ...secondHopChunks]);
+      const secondHopAsLabeled: LabeledChunk[] = secondHopChunks.map((chunk, idx) => ({
+        label: `[L${effectiveLocalChunks.length + idx + 1}]`,
+        title: chunk.title,
+        content: chunk.content,
+        lane: "local" as const,
+        authority: "other" as const,
+        year: chunk.year,
+        category: chunk.category,
+      }));
+      const existingContents = new Set(effectiveLocalChunks.map(c => c.content.slice(0, 200)));
+      const newChunks = secondHopAsLabeled.filter(c => !existingContents.has(c.content.slice(0, 200)));
+      const mergedLocal = [...effectiveLocalChunks, ...newChunks];
       secondHopChunksAdded = mergedLocal.length - originalLocalCount;
 
       logDebug("v3_second_hop_results", {
@@ -315,7 +331,8 @@ export async function runChatV3Pipeline(
           effectiveLocalChunks,
           effectiveStateChunks,
           issueMap,
-          retrievalResult.situationAlignment
+          retrievalResult.situationAlignment,
+          effectiveSauChunks
         );
 
         synthesisResult = await synthesizeV3({
@@ -324,6 +341,7 @@ export async function runChatV3Pipeline(
           sessionSourceText,
           localChunks: effectiveLocalChunks,
           stateChunks: effectiveStateChunks,
+          sauChunks: effectiveSauChunks,
           recordStrength: effectiveRecordStrength,
           history: historyForSynthesis,
           logContext,
@@ -331,6 +349,7 @@ export async function runChatV3Pipeline(
           answerType,
           renderStyle,
           templateContext,
+          sauId: retrievalPlan.sauId,
         });
 
         answerText = synthesisResult.answerText;
@@ -341,6 +360,7 @@ export async function runChatV3Pipeline(
           sessionSourceText,
           localChunks: effectiveLocalChunks,
           stateChunks: effectiveStateChunks,
+          sauChunks: effectiveSauChunks,
           recordStrength: effectiveRecordStrength,
           history: historyForSynthesis,
           logContext,
@@ -348,6 +368,7 @@ export async function runChatV3Pipeline(
           answerType,
           renderStyle,
           templateContext,
+          sauId: retrievalPlan.sauId,
         });
 
         answerText = synthesisResult.answerText;
@@ -397,6 +418,7 @@ export async function runChatV3Pipeline(
         sessionSourceText,
         localChunks: effectiveLocalChunks,
         stateChunks: effectiveStateChunks,
+        sauChunks: effectiveSauChunks,
         recordStrength: effectiveRecordStrength,
         history: historyForSynthesis,
         logContext,
@@ -405,6 +427,7 @@ export async function runChatV3Pipeline(
         answerType,
         renderStyle,
         templateContext,
+        sauId: retrievalPlan.sauId,
       });
 
       repairRan = true;
@@ -510,7 +533,8 @@ export async function runChatV3Pipeline(
 
   const docSourceType = classifyDocSourceType(
     retrievalResult.localCount,
-    retrievalResult.stateCount
+    retrievalResult.stateCount,
+    retrievalResult.sauCount
   );
 
   const debugInfo: V3DebugInfo = {
@@ -523,12 +547,15 @@ export async function runChatV3Pipeline(
     planQueries: {
       local: retrievalPlan.local.queries,
       state: retrievalPlan.state.queries,
+      sau: retrievalPlan.sau?.queries,
     },
     retrievalCounts: {
       localRetrieved: retrievalResult.debug.localRetrievedTotal,
       localSelected: retrievalResult.localCount,
       stateRetrieved: retrievalResult.debug.stateRetrievedTotal,
       stateSelected: retrievalResult.stateCount,
+      sauRetrieved: retrievalResult.debug.sauRetrievedTotal,
+      sauSelected: retrievalResult.sauCount,
     },
     recordStrengthTier: effectiveRecordStrength.tier,
     auditFlags,
@@ -560,6 +587,7 @@ export async function runChatV3Pipeline(
     tier: effectiveRecordStrength.tier,
     localSelected: effectiveLocalChunks.length,
     stateSelected: effectiveStateChunks.length,
+    sauSelected: effectiveSauChunks.length,
     auditFlagCount: auditFlags.length,
     repairRan,
     secondHopRan,
@@ -573,21 +601,25 @@ export async function runChatV3Pipeline(
     sourceDocumentNames: retrievalResult.allDocumentNames,
     docSourceType,
     docSourceTown: townPreference || null,
-    retrievedChunkCount: effectiveLocalChunks.length + effectiveStateChunks.length,
+    retrievedChunkCount: effectiveLocalChunks.length + effectiveStateChunks.length + effectiveSauChunks.length,
     recordStrength: effectiveRecordStrength,
     debug: debugInfo,
     durationMs,
   };
 }
 
-function classifyDocSourceType(localCount: number, stateCount: number): DocSourceType {
-  if (localCount === 0 && stateCount === 0) {
+function classifyDocSourceType(localCount: number, stateCount: number, sauCount: number = 0): DocSourceType {
+  const totalLocal = localCount + sauCount;
+  if (totalLocal === 0 && stateCount === 0) {
     return "none";
   }
-  if (localCount > 0 && stateCount > 0) {
+  if (totalLocal > 0 && stateCount > 0) {
     return "mixed";
   }
-  if (localCount > 0) {
+  if (sauCount > 0 && localCount === 0) {
+    return "sau";
+  }
+  if (totalLocal > 0) {
     return "local";
   }
   return "statewide";

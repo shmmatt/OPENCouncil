@@ -34,6 +34,7 @@ export interface SynthesisV3Options extends SynthesisInputV3 {
   isFinalAttempt?: boolean;
   answerType?: AnswerType;
   renderStyle?: RenderStyle;
+  sauId?: string;
 }
 
 export interface SynthesisV3Result {
@@ -77,6 +78,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     sessionSourceText, 
     localChunks, 
     stateChunks, 
+    sauChunks = [],
     recordStrength,
     history,
     logContext,
@@ -85,13 +87,14 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     answerType = "QUICK_PROCESS",
     renderStyle = "PROSE",
     templateContext,
+    sauId,
   } = options;
   
   const { model: modelName } = getModelForStage('complexSynthesis');
   const startTime = Date.now();
 
   const prosePolicy = getProsePolicy(answerType, renderStyle);
-  let systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length);
+  let systemPrompt = buildProseSystemPrompt(recordStrength, issueMap, answerType, renderStyle, prosePolicy, isRepairAttempt, stateChunks.length, sauChunks.length, sauId);
 
   systemPrompt += `\n\n## EVIDENCE SUFFICIENCY (IMPORTANT)
 - You are analyzing municipal and legal documents. Do NOT infer or guess the outcome of votes, budgets, or legal decisions.
@@ -118,6 +121,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     sessionSourceText, 
     localChunks, 
     stateChunks,
+    sauChunks,
     history
   );
 
@@ -263,10 +267,13 @@ function buildProseSystemPrompt(
   renderStyle: RenderStyle,
   prosePolicy: ProsePolicy,
   isRepairAttempt?: boolean,
-  stateChunkCount?: number
+  stateChunkCount?: number,
+  sauChunkCount?: number,
+  sauId?: string,
 ): string {
   const tierInstructions = getTierInstructions(recordStrength);
   const hasStateChunks = (stateChunkCount || 0) > 0;
+  const hasSauChunks = (sauChunkCount || 0) > 0;
   const answerTemplate = getAnswerTypeTemplate(answerType, renderStyle, prosePolicy, hasStateChunks);
   
   const repairNote = isRepairAttempt 
@@ -321,10 +328,18 @@ ${crossRefInstructions}${recencyInstructions}
 - Cite facts/legal claims inline at sentence end: "...requires a public hearing. [S1]"
 - [Lx] for local documents (minutes, ordinances, etc.)
 - [Sx] for state law (RSA, NHMA guidance)
+- [Ax] for SAU (School Administrative Unit) documents — school district budgets, school board minutes, education reports
 - [USER] only when referencing user-provided text
 - If only local sources exist, answer using local only
 - If state sources are weak/irrelevant, do not mention state law
 ${hasStateChunks ? '- Include at least 1 state citation [Sx] if relevant to the legal framework' : ''}
+${hasSauChunks ? `
+## SAU / SCHOOL DISTRICT DISTINCTION (MANDATORY when SAU sources present)
+- SAU documents are from ${sauId || 'the regional School Administrative Unit'}, which is a regional school district covering multiple towns
+- When synthesizing data, EXPLICITLY distinguish between municipal/town government actions and regional SAU actions
+- Clearly cite which entity — the town or the SAU — is responsible for each budget item, policy, or decision being discussed
+- School budgets and education spending come from the SAU, NOT the town. Property tax bills include both town AND school portions — make this distinction clear
+- Use [Ax] citations for SAU-sourced facts and [Lx] citations for town-sourced facts — never conflate the two` : ''}
 
 ## TIER INSTRUCTIONS (${recordStrength.tier})
 ${tierInstructions}
@@ -408,6 +423,7 @@ function buildSynthesisUserPrompt(
   sessionSourceText: string | undefined,
   localChunks: LabeledChunk[],
   stateChunks: LabeledChunk[],
+  sauChunks: LabeledChunk[],
   history: ChatHistoryMessage[]
 ): string {
   const parts: string[] = [];
@@ -433,6 +449,14 @@ function buildSynthesisUserPrompt(
     }
   }
 
+  if (sauChunks.length > 0) {
+    parts.push('=== SAU / SCHOOL DISTRICT DOCUMENTS (cite as [A1], [A2], etc.) ===');
+    for (const chunk of sauChunks) {
+      const meta = formatChunkMeta(chunk);
+      parts.push(`${chunk.label} ${chunk.title}${meta} — ${chunk.content.slice(0, 2000)}\n`);
+    }
+  }
+
   if (stateChunks.length > 0) {
     parts.push('=== STATE DOCUMENTS (cite as [S1], [S2], etc. for legal framework) ===');
     for (const chunk of stateChunks) {
@@ -441,7 +465,7 @@ function buildSynthesisUserPrompt(
     }
   }
 
-  if (localChunks.length === 0 && stateChunks.length === 0 && !sessionSourceText) {
+  if (localChunks.length === 0 && stateChunks.length === 0 && sauChunks.length === 0 && !sessionSourceText) {
     parts.push('=== NO ARCHIVE DOCUMENTS FOUND ===\nNo relevant documents were retrieved from the archive. Provide a general response and note this limitation.');
   }
 
@@ -452,7 +476,7 @@ function buildSynthesisUserPrompt(
 
 function extractCitationsFromAnswer(answerText: string): string[] {
   const citations: string[] = [];
-  const citationPattern = /\[(L\d+|S\d+|USER)\]/g;
+  const citationPattern = /\[(L\d+|S\d+|A\d+|USER)\]/g;
   let match;
   
   while ((match = citationPattern.exec(answerText)) !== null) {
@@ -468,9 +492,10 @@ export function computeRecordStrength(
   localChunks: LabeledChunk[],
   stateChunks: LabeledChunk[],
   issueMap: IssueMap,
-  situationAlignment: number
+  situationAlignment: number,
+  sauChunks: LabeledChunk[] = []
 ): RecordStrength {
-  const localCount = localChunks.length;
+  const localCount = localChunks.length + sauChunks.length;
   const stateCount = stateChunks.length;
   
   // Compute distinct state documents by title (deduped)

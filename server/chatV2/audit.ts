@@ -939,7 +939,7 @@ function normalizeSectionBullets(content: string, maxBullets: number): string {
     if (words.length > MAX_BULLET_WORDS) {
       // Try to preserve citation tokens at end (e.g., [S1], [L2])
       const lastWord = words[words.length - 1];
-      const hasCitation = /^\[(?:S|L|USER)\d*\]$/.test(lastWord);
+      const hasCitation = /^\[(?:S|L|A|USER)\d*\]$/.test(lastWord);
       
       if (hasCitation && words.length > MAX_BULLET_WORDS + 1) {
         // Keep citation at end

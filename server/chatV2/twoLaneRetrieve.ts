@@ -1322,19 +1322,24 @@ import type { RetrievalPlanV3, LabeledChunk, ChunkAuthority, IssueMap as IssueMa
 export interface V3RetrievalResult {
   localChunks: LabeledChunk[];
   stateChunks: LabeledChunk[];
+  sauChunks: LabeledChunk[];
   allDocumentNames: string[];
   localCount: number;
   stateCount: number;
+  sauCount: number;
   situationAlignment: number;
   legalTopicCoverage: number;
   authoritativeStatePresent: boolean;
   distinctStateDocs: number;
   distinctLocalDocs: number;
+  distinctSauDocs: number;
   debug: {
     localQueriesUsed: string[];
     stateQueriesUsed: string[];
+    sauQueriesUsed: string[];
     localRetrievedTotal: number;
     stateRetrievedTotal: number;
+    sauRetrievedTotal: number;
     earlyExitTriggered: boolean;
     earlyExitReason?: string;
     durationMs: number;
@@ -1602,19 +1607,24 @@ export async function twoLaneRetrieveWithPlan(
   return {
     localChunks: labeledLocalChunks,
     stateChunks: labeledStateChunks,
+    sauChunks: [],
     allDocumentNames,
     localCount: labeledLocalChunks.length,
     stateCount: labeledStateChunks.length,
+    sauCount: 0,
     situationAlignment,
     legalTopicCoverage: legalTopicCoverageFinal,
     authoritativeStatePresent: authoritativeStatePresentFinal,
     distinctStateDocs: finalDistinctStateDocs,
     distinctLocalDocs: finalDistinctLocalDocs,
+    distinctSauDocs: 0,
     debug: {
       localQueriesUsed,
       stateQueriesUsed,
+      sauQueriesUsed: [],
       localRetrievedTotal,
       stateRetrievedTotal,
+      sauRetrievedTotal: 0,
       earlyExitTriggered,
       earlyExitReason: earlyExitReason || undefined,
       durationMs,

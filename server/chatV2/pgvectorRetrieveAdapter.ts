@@ -15,7 +15,7 @@ export interface PgvectorLaneChunk {
   docId: string;
   title: string;
   content: string;
-  lane: "local" | "state";
+  lane: "local" | "state" | "sau";
   score: number;
   documentNames: string[];
   year?: string;
@@ -99,11 +99,12 @@ export interface LaneQueryOptions {
   keywordTerms?: string[];
   temporalFilter?: TemporalTarget;
   queryFocus?: QueryFocus;
+  sauTowns?: string[];
 }
 
 export async function executeQueryOnLane(
   query: string,
-  lane: "local" | "state",
+  lane: "local" | "state" | "sau",
   town: string | null,
   maxResults: number,
   laneOptions?: LaneQueryOptions,
@@ -111,6 +112,7 @@ export async function executeQueryOnLane(
   const queryEmbedding = await generateQueryEmbedding(query);
 
   const townFilter = lane === "local" && town ? town : lane === "state" ? "statewide" : undefined;
+  const townsFilter = lane === "sau" && laneOptions?.sauTowns ? laneOptions.sauTowns : undefined;
   const useHybrid = laneOptions && (
     (laneOptions.keywordTerms && laneOptions.keywordTerms.length > 0) ||
     (laneOptions.temporalFilter && laneOptions.temporalFilter.strategy !== "none") ||
@@ -126,6 +128,7 @@ export async function executeQueryOnLane(
 
     const hybridResults = await hybridSearch(queryEmbedding, {
       town: townFilter,
+      towns: townsFilter,
       limit: maxResults,
       similarityThreshold: 0.4,
       keywordTerms: laneOptions.keywordTerms,
@@ -141,6 +144,7 @@ export async function executeQueryOnLane(
   } else {
     results = await semanticSearch(queryEmbedding, {
       town: townFilter,
+      towns: townsFilter,
       limit: maxResults,
       similarityThreshold: 0.4,
     });
@@ -191,7 +195,7 @@ export function dedupeChunksByContent(chunks: PgvectorLaneChunk[]): PgvectorLane
   return deduped;
 }
 
-function classifyAuthority(title: string, content: string, lane: "local" | "state"): ChunkAuthority {
+function classifyAuthority(title: string, content: string, lane: "local" | "state" | "sau"): ChunkAuthority {
   const combinedText = (title + ' ' + content).toLowerCase();
 
   if (lane === "state") {
@@ -242,6 +246,7 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
 
   const localQueries = plan.local.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
   const stateQueries = plan.state.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
+  const sauQueries = plan.sau ? plan.sau.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE) : [];
 
   const laneOpts: LaneQueryOptions = {
     keywordTerms: plan.keywordTerms && plan.keywordTerms.length > 0 ? plan.keywordTerms : undefined,
@@ -249,12 +254,18 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     queryFocus: plan.queryFocus,
   };
 
+  const sauLaneOpts: LaneQueryOptions = {
+    ...laneOpts,
+    sauTowns: plan.sauTowns,
+  };
+
   const allQueryPromises = [
-    ...localQueries.map(query => ({ query, lane: "local" as const, k: plan.local.k })),
-    ...stateQueries.map(query => ({ query, lane: "state" as const, k: plan.state.k })),
-  ].map(async ({ query, lane, k }) => {
+    ...localQueries.map(query => ({ query, lane: "local" as const, k: plan.local.k, opts: laneOpts })),
+    ...stateQueries.map(query => ({ query, lane: "state" as const, k: plan.state.k, opts: laneOpts })),
+    ...sauQueries.map(query => ({ query, lane: "sau" as const, k: plan.sau!.k, opts: sauLaneOpts })),
+  ].map(async ({ query, lane, k, opts }) => {
     try {
-      const result = await executeQueryOnLane(query, lane, townPreference || null, k, laneOpts);
+      const result = await executeQueryOnLane(query, lane, townPreference || null, k, opts);
       return { chunks: result, query, lane, success: true };
     } catch (err) {
       logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
@@ -266,27 +277,35 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
 
   const allLocalChunks: PgvectorLaneChunk[] = [];
   const allStateChunks: PgvectorLaneChunk[] = [];
+  const allSauChunks: PgvectorLaneChunk[] = [];
   const localQueriesUsed: string[] = [];
   const stateQueriesUsed: string[] = [];
+  const sauQueriesUsed: string[] = [];
 
   for (const result of queryResults) {
     if (result.lane === "local") {
       allLocalChunks.push(...result.chunks);
       if (result.success && result.chunks.length > 0) localQueriesUsed.push(result.query);
-    } else {
+    } else if (result.lane === "state") {
       allStateChunks.push(...result.chunks);
       if (result.success && result.chunks.length > 0) stateQueriesUsed.push(result.query);
+    } else if (result.lane === "sau") {
+      allSauChunks.push(...result.chunks);
+      if (result.success && result.chunks.length > 0) sauQueriesUsed.push(result.query);
     }
   }
 
   const dedupedLocal = dedupeChunksByContent(allLocalChunks);
   const dedupedState = dedupeChunksByContent(allStateChunks);
+  const dedupedSau = dedupeChunksByContent(allSauChunks);
 
   const rankedLocal = rankWithSituation(dedupedLocal, situationContext);
   const rankedState = rankWithSituation(dedupedState, situationContext);
+  const rankedSau = rankWithSituation(dedupedSau, situationContext);
 
   const selectedLocal = rankedLocal.slice(0, plan.local.cap);
   const selectedState = rankedState.slice(0, plan.state.cap);
+  const selectedSau = plan.sau ? rankedSau.slice(0, plan.sau.cap) : [];
 
   const labeledLocalChunks: LabeledChunk[] = selectedLocal.map((chunk, idx) => ({
     label: `[L${idx + 1}]`,
@@ -308,10 +327,21 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     category: chunk.category,
   }));
 
-  const situationAlignment = situationContext && [...selectedLocal, ...selectedState].length > 0
-    ? [...selectedLocal, ...selectedState].reduce(
+  const labeledSauChunks: LabeledChunk[] = selectedSau.map((chunk, idx) => ({
+    label: `[A${idx + 1}]`,
+    title: chunk.title,
+    content: chunk.content,
+    lane: "sau" as const,
+    authority: classifyAuthority(chunk.title, chunk.content, "sau"),
+    year: chunk.year,
+    category: chunk.category,
+  }));
+
+  const allSelectedChunks = [...selectedLocal, ...selectedState, ...selectedSau];
+  const situationAlignment = situationContext && allSelectedChunks.length > 0
+    ? allSelectedChunks.reduce(
         (sum, c) => sum + computeSituationMatchScore(c.title + " " + c.content, situationContext), 0
-      ) / [...selectedLocal, ...selectedState].length
+      ) / allSelectedChunks.length
     : 0;
 
   const legalTopicCoverage = issueMap.legalTopics.length > 0
@@ -327,16 +357,18 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
 
   const distinctStateDocs = new Set(labeledStateChunks.map(c => c.title.toLowerCase().trim())).size;
   const distinctLocalDocs = new Set(labeledLocalChunks.map(c => c.title.toLowerCase().trim())).size;
+  const distinctSauDocs = new Set(labeledSauChunks.map(c => c.title.toLowerCase().trim())).size;
 
   const allDocumentNames = Array.from(new Set([
     ...selectedLocal.flatMap(c => c.documentNames),
     ...selectedState.flatMap(c => c.documentNames),
+    ...selectedSau.flatMap(c => c.documentNames),
   ]));
 
   const durationMs = Date.now() - startTime;
 
   logInfo(
-    `pgvector retrieval: ${labeledLocalChunks.length} local + ${labeledStateChunks.length} state chunks (${durationMs}ms)`,
+    `pgvector retrieval: ${labeledLocalChunks.length} local + ${labeledStateChunks.length} state + ${labeledSauChunks.length} SAU chunks (${durationMs}ms)`,
     {
       stage: "pgvectorRetrieve",
       requestId: logContext?.requestId,
@@ -347,19 +379,24 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   return {
     localChunks: labeledLocalChunks,
     stateChunks: labeledStateChunks,
+    sauChunks: labeledSauChunks,
     allDocumentNames,
     localCount: labeledLocalChunks.length,
     stateCount: labeledStateChunks.length,
+    sauCount: labeledSauChunks.length,
     situationAlignment,
     legalTopicCoverage,
     authoritativeStatePresent: detectAuthoritativeState(selectedState),
     distinctStateDocs,
     distinctLocalDocs,
+    distinctSauDocs,
     debug: {
       localQueriesUsed,
       stateQueriesUsed,
+      sauQueriesUsed,
       localRetrievedTotal: allLocalChunks.length,
       stateRetrievedTotal: allStateChunks.length,
+      sauRetrievedTotal: allSauChunks.length,
       earlyExitTriggered: false,
       durationMs,
       legalSalience: issueMap.legalSalience,
