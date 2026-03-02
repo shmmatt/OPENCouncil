@@ -86,6 +86,7 @@ export async function deleteChunksByDocumentId(documentId: string): Promise<void
 export interface SearchOptions {
   town?: string;
   towns?: string[];
+  sau?: string;
   category?: string;
   board?: string;
   year?: string;
@@ -110,6 +111,7 @@ export async function semanticSearch(
   const {
     town,
     towns,
+    sau,
     category,
     board,
     year,
@@ -119,7 +121,9 @@ export async function semanticSearch(
 
   const conditions = [];
 
-  if (town) {
+  if (sau) {
+    conditions.push(sql`metadata->>'sau' = ${sau}`);
+  } else if (town) {
     conditions.push(sql`lower(metadata->>'town') = ${town.toLowerCase()}`);
   } else if (towns && towns.length > 0) {
     const townList = towns.map(t => `'${t.replace(/'/g, "''").toLowerCase()}'`).join(",");
@@ -295,6 +299,7 @@ export async function keywordSearch(
   const {
     town,
     towns,
+    sau,
     category,
     board,
     year,
@@ -308,7 +313,9 @@ export async function keywordSearch(
 
   conditions.push(sql`search_vector @@ to_tsquery('english', ${tsQuery})`);
 
-  if (town) {
+  if (sau) {
+    conditions.push(sql`metadata->>'sau' = ${sau}`);
+  } else if (town) {
     conditions.push(sql`lower(metadata->>'town') = ${town.toLowerCase()}`);
   } else if (towns && towns.length > 0) {
     const townList = towns.map(t => `'${t.replace(/'/g, "''").toLowerCase()}'`).join(",");

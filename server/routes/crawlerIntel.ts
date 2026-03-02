@@ -17,11 +17,13 @@ import {
 } from "../services/gapAnalysis";
 import {
   startStateCrawl,
+  startSauCrawl,
   getCrawlProgress,
   getActiveCrawls,
   abortCrawl,
 } from "../services/crawlerEngine";
 import { startCourtListenerCrawl } from "../services/courtListenerCrawl";
+import * as sauStorage from "../storage/crawlerSau";
 import { FAILURE_LABELS, type FailureType } from "../../shared/crawler-schema";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -2101,6 +2103,390 @@ router.post("/backfill-blobs", async (req, res) => {
     });
   } catch (error: any) {
     apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+// ============================================================
+// SAU SOURCE ROUTES
+// ============================================================
+
+async function resolveSauSource(slugOrId: string) {
+  let source = await sauStorage.getSauSourceBySlug(slugOrId.toLowerCase());
+  if (!source) {
+    source = await sauStorage.getSauSourceById(slugOrId);
+  }
+  return source;
+}
+
+router.get("/sau-sources", async (_req, res) => {
+  try {
+    const sources = await sauStorage.getSauSourceOverviews();
+    res.json({
+      sources: sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        sauId: s.sauId,
+        baseUrl: s.baseUrl,
+        description: s.description,
+        memberTowns: s.memberTowns,
+        county: s.county,
+        state: s.state,
+        targetPaths: s.targetPaths,
+        linkPatterns: s.linkPatterns,
+        excludePatterns: s.excludePatterns,
+        scope: s.scope,
+        status: s.status,
+        totalDocuments: s.totalDocuments,
+        totalUploaded: s.totalUploaded,
+        consecutiveFailures: s.consecutiveFailures,
+        lastRunStatus: s.lastRunStatus,
+        lastRunDate: s.lastRunDate,
+        lastCrawlDate: s.lastCrawlDate,
+        notes: s.notes,
+        documentsByStatus: s.documentsByStatus,
+      })),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const registerSauSourceSchema = z.object({
+  name: z.string().min(1).max(200),
+  sauId: z.string().min(1).max(20),
+  baseUrl: z.string().url(),
+  description: z.string().optional(),
+  memberTowns: z.array(z.string()).default([]),
+  county: z.string().optional(),
+  targetPaths: z.array(z.string()).default([]),
+  linkPatterns: z.array(z.string()).default([]),
+  excludePatterns: z.array(z.string()).default([]),
+  maxPages: z.number().int().positive().optional(),
+  notes: z.string().optional(),
+});
+
+router.post("/sau-sources", async (req, res) => {
+  try {
+    const parsed = registerSauSourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const data = parsed.data;
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+    const existing = await sauStorage.getSauSourceBySlug(slug);
+    if (existing) {
+      return apiError(res, 409, "SOURCE_EXISTS", `SAU source '${data.name}' already registered with slug '${slug}'`);
+    }
+
+    const source = await sauStorage.createSauSource({
+      name: data.name,
+      slug,
+      sauId: data.sauId,
+      baseUrl: data.baseUrl.replace(/\/$/, ""),
+      description: data.description,
+      memberTowns: data.memberTowns,
+      county: data.county,
+      targetPaths: data.targetPaths,
+      linkPatterns: data.linkPatterns,
+      excludePatterns: data.excludePatterns,
+      maxPages: data.maxPages,
+      notes: data.notes,
+    });
+
+    res.status(201).json({
+      message: `SAU source '${data.name}' registered successfully`,
+      source: {
+        id: source.id,
+        name: source.name,
+        slug: source.slug,
+        sauId: source.sauId,
+        baseUrl: source.baseUrl,
+        memberTowns: source.memberTowns,
+        status: source.status,
+      },
+    });
+  } catch (error: any) {
+    if (error.message?.includes("unique") || error.code === "23505") {
+      return apiError(res, 409, "SOURCE_EXISTS", "A SAU source with that name already exists");
+    }
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/sau-sources/:sourceSlug", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const [runsResult, docsResult] = await Promise.all([
+      sauStorage.getSauSourceRuns(source.id, 10, 0),
+      sauStorage.getSauDocuments(source.id, undefined, 1, 0),
+    ]);
+
+    const docsByCategory = await db.execute(sql`
+      SELECT category, COUNT(*) as count
+      FROM crawler_sau_documents
+      WHERE source_id = ${source.id}
+      GROUP BY category
+    `);
+    const categoryBreakdown: Record<string, number> = {};
+    for (const row of docsByCategory.rows as any[]) {
+      categoryBreakdown[row.category || "uncategorized"] = parseInt(row.count);
+    }
+
+    res.json({
+      source: {
+        id: source.id,
+        name: source.name,
+        slug: source.slug,
+        sauId: source.sauId,
+        baseUrl: source.baseUrl,
+        description: source.description,
+        memberTowns: source.memberTowns,
+        county: source.county,
+        targetPaths: source.targetPaths,
+        linkPatterns: source.linkPatterns,
+        excludePatterns: source.excludePatterns,
+        maxPages: source.maxPages,
+        scope: source.scope,
+        status: source.status,
+        totalDocuments: source.totalDocuments,
+        totalUploaded: source.totalUploaded,
+        consecutiveFailures: source.consecutiveFailures,
+        lastCrawlDate: source.lastCrawlDate,
+        notes: source.notes,
+      },
+      documentStats: {
+        totalTracked: docsResult.total,
+        byCategory: categoryBreakdown,
+      },
+      recentRuns: runsResult.runs.map((run) => ({
+        id: run.id,
+        mode: run.mode,
+        triggerType: run.triggerType,
+        status: run.status,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        pagesVisited: run.pagesVisited,
+        documentsDiscovered: run.documentsDiscovered,
+        documentsUploaded: run.documentsUploaded,
+        documentsFailed: run.documentsFailed,
+        errorMessage: run.errorMessage,
+      })),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.patch("/sau-sources/:sourceSlug", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const allowedFields = [
+      "name", "baseUrl", "description", "memberTowns",
+      "targetPaths", "linkPatterns", "excludePatterns",
+      "maxPages", "status", "notes",
+    ];
+    const updates: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return apiError(res, 400, "NO_UPDATES", "No valid fields provided to update");
+    }
+
+    const updated = await sauStorage.updateSauSource(source.slug, updates as any);
+    res.json({
+      message: `SAU source '${source.name}' updated`,
+      source: updated,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/sau-sources/:sourceSlug/documents", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    const result = await sauStorage.getSauDocuments(source.id, { status, search }, limit, offset);
+
+    res.json({
+      documents: result.documents,
+      total: result.total,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+router.get("/sau-sources/:sourceSlug/runs", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const result = await sauStorage.getSauSourceRuns(source.id, limit, offset);
+
+    res.json({
+      runs: result.runs,
+      total: result.total,
+    });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message, true, 30);
+  }
+});
+
+const sauSourceCrawlSchema = z.object({
+  mode: z.enum(["full", "incremental", "manual"]).default("full"),
+  maxPages: z.number().int().positive().optional(),
+  targetPaths: z.array(z.string()).optional(),
+  linkPatterns: z.array(z.string()).optional(),
+  callbackUrl: z.string().url().optional(),
+});
+
+router.post("/sau-sources/:sourceSlug/crawl", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    if (source.status === "disabled") {
+      return apiError(res, 409, "SOURCE_DISABLED", `SAU source '${source.name}' is disabled`);
+    }
+
+    const existingActive = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (existingActive) {
+      return apiError(res, 409, "CRAWL_ALREADY_RUNNING", `Crawl already running for ${source.name}`, false);
+    }
+
+    const parsed = sauSourceCrawlSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return apiError(res, 400, "INVALID_INPUT", `Invalid input: ${JSON.stringify(parsed.error.flatten().fieldErrors)}`);
+    }
+
+    const { mode, maxPages, targetPaths, linkPatterns, callbackUrl } = parsed.data;
+
+    const effectiveTargetPaths = targetPaths && targetPaths.length > 0
+      ? targetPaths
+      : (source.targetPaths as string[]) || [];
+
+    const effectiveLinkPatterns = linkPatterns && linkPatterns.length > 0
+      ? linkPatterns
+      : (source.linkPatterns as string[]) || [];
+
+    const effectiveExcludePatterns = (source.excludePatterns as string[]) || [];
+
+    const run = await sauStorage.createSauSourceRun(
+      source.id,
+      mode,
+      "manual",
+      maxPages || source.maxPages || undefined
+    );
+
+    const runId = await startSauCrawl(source, run, {
+      maxPages: maxPages || source.maxPages || undefined,
+      mode,
+      targetPaths: effectiveTargetPaths,
+      linkPatterns: effectiveLinkPatterns,
+      excludePatterns: effectiveExcludePatterns,
+    });
+
+    res.json({
+      message: `SAU source crawl started for ${source.name} (${source.sauId})`,
+      runId,
+      sourceId: source.id,
+      mode,
+      maxPages: maxPages || source.maxPages || "default",
+      triggerType: "manual",
+      targetPaths: effectiveTargetPaths,
+      linkPatterns: effectiveLinkPatterns,
+      excludePatterns: effectiveExcludePatterns,
+      hint: `Poll GET /sau-sources/${source.slug}/progress for real-time status`,
+      ...(callbackUrl ? { callbackUrl } : {}),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "CRAWL_START_FAILED", error.message, true, 60);
+  }
+});
+
+router.get("/sau-sources/:sourceSlug/progress", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const activeCrawl = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (!activeCrawl) {
+      return res.json({ active: false, message: "No active crawl for this source" });
+    }
+
+    const progress = getCrawlProgress(activeCrawl.runId);
+    if (!progress) {
+      return res.json({ active: false, message: "Crawl progress not found" });
+    }
+
+    res.json({
+      active: true,
+      runId: progress.runId,
+      status: progress.status,
+      pagesVisited: progress.pagesVisited,
+      pagesQueued: progress.pagesQueued,
+      documentsDiscovered: progress.documentsDiscovered,
+      documentsDownloaded: progress.documentsDownloaded,
+      documentsFailed: progress.documentsFailed,
+      duplicatesSkipped: progress.duplicatesSkipped,
+      currentUrl: progress.currentUrl,
+      startedAt: progress.startedAt,
+      recentLogs: (progress.log || []).slice(-20),
+    });
+  } catch (error: any) {
+    apiError(res, 500, "PROGRESS_FETCH_FAILED", error.message);
+  }
+});
+
+router.post("/sau-sources/:sourceSlug/abort", async (req, res) => {
+  try {
+    const source = await resolveSauSource(req.params.sourceSlug);
+    if (!source) {
+      return apiError(res, 404, "SOURCE_NOT_FOUND", `SAU source '${req.params.sourceSlug}' not found`);
+    }
+
+    const activeCrawl = getActiveCrawls().find(c => c.townId === source.id && c.status === 'running');
+    if (!activeCrawl) {
+      return apiError(res, 404, "NO_ACTIVE_CRAWL", "No active crawl found for this source");
+    }
+
+    abortCrawl(activeCrawl.runId);
+    res.json({ message: `Crawl abort requested for ${source.name}`, runId: activeCrawl.runId });
+  } catch (error: any) {
+    apiError(res, 500, "INTERNAL_ERROR", error.message);
   }
 });
 

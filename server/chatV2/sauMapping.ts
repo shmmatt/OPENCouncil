@@ -51,12 +51,11 @@ const TOWN_TO_SAU: Record<string, string> = {
   "Tuftonboro": "SAU 49",
   "Effingham": "SAU 49",
   "Brookfield": "SAU 49",
-  "Wakefield": "SAU 49",
   "New Durham": "SAU 49",
 
+  "Wakefield": "SAU 101",
+
   "Moultonborough": "SAU 45",
-  "Sandwich": "SAU 45",
-  "Center Harbor": "SAU 45",
 
   "Laconia": "SAU 30",
   "Belmont": "SAU 30",
@@ -66,6 +65,8 @@ const TOWN_TO_SAU: Record<string, string> = {
   "Meredith": "SAU 2",
   "Ashland": "SAU 2",
   "New Hampton": "SAU 2",
+  "Center Harbor": "SAU 2",
+  "Sandwich": "SAU 2",
 
   "Gilmanton": "SAU 79",
   "Barnstead": "SAU 79",

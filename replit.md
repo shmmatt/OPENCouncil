@@ -45,13 +45,53 @@ A dual-provider OCR system utilizes Tesseract.js for low-text PDFs and AWS Textr
 Document files are stored in Replit Object Storage, providing scalable and secure storage.
 
 ### Crawler / Data Collection
-A sophisticated crawler system collects data using multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching. It supports town-level and state-level document collection, including integrations with Google Drive and CourtListener API.
+A sophisticated crawler system collects data using multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for resilient fetching. It supports town-level, state-level, and SAU-level document collection, including integrations with Google Drive and CourtListener API.
 
 **County Coverage:** Carroll, Coos, Grafton, and Belknap counties (northern NH and Lakes Region). County town data files live in `crawler/scripts/{county}-county-towns.json`. New counties can be seeded into the database via `npx tsx crawler/scripts/seed-new-counties.ts`.
 
 **Crawl Queue:** The crawler engine enforces a max of 3 concurrent crawls (`MAX_CONCURRENT_CRAWLS` in `server/services/crawlerEngine.ts`). Batch crawls (trigger-all, county batch) use `enqueueCrawl()` which queues excess towns and auto-dequeues as slots free up. Queue status is available via `GET /api/admin/crawler/queue` and clearable via `POST /api/admin/crawler/queue/clear`. The admin panel shows county filtering, batch county crawl buttons, and a queue status badge.
 
 **Town Name Registry:** `NH_TOWNS` in `shared/schema.ts` is the single source of truth for all known NH town names. All other files (chatV2 router, simpleAnswer, etc.) import from there — no duplicate lists.
+
+#### SAU Crawling Infrastructure
+SAU (School Administrative Unit) crawling follows the same patterns as town/state crawling but targets school district websites.
+
+**Database Tables** (`shared/crawler-schema.ts`):
+- `crawler_sau_sources`: Master registry of SAU sources (name, slug, sauId, baseUrl, memberTowns JSON, county, targetPaths, linkPatterns, excludePatterns, maxPages, status, crawl stats)
+- `crawler_sau_source_runs`: Run history per SAU source (mode, status, stats)
+- `crawler_sau_documents`: Document registry (url, urlHash unique, title, s3Key, category, status, fileBlobId FK)
+
+**Storage Layer** (`server/storage/crawlerSau.ts`): Full CRUD for SAU sources, runs, and documents.
+
+**Engine Functions** (`server/services/crawlerEngine.ts`):
+- `startSauCrawl(source, options)` / `executeSauCrawl()`: 5-phase crawl (sitemap → known paths → BFS → document download → file_blob bridging)
+- `generateSauS3Key(slug, url, filename)`: S3 key pattern `sau/{slug}/{subpath}/{filename}`
+- `bridgeSauDocToFileBlob(sauDocId)`: Bridges SAU docs to main file_blobs table for embedding pipeline
+
+**Crawl State** (`server/services/crawlerState.ts`): Extended with `recordSauDocument`, `batchRecordSauDocuments`, `getAllSauDocumentUrls`, `getResumableSauDocuments`, `updateSauRunProgress`.
+
+**API Routes** (`server/routes/crawlerIntel.ts`):
+- `GET/POST /api/crawler-intel/sau-sources`: List/create SAU sources
+- `GET/PATCH /api/crawler-intel/sau-sources/:slug`: Get/update single source
+- `GET /api/crawler-intel/sau-sources/:slug/documents`: List documents
+- `GET /api/crawler-intel/sau-sources/:slug/runs`: Run history
+- `POST /api/crawler-intel/sau-sources/:slug/crawl`: Trigger crawl
+- `GET /api/crawler-intel/sau-sources/:slug/progress`: Live crawl progress
+- `POST /api/crawler-intel/sau-sources/:slug/abort`: Abort active crawl
+
+**Seeded Carroll County SAUs** (via `server/scripts/seed-sau-sources.ts`):
+- SAU 9 (Mt. Washington Valley): Conway, Albany, Bartlett, Chatham, Eaton, Freedom, Hart's Location, Jackson, Madison, Tamworth — https://www.sau9.org
+- SAU 49 (Governor Wentworth Regional): Wolfeboro, Ossipee, Tuftonboro, Effingham, Brookfield, New Durham — https://www.gwrsd.org
+- SAU 45 (Moultonborough): Moultonborough only — https://www.moultonboroughschool.com
+- SAU 2 (Inter-Lakes): Meredith, Center Harbor, Sandwich — https://www.interlakes.org
+
+**Embedding Pipeline Integration** (`server/services/embeddingPipeline.ts`):
+- `fetchReadyBlobs` JOINs `crawler_sau_documents` + `crawler_sau_sources` so SAU docs resolve metadata
+- SAU documents get tagged with `metadata.sau = "SAU 9"` and `metadata.sourceType = "sau"` in document_chunks
+- `embeddingStorage.ts` search functions support filtering by `metadata.sau` field
+- `pgvectorRetrieveAdapter.ts` SAU lane passes `sauId` filter for precise SAU document retrieval
+
+**Admin UI**: "SAU Sources" tab in the admin crawler panel (`client/src/pages/admin-crawler.tsx`) with dashboard table, detail view (overview/documents/run history sub-tabs), crawl controls, and config editor.
 
 ### OC Research Module
 The OC Research tab provides analytical tools for municipal data analysis, including a **Development Friction Report**. This report uses a multi-phase pipeline to:

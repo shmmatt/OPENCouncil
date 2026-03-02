@@ -19,6 +19,8 @@ interface ChunkData {
   year: string | null;
   contentHash: string;
   filename: string | null;
+  sau: string | null;
+  sourceType: string | null;
 }
 
 export interface PipelineProgress {
@@ -125,6 +127,8 @@ interface FileBlobRow {
   category: string | null;
   year: string | null;
   document_id: string | null;
+  sau: string | null;
+  source_type: string | null;
 }
 
 async function fetchReadyBlobs(limit: number | null, town: string | null): Promise<FileBlobRow[]> {
@@ -139,12 +143,22 @@ async function fetchReadyBlobs(limit: number | null, town: string | null): Promi
       COALESCE(ld.board, cd.board) as board,
       ld.category,
       dv.year,
-      dv.document_id
+      dv.document_id,
+      css.sau_id as sau,
+      CASE
+        WHEN csd.id IS NOT NULL THEN 'sau'
+        WHEN cssd.id IS NOT NULL THEN 'state'
+        WHEN cd.id IS NOT NULL THEN 'town'
+        ELSE 'unknown'
+      END as source_type
     FROM file_blobs fb
     LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id AND dv.is_current = true
     LEFT JOIN logical_documents ld ON dv.document_id = ld.id
     LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
     LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
+    LEFT JOIN crawler_sau_documents csd ON csd.file_blob_id = fb.id
+    LEFT JOIN crawler_sau_sources css ON csd.source_id = css.id
+    LEFT JOIN crawler_state_documents cssd ON cssd.file_blob_id = fb.id
     WHERE fb.embedding_status = 'none'
       AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
       AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
@@ -171,6 +185,8 @@ async function insertChunk(c: ChunkData & { embedding: number[] }): Promise<void
     filename: c.filename || undefined,
     fileBlobId: c.fileBlobId,
     contentHash: c.contentHash,
+    sau: c.sau || undefined,
+    sourceType: c.sourceType || undefined,
   });
   const embeddingStr = `[${c.embedding.join(",")}]`;
 
@@ -261,6 +277,8 @@ export async function startPipeline(options?: { limit?: number; town?: string })
           year: blob.year || null,
           contentHash,
           filename: blob.original_filename || null,
+          sau: blob.sau || null,
+          sourceType: blob.source_type || null,
         });
       }
 

@@ -100,6 +100,7 @@ export interface LaneQueryOptions {
   temporalFilter?: TemporalTarget;
   queryFocus?: QueryFocus;
   sauTowns?: string[];
+  sauId?: string;
 }
 
 export async function executeQueryOnLane(
@@ -113,6 +114,7 @@ export async function executeQueryOnLane(
 
   const townFilter = lane === "local" && town ? town : lane === "state" ? "statewide" : undefined;
   const townsFilter = lane === "sau" && laneOptions?.sauTowns ? laneOptions.sauTowns : undefined;
+  const sauFilter = lane === "sau" && laneOptions?.sauId ? laneOptions.sauId : undefined;
   const useHybrid = laneOptions && (
     (laneOptions.keywordTerms && laneOptions.keywordTerms.length > 0) ||
     (laneOptions.temporalFilter && laneOptions.temporalFilter.strategy !== "none") ||
@@ -129,6 +131,7 @@ export async function executeQueryOnLane(
     const hybridResults = await hybridSearch(queryEmbedding, {
       town: townFilter,
       towns: townsFilter,
+      sau: sauFilter,
       limit: maxResults,
       similarityThreshold: 0.4,
       keywordTerms: laneOptions.keywordTerms,
@@ -145,6 +148,7 @@ export async function executeQueryOnLane(
     results = await semanticSearch(queryEmbedding, {
       town: townFilter,
       towns: townsFilter,
+      sau: sauFilter,
       limit: maxResults,
       similarityThreshold: 0.4,
     });
@@ -257,6 +261,7 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   const sauLaneOpts: LaneQueryOptions = {
     ...laneOpts,
     sauTowns: plan.sauTowns,
+    sauId: plan.sauId,
   };
 
   const allQueryPromises = [

@@ -41,6 +41,7 @@ import {
   RotateCw,
   Plus,
   Square,
+  GraduationCap,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -2923,6 +2924,661 @@ function StateSourcesDashboard({
   );
 }
 
+interface SauSource {
+  id: string;
+  name: string;
+  slug: string;
+  sauId: string;
+  baseUrl: string;
+  description: string | null;
+  memberTowns: string[];
+  county: string | null;
+  state: string;
+  targetPaths: string[];
+  linkPatterns: string[];
+  excludePatterns: string[];
+  maxPages: number | null;
+  scope: string;
+  status: string;
+  lastCrawlDate: string | null;
+  totalDocuments: number;
+  totalUploaded: number;
+  consecutiveFailures: number;
+  notes: string | null;
+  lastRunStatus?: string | null;
+  lastRunDate?: string | null;
+  documentsByStatus?: Record<string, number>;
+}
+
+function SauSourceProfileEditor({
+  source,
+  onSave,
+  saving,
+}: {
+  source: SauSource;
+  onSave: (updates: any) => void;
+  saving: boolean;
+}) {
+  const [name, setName] = useState(source.name);
+  const [baseUrl, setBaseUrl] = useState(source.baseUrl);
+  const [description, setDescription] = useState(source.description || "");
+  const [memberTowns, setMemberTowns] = useState((source.memberTowns || []).join(", "));
+  const [targetPaths, setTargetPaths] = useState((source.targetPaths || []).join("\n"));
+  const [linkPatterns, setLinkPatterns] = useState((source.linkPatterns || []).join("\n"));
+  const [excludePatterns, setExcludePatterns] = useState((source.excludePatterns || []).join("\n"));
+  const [maxPages, setMaxPages] = useState(source.maxPages?.toString() || "");
+  const [notes, setNotes] = useState(source.notes || "");
+  const [status, setStatus] = useState(source.status);
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Edit {source.name}</DialogTitle>
+      </DialogHeader>
+      <ScrollArea className="max-h-[60vh]">
+        <div className="space-y-4 py-2 pr-4">
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="input-sau-source-name" />
+          </div>
+          <div className="space-y-2">
+            <Label>Base URL</Label>
+            <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} data-testid="input-sau-source-url" />
+          </div>
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} data-testid="input-sau-source-description" />
+          </div>
+          <div className="space-y-2">
+            <Label>Member Towns (comma-separated)</Label>
+            <Input value={memberTowns} onChange={(e) => setMemberTowns(e.target.value)} placeholder="Conway, Albany, Bartlett" data-testid="input-sau-member-towns" />
+          </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger data-testid="select-sau-source-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Max Pages</Label>
+            <Input type="number" value={maxPages} onChange={(e) => setMaxPages(e.target.value)} placeholder="No limit" data-testid="input-sau-source-maxpages" />
+          </div>
+          <div className="space-y-2">
+            <Label>Target Paths (one per line)</Label>
+            <Textarea value={targetPaths} onChange={(e) => setTargetPaths(e.target.value)} rows={3} data-testid="input-sau-source-target-paths" />
+          </div>
+          <div className="space-y-2">
+            <Label>Link Patterns (one per line)</Label>
+            <Textarea value={linkPatterns} onChange={(e) => setLinkPatterns(e.target.value)} rows={2} data-testid="input-sau-source-link-patterns" />
+          </div>
+          <div className="space-y-2">
+            <Label>Exclude Patterns (one per line)</Label>
+            <Textarea value={excludePatterns} onChange={(e) => setExcludePatterns(e.target.value)} rows={2} data-testid="input-sau-source-exclude-patterns" />
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} data-testid="input-sau-source-notes" />
+          </div>
+        </div>
+      </ScrollArea>
+      <DialogFooter>
+        <Button
+          onClick={() => onSave({
+            name, baseUrl, description: description || null,
+            memberTowns: memberTowns.split(",").map(s => s.trim()).filter(Boolean),
+            targetPaths: targetPaths.trim() ? targetPaths.trim().split("\n").filter(Boolean) : [],
+            linkPatterns: linkPatterns.trim() ? linkPatterns.trim().split("\n").filter(Boolean) : [],
+            excludePatterns: excludePatterns.trim() ? excludePatterns.trim().split("\n").filter(Boolean) : [],
+            status,
+            maxPages: maxPages ? parseInt(maxPages) : null,
+            notes: notes || null,
+          })}
+          disabled={saving}
+          data-testid="button-save-sau-source"
+        >
+          {saving && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+          Save Changes
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function SauSourceDetail({
+  source,
+  onBack,
+}: {
+  source: SauSource;
+  onBack: () => void;
+}) {
+  const [tab, setTab] = useState("overview");
+  const [editOpen, setEditOpen] = useState(false);
+  const [docPage, setDocPage] = useState(0);
+  const [runPage, setRunPage] = useState(0);
+  const { toast } = useToast();
+  const limit = 50;
+
+  const { data: detailData } = useQuery<{ source: SauSource; documentStats: any; recentRuns: any[] }>({
+    queryKey: ["/api/crawler-intel/sau-sources", source.slug],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: docsData } = useQuery<{ documents: any[]; total: number }>({
+    queryKey: ["/api/crawler-intel/sau-sources", source.slug, "documents", docPage],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(docPage * limit) });
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}/documents?${params}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: tab === "documents",
+  });
+
+  const { data: runsData } = useQuery<{ runs: any[]; total: number }>({
+    queryKey: ["/api/crawler-intel/sau-sources", source.slug, "runs", runPage],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(runPage * limit) });
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}/runs?${params}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: tab === "runs",
+  });
+
+  const { data: progressData } = useQuery<{
+    active: boolean;
+    runId?: string;
+    status?: string;
+    pagesVisited?: number;
+    pagesQueued?: number;
+    documentsDiscovered?: number;
+    documentsDownloaded?: number;
+    documentsFailed?: number;
+    duplicatesSkipped?: number;
+    currentUrl?: string;
+    startedAt?: string;
+    recentLogs?: string[];
+  }>({
+    queryKey: ["/api/crawler-intel/sau-sources", source.slug, "progress"],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}/progress`);
+      if (!res.ok) return { active: false };
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      return query.state.data?.active ? 3000 : false;
+    },
+  });
+
+  const isCrawlActive = progressData?.active === true;
+
+  const triggerCrawl = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}/crawl`, {
+        method: "POST",
+        body: JSON.stringify({ mode: "full" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Crawl Started", description: data.message || "SAU crawl triggered" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/sau-sources"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const abortCrawlMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}/abort`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Crawl Aborted", description: data.message || "Crawl stopped" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/sau-sources"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateSource = useMutation({
+    mutationFn: async (updates: any) => {
+      const res = await adminFetch(`/api/crawler-intel/sau-sources/${source.slug}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Updated", description: "SAU source profile saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/crawler-intel/sau-sources"] });
+      setEditOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const src = detailData?.source || source;
+  const stats = detailData?.documentStats;
+  const totalDocPages = Math.ceil((docsData?.total || 0) / limit);
+  const totalRunPages = Math.ceil((runsData?.total || 0) / limit);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={onBack} data-testid="button-back-sau-sources">
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <GraduationCap className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-xl font-bold">{src.name}</h2>
+          {getSourceStatusBadge(src.status)}
+          <Badge variant="secondary">{src.sauId}</Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={src.baseUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground flex items-center gap-1">
+            {src.baseUrl} <ExternalLink className="w-3 h-3" />
+          </a>
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-edit-sau-source">
+                <Settings className="w-3 h-3 mr-1" />Edit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <SauSourceProfileEditor source={src} onSave={(updates) => updateSource.mutate(updates)} saving={updateSource.isPending} />
+            </DialogContent>
+          </Dialog>
+          {isCrawlActive ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => abortCrawlMutation.mutate()}
+              disabled={abortCrawlMutation.isPending}
+              data-testid="button-abort-sau-crawl"
+            >
+              <Square className="w-3 h-3 mr-1" />
+              {abortCrawlMutation.isPending ? "Stopping..." : "Abort Crawl"}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => triggerCrawl.mutate()}
+              disabled={triggerCrawl.isPending}
+              data-testid="button-trigger-sau-crawl"
+            >
+              <Play className="w-3 h-3 mr-1" />
+              {triggerCrawl.isPending ? "Starting..." : "Trigger Crawl"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {isCrawlActive && progressData && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+              <span className="text-sm font-medium">Crawl in Progress</span>
+              <Badge variant="secondary">{progressData.status}</Badge>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+              <div>
+                <div className="text-muted-foreground">Pages</div>
+                <div className="font-mono font-medium">{progressData.pagesVisited || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Discovered</div>
+                <div className="font-mono font-medium">{progressData.documentsDiscovered || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Downloaded</div>
+                <div className="font-mono font-medium text-green-600">{progressData.documentsDownloaded || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Failed</div>
+                <div className="font-mono font-medium text-red-500">{progressData.documentsFailed || 0}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Duplicates</div>
+                <div className="font-mono font-medium">{progressData.duplicatesSkipped || 0}</div>
+              </div>
+            </div>
+            {progressData.currentUrl && (
+              <div className="text-xs text-muted-foreground truncate font-mono" data-testid="text-sau-crawl-current-url">
+                {progressData.currentUrl}
+              </div>
+            )}
+            {progressData.recentLogs && progressData.recentLogs.length > 0 && (
+              <div className="max-h-32 overflow-y-auto bg-muted/50 rounded p-2 text-xs font-mono space-y-0.5">
+                {progressData.recentLogs.map((log, i) => (
+                  <div key={i} className="text-muted-foreground">{log}</div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Total Docs</div>
+            <div className="text-lg font-bold" data-testid="text-sau-total-docs">{formatNumber(src.totalDocuments)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Uploaded</div>
+            <div className="text-lg font-bold text-green-600" data-testid="text-sau-uploaded">{formatNumber(src.totalUploaded)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Member Towns</div>
+            <div className="text-sm font-medium">{(src.memberTowns || []).length} towns</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-sm text-muted-foreground">Last Crawl</div>
+            <div className="text-sm font-medium">{formatDateShort(src.lastCrawlDate)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="overview" data-testid="tab-sau-overview">
+            <GraduationCap className="w-3 h-3 mr-1" />Overview
+          </TabsTrigger>
+          <TabsTrigger value="documents" data-testid="tab-sau-documents">
+            <FileText className="w-3 h-3 mr-1" />Documents
+          </TabsTrigger>
+          <TabsTrigger value="runs" data-testid="tab-sau-runs">
+            <Activity className="w-3 h-3 mr-1" />Run History
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {src.description && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Description</div>
+                <p className="text-sm">{src.description}</p>
+              </CardContent>
+            </Card>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Member Towns</div>
+                <div className="flex flex-wrap gap-1">
+                  {(src.memberTowns || []).map((town) => (
+                    <Badge key={town} variant="secondary">{town}</Badge>
+                  ))}
+                  {(!src.memberTowns || src.memberTowns.length === 0) && <span className="text-xs text-muted-foreground">None configured</span>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Target Paths</div>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {(src.targetPaths || []).map((p, i) => (
+                    <div key={i} className="text-xs font-mono text-muted-foreground">{p}</div>
+                  ))}
+                  {(!src.targetPaths || src.targetPaths.length === 0) && <span className="text-xs text-muted-foreground">None</span>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {(src.linkPatterns && src.linkPatterns.length > 0) && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Link Patterns</div>
+                <div className="flex flex-wrap gap-1">
+                  {src.linkPatterns.map((p, i) => (
+                    <Badge key={i} variant="outline" className="text-xs font-mono">{p}</Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {(src.excludePatterns && src.excludePatterns.length > 0) && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Exclude Patterns</div>
+                <div className="flex flex-wrap gap-1">
+                  {src.excludePatterns.map((p, i) => (
+                    <Badge key={i} variant="outline" className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {src.notes && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Notes</div>
+                <p className="text-sm whitespace-pre-wrap">{src.notes}</p>
+              </CardContent>
+            </Card>
+          )}
+          {stats?.byCategory && Object.keys(stats.byCategory).length > 0 && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="text-sm text-muted-foreground mb-2">Document Stats by Category</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.entries(stats.byCategory as Record<string, number>).map(([cat, count]) => (
+                    <div key={cat} className="flex items-center justify-between gap-2">
+                      <span className="text-xs truncate">{cat}</span>
+                      <span className="text-xs font-bold">{count as number}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-3">
+          <ScrollArea className="w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Filename</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Discovered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(docsData?.documents || []).map((doc: any) => (
+                  <TableRow key={doc.id} data-testid={`row-sau-doc-${doc.id}`}>
+                    <TableCell>
+                      <div className="max-w-[300px] truncate text-sm" title={doc.url}>{doc.filename}</div>
+                    </TableCell>
+                    <TableCell>
+                      {doc.category ? (
+                        <Badge variant="secondary">{doc.category}</Badge>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell>{getDocStatusBadge(doc.status)}</TableCell>
+                    <TableCell className="text-xs">{formatDateShort(doc.discoveredAt)}</TableCell>
+                  </TableRow>
+                ))}
+                {(docsData?.documents || []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">No documents found</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          <Pagination page={docPage} totalPages={totalDocPages} onPageChange={setDocPage} total={docsData?.total || 0} />
+        </TabsContent>
+
+        <TabsContent value="runs" className="space-y-3">
+          <ScrollArea className="w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Started</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pages</TableHead>
+                  <TableHead>Discovered</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead>Failed</TableHead>
+                  <TableHead>Duration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(runsData?.runs || detailData?.recentRuns || []).map((run: any) => {
+                  const duration = run.completedAt
+                    ? Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+                    : null;
+                  return (
+                    <TableRow key={run.id} data-testid={`row-sau-run-${run.id}`}>
+                      <TableCell className="text-xs">{formatDateShort(run.startedAt)}</TableCell>
+                      <TableCell><Badge variant="secondary">{run.mode}</Badge></TableCell>
+                      <TableCell>{getRunStatusBadge(run.status)}</TableCell>
+                      <TableCell>{run.pagesVisited}</TableCell>
+                      <TableCell>{run.documentsDiscovered}</TableCell>
+                      <TableCell className="text-green-600 font-medium">{run.documentsUploaded}</TableCell>
+                      <TableCell className={run.documentsFailed > 0 ? "text-red-600" : ""}>{run.documentsFailed}</TableCell>
+                      <TableCell className="text-xs">
+                        {duration != null ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "-"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {(runsData?.runs || detailData?.recentRuns || []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No runs yet</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          <Pagination page={runPage} totalPages={totalRunPages} onPageChange={setRunPage} total={runsData?.total || 0} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function SauSourcesDashboard({
+  onSelectSource,
+}: {
+  onSelectSource: (source: SauSource) => void;
+}) {
+  const { data, isLoading } = useQuery<{ sources: SauSource[] }>({
+    queryKey: ["/api/crawler-intel/sau-sources"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/crawler-intel/sau-sources");
+      if (!res.ok) throw new Error("Failed to fetch SAU sources");
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const sources = data?.sources || [];
+
+  return (
+    <div className="space-y-3">
+      <ScrollArea className="w-full">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Source</TableHead>
+              <TableHead>SAU ID</TableHead>
+              <TableHead>Member Towns</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Documents</TableHead>
+              <TableHead>Last Crawl</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sources.map((src) => (
+              <TableRow
+                key={src.id}
+                className="hover-elevate cursor-pointer"
+                onClick={() => onSelectSource(src)}
+                data-testid={`row-sau-source-${src.slug}`}
+              >
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <div className="font-medium">{src.name}</div>
+                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">{src.baseUrl}</div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{src.sauId}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {(src.memberTowns || []).slice(0, 4).map((town) => (
+                      <Badge key={town} variant="outline" className="text-xs">{town}</Badge>
+                    ))}
+                    {(src.memberTowns || []).length > 4 && (
+                      <span className="text-xs text-muted-foreground">+{src.memberTowns.length - 4}</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>{getSourceStatusBadge(src.status)}</TableCell>
+                <TableCell>
+                  <span className="text-green-600 font-medium">{src.totalUploaded}</span>
+                  <span className="text-muted-foreground"> / {src.totalDocuments}</span>
+                </TableCell>
+                <TableCell className="text-xs">{formatDateShort(src.lastCrawlDate)}</TableCell>
+              </TableRow>
+            ))}
+            {sources.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No SAU sources configured</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+    </div>
+  );
+}
+
 function CrawlAnalyticsDashboard() {
   const { data: towns, isLoading: townsLoading } = useQuery<TownOverview[]>({
     queryKey: ["/api/admin/crawler/towns"],
@@ -3103,6 +3759,7 @@ export default function AdminCrawler() {
   const [, setLocation] = useLocation();
   const [selectedTown, setSelectedTown] = useState<TownOverview | null>(null);
   const [selectedSource, setSelectedSource] = useState<StateSource | null>(null);
+  const [selectedSauSource, setSelectedSauSource] = useState<SauSource | null>(null);
   const [activeTab, setActiveTab] = useState("towns");
   const [batchCounty, setBatchCounty] = useState<string>("");
   const { toast } = useToast();
@@ -3289,6 +3946,8 @@ export default function AdminCrawler() {
           <TownDetail town={selectedTown} onBack={() => setSelectedTown(null)} />
         ) : selectedSource ? (
           <StateSourceDetail source={selectedSource} onBack={() => setSelectedSource(null)} />
+        ) : selectedSauSource ? (
+          <SauSourceDetail source={selectedSauSource} onBack={() => setSelectedSauSource(null)} />
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
@@ -3303,6 +3962,9 @@ export default function AdminCrawler() {
               </TabsTrigger>
               <TabsTrigger value="state-sources" data-testid="tab-state-sources">
                 <Globe className="w-3 h-3 mr-1" />State Sources
+              </TabsTrigger>
+              <TabsTrigger value="sau-sources" data-testid="tab-sau-sources">
+                <GraduationCap className="w-3 h-3 mr-1" />SAU Sources
               </TabsTrigger>
             </TabsList>
 
@@ -3320,6 +3982,10 @@ export default function AdminCrawler() {
 
             <TabsContent value="state-sources">
               <StateSourcesDashboard onSelectSource={setSelectedSource} />
+            </TabsContent>
+
+            <TabsContent value="sau-sources">
+              <SauSourcesDashboard onSelectSource={setSelectedSauSource} />
             </TabsContent>
           </Tabs>
         )}

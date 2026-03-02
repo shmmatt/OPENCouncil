@@ -455,6 +455,92 @@ export const crawlerStateDocuments = pgTable("crawler_state_documents", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ============================================================
+// SAU (School Administrative Unit) SOURCE TABLES
+// ============================================================
+
+export const crawlerSauSources = pgTable("crawler_sau_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  sauId: text("sau_id").notNull(),
+  baseUrl: text("base_url").notNull(),
+  description: text("description"),
+
+  memberTowns: jsonb("member_towns").notNull().$type<string[]>().default([]),
+  county: text("county"),
+  state: text("state").notNull().default("NH"),
+
+  targetPaths: jsonb("target_paths").notNull().$type<string[]>().default([]),
+  linkPatterns: jsonb("link_patterns").notNull().$type<string[]>().default([]),
+  excludePatterns: jsonb("exclude_patterns").notNull().$type<string[]>().default([]),
+
+  maxPages: integer("max_pages"),
+  scope: text("scope").notNull().default("sau"),
+
+  status: text("status").notNull().default("active"),
+  lastCrawlDate: timestamp("last_crawl_date"),
+  nextScheduledCrawl: timestamp("next_scheduled_crawl"),
+  totalDocuments: integer("total_documents").notNull().default(0),
+  totalUploaded: integer("total_uploaded").notNull().default(0),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const crawlerSauSourceRuns = pgTable("crawler_sau_source_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => crawlerSauSources.id, { onDelete: "cascade" }),
+
+  mode: text("mode").notNull(),
+  triggerType: text("trigger_type").notNull(),
+
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  status: text("status").notNull().default("running"),
+
+  pagesVisited: integer("pages_visited").notNull().default(0),
+  documentsDiscovered: integer("documents_discovered").notNull().default(0),
+  documentsDownloaded: integer("documents_downloaded").notNull().default(0),
+  documentsUploaded: integer("documents_uploaded").notNull().default(0),
+  documentsFailed: integer("documents_failed").notNull().default(0),
+
+  maxPagesLimit: integer("max_pages_limit"),
+  errorMessage: text("error_message"),
+  summary: jsonb("summary"),
+});
+
+export const crawlerSauDocuments = pgTable("crawler_sau_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").notNull().references(() => crawlerSauSources.id, { onDelete: "cascade" }),
+
+  url: text("url").notNull(),
+  urlHash: text("url_hash").notNull().unique(),
+  filename: text("filename").notNull(),
+
+  category: text("category"),
+  title: text("title"),
+
+  sizeBytes: integer("size_bytes"),
+  mimeType: text("mime_type"),
+
+  s3Key: text("s3_key"),
+  s3UploadedAt: timestamp("s3_uploaded_at"),
+
+  discoveredAt: timestamp("discovered_at").defaultNow().notNull(),
+  discoveredFrom: text("discovered_from"),
+  status: text("status").notNull().default("discovered"),
+  errorMessage: text("error_message"),
+
+  fileBlobId: varchar("file_blob_id"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertCrawlerTownSchema = createInsertSchema(crawlerTowns).omit({
   id: true,
@@ -535,6 +621,33 @@ export type InsertCrawlerStateSourceRun = z.infer<typeof insertStateSourceRunSch
 
 export type CrawlerStateDocument = typeof crawlerStateDocuments.$inferSelect;
 export type InsertCrawlerStateDocument = z.infer<typeof insertStateDocumentSchema>;
+
+export const insertSauSourceSchema = createInsertSchema(crawlerSauSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSauSourceRunSchema = createInsertSchema(crawlerSauSourceRuns).omit({
+  id: true,
+  startedAt: true,
+});
+
+export const insertSauDocumentSchema = createInsertSchema(crawlerSauDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  discoveredAt: true,
+});
+
+export type CrawlerSauSource = typeof crawlerSauSources.$inferSelect;
+export type InsertCrawlerSauSource = z.infer<typeof insertSauSourceSchema>;
+
+export type CrawlerSauSourceRun = typeof crawlerSauSourceRuns.$inferSelect;
+export type InsertCrawlerSauSourceRun = z.infer<typeof insertSauSourceRunSchema>;
+
+export type CrawlerSauDocument = typeof crawlerSauDocuments.$inferSelect;
+export type InsertCrawlerSauDocument = z.infer<typeof insertSauDocumentSchema>;
 
 // Status types
 export type TownStatus = "active" | "failed" | "paused" | "disabled";

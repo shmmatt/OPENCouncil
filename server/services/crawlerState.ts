@@ -18,17 +18,22 @@ import {
   crawlerStateDocuments,
   crawlerStateSourceRuns,
   crawlerStateSources,
+  crawlerSauDocuments,
+  crawlerSauSourceRuns,
+  crawlerSauSources,
   type InsertCrawlerTown,
   type InsertCrawlerSitemap,
   type InsertCrawlerUrl,
   type InsertCrawlerDocument,
   type InsertCrawlerRun,
   type InsertCrawlerStateDocument,
+  type InsertCrawlerSauDocument,
   type CrawlerTown,
   type CrawlerSitemap,
   type CrawlerDocument,
   type CrawlerRun,
   type CrawlerStateDocument,
+  type CrawlerSauDocument,
   type SitemapUrl,
   type CrawlRunSummary
 } from '../../shared/crawler-schema';
@@ -618,5 +623,124 @@ export async function updateStateRunProgress(runId: string, progress: {
       documentsFailed: progress.documentsFailed,
     })
     .where(eq(crawlerStateSourceRuns.id, runId));
+}
+
+// ============================================================
+// SAU SOURCE DOCUMENT MANAGEMENT
+// ============================================================
+
+const SAU_DOC_STATUS_RANK: Record<string, number> = {
+  'discovered': 1,
+  'failed': 2,
+  'downloaded': 3,
+  'uploaded': 4,
+};
+
+export async function recordSauDocument(doc: InsertCrawlerSauDocument): Promise<CrawlerSauDocument> {
+  const [created] = await db.insert(crawlerSauDocuments)
+    .values(doc)
+    .onConflictDoUpdate({
+      target: crawlerSauDocuments.urlHash,
+      set: {
+        status: sql`CASE 
+          WHEN ${SAU_DOC_STATUS_RANK[doc.status || 'discovered'] || 1} > COALESCE(
+            CASE ${crawlerSauDocuments.status}
+              WHEN 'discovered' THEN 1
+              WHEN 'failed' THEN 2
+              WHEN 'downloaded' THEN 3
+              WHEN 'uploaded' THEN 4
+              ELSE 0
+            END, 0)
+          THEN ${doc.status || 'discovered'}
+          ELSE ${crawlerSauDocuments.status}
+        END`,
+        s3Key: doc.s3Key ? sql`${doc.s3Key}` : crawlerSauDocuments.s3Key,
+        s3UploadedAt: doc.s3UploadedAt ? sql`${doc.s3UploadedAt}` : crawlerSauDocuments.s3UploadedAt,
+        sizeBytes: doc.sizeBytes ? sql`${doc.sizeBytes}` : crawlerSauDocuments.sizeBytes,
+        mimeType: doc.mimeType ? sql`${doc.mimeType}` : crawlerSauDocuments.mimeType,
+        category: doc.category ? sql`${doc.category}` : crawlerSauDocuments.category,
+        title: doc.title ? sql`${doc.title}` : crawlerSauDocuments.title,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  return created;
+}
+
+export async function batchRecordSauDocuments(docs: InsertCrawlerSauDocument[]): Promise<void> {
+  if (docs.length === 0) return;
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    await db.insert(crawlerSauDocuments)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: crawlerSauDocuments.urlHash,
+        set: {
+          status: sql`CASE
+            WHEN (CASE EXCLUDED.status
+                    WHEN 'discovered' THEN 1
+                    WHEN 'failed' THEN 2
+                    WHEN 'downloaded' THEN 3
+                    WHEN 'uploaded' THEN 4
+                    ELSE 0
+                  END) > COALESCE(
+              CASE ${crawlerSauDocuments.status}
+                WHEN 'discovered' THEN 1
+                WHEN 'failed' THEN 2
+                WHEN 'downloaded' THEN 3
+                WHEN 'uploaded' THEN 4
+                ELSE 0
+              END, 0)
+            THEN EXCLUDED.status
+            ELSE ${crawlerSauDocuments.status}
+          END`,
+          discoveredFrom: sql`COALESCE(EXCLUDED.discovered_from, ${crawlerSauDocuments.discoveredFrom})`,
+          s3Key: sql`COALESCE(EXCLUDED.s3_key, ${crawlerSauDocuments.s3Key})`,
+          s3UploadedAt: sql`COALESCE(EXCLUDED.s3_uploaded_at, ${crawlerSauDocuments.s3UploadedAt})`,
+          sizeBytes: sql`COALESCE(EXCLUDED.size_bytes, ${crawlerSauDocuments.sizeBytes})`,
+          mimeType: sql`COALESCE(EXCLUDED.mime_type, ${crawlerSauDocuments.mimeType})`,
+          category: sql`COALESCE(EXCLUDED.category, ${crawlerSauDocuments.category})`,
+          title: sql`COALESCE(EXCLUDED.title, ${crawlerSauDocuments.title})`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+}
+
+export async function getAllSauDocumentUrls(sourceId: string): Promise<Array<{ url: string; urlHash: string; status: string; discoveredFrom: string | null }>> {
+  return db.select({
+    url: crawlerSauDocuments.url,
+    urlHash: crawlerSauDocuments.urlHash,
+    status: crawlerSauDocuments.status,
+    discoveredFrom: crawlerSauDocuments.discoveredFrom,
+  })
+    .from(crawlerSauDocuments)
+    .where(eq(crawlerSauDocuments.sourceId, sourceId));
+}
+
+export async function getResumableSauDocuments(sourceId: string): Promise<CrawlerSauDocument[]> {
+  return db.select()
+    .from(crawlerSauDocuments)
+    .where(and(
+      eq(crawlerSauDocuments.sourceId, sourceId),
+      sql`${crawlerSauDocuments.status} IN ('discovered', 'failed')`
+    ));
+}
+
+export async function updateSauRunProgress(runId: string, progress: {
+  pagesVisited: number;
+  documentsDiscovered: number;
+  documentsDownloaded: number;
+  documentsFailed: number;
+}): Promise<void> {
+  await db.update(crawlerSauSourceRuns)
+    .set({
+      pagesVisited: progress.pagesVisited,
+      documentsDiscovered: progress.documentsDiscovered,
+      documentsUploaded: progress.documentsDownloaded,
+      documentsFailed: progress.documentsFailed,
+    })
+    .where(eq(crawlerSauSourceRuns.id, runId));
 }
 
