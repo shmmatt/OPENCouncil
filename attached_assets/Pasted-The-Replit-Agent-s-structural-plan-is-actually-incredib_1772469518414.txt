@@ -1,0 +1,52 @@
+The Replit Agent's structural plan is actually incredibly solid—it hits all the right functional requirements for a good landing page. However, you are completely right to be cautious about the tone. Terms like "Ingest & Embed," "OCR," and "automated audit for hallucinations" will immediately alienate a rural New Hampshire audience and make it sound exactly like a detached Silicon Valley product.
+
+To make this feel like an organic, locally-grown tool for the North Country and Lakes Region, we need to translate that tech-jargon into "Town Hall" language. It should sound like a helpful neighbor who just happens to have read every single town document.
+
+Here is how we can translate the Replit plan into approachable, authoritative copy for the new layout:
+
+### **Hero Section**
+
+* **Headline:** Clear Answers for Your Community.
+* **Subtitle:** OPENCouncil makes it easy to search and understand New Hampshire municipal documents, state laws, and school board records. Built locally to help citizens, elected officials, and town employees make informed decisions.
+
+### **What You Can Do (Use Cases)**
+
+*Instead of feature cards, use relatable, real-world town issues:*
+
+* **Understand Zoning Laws:** Instantly look up the specific NH RSA or local ordinance behind a property setback or building code.
+* **Track Board Decisions:** Find exactly what the Planning Board decided about a local development project without reading months of meeting minutes.
+* **Follow School Budgets:** Track SAU spending discussions and school board budget deliberations across different meetings.
+
+### **How It Works (De-jargoning the Pipeline)**
+
+*Replace "Crawl → Ingest & Embed → Synthesize" with a plain-English step-by-step:*
+
+* **1. We Gather the Public Record:** OPENCouncil automatically collects official meeting minutes, ordinances, and budgets directly from local town and school websites.
+* **2. You Ask a Question:** Type your question exactly how you'd ask a town clerk.
+* **3. We Search Locally and Statewide:** The system checks your specific town's bylaws while simultaneously checking New Hampshire state law (RSAs) to give you the full picture.
+* **4. You Get a Clear Answer with Proof:** We provide a plain-English summary, alongside direct links to the exact pages in the official documents so you can verify it yourself.
+
+### **What Makes It Reliable (Trust & Verification)**
+
+*Replace "audit/repair and confidence tiers" with accountability:*
+
+* **Always Showing Our Work:** Every single claim includes a clickable citation. We never ask you to just trust the system; we take you straight to the source document.
+* **Strict Fact-Checking:** Before you see an answer, our system double-checks its own work against the public record to ensure state statutes and local rules aren't misrepresented.
+* **Honest Limitations:** If the answer isn't in the public record, OPENCouncil will tell you it doesn't know. We don't guess, and we don't pull from unverified outside sources.
+
+### **What Context Does It Have (The Scope)**
+
+*Highlight the local focus:*
+
+* **A Growing Library for the Granite State:** OPENCouncil is continuously expanding its coverage across Carroll, Coos, Grafton, and Belknap counties.
+* **Comprehensive Records:** Search across Town Meeting minutes, zoning ordinances, municipal budgets, warrant articles, NHMA guidance, and SAU documents all in one place.
+
+### **How Fresh Is the Data (The Crawler)**
+
+*Keep the tech invisible but the benefit clear:*
+
+* **Always Up to Date:** Town governance moves fast. Our system autonomously visits municipal websites to download and read new documents as soon as they are posted, ensuring you are always searching the most current public record.
+
+---
+
+Would you like me to map this exact copy into the React/shadcn code for your `landing.tsx` file so you can paste it directly into Replit?
