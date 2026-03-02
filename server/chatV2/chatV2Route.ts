@@ -811,6 +811,19 @@ export function registerChatV2Routes(app: Express): void {
       const duration = Date.now() - startTime;
 
       if (error instanceof GeminiQuotaExceededError) {
+        try {
+          await storage.createChatMessage({
+            sessionId,
+            role: "assistant",
+            content: getQuotaExceededMessage(),
+            citations: null,
+          });
+        } catch (saveError) {
+          logError("sse_quota_save_error", {
+            ...logCtx, stage: "error_save",
+            error: saveError instanceof Error ? saveError.message : String(saveError),
+          });
+        }
         sendEvent("error", { message: getQuotaExceededMessage() });
       } else {
         logError("sse_pipeline_error", {
@@ -818,6 +831,19 @@ export function registerChatV2Routes(app: Express): void {
           error: error instanceof Error ? error.message : String(error),
           durationMs: duration,
         });
+        try {
+          await storage.createChatMessage({
+            sessionId,
+            role: "assistant",
+            content: "An error occurred while processing this question. Please try again or simplify your question.",
+            citations: null,
+          });
+        } catch (saveError) {
+          logError("sse_error_save_error", {
+            ...logCtx, stage: "error_save",
+            error: saveError instanceof Error ? saveError.message : String(saveError),
+          });
+        }
         sendEvent("error", { message: error instanceof Error ? error.message : "Failed to process message" });
       }
 
