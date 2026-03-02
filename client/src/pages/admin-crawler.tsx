@@ -3888,12 +3888,12 @@ export default function AdminCrawler() {
                   Clear Queue
                 </Button>
               )}
-              <Select value={batchCounty} onValueChange={setBatchCounty} data-testid="select-batch-county">
+              <Select value={batchCounty || "all"} onValueChange={(v) => setBatchCounty(v === "all" ? "" : v)} data-testid="select-batch-county">
                 <SelectTrigger className="w-[160px]" data-testid="select-batch-county">
                   <SelectValue placeholder="All Counties" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Counties</SelectItem>
+                  <SelectItem value="all">All Counties</SelectItem>
                   {batchCounties.map((county) => (
                     <SelectItem key={county} value={county}>{county}</SelectItem>
                   ))}
