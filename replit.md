@@ -69,6 +69,7 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `bridgeSauDocToFileBlob(sauDocId)`: Bridges SAU docs to main file_blobs table for embedding pipeline
 - `detectProtection()`: Distinguishes reCAPTCHA v3 (invisible, non-blocking) from v2 (visible challenge, blocking). Only flags v2/hCAPTCHA as CAPTCHA protection.
 - `isDocumentUrl()`: Recognizes Finalsite `/fs/resource-manager/view/` and `resources.finalsite.net` patterns, Google Drive file links, and SmartSites/ParentSquare PDF hosting (`files.smartsites.parentsquare.com`)
+- `isExternalDocumentLink()`: Recognizes external document hosting platforms: Google Drive (files + folders), Google Docs, Dropbox, OneDrive, SharePoint, SmartSites/ParentSquare PDFs, and Finalsite CDN (`resources.finalsite.net`). Checked in all crawl phases (homepage, target paths, BFS) for consistent external doc detection.
 - `crawlDriveFolderHtml()`: HTML-based Google Drive folder crawler — extracts file IDs from `data-id` attributes, recursively follows subfolders (max depth 3). Used as fallback when Google Drive API key is not configured.
 - Download phase: Google Drive individual files downloaded via export URL conversion, supports `/file/d/`, `/open?id=`, and `/uc?id=` patterns. Drive **folders** are crawled (via API or HTML scraping), then each document file is downloaded individually. Document MIME type filtering applied to API results. MIME validation skips HTML responses.
 
@@ -83,9 +84,9 @@ SAU (School Administrative Unit) crawling follows the same patterns as town/stat
 - `GET /api/crawler-intel/sau-sources/:slug/progress`: Live crawl progress
 - `POST /api/crawler-intel/sau-sources/:slug/abort`: Abort active crawl
 
-**Seeded Carroll County SAUs** (via `server/scripts/seed-sau-sources.ts`):
+**Seeded Carroll County SAUs** (via `server/scripts/seed-sau-sources.ts` — upserts existing records on re-run):
 - SAU 9 (Mt. Washington Valley): Conway hub, 10 member towns — https://www.sau9.org (SmartSites/ParentSquare CMS, reCAPTCHA v3 non-blocking). Target paths include all town pages (`/albany`, `/bartlett`, etc.) which link to Google Drive folders containing minutes, warrants, annual reports per town.
-- SAU 49 (Governor Wentworth Regional): Wolfeboro hub, 6 member towns — https://gwrsd.sau49nh.gov (Finalsite CMS, gwrsd.org redirects here)
+- SAU 49 (Governor Wentworth Regional): Wolfeboro hub, 6 member towns — https://gwrsd.sau49nh.gov (Finalsite CMS, gwrsd.org redirects here). 24 target paths covering school board (minutes, policies, committees), about pages, special education, staff, families, forms, transportation. Documents hosted via Finalsite `/fs/resource-manager/view/` which redirect to `resources.finalsite.net` CDN. maxPages=400.
 - SAU 45 (Moultonborough): Single-town SAU — https://sau45.org/en-US (SchoolBlocks CMS, docs via Google Drive)
 - SAU 2 (Inter-Lakes): Meredith, Center Harbor, Sandwich — https://www.interlakes.org
 

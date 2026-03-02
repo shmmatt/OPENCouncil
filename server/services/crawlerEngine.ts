@@ -383,8 +383,9 @@ function isExternalDocumentLink(url: string): boolean {
   if (lower.includes('docs.google.com') && lower.includes('/document/')) return true;
   if (lower.includes('dropbox.com') && (lower.includes('/s/') || lower.includes('/scl/'))) return true;
   if (lower.includes('onedrive.live.com') || lower.includes('1drv.ms')) return true;
-  if (lower.includes('sharepoint.com') && lower.includes('/Documents/')) return true;
+  if (lower.includes('sharepoint.com') && lower.includes('/documents/')) return true;
   if (lower.includes('files.smartsites.parentsquare.com/') && hasDocumentExtension(url)) return true;
+  if (lower.includes('resources.finalsite.net/') && hasDocumentExtension(url)) return true;
   if (isDriveFolderLink(url)) return true;
   return false;
 }
@@ -2773,6 +2774,11 @@ async function executeStateCrawl(
         stats.breadthFirst++;
         progress.documentsDiscovered++;
         homeDocsFound++;
+      } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+        docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'external', linkText: link.text });
+        stats.external = (stats.external || 0) + 1;
+        progress.documentsDiscovered++;
+        homeDocsFound++;
       } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {
         const prio = isHighPriorityUrl(link.href) ? 1 : 3;
         queue.push({ url: link.href, depth: 1, priority: prio });
@@ -3665,6 +3671,11 @@ async function executeSauCrawl(
         }
         docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'breadthFirst', linkText: link.text });
         stats.breadthFirst++;
+        progress.documentsDiscovered++;
+        homeDocsFound++;
+      } else if (isExternalDocumentLink(link.href) && !docsSeen.has(link.href)) {
+        docsSeen.set(link.href, { foundOnPage: baseUrl, strategy: 'external', linkText: link.text });
+        stats.external = (stats.external || 0) + 1;
         progress.documentsDiscovered++;
         homeDocsFound++;
       } else if (isNavigationLink(link.href, baseHostname) && !visited.has(link.href)) {

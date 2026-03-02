@@ -53,12 +53,18 @@ const SAU_SOURCES = [
       "/school-board", "/school-board/meeting-minutes", "/school-board/meeting-minutes-clone",
       "/school-board/agendas", "/school-board/annual-meeting",
       "/school-board/school-board-policy", "/school-board/school-board-committees",
+      "/school-board/meeting-schedule", "/school-board/school-board-member-ethics",
       "/about-gwrsd/sau-office", "/about-gwrsd/budget-finance",
-      "/about-gwrsd/district-reports",
+      "/about-gwrsd/district-reports", "/about-gwrsd/strategic-plan",
+      "/about-gwrsd/commencement-goals", "/about-gwrsd/data-reporting",
+      "/about-gwrsd/right-to-know-requests", "/about-gwrsd/superintendent",
+      "/special-education", "/staff/pd-master-plan-and-appendices",
+      "/staff/required-trainings", "/families/family-engagement-policy",
+      "/forms", "/transportation", "/food-service2",
     ],
     linkPatterns: BROADENED_LINK_PATTERNS,
     excludePatterns: TIGHTENED_EXCLUDE_PATTERNS,
-    maxPages: 300,
+    maxPages: 400,
     notes: "Governor Wentworth Regional — Wolfeboro is the hub. Uses Finalsite CMS (docs via /fs/resource-manager/view/). gwrsd.org redirects to gwrsd.sau49nh.gov. Note: Wakefield is NOT in SAU 49 (it's SAU 101).",
   },
   {
@@ -113,7 +119,21 @@ async function seedSauSources() {
       .limit(1);
 
     if (existing.length > 0) {
-      console.log(`  SKIP: ${sau.name} (slug '${sau.slug}' already exists)`);
+      await db.execute(sql`
+        UPDATE crawler_sau_sources SET
+          name = ${sau.name},
+          sau_id = ${sau.sauId},
+          base_url = ${sau.baseUrl},
+          description = ${sau.description},
+          member_towns = ${JSON.stringify(sau.memberTowns)}::jsonb,
+          target_paths = ${JSON.stringify(sau.targetPaths)}::jsonb,
+          link_patterns = ${JSON.stringify(sau.linkPatterns)}::jsonb,
+          exclude_patterns = ${JSON.stringify(sau.excludePatterns)}::jsonb,
+          max_pages = ${sau.maxPages},
+          notes = ${sau.notes}
+        WHERE slug = ${sau.slug}
+      `);
+      console.log(`  UPDATE: ${sau.name} (slug '${sau.slug}' updated)`);
       continue;
     }
 
@@ -133,7 +153,7 @@ async function seedSauSources() {
       notes: sau.notes,
       status: "active",
     });
-    console.log(`  OK: ${sau.name} (${sau.sauId}) — ${sau.memberTowns.length} member towns`);
+    console.log(`  INSERT: ${sau.name} (${sau.sauId}) — ${sau.memberTowns.length} member towns`);
   }
 
   console.log("SAU source seeding complete.");
