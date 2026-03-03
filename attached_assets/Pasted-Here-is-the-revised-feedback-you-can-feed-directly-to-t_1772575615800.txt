@@ -1,0 +1,33 @@
+Here is the revised feedback you can feed directly to the Replit agent to course-correct Phase 1. It incorporates the triage logic and explicitly instructs the agent to leverage your existing vector database without redundant processing.
+
+---
+
+### Feedback for Replit Agent: Phase 1 Plan Adjustments
+
+The Phase 1 plan is structurally solid, but we need to make three critical architectural adjustments to T004 and T005 before execution.
+
+**1. T004: Implement a "Story-Worthiness" Triage Judge**
+The current plan merges topic extraction, historical enrichment, and summary generation into one fluid flow. We need to prevent the system from researching and generating full articles for mundane approvals.
+
+* **Update `extractTopicsFromMinutes`:** Split this into two distinct LLM steps.
+* **Step 1 (Extraction):** Extract raw topics from the recent minutes.
+* **Step 2 (The Judge):** Pass the extracted topics to a second LLM prompt that scores each topic from 1 to 10 based on Financial Impact, Public Friction, and Quality of Life.
+
+
+* **Routing Logic:** Only pass topics that score an 8 or above to `enrichWithHistoricalContext`. Topics scoring 1-7 should bypass historical research and be routed to a simple, single-sentence "routine roll-up" formatter.
+
+**2. T004: Vector Retrieval Only (No Re-Chunking)**
+The plan must explicitly acknowledge that our historical minutes are *already* ingested, chunked, and embedded in our `pgvector` database.
+
+* **Update `enrichWithHistoricalContext`:** This function must act strictly as a retrieval client. Do not write any new logic to chunk or re-embed historical documents.
+* **Execution:** Use the existing `embeddingService.ts` to convert the high-scoring topic into an embedding, run a semantic similarity search against the existing `pgvector` tables to pull the top 3 to 5 most relevant historical chunks, and feed those chunks to Gemini to synthesize the context.
+
+**3. T005: Avoid the Custom Web Scraping Trap**
+The plan suggests building a custom news crawler with user-agent rotation for local sources (Conway Daily Sun, Carroll County Independent, Laconia Daily Sun). Custom DOM scraping for local news is brittle and high-maintenance.
+
+* **Update `searchNewsForTopic`:** Do not build a custom scraper. First, attempt to parse the standard RSS syndication feeds for these specific CMS platforms (often found by appending `?f=rss` to their URLs).
+* **Fallback:** If raw HTML/full-text extraction is absolutely necessary, update the plan to integrate a dedicated extraction API (like Firecrawl or Jina Reader) rather than managing proxy rotation and DOM parsing ourselves.
+
+---
+
+Would you like me to draft the exact system prompt for the "Story-Worthiness Judge" (Step 2 of T004) so you can hand it to the agent alongside this feedback?
