@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -58,7 +58,9 @@ import {
   Database,
   Brain,
   Lightbulb,
+  PlayCircle,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 interface ChatAnalyticsListItem {
   sessionId: string;
@@ -282,26 +284,102 @@ export default function AdminChatAnalytics() {
     },
   });
 
-  const batchAnalyzeMutation = useMutation({
-    mutationFn: async (sessionIds: string[]) => {
-      return fetchWithAuth("/api/admin/chat-analytics/batch-with-summary", {
+  const [batchProgress, setBatchProgress] = useState<{
+    active: boolean;
+    current: number;
+    total: number;
+    phase: string;
+    mode: "full" | "summary-only";
+  } | null>(null);
+  const batchAbortRef = useRef<AbortController | null>(null);
+
+  const startBatchStream = useCallback(async (sessionIds: string[], mode: "full" | "summary-only") => {
+    const currentToken = localStorage.getItem("adminToken");
+    if (!currentToken) return;
+
+    const endpoint = mode === "full"
+      ? "/api/admin/chat-analytics/batch-with-summary-stream"
+      : "/api/admin/chat-analytics/rollup-summary-only-stream";
+
+    const abortController = new AbortController();
+    batchAbortRef.current = abortController;
+
+    setBatchProgress({ active: true, current: 0, total: sessionIds.length, phase: "starting", mode });
+
+    try {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
         body: JSON.stringify({ sessionIds }),
+        signal: abortController.signal,
       });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Batch review complete",
-        description: "All sessions analyzed and rollup summary generated.",
-      });
-      setSelectedSessions(new Set());
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-analytics"] });
-    },
-    onError: () => {
-      toast({ title: "Batch analysis failed", variant: "destructive" });
-    },
-  });
+
+      if (!response.ok || !response.body) {
+        throw new Error("Stream request failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "progress") {
+              setBatchProgress(prev => prev ? {
+                ...prev,
+                current: event.current,
+                total: event.total,
+                phase: event.phase,
+              } : null);
+            } else if (event.type === "complete") {
+              setBatchProgress(prev => prev ? { ...prev, phase: "done", current: prev.total, } : null);
+              await new Promise(resolve => setTimeout(resolve, 600));
+              toast({
+                title: mode === "full" ? "Batch review complete" : "Summary generated",
+                description: mode === "full"
+                  ? "All sessions analyzed and rollup summary generated."
+                  : "Rollup summary generated from existing analyses.",
+              });
+              setSelectedSessions(new Set());
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-analytics"] });
+            } else if (event.type === "error") {
+              toast({ title: "Analysis failed", description: event.message, variant: "destructive" });
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        toast({ title: "Batch analysis failed", variant: "destructive" });
+      }
+    } finally {
+      setBatchProgress(null);
+      batchAbortRef.current = null;
+    }
+  }, [toast, setSelectedSessions]);
+
+  const batchAnalyzeMutation = {
+    isPending: batchProgress?.active === true,
+    mutate: (sessionIds: string[]) => startBatchStream(sessionIds, "full"),
+  };
+
+  const summaryOnlyMutation = {
+    isPending: batchProgress?.active === true && batchProgress.mode === "summary-only",
+    mutate: (sessionIds: string[]) => startBatchStream(sessionIds, "summary-only"),
+  };
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -464,26 +542,81 @@ export default function AdminChatAnalytics() {
           </CardHeader>
           <CardContent>
             {selectedSessions.size > 0 && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-md flex-wrap">
-                <span className="text-sm font-medium">
-                  {selectedSessions.size} selected
-                </span>
-                <Button
-                  size="sm"
-                  onClick={() => batchAnalyzeMutation.mutate(Array.from(selectedSessions))}
-                  disabled={batchAnalyzeMutation.isPending}
-                  data-testid="button-batch-analyze"
-                >
-                  {batchAnalyzeMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
-                  Batch Review
-                </Button>
-                <Button variant="ghost" size="sm" onClick={deselectAll} data-testid="button-deselect-all">
-                  Clear Selection
-                </Button>
+              <div className="mb-4 p-3 bg-muted/50 rounded-md space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">
+                    {selectedSessions.size} selected
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => batchAnalyzeMutation.mutate(Array.from(selectedSessions))}
+                    disabled={batchProgress?.active === true}
+                    data-testid="button-batch-analyze"
+                  >
+                    {batchProgress?.active && batchProgress.mode === "full" ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    Batch Review
+                  </Button>
+                  {(() => {
+                    const allAnalyzed = Array.from(selectedSessions).every(id => {
+                      const item = items.find(i => i.sessionId === id);
+                      return item?.isAnalyzed;
+                    });
+                    if (allAnalyzed && selectedSessions.size > 0) {
+                      return (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => summaryOnlyMutation.mutate(Array.from(selectedSessions))}
+                          disabled={batchProgress?.active === true}
+                          data-testid="button-summary-only"
+                        >
+                          {batchProgress?.active && batchProgress.mode === "summary-only" ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <PlayCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Generate Summary
+                        </Button>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <Button variant="ghost" size="sm" onClick={deselectAll} disabled={batchProgress?.active === true} data-testid="button-deselect-all">
+                    Clear Selection
+                  </Button>
+                </div>
+                {batchProgress?.active && (
+                  <div className="space-y-2" data-testid="batch-progress">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-muted-foreground">
+                        {batchProgress.phase === "analyzing"
+                          ? `Analyzing session ${batchProgress.current} of ${batchProgress.total}...`
+                          : batchProgress.phase === "rollup"
+                          ? "Generating improvement roadmap..."
+                          : batchProgress.phase === "done"
+                          ? "Complete!"
+                          : "Starting..."}
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        batchProgress.phase === "done"
+                          ? 100
+                          : batchProgress.phase === "rollup"
+                          ? 95
+                          : batchProgress.total > 0
+                          ? Math.round((batchProgress.current / batchProgress.total) * 90)
+                          : 0
+                      }
+                      className="h-2"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -748,7 +881,7 @@ export default function AdminChatAnalytics() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.max(1, page - 1))}
+                  onClick={() => { setPage(Math.max(1, page - 1)); setSelectedSessions(new Set()); }}
                   disabled={page <= 1}
                   data-testid="button-prev-page"
                 >
@@ -760,7 +893,7 @@ export default function AdminChatAnalytics() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  onClick={() => { setPage(Math.min(totalPages, page + 1)); setSelectedSessions(new Set()); }}
                   disabled={page >= totalPages}
                   data-testid="button-next-page"
                 >

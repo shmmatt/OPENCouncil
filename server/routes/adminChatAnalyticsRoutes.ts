@@ -6,6 +6,7 @@ import {
   analyzeChatSession,
   batchAnalyzeSessions,
   batchAnalyzeWithSummary,
+  generateRollupSummaryOnly,
   getChatReviewRuns,
   getChatReviewRunById,
 } from "../services/chatAnalyticsService";
@@ -158,6 +159,107 @@ export function registerAdminChatAnalyticsRoutes(app: Express) {
       } catch (error) {
         console.error("Error batch analyzing with summary:", error);
         res.status(500).json({ message: "Failed to batch analyze sessions with summary" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/admin/chat-analytics/batch-with-summary-stream",
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { sessionIds } = req.body;
+        if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+          return res.status(400).json({ message: "sessionIds array is required" });
+        }
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+
+        const sendEvent = (data: object) => {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        try {
+          const run = await batchAnalyzeWithSummary(sessionIds, (current, total, phase, sessionId) => {
+            sendEvent({ type: "progress", current, total, phase, sessionId });
+          });
+
+          sendEvent({ type: "complete", run });
+        } catch (error) {
+          sendEvent({ type: "error", message: error instanceof Error ? error.message : "Unknown error" });
+        }
+
+        res.end();
+      } catch (error) {
+        console.error("Error in batch stream:", error);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Failed to start batch analysis stream" });
+        }
+      }
+    }
+  );
+
+  app.post(
+    "/api/admin/chat-analytics/rollup-summary-only",
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { sessionIds } = req.body;
+        if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+          return res.status(400).json({ message: "sessionIds array is required" });
+        }
+        const run = await generateRollupSummaryOnly(sessionIds);
+        res.json(run);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("not been analyzed")) {
+          return res.status(400).json({ message: error.message });
+        }
+        console.error("Error generating rollup summary:", error);
+        res.status(500).json({ message: "Failed to generate rollup summary" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/admin/chat-analytics/rollup-summary-only-stream",
+    authenticateAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { sessionIds } = req.body;
+        if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+          return res.status(400).json({ message: "sessionIds array is required" });
+        }
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+
+        const sendEvent = (data: object) => {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        try {
+          const run = await generateRollupSummaryOnly(sessionIds, (current, total, phase) => {
+            sendEvent({ type: "progress", current, total, phase });
+          });
+
+          sendEvent({ type: "complete", run });
+        } catch (error) {
+          sendEvent({ type: "error", message: error instanceof Error ? error.message : "Unknown error" });
+        }
+
+        res.end();
+      } catch (error) {
+        console.error("Error in rollup stream:", error);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Failed to start rollup stream" });
+        }
       }
     }
   );

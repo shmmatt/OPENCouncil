@@ -465,10 +465,17 @@ ${transcript}`;
   }
 }
 
-export async function batchAnalyzeSessions(sessionIds: string[]): Promise<{ sessionId: string; success: boolean; error?: string }[]> {
-  const results: { sessionId: string; success: boolean; error?: string }[] = [];
+export type ProgressCallback = (current: number, total: number, phase: string, sessionId?: string) => void;
 
-  for (const sessionId of sessionIds) {
+export async function batchAnalyzeSessions(
+  sessionIds: string[],
+  onProgress?: ProgressCallback,
+): Promise<{ sessionId: string; success: boolean; error?: string }[]> {
+  const results: { sessionId: string; success: boolean; error?: string }[] = [];
+  const total = sessionIds.length;
+
+  for (let i = 0; i < sessionIds.length; i++) {
+    const sessionId = sessionIds[i];
     try {
       await analyzeChatSession(sessionId);
       results.push({ sessionId, success: true });
@@ -479,21 +486,17 @@ export async function batchAnalyzeSessions(sessionIds: string[]): Promise<{ sess
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
+    onProgress?.(i + 1, total, "analyzing", sessionId);
   }
 
   return results;
 }
 
-export async function batchAnalyzeWithSummary(sessionIds: string[]): Promise<ChatReviewRun> {
-  const analysisResults = await batchAnalyzeSessions(sessionIds);
-  const successCount = analysisResults.filter(r => r.success).length;
-
-  const analyses: ChatAnalytics[] = [];
-  for (const sessionId of sessionIds) {
-    const a = await storage.getChatAnalyticsBySessionId(sessionId);
-    if (a) analyses.push(a);
-  }
-
+async function generateRollupFromAnalyses(
+  sessionIds: string[],
+  analyses: ChatAnalytics[],
+  successCount: number,
+): Promise<{ executiveSummary: string; allMissingDocs: string; totalThumbsUp: number; totalThumbsDown: number; avgDocScore: string | null; avgAnswerScore: string | null }> {
   let totalThumbsUp = 0;
   let totalThumbsDown = 0;
   for (const sessionId of sessionIds) {
@@ -622,12 +625,73 @@ ${sessionDetails}`;
     executiveSummary = `Batch analysis completed. ${successCount}/${sessionIds.length} sessions analyzed. Avg Doc: ${avgDocScore}/10, Avg Answer: ${avgAnswerScore}/10. ${totalThumbsUp} thumbs up, ${totalThumbsDown} thumbs down. ${criticalCount} critical domain errors.`;
   }
 
+  return { executiveSummary, allMissingDocs, totalThumbsUp, totalThumbsDown, avgDocScore, avgAnswerScore };
+}
+
+export async function batchAnalyzeWithSummary(
+  sessionIds: string[],
+  onProgress?: ProgressCallback,
+): Promise<ChatReviewRun> {
+  const analysisResults = await batchAnalyzeSessions(sessionIds, onProgress);
+  const successCount = analysisResults.filter(r => r.success).length;
+
+  const analyses: ChatAnalytics[] = [];
+  for (const sessionId of sessionIds) {
+    const a = await storage.getChatAnalyticsBySessionId(sessionId);
+    if (a) analyses.push(a);
+  }
+
+  onProgress?.(sessionIds.length, sessionIds.length, "rollup");
+
+  const { executiveSummary, allMissingDocs, totalThumbsUp, totalThumbsDown, avgDocScore, avgAnswerScore } =
+    await generateRollupFromAnalyses(sessionIds, analyses, successCount);
+
   const run = await createChatReviewRun({
     sessionIds,
     totalSessions: sessionIds.length,
     successfulAnalyses: successCount,
-    avgDocScore: avgDocScore,
-    avgAnswerScore: avgAnswerScore,
+    avgDocScore,
+    avgAnswerScore,
+    thumbsUpCount: totalThumbsUp,
+    thumbsDownCount: totalThumbsDown,
+    topMissingDocs: allMissingDocs.slice(0, 5000),
+    executiveSummary,
+  });
+
+  return run;
+}
+
+export async function generateRollupSummaryOnly(
+  sessionIds: string[],
+  onProgress?: ProgressCallback,
+): Promise<ChatReviewRun> {
+  const analyses: ChatAnalytics[] = [];
+  const missingAnalysis: string[] = [];
+
+  for (const sessionId of sessionIds) {
+    const a = await storage.getChatAnalyticsBySessionId(sessionId);
+    if (a) {
+      analyses.push(a);
+    } else {
+      missingAnalysis.push(sessionId);
+    }
+  }
+
+  if (missingAnalysis.length > 0) {
+    throw new Error(`The following sessions have not been analyzed yet: ${missingAnalysis.join(", ")}`);
+  }
+
+  onProgress?.(0, 1, "rollup");
+
+  const { executiveSummary, allMissingDocs, totalThumbsUp, totalThumbsDown, avgDocScore, avgAnswerScore } =
+    await generateRollupFromAnalyses(sessionIds, analyses, analyses.length);
+
+  const run = await createChatReviewRun({
+    sessionIds,
+    totalSessions: sessionIds.length,
+    successfulAnalyses: analyses.length,
+    avgDocScore,
+    avgAnswerScore,
     thumbsUpCount: totalThumbsUp,
     thumbsDownCount: totalThumbsDown,
     topMissingDocs: allMissingDocs.slice(0, 5000),
