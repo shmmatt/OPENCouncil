@@ -958,6 +958,73 @@ export type ResearchReport = typeof researchReports.$inferSelect;
 export type InsertResearchReport = z.infer<typeof insertResearchReportSchema>;
 
 // ============================================================
+// CONTENT GENERATION & TOWN FEED
+// ============================================================
+
+export interface TownFeedNewsArticle {
+  title: string;
+  url: string;
+  source: string;
+  snippet: string;
+  fetchedAt: string;
+}
+
+export interface ScoredTopic {
+  topic: string;
+  score: number;
+  relevance: number;
+  financialImpact: number;
+  publicFriction: number;
+  qualityOfLife: number;
+  board: string | null;
+  meetingDate: string | null;
+  keyPoints: string[];
+  historicalContext?: string;
+}
+
+export interface RoutineTopic {
+  topic: string;
+  score: number;
+  board: string | null;
+  rollupSentence: string;
+}
+
+export interface TownFeedPayload {
+  summary: string;
+  sections: {
+    title: string;
+    description: string;
+    suggestedQuestions: string[];
+  }[];
+  highLevelQuestions: string[];
+}
+
+export const townFeedItems = pgTable("town_feed_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  town: text("town").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  topics: jsonb("topics").$type<ScoredTopic[]>().notNull().default([]),
+  routineTopics: jsonb("routine_topics").$type<RoutineTopic[]>().notNull().default([]),
+  sourceMinutesIds: jsonb("source_minutes_ids").$type<string[]>().notNull().default([]),
+  newsArticles: jsonb("news_articles").$type<TownFeedNewsArticle[]>().notNull().default([]),
+  status: text("status").notNull().default("draft"),
+  generatedPayload: jsonb("generated_payload").$type<TownFeedPayload>(),
+  templateId: varchar("template_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertTownFeedItemSchema = createInsertSchema(townFeedItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TownFeedItem = typeof townFeedItems.$inferSelect;
+export type InsertTownFeedItem = z.infer<typeof insertTownFeedItemSchema>;
+
+// ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
 // ============================================================
 export * from './crawler-schema';

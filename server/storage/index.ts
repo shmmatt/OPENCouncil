@@ -40,3 +40,6 @@ export * from "./s3GeminiSync";
 
 // Chat Templates
 export * from "./chatTemplates";
+
+// Town Feed
+export * from "./townFeed";

@@ -44,6 +44,15 @@ The OC Research tab provides analytical tools, including a Development Friction 
 ### Chat Review System
 The chat review system uses Gemini 3.1 Pro for deep, architecture-aware analysis of chat sessions. It includes an architecture context injected into the reviewer LLM, performs per-session analysis to identify gap categories, pipeline stage attribution, critical domain errors, and generates prompting/pipeline suggestions. A batch rollup aggregates analyses into an improvement roadmap.
 
+### Content Generation & Town Feed
+A content generation pipeline extracts engaging topics from recent meeting minutes, triages them through a "Story-Worthiness Judge" (scoring 1-10 on Financial Impact, Public Friction, Quality of Life), enriches high-scoring topics (8+) with historical context via pgvector semantic search, and generates polished summaries. Low-scoring topics receive a single-sentence routine roll-up.
+
+**Admin Panel** (`/admin/content`): Admins can generate content for any town, edit summaries, publish to the Town Feed, and investigate topics by crawling local news sources (Conway Daily Sun, Carroll County Independent, Laconia Daily Sun) via RSS feeds with Jina Reader fallback. A stub "Generate Video" button is present for future short-form video generation (FB, TikTok, YouTube).
+
+**Town Feed**: Published content replaces the "Recent Minutes" section in the chat sidebar, displaying summaries with topic badges, news article links, and "Ask about this" interaction. Falls back to Recent Minutes when no published feed items exist.
+
+**Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `shared/schema.ts` (townFeedItems table).
+
 ## External Dependencies
 
 *   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.

@@ -253,6 +253,12 @@ export default function AdminResearch() {
                 Templates
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-content">
+              <Link href="/admin/content">
+                <FlaskConical className="w-4 h-4 mr-2" />
+                Content
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
               <LogOut className="w-4 h-4 mr-2" />
               Logout

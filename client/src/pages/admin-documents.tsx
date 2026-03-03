@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3, Link2, Copy, Check, ScanLine, Globe, FlaskConical } from "lucide-react";
+import { Upload, Trash2, LogOut, FileText, Loader2, FolderUp, GitBranch, BarChart3, Link2, Copy, Check, ScanLine, Globe, FlaskConical, Sparkles } from "lucide-react";
 import type { Document } from "@shared/schema";
 
 const CATEGORY_OPTIONS = [
@@ -274,6 +274,12 @@ export default function AdminDocuments() {
               <Link href="/admin/research">
                 <FlaskConical className="w-4 h-4 mr-2" />
                 OC Research
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-content">
+              <Link href="/admin/content">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Content
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
