@@ -90,10 +90,24 @@ function TopicBadge({ topic }: { topic: ScoredTopic }) {
 }
 
 function NewsArticleCard({ article }: { article: TownFeedNewsArticle }) {
+  const score = article.relevancyScore ?? 0;
+  const isHighRelevancy = score >= 7;
   return (
-    <div className="flex flex-col gap-1 p-3 border rounded-md" data-testid={`card-news-${article.url}`}>
+    <div
+      className={`flex flex-col gap-1 p-3 border rounded-md ${isHighRelevancy ? "border-primary/30 bg-primary/5" : ""}`}
+      data-testid={`card-news-${article.url}`}
+    >
       <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="outline" className="text-xs">{article.source}</Badge>
+        {score > 0 && (
+          <Badge
+            variant={isHighRelevancy ? "default" : "secondary"}
+            className="text-xs"
+            data-testid={`badge-relevancy-${encodeURIComponent(article.url)}`}
+          >
+            Relevancy: {score}/10
+          </Badge>
+        )}
         <span className="text-xs text-muted-foreground">
           {new Date(article.fetchedAt).toLocaleDateString()}
         </span>
@@ -200,10 +214,28 @@ function FeedItemDetail({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
       setInvestigateDialogOpen(false);
       setSelectedInvestigateTopics(new Set());
-      toast({ title: "Investigation complete", description: "News articles have been added" });
+      toast({ title: "Investigation complete", description: "News articles have been scored for relevancy" });
     },
     onError: (err: Error) => {
       toast({ title: "Investigation failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/admin/content/feed-items/${item.id}/regenerate-summary`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Summary regeneration failed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      setSummary(data.summary);
+      toast({ title: "Summary regenerated", description: "News facts have been incorporated with source attribution" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Regeneration failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -364,12 +396,17 @@ function FeedItemDetail({
               <Newspaper className="w-4 h-4" />
               News Articles ({newsArticles.length})
             </CardTitle>
+            <CardDescription>
+              {newsArticles.filter(a => (a.relevancyScore ?? 0) >= 7).length} high-relevancy articles
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {newsArticles.map((article, idx) => (
-                <NewsArticleCard key={idx} article={article} />
-              ))}
+              {[...newsArticles]
+                .sort((a, b) => (b.relevancyScore ?? 0) - (a.relevancyScore ?? 0))
+                .map((article, idx) => (
+                  <NewsArticleCard key={idx} article={article} />
+                ))}
             </div>
           </CardContent>
         </Card>
@@ -412,8 +449,24 @@ function FeedItemDetail({
           ) : (
             <Search className="w-4 h-4 mr-2" />
           )}
-          Investigate
+          {newsArticles.length > 0 ? "Re-Investigate" : "Investigate"}
         </Button>
+
+        {newsArticles.some(a => (a.relevancyScore ?? 0) >= 7) && (
+          <Button
+            variant="outline"
+            onClick={() => regenerateMutation.mutate()}
+            disabled={regenerateMutation.isPending}
+            data-testid="button-regenerate-summary"
+          >
+            {regenerateMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4 mr-2" />
+            )}
+            Regenerate with News
+          </Button>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>

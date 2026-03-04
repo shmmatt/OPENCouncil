@@ -3,7 +3,7 @@ import { db, schema, eq, and, desc, sql, gte } from "../storage/db";
 import { generateQueryEmbedding } from "./embeddingService";
 import { semanticSearch } from "./embeddingStorage";
 import { logInfo, logError, logDebug } from "../utils/logger";
-import type { ScoredTopic, RoutineTopic } from "@shared/schema";
+import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const MODEL = "gemini-2.5-flash";
@@ -372,4 +372,143 @@ export async function runContentGenerationPipeline(town: string): Promise<{
     routineTopics,
     sourceMinutesIds,
   };
+}
+
+export async function scoreArticleRelevancy(
+  articles: TownFeedNewsArticle[],
+  topics: ScoredTopic[]
+): Promise<TownFeedNewsArticle[]> {
+  if (articles.length === 0) return [];
+
+  const topicSummaries = topics.map((t, i) =>
+    `${i + 1}. "${t.topic}" — ${t.keyPoints.slice(0, 3).join("; ")}`
+  ).join("\n");
+
+  const articleSummaries = articles.map((a, i) =>
+    `${i + 1}. [${a.source}] "${a.title}" — ${a.snippet.slice(0, 200)}`
+  ).join("\n");
+
+  const prompt = `You are evaluating the relevancy of news articles to municipal meeting topics.
+
+For each article, score how relevant it is to the topics on a scale of 1-10:
+- 10: Directly covers the same issue, references the same entities/decisions
+- 7-9: Strongly related, provides meaningful additional context or reporting
+- 4-6: Tangentially related, covers similar themes but not the same specific issue
+- 1-3: Minimally or not related
+
+TOPICS FROM MUNICIPAL MEETINGS:
+${topicSummaries}
+
+NEWS ARTICLES TO SCORE:
+${articleSummaries}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object" as const,
+          properties: {
+            scores: {
+              type: "array" as const,
+              items: {
+                type: "object" as const,
+                properties: {
+                  index: { type: "number" as const },
+                  relevancyScore: { type: "number" as const },
+                },
+                required: ["index", "relevancyScore"],
+              },
+            },
+          },
+          required: ["scores"],
+        },
+      },
+    });
+
+    const rawText = response.text || "{}";
+    const parsed = JSON.parse(rawText);
+    const scores = parsed.scores || [];
+
+    const scored = articles.map((a, i) => {
+      const scoreData = scores.find((s: any) => s.index === i + 1);
+      return {
+        ...a,
+        relevancyScore: Math.max(1, Math.min(10, Math.round(scoreData?.relevancyScore ?? 1))),
+      };
+    });
+
+    scored.sort((a, b) => (b.relevancyScore ?? 0) - (a.relevancyScore ?? 0));
+
+    logInfo(`[contentGeneration] Scored ${scored.length} articles, ${scored.filter(a => (a.relevancyScore ?? 0) >= 7).length} high-relevancy`);
+    return scored;
+  } catch (error) {
+    logError(`[contentGeneration] Article relevancy scoring failed`, { error: String(error) });
+    return articles.map(a => ({ ...a, relevancyScore: 1 }));
+  }
+}
+
+export async function regenerateSummaryWithNews(item: TownFeedItem): Promise<string> {
+  const topics = (item.topics || []) as ScoredTopic[];
+  const routineTopics = (item.routineTopics || []) as RoutineTopic[];
+  const newsArticles = (item.newsArticles || []) as TownFeedNewsArticle[];
+
+  const highScoringTopics = topics.filter(t => t.score >= 8);
+  const topArticles = newsArticles
+    .filter(a => (a.relevancyScore ?? 0) >= 7)
+    .sort((a, b) => (b.relevancyScore ?? 0) - (a.relevancyScore ?? 0))
+    .slice(0, 5);
+
+  const highTopicText = highScoringTopics.map((t, i) => {
+    const ctx = t.historicalContext ? `\n   Historical context: ${t.historicalContext}` : "";
+    return `${i + 1}. "${t.topic}" (Score: ${t.score}/10, Board: ${t.board || "unknown"})
+   Key points: ${t.keyPoints.join("; ")}${ctx}`;
+  }).join("\n\n");
+
+  const routineText = routineTopics.map(r => `- ${r.rollupSentence}`).join("\n");
+
+  const newsText = topArticles.map((a, i) =>
+    `${i + 1}. [${a.source}] "${a.title}" (Relevancy: ${a.relevancyScore}/10)\n   ${a.snippet}`
+  ).join("\n\n");
+
+  const prompt = `You are writing a municipal update digest for ${item.town}, New Hampshire residents.
+
+Write a polished, engaging summary that combines deeply-researched high-priority topics with relevant local news reporting and a brief routine roll-up section. The tone should be informative, accessible, and civic-minded — like a well-written local newsletter.
+
+HIGH-PRIORITY TOPICS (cover each in detail):
+${highTopicText || "(None — all topics were routine this period)"}
+
+RELEVANT LOCAL NEWS ARTICLES (incorporate key facts from these into your coverage):
+${newsText || "(No relevant news articles found)"}
+
+ROUTINE ITEMS (summarize briefly):
+${routineText || "(None)"}
+
+Guidelines:
+- Start with a compelling opening sentence about what's happening in ${item.town}
+- Cover each high-priority topic in 1-2 paragraphs with context and significance
+- When you use a fact, quote, or detail from a news article, attribute it inline — for example: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
+- Only attribute facts that actually come from the news articles, not from the meeting minutes themselves
+- End with a brief "Also discussed" or "In other business" section for routine items
+- Keep the total summary to 300-600 words
+- Use plain, accessible language — no jargon
+- Bold important names, dollar amounts, and key decisions`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: { temperature: 0.3, maxOutputTokens: 2000 },
+    });
+
+    const summary = response.text || "Unable to generate summary.";
+    logInfo(`[contentGeneration] Regenerated summary with news for ${item.town} (${summary.length} chars, ${topArticles.length} articles incorporated)`);
+    return summary.trim();
+  } catch (error) {
+    logError(`[contentGeneration] Summary regeneration with news failed for ${item.town}`, { error: String(error) });
+    throw error;
+  }
 }

@@ -9,9 +9,9 @@ import {
   deleteTownFeedItem,
   getPublishedFeedItems,
 } from "../storage/townFeed";
-import { runContentGenerationPipeline } from "../services/contentGeneration";
+import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews } from "../services/contentGeneration";
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
-import type { TownFeedNewsArticle, TownFeedPayload } from "@shared/schema";
+import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
 const adminRouter = Router();
 adminRouter.use(authenticateAdmin);
@@ -176,14 +176,36 @@ adminRouter.post("/feed-items/:id/investigate", async (req, res) => {
     const deduped = allNewArticles.filter(a => !existingUrls.has(a.url));
     const mergedArticles = [...(item.newsArticles || []), ...deduped];
 
+    const topics = (item.topics || []) as ScoredTopic[];
+    const scoredArticles = await scoreArticleRelevancy(mergedArticles, topics);
+
     const updated = await updateTownFeedItem(req.params.id, {
-      newsArticles: mergedArticles,
+      newsArticles: scoredArticles,
     } as any);
 
     res.json(updated);
   } catch (error: any) {
     console.error("Error investigating topics:", error);
     res.status(500).json({ message: error.message || "Investigation failed" });
+  }
+});
+
+adminRouter.post("/feed-items/:id/regenerate-summary", async (req, res) => {
+  try {
+    const item = await getTownFeedItemById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: "Feed item not found" });
+    }
+
+    const newSummary = await regenerateSummaryWithNews(item);
+    const updated = await updateTownFeedItem(req.params.id, {
+      summary: newSummary,
+    } as any);
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error("Error regenerating summary:", error);
+    res.status(500).json({ message: error.message || "Summary regeneration failed" });
   }
 });
 

@@ -967,6 +967,8 @@ export interface TownFeedNewsArticle {
   source: string;
   snippet: string;
   fetchedAt: string;
+  relevancyScore?: number;
+  attribution?: string;
 }
 
 export interface ScoredTopic {
