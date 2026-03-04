@@ -292,29 +292,16 @@ export async function generateSummary(
 
   const routineText = routineRollup.map(r => `- ${r.rollupSentence}`).join("\n");
 
-  const prompt = `ROLE: You are a wire-service reporter for a New Hampshire municipal affairs desk. You write like the Associated Press covers city council meetings: flat, factual, zero editorial voice. You are not a storyteller, commentator, or newsletter writer.
+  const prompt = `You are a municipal affairs reporter covering ${town}, New Hampshire. Write a factual summary of recent board and committee actions. Your writing must be dry, neutral, and precise — like a wire service report, not a newsletter.
 
-ABSOLUTE PROHIBITIONS — violating any of these is a failure:
-1. No exclamation marks anywhere in the output, including headers/titles
-2. No rhetorical questions of any kind
-3. No conversational openers or closers: "Let's dive in," "Here's what you need to know," "What does this mean for you?," "Big news," "Stay tuned," "In a nutshell," "The bottom line," "Looking ahead"
-4. No subjective/editorial adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant," "notable," "dramatic," "key," "major," "groundbreaking," "controversial"
-5. No narrative flair: "In a move that...," "After months of...," "Residents may be surprised to learn..."
-6. No first or second person: no "we," "you," "your," "our"
-7. No informal contractions in prose: "it's," "they're," "don't" — use "it is," "they are," "do not"
-8. No headers or titles containing the town name with an exclamation mark or casual phrasing
-
-NEGATIVE EXAMPLES (never write anything like these):
-- "${town} Update!" or "What's Happening in ${town}"
-- "Big changes are coming to ${town}!"
-- "Residents should take note of an important vote."
-- "In an exciting development, the board approved..."
-- "Here's what you need to know about the latest meeting."
-
-POSITIVE EXAMPLES (match this register):
-- "The ${town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
-- "The Planning Board tabled a site-plan review for a proposed 24-unit housing development on Route 16."
-- "The vote was 3-2, with members Smith and Doe dissenting."
+STRICT TONE RULES:
+- Never use exclamation marks
+- Never use rhetorical questions
+- Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
+- Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never title the piece with the town name followed by an exclamation mark or informal phrasing
+- Do NOT write: "Big changes are coming to ${town}!" or "${town} Update!"
+- DO write: "The ${town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
 
 HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
@@ -322,15 +309,15 @@ ${highTopicText || "(None — all topics were routine this period)"}
 ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-STRUCTURE REQUIREMENTS:
-- Open with the single most consequential action, stated as a declarative sentence with the deciding body, the action, and the date
+Structure:
+- Open with the most consequential action taken, stated as a single declarative sentence
 - One topic per paragraph, 2-4 sentences each
-- For each topic: state what was decided, by whom (name the board/committee), the vote count if available, and what changes for residents
-- Where context is useful, include a single sentence prefixed with "Why it matters:" — this sentence must be a verifiable fact, not an opinion
-- Bold names, dollar figures, vote counts, and dates using markdown **bold**
-- End with "Also on the agenda:" followed by routine items compressed into one sentence each
-- Target 400-800 words
-- Always complete the full summary through the final routine item — do not stop mid-sentence, mid-paragraph, or before the routine items section`;
+- For each topic: what was decided, by whom, and what changes for residents
+- Use "Why it matters:" as a label before a single factual sentence where relevant — never as editorial commentary
+- Bold names, dollar figures, vote counts, and dates
+- End with "Also on the agenda:" followed by routine items, each in one sentence
+- 400-800 words
+- Always finish the full summary — do not stop mid-sentence or mid-section`;
 
   try {
     const response = await ai.models.generateContent({
@@ -502,49 +489,37 @@ export async function regenerateSummaryWithNews(item: TownFeedItem): Promise<str
     `${i + 1}. [${a.source}] "${a.title}" (Relevancy: ${a.relevancyScore}/10)\n   ${a.snippet}`
   ).join("\n\n");
 
-  const prompt = `ROLE: You are a wire-service reporter for a New Hampshire municipal affairs desk. You write like the Associated Press covers city council meetings: flat, factual, zero editorial voice. You are not a storyteller, commentator, or newsletter writer.
+  const prompt = `You are a municipal affairs reporter covering ${item.town}, New Hampshire. Write a factual summary of recent board and committee actions, incorporating relevant local news reporting. Your writing must be dry, neutral, and precise — like a wire service report, not a newsletter.
 
-ABSOLUTE PROHIBITIONS — violating any of these is a failure:
-1. No exclamation marks anywhere in the output, including headers/titles
-2. No rhetorical questions of any kind
-3. No conversational openers or closers: "Let's dive in," "Here's what you need to know," "What does this mean for you?," "Big news," "Stay tuned," "In a nutshell," "The bottom line," "Looking ahead"
-4. No subjective/editorial adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant," "notable," "dramatic," "key," "major," "groundbreaking," "controversial"
-5. No narrative flair: "In a move that...," "After months of...," "Residents may be surprised to learn..."
-6. No first or second person: no "we," "you," "your," "our"
-7. No informal contractions in prose: "it's," "they're," "don't" — use "it is," "they are," "do not"
-8. No headers or titles containing the town name with an exclamation mark or casual phrasing
-
-NEGATIVE EXAMPLES (never write anything like these):
-- "${item.town} Update!" or "What's Happening in ${item.town}"
-- "Big changes are coming to ${item.town}!"
-- "Residents should take note of an important vote."
-- "In an exciting development, the board approved..."
-- "Here's what you need to know about the latest meeting."
-
-POSITIVE EXAMPLES (match this register):
-- "The ${item.town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
-- "The Planning Board tabled a site-plan review for a proposed 24-unit housing development on Route 16."
-- "The vote was 3-2, with members Smith and Doe dissenting."
+STRICT TONE RULES:
+- Never use exclamation marks
+- Never use rhetorical questions
+- Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
+- Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never title the piece with the town name followed by an exclamation mark or informal phrasing
+- Do NOT write: "Big changes are coming to ${item.town}!" or "${item.town} Update!"
+- DO write: "The ${item.town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
 
 HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
 
-RELEVANT LOCAL NEWS ARTICLES (incorporate verified facts from these sources only):
+RELEVANT LOCAL NEWS ARTICLES (incorporate key facts from these):
 ${newsText || "(No relevant news articles found)"}
 
 ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-STRUCTURE REQUIREMENTS:
-- Open with the single most consequential action, stated as a declarative sentence with the deciding body, the action, and the date
+Structure:
+- Open with the most consequential action taken, stated as a single declarative sentence
 - One topic per paragraph, 2-4 sentences each
-- For each topic: state what was decided, by whom (name the board/committee), the vote count if available, and what changes for residents
-- Where context is useful, include a single sentence prefixed with "Why it matters:" — this sentence must be a verifiable fact, not an opinion
-- When citing a fact sourced from a news article, attribute it inline: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent" — only attribute facts from news articles, never from meeting minutes
-- Bold names, dollar figures, vote counts, and dates using markdown **bold**
-- End with "Also on the agenda:" followed by routine items compressed into one sentence each
-- Target 400-800 words
-- Always complete the full summary through the final routine item — do not stop mid-sentence, mid-paragraph, or before the routine items section`;
+- For each topic: what was decided, by whom, and what changes for residents
+- Use "Why it matters:" as a label before a single factual sentence where relevant — never as editorial commentary
+- When citing a fact from a news article, attribute it inline: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
+- Only attribute facts from news articles, not from meeting minutes
+- Bold names, dollar figures, vote counts, and dates
+- End with "Also on the agenda:" followed by routine items, each in one sentence
+- 400-800 words
+- Always finish the full summary — do not stop mid-sentence or mid-section`;
 
   try {
     const response = await ai.models.generateContent({
