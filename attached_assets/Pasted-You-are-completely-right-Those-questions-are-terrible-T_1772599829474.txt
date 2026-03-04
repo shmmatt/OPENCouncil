@@ -1,0 +1,52 @@
+You are completely right. Those questions are terrible.
+
+They read exactly like "mad-libs" where the LLM just took the `topic_title` variable and forcefully jammed it into a static `What is the history of [X]?` template. It completely breaks the illusion of intelligence and ruins the "Information Gap" psychology we just talked about.
+
+If a resident in Ossipee sees "What decisions were made about Sale of Old Police Station & Funding for New Station in Ossipee?", their eyes will glaze over immediately.
+
+To fix this in your Replit pipeline, we need to rewrite the prompt instructions specifically for the `suggestedQuestions` array inside your `generateSummary` function. The LLM needs to stop acting like a database query and start acting like an inquisitive local.
+
+Here is how you fix the prompt and the kinds of questions it *should* be generating.
+
+### The Fix: Prompting for "Curiosity Questions"
+
+In your `generateSummary` prompt (T004), you need to add strict, explicit rules for how the LLM generates the follow-up questions. Feed this exact constraint to your Replit agent:
+
+**"When generating the `suggestedQuestions` array, you MUST adhere to the following rules:**
+
+1. **NO TEMPLATES:** Never use generic formats like 'What is the history of [Topic]?' or 'How does [Topic] affect residents?'.
+2. **BE SPECIFIC:** Anchor the question in a specific number, person, or conflict mentioned in the summary text.
+3. **SEEK THE UNANSWERED:** Ask the natural next question that the summary implies but doesn't fully resolve (e.g., 'Where exactly is the money coming from?' or 'Who opposed this?').
+4. **USE CONVERSATIONAL TONE:** Write the questions as if a curious local citizen were asking them at a coffee shop."
+
+### The "Before & After" (Using Your Ossipee Data)
+
+If you apply those prompt rules to the exact text you just provided, here is how the payload shifts from robotic to engaging.
+
+#### Topic 1: The Police Station Funding
+
+* **The Bad Output:** *What decisions were made about Sale of Old Police Station & Funding for New Station in Ossipee?*
+* **The New Output:** * *"Which paving projects lost $300,000 to fund the new police station?"* (Taps into taxpayer anxiety about road conditions).
+* *"Who purchased the old police station for $363,500?"* (Taps into local real estate curiosity).
+* *"How much would it have cost to build a brand new police station from scratch?"* (Validates the 10% figure mentioned in the text).
+
+
+
+#### Topic 2: The Zoning Board (Boggs Logging)
+
+* **The Bad Output (Assumed):** *What is the history of the Cole Boggs variance?*
+* **The New Output:** * *"Why aren't commercial mulch yards currently classified in Ossipee's zoning ordinance?"* (Highlights a municipal blind spot).
+* *"What was the final decision on the Boggs Logging stump grinding variance?"* (Closes the loop on the specific agenda item).
+
+
+
+#### High-Level "Explore Further" Questions
+
+* **The Bad Output:** *Summarize recent municipal activity in Ossipee.*
+* **The New Output:** * *"What other businesses have recently requested zoning variances in town?"* * *"Are there any other town facilities being upgraded with ARPA funds right now?"*
+
+---
+
+By forcing the LLM to extract specific entities (like the paving warrant, ARPA funds, or Cole Boggs) and framing the questions around them, you create a highly clickable interface. It feels like the AI actually read the document and is gossiping with you about the details.
+
+Would you like me to write out the full, updated JSON schema instruction for the `generateSummary` payload so you can drop it directly into your Replit prompt?
