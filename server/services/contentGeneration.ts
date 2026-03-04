@@ -335,6 +335,137 @@ Structure:
   }
 }
 
+export async function generateCuriosityQuestions(
+  summary: string,
+  highScoringTopics: ScoredTopic[],
+  town: string
+): Promise<{ sections: { topic: string; questions: string[] }[]; highLevelQuestions: string[] }> {
+  let topicDetails: string;
+  try {
+    topicDetails = highScoringTopics.map((t, i) => {
+      const points = Array.isArray(t.keyPoints) ? t.keyPoints.join("; ") : "";
+      return `${i + 1}. "${t.topic}" (Board: ${t.board || "unknown"})
+   Key points: ${points}
+   ${t.historicalContext ? `Context: ${t.historicalContext}` : ""}`;
+    }).join("\n\n");
+  } catch {
+    topicDetails = highScoringTopics.map((t, i) => `${i + 1}. "${t.topic}"`).join("\n");
+  }
+
+  const truncatedSummary = summary.length > 3000 ? summary.slice(0, 3000) + "..." : summary;
+
+  const prompt = `You are generating follow-up questions for a municipal news summary about ${town}, New Hampshire. Read the summary and topic details carefully, then generate specific, curiosity-driven questions.
+
+SUMMARY:
+${truncatedSummary}
+
+TOPICS:
+${topicDetails}
+
+STRICT RULES FOR QUESTION GENERATION:
+1. NO TEMPLATES — Never use generic formats like "What is the history of [Topic]?" or "How does [Topic] affect residents?" or "What decisions were made about [Topic]?"
+2. BE SPECIFIC — Anchor every question in a specific number, person, dollar figure, vote count, date, or conflict actually mentioned in the summary text.
+3. SEEK THE UNANSWERED — Ask the natural next question the summary implies but does not fully resolve. What would a reader wonder after reading this?
+4. CONVERSATIONAL TONE — Write as if a curious local resident were asking at a coffee shop. Short, punchy, natural.
+
+BAD EXAMPLES (never generate questions like these):
+- "What decisions were made about the police station in ${town}?"
+- "What is the history of zoning variances in ${town}?"
+- "How does the budget affect ${town} residents?"
+- "Summarize recent municipal activity in ${town}."
+
+GOOD EXAMPLES (generate questions like these):
+- "Which paving projects lost $300,000 to fund the new police station?"
+- "Who purchased the old police station for $363,500?"
+- "Why aren't commercial mulch yards classified in the zoning ordinance?"
+- "Are there other town facilities being upgraded with ARPA funds right now?"
+
+Respond with JSON only:
+{
+  "sections": [
+    {
+      "topic": "exact topic title from the list above",
+      "questions": ["question 1", "question 2", "question 3"]
+    }
+  ],
+  "highLevelQuestions": ["cross-cutting question 1", "cross-cutting question 2", "cross-cutting question 3"]
+}
+
+Generate 2-3 questions per topic and 2-3 high-level questions that cut across multiple topics.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.4,
+        maxOutputTokens: 2048,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object" as const,
+          properties: {
+            sections: {
+              type: "array" as const,
+              items: {
+                type: "object" as const,
+                properties: {
+                  topic: { type: "string" as const },
+                  questions: { type: "array" as const, items: { type: "string" as const } },
+                },
+                required: ["topic", "questions"],
+              },
+            },
+            highLevelQuestions: {
+              type: "array" as const,
+              items: { type: "string" as const },
+            },
+          },
+          required: ["sections", "highLevelQuestions"],
+        },
+      },
+    });
+
+    const rawText = response.text || "{}";
+    logDebug(`[contentGeneration] Curiosity questions raw (${rawText.length} chars): ${rawText.slice(0, 300)}`);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (parseErr) {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error(`JSON parse failed: ${String(parseErr)}`);
+      }
+    }
+
+    const sections = (parsed.sections || []).map((s: any) => ({
+      topic: String(s.topic || ""),
+      questions: Array.isArray(s.questions) ? s.questions.map(String).slice(0, 3) : [],
+    }));
+
+    const highLevelQuestions = Array.isArray(parsed.highLevelQuestions)
+      ? parsed.highLevelQuestions.map(String).slice(0, 3)
+      : [];
+
+    if (sections.every((s: any) => s.questions.length === 0) && highLevelQuestions.length === 0) {
+      throw new Error("LLM returned empty questions");
+    }
+
+    logInfo(`[contentGeneration] Generated curiosity questions: ${sections.length} sections, ${highLevelQuestions.length} high-level`);
+    return { sections, highLevelQuestions };
+  } catch (error) {
+    logError(`[contentGeneration] Curiosity question generation failed`, { error: String(error) });
+    return {
+      sections: highScoringTopics.map(t => ({
+        topic: t.topic,
+        questions: [`What led to the decision on ${t.topic}?`, `What happens next with ${t.topic}?`],
+      })),
+      highLevelQuestions: [`What should ${town} residents watch for in the coming months?`],
+    };
+  }
+}
+
 export async function runContentGenerationPipeline(town: string): Promise<{
   title: string;
   summary: string;

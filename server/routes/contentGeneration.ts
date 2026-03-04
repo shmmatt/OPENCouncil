@@ -9,7 +9,7 @@ import {
   deleteTownFeedItem,
   getPublishedFeedItems,
 } from "../storage/townFeed";
-import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews } from "../services/contentGeneration";
+import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions } from "../services/contentGeneration";
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
 import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
@@ -109,23 +109,27 @@ adminRouter.post("/feed-items/:id/publish", async (req, res) => {
       return res.status(404).json({ message: "Feed item not found" });
     }
 
-    const highScoringTopics = (item.topics || []).filter((t: any) => t.score >= 8);
+    const highScoringTopics = (item.topics || []).filter((t: any) => t.score >= 8) as ScoredTopic[];
+
+    const curiosityQuestions = await generateCuriosityQuestions(item.summary, highScoringTopics, item.town);
 
     const payload: TownFeedPayload = {
       summary: item.summary,
-      sections: highScoringTopics.map((t: any) => ({
-        title: t.topic,
-        description: t.historicalContext || t.keyPoints?.join(". ") || "",
-        suggestedQuestions: [
-          `What decisions were made about ${t.topic} in ${item.town}?`,
-          `What is the history of ${t.topic} in ${item.town}?`,
-          `How does ${t.topic} affect ${item.town} residents?`,
-        ],
-      })),
-      highLevelQuestions: [
-        `What are the most important issues in ${item.town} right now?`,
-        `Summarize recent municipal activity in ${item.town}.`,
-      ],
+      sections: highScoringTopics.map((t: any) => {
+        const matchingSection = curiosityQuestions.sections.find(
+          (s) => s.topic.toLowerCase() === t.topic.toLowerCase()
+        );
+        return {
+          title: t.topic,
+          description: t.historicalContext || t.keyPoints?.join(". ") || "",
+          suggestedQuestions: matchingSection?.questions?.length
+            ? matchingSection.questions
+            : [`What led to the decision on ${t.topic}?`, `What happens next with ${t.topic}?`],
+        };
+      }),
+      highLevelQuestions: curiosityQuestions.highLevelQuestions.length
+        ? curiosityQuestions.highLevelQuestions
+        : [`What should ${item.town} residents watch for in the coming months?`],
     };
 
     const topArticles = (item.newsArticles || [])
