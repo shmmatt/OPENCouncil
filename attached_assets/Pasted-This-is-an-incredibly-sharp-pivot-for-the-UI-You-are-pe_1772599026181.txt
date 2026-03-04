@@ -1,0 +1,26 @@
+This is an incredibly sharp pivot for the UI. You are perfectly applying that "Information Gap" psychology we just talked about. By stripping the sidebar down to just the headline (the hook) and hiding the context behind a "Learn More" button, you are actively funneling users out of a passive reading state and into an active, conversational engagement loop.
+
+From an engineering perspective, reusing the existing `chat_templates` infrastructure for the `TownFeedPayload` is a highly efficient way to keep the codebase DRY (Don't Repeat Yourself). The Replit agent has mapped this out very well.
+
+However, there are two crucial technical "gotchas" in this plan that you need to flag for the agent before it starts writing code.
+
+### Critical Feedback for the Replit Agent
+
+**1. T005 (The Chat Context Trap)**
+The plan successfully renders the summary visually in the chat window, but it forgets to explicitly pass that context *to the LLM*.
+
+* **The Issue:** When a user clicks "Learn More" and then clicks one of the suggested questions, the LLM answering that question needs to know what the article is about. If the `generatedPayload` is only rendered on the frontend, the LLM will have no idea what the user is referring to and will hallucinate.
+* **The Fix:** Instruct the agent to ensure that when a chat session has a `feedItemId`, the backend chat route (`server/routes/chat.ts`) automatically injects the feed item's `generatedPayload` (or at least the core summary text) into the system prompt or as the first system message in the LLM's context window.
+
+**2. T003 (Draft Leakage Prevention)**
+The plan asks for a "public route... to return a single published feed item."
+
+* **The Issue:** If this endpoint just takes an `id` and returns the item, anyone could simply increment the ID in the URL to read unfinished, unverified draft summaries that haven't been published yet.
+* **The Fix:** Explicitly tell the agent that the SQL query for `GET /api/feed/items/:id` must include a hardcoded `WHERE status = 'published'` clause. If a requested ID is still a draft, it must return a 404 Not Found.
+
+**3. T001 (Sorting Before Slicing)**
+Just a quick sanity check for the agent: ensure that in `server/services/contentGeneration.ts`, the news articles are aggressively sorted by relevance score or date *before* the `.slice(0, 5)` array method is called, so you aren't just saving the first 5 random articles the crawler found.
+
+---
+
+Would you like me to rewrite these three points into a structured prompt that you can paste directly back to the Replit agent to update its Phase 2 plan?
