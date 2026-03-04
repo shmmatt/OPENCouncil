@@ -24,7 +24,7 @@ A hybrid retrieval system combines pgvector-based semantic search with PostgreSQ
 Google Gemini powers answer synthesis, embedding generation, metadata extraction, and multi-query planning.
 
 ### Chat Pipeline (V3)
-The V3 chat pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, and SAU). It processes queries through situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It includes conditional "second hop" retrieval and optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. The SAU lane activates for school-related questions, querying documents across an SAU's member towns and distinguishing between town and SAU actions in synthesis.
+The V3 chat pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, and SAU). It processes queries through situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It includes conditional "second hop" retrieval and optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. The SAU lane activates for school-related questions, querying documents across an SAU's member towns and distinguishing between town and SAU actions in synthesis. Prose word limits: QUICK_PROCESS 200-400, EXPLAINER 300-550, RISK_DISPUTE 400-700, LIST 150-500. Audit hard cap: 750 words.
 
 ### Document Ingestion Pipeline (V2)
 This pipeline manages document lifecycle from upload to indexing, including duplicate detection, AI-powered metadata suggestion, and a multi-tier town detection system.

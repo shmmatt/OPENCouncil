@@ -50,7 +50,7 @@ const SECTION_BULLET_LIMITS: Record<string, number> = {
   "Unknowns that matter": 4,
 };
 
-const MAX_WORD_COUNT = 500;
+const MAX_WORD_COUNT = 750;
 const MAX_BULLET_WORDS = 20; // Hard cap per spec
 
 // LLM tail phrases to reject
@@ -814,8 +814,8 @@ export function scoreAnswer(
     score -= 30;
   }
   
-  // Bonus for good word count (sweet spot 200-500)
-  if (wordCount >= 200 && wordCount <= 500) {
+  // Bonus for good word count (sweet spot 250-700)
+  if (wordCount >= 250 && wordCount <= 700) {
     score += 15;
   }
   

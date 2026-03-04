@@ -5,9 +5,9 @@
  * This module defines character targets, hard caps, token limits, and structure constraints.
  * 
  * V3 PROSE-FIRST MODE (includes TL;DR ~30-50 words):
- * - QUICK_PROCESS: 150-270 words (~900-1600 chars) - TL;DR + 1-2 paragraphs, no headings
- * - EXPLAINER: 220-370 words (~1300-2200 chars) - TL;DR + 2-3 paragraphs, no headings  
- * - RISK_DISPUTE: 290-500 words (~1700-3000 chars) - TL;DR + 3-5 paragraphs, no headings
+ * - QUICK_PROCESS: 200-400 words (~1200-2400 chars) - TL;DR + 1-3 paragraphs, no headings
+ * - EXPLAINER: 300-550 words (~1800-3300 chars) - TL;DR + 2-4 paragraphs, no headings  
+ * - RISK_DISPUTE: 400-700 words (~2400-4200 chars) - TL;DR + 3-6 paragraphs, no headings
  */
 
 import type { AnswerMode, AnswerType, RenderStyle } from "./types";
@@ -325,10 +325,10 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
     return {
       answerType,
       renderStyle,
-      wordMin: 100,
-      wordMax: 400,
-      charMin: 600,
-      charMax: 2400,
+      wordMin: 150,
+      wordMax: 500,
+      charMin: 900,
+      charMax: 3000,
       paragraphs: { min: 1, max: 1 },
       allowHeadings: false,
       allowBullets: true,
@@ -340,11 +340,11 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 150,
-        wordMax: 270,
-        charMin: 900,
-        charMax: 1600,
-        paragraphs: { min: 1, max: 2 },
+        wordMin: 200,
+        wordMax: 400,
+        charMin: 1200,
+        charMax: 2400,
+        paragraphs: { min: 1, max: 3 },
         allowHeadings: false,
         allowBullets: false,
       };
@@ -353,11 +353,11 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 220,
-        wordMax: 370,
-        charMin: 1300,
-        charMax: 2200,
-        paragraphs: { min: 2, max: 3 },
+        wordMin: 300,
+        wordMax: 550,
+        charMin: 1800,
+        charMax: 3300,
+        paragraphs: { min: 2, max: 4 },
         allowHeadings: false,
         allowBullets: false,
       };
@@ -366,11 +366,11 @@ export function getProsePolicy(answerType: AnswerType, renderStyle: RenderStyle)
       return {
         answerType,
         renderStyle,
-        wordMin: 290,
-        wordMax: 500,
-        charMin: 1700,
-        charMax: 3000,
-        paragraphs: { min: 3, max: 5 },
+        wordMin: 400,
+        wordMax: 700,
+        charMin: 2400,
+        charMax: 4200,
+        paragraphs: { min: 3, max: 6 },
         allowHeadings: false,
         allowBullets: false,
       };
