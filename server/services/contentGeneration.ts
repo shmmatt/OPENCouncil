@@ -292,29 +292,30 @@ export async function generateSummary(
 
   const routineText = routineRollup.map(r => `- ${r.rollupSentence}`).join("\n");
 
-  const prompt = `You are writing a municipal update digest for ${town}, New Hampshire residents.
+  const prompt = `You are writing a municipal update for ${town}, New Hampshire. Write in the style of Axios — direct, matter-of-fact, no editorializing.
 
-Write a polished, engaging summary that combines deeply-researched high-priority topics with a brief routine roll-up section. The tone should be informative, accessible, and civic-minded — like a well-written local newsletter.
-
-HIGH-PRIORITY TOPICS (cover each in detail):
+HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
 
-ROUTINE ITEMS (summarize briefly):
+ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-Guidelines:
-- Start with a compelling opening sentence about what's happening in ${town}
-- Cover each high-priority topic in 1-2 paragraphs with context and significance
-- End with a brief "Also discussed" or "In other business" section for routine items
-- Keep the total summary to 300-600 words
-- Use plain, accessible language — no jargon
-- Bold important names, dollar amounts, and key decisions`;
+Format and tone:
+- Lead with the single most important decision or development
+- Short paragraphs, one idea each
+- State what happened, who decided it, and what it means for residents
+- Use "Why it matters:" framing where helpful, but do not editorialize or use opinion language
+- No adjectives like "exciting," "impressive," "concerning" — let the facts speak
+- Bold key names, dollar amounts, and decisions
+- End with a brief "Also on the agenda:" section listing routine items in one or two sentences each
+- 400-800 words total
+- Plain language, no jargon`;
 
   try {
     const response = await ai.models.generateContent({
       model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: { temperature: 0.3, maxOutputTokens: 2000 },
+      config: { temperature: 0.3, maxOutputTokens: 4000 },
     });
 
     const summary = response.text || "Unable to generate summary.";
@@ -480,34 +481,35 @@ export async function regenerateSummaryWithNews(item: TownFeedItem): Promise<str
     `${i + 1}. [${a.source}] "${a.title}" (Relevancy: ${a.relevancyScore}/10)\n   ${a.snippet}`
   ).join("\n\n");
 
-  const prompt = `You are writing a municipal update digest for ${item.town}, New Hampshire residents.
+  const prompt = `You are writing a municipal update for ${item.town}, New Hampshire. Write in the style of Axios — direct, matter-of-fact, no editorializing. Incorporate relevant local news reporting with inline attribution.
 
-Write a polished, engaging summary that combines deeply-researched high-priority topics with relevant local news reporting and a brief routine roll-up section. The tone should be informative, accessible, and civic-minded — like a well-written local newsletter.
-
-HIGH-PRIORITY TOPICS (cover each in detail):
+HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
 
-RELEVANT LOCAL NEWS ARTICLES (incorporate key facts from these into your coverage):
+RELEVANT LOCAL NEWS ARTICLES (incorporate key facts from these):
 ${newsText || "(No relevant news articles found)"}
 
-ROUTINE ITEMS (summarize briefly):
+ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-Guidelines:
-- Start with a compelling opening sentence about what's happening in ${item.town}
-- Cover each high-priority topic in 1-2 paragraphs with context and significance
-- When you use a fact, quote, or detail from a news article, attribute it inline — for example: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
-- Only attribute facts that actually come from the news articles, not from the meeting minutes themselves
-- End with a brief "Also discussed" or "In other business" section for routine items
-- Keep the total summary to 300-600 words
-- Use plain, accessible language — no jargon
-- Bold important names, dollar amounts, and key decisions`;
+Format and tone:
+- Lead with the single most important decision or development
+- Short paragraphs, one idea each
+- State what happened, who decided it, and what it means for residents
+- Use "Why it matters:" framing where helpful, but do not editorialize or use opinion language
+- No adjectives like "exciting," "impressive," "concerning" — let the facts speak
+- When using a fact from a news article, attribute it inline: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
+- Only attribute facts from the news articles, not from the meeting minutes
+- Bold key names, dollar amounts, and decisions
+- End with a brief "Also on the agenda:" section listing routine items in one or two sentences each
+- 400-800 words total
+- Plain language, no jargon`;
 
   try {
     const response = await ai.models.generateContent({
       model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: { temperature: 0.3, maxOutputTokens: 2000 },
+      config: { temperature: 0.3, maxOutputTokens: 4000 },
     });
 
     const summary = response.text || "Unable to generate summary.";
