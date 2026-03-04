@@ -7,6 +7,7 @@ import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem } fro
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const MODEL = "gemini-2.5-flash";
+const SUMMARY_MODEL = "gemini-3.1-pro-preview";
 
 interface RawTopic {
   topic: string;
@@ -311,7 +312,7 @@ Guidelines:
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL,
+      model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: { temperature: 0.3, maxOutputTokens: 2000 },
     });
@@ -376,7 +377,8 @@ export async function runContentGenerationPipeline(town: string): Promise<{
 
 export async function scoreArticleRelevancy(
   articles: TownFeedNewsArticle[],
-  topics: ScoredTopic[]
+  topics: ScoredTopic[],
+  town: string
 ): Promise<TownFeedNewsArticle[]> {
   if (articles.length === 0) return [];
 
@@ -388,15 +390,19 @@ export async function scoreArticleRelevancy(
     `${i + 1}. [${a.source}] "${a.title}" — ${a.snippet.slice(0, 200)}`
   ).join("\n");
 
-  const prompt = `You are evaluating the relevancy of news articles to municipal meeting topics.
+  const prompt = `You are evaluating the relevancy of news articles to municipal meeting topics from ${town}, New Hampshire.
+
+CRITICAL: Geographic relevance is essential. These topics are specifically about ${town}, NH.
 
 For each article, score how relevant it is to the topics on a scale of 1-10:
-- 10: Directly covers the same issue, references the same entities/decisions
-- 7-9: Strongly related, provides meaningful additional context or reporting
-- 4-6: Tangentially related, covers similar themes but not the same specific issue
-- 1-3: Minimally or not related
+- 10: Directly covers the same issue in ${town}, references the same entities/decisions
+- 7-9: Strongly related to the same issue in ${town}, provides meaningful additional context
+- 4-6: Related topic in the same geographic region (Carroll County, Lakes Region) but not specifically about ${town}
+- 1-3: Same general theme (e.g., "police station") but about a DIFFERENT town or unrelated location — these must score low regardless of topic similarity
 
-TOPICS FROM MUNICIPAL MEETINGS:
+An article about a police station in Wolfeboro is NOT relevant to a police station topic in ${town}. An article about zoning in Conway is NOT relevant to a zoning topic in ${town}. The town must match for a score of 7 or above.
+
+TOPICS FROM ${town.toUpperCase()} MUNICIPAL MEETINGS:
 ${topicSummaries}
 
 NEWS ARTICLES TO SCORE:
@@ -499,7 +505,7 @@ Guidelines:
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL,
+      model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: { temperature: 0.3, maxOutputTokens: 2000 },
     });

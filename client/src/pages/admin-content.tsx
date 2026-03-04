@@ -452,7 +452,7 @@ function FeedItemDetail({
           {newsArticles.length > 0 ? "Re-Investigate" : "Investigate"}
         </Button>
 
-        {newsArticles.some(a => (a.relevancyScore ?? 0) >= 7) && (
+        {newsArticles.length > 0 && (
           <Button
             variant="outline"
             onClick={() => regenerateMutation.mutate()}

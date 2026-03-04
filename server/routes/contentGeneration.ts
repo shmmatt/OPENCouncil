@@ -177,7 +177,7 @@ adminRouter.post("/feed-items/:id/investigate", async (req, res) => {
     const mergedArticles = [...(item.newsArticles || []), ...deduped];
 
     const topics = (item.topics || []) as ScoredTopic[];
-    const scoredArticles = await scoreArticleRelevancy(mergedArticles, topics);
+    const scoredArticles = await scoreArticleRelevancy(mergedArticles, topics, item.town);
 
     const updated = await updateTownFeedItem(req.params.id, {
       newsArticles: scoredArticles,
