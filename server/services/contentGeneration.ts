@@ -292,7 +292,16 @@ export async function generateSummary(
 
   const routineText = routineRollup.map(r => `- ${r.rollupSentence}`).join("\n");
 
-  const prompt = `You are writing a municipal update for ${town}, New Hampshire. Write in the style of Axios — direct, matter-of-fact, no editorializing.
+  const prompt = `You are a municipal affairs reporter covering ${town}, New Hampshire. Write a factual summary of recent board and committee actions. Your writing must be dry, neutral, and precise — like a wire service report, not a newsletter.
+
+STRICT TONE RULES:
+- Never use exclamation marks
+- Never use rhetorical questions
+- Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
+- Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never title the piece with the town name followed by an exclamation mark or informal phrasing
+- Do NOT write: "Big changes are coming to ${town}!" or "${town} Update!"
+- DO write: "The ${town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
 
 HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
@@ -300,22 +309,21 @@ ${highTopicText || "(None — all topics were routine this period)"}
 ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-Format and tone:
-- Lead with the single most important decision or development
-- Short paragraphs, one idea each
-- State what happened, who decided it, and what it means for residents
-- Use "Why it matters:" framing where helpful, but do not editorialize or use opinion language
-- No adjectives like "exciting," "impressive," "concerning" — let the facts speak
-- Bold key names, dollar amounts, and decisions
-- End with a brief "Also on the agenda:" section listing routine items in one or two sentences each
-- 400-800 words total
-- Plain language, no jargon`;
+Structure:
+- Open with the most consequential action taken, stated as a single declarative sentence
+- One topic per paragraph, 2-4 sentences each
+- For each topic: what was decided, by whom, and what changes for residents
+- Use "Why it matters:" as a label before a single factual sentence where relevant — never as editorial commentary
+- Bold names, dollar figures, vote counts, and dates
+- End with "Also on the agenda:" followed by routine items, each in one sentence
+- 400-800 words
+- Always finish the full summary — do not stop mid-sentence or mid-section`;
 
   try {
     const response = await ai.models.generateContent({
       model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: { temperature: 0.3, maxOutputTokens: 4000 },
+      config: { temperature: 0.2, maxOutputTokens: 8192 },
     });
 
     const summary = response.text || "Unable to generate summary.";
@@ -481,7 +489,16 @@ export async function regenerateSummaryWithNews(item: TownFeedItem): Promise<str
     `${i + 1}. [${a.source}] "${a.title}" (Relevancy: ${a.relevancyScore}/10)\n   ${a.snippet}`
   ).join("\n\n");
 
-  const prompt = `You are writing a municipal update for ${item.town}, New Hampshire. Write in the style of Axios — direct, matter-of-fact, no editorializing. Incorporate relevant local news reporting with inline attribution.
+  const prompt = `You are a municipal affairs reporter covering ${item.town}, New Hampshire. Write a factual summary of recent board and committee actions, incorporating relevant local news reporting. Your writing must be dry, neutral, and precise — like a wire service report, not a newsletter.
+
+STRICT TONE RULES:
+- Never use exclamation marks
+- Never use rhetorical questions
+- Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
+- Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never title the piece with the town name followed by an exclamation mark or informal phrasing
+- Do NOT write: "Big changes are coming to ${item.town}!" or "${item.town} Update!"
+- DO write: "The ${item.town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
 
 HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
@@ -492,24 +509,23 @@ ${newsText || "(No relevant news articles found)"}
 ROUTINE ITEMS:
 ${routineText || "(None)"}
 
-Format and tone:
-- Lead with the single most important decision or development
-- Short paragraphs, one idea each
-- State what happened, who decided it, and what it means for residents
-- Use "Why it matters:" framing where helpful, but do not editorialize or use opinion language
-- No adjectives like "exciting," "impressive," "concerning" — let the facts speak
-- When using a fact from a news article, attribute it inline: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
-- Only attribute facts from the news articles, not from the meeting minutes
-- Bold key names, dollar amounts, and decisions
-- End with a brief "Also on the agenda:" section listing routine items in one or two sentences each
-- 400-800 words total
-- Plain language, no jargon`;
+Structure:
+- Open with the most consequential action taken, stated as a single declarative sentence
+- One topic per paragraph, 2-4 sentences each
+- For each topic: what was decided, by whom, and what changes for residents
+- Use "Why it matters:" as a label before a single factual sentence where relevant — never as editorial commentary
+- When citing a fact from a news article, attribute it inline: "as reported by the Conway Daily Sun" or "according to the Carroll County Independent"
+- Only attribute facts from news articles, not from meeting minutes
+- Bold names, dollar figures, vote counts, and dates
+- End with "Also on the agenda:" followed by routine items, each in one sentence
+- 400-800 words
+- Always finish the full summary — do not stop mid-sentence or mid-section`;
 
   try {
     const response = await ai.models.generateContent({
       model: SUMMARY_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: { temperature: 0.3, maxOutputTokens: 4000 },
+      config: { temperature: 0.2, maxOutputTokens: 8192 },
     });
 
     const summary = response.text || "Unable to generate summary.";
