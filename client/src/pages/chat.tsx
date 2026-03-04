@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Newspaper, Calendar } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -16,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatSession, ChatMessage, MinutesUpdateItem, TemplatePayload, TownFeedItem, ScoredTopic } from "@shared/schema";
+import type { ChatSession, ChatMessage, MinutesUpdateItem, TemplatePayload, TownFeedItem } from "@shared/schema";
 import type { ChatNotice } from "@shared/chatNotices";
 import { MessageNotices } from "@/components/MessageNotices";
 import { TemplateBanner } from "@/components/TemplateBanner";
@@ -178,13 +177,11 @@ function RecentMinutesUpdates({
 
 function TownFeed({
   feedItems,
-  onAskAboutTopic,
+  onLearnMore,
 }: {
   feedItems: TownFeedItem[];
-  onAskAboutTopic: (prompt: string) => void;
+  onLearnMore: (feedItemId: string, title: string) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
   if (feedItems.length === 0) {
     return null;
   }
@@ -203,131 +200,40 @@ function TownFeed({
     }
   };
 
-  const truncateSummary = (text: string, maxLines: number = 3) => {
-    const lines = text.split("\n").slice(0, maxLines);
-    const joined = lines.join("\n");
-    if (joined.length > 180) return joined.slice(0, 180) + "...";
-    if (text.split("\n").length > maxLines || text.length > joined.length) return joined + "...";
-    return joined;
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 8) return "bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/20";
-    return "bg-muted text-muted-foreground";
-  };
-
   return (
     <div className="space-y-1">
-      {feedItems.map((item) => {
-        const isExpanded = expandedId === item.id;
-        const highScoringTopics = (item.topics || []).filter((t: ScoredTopic) => t.score >= 8);
-        const newsArticles = item.newsArticles || [];
-
-        return (
-          <div
-            key={item.id}
-            className="rounded-md bg-sidebar-accent/30 overflow-visible"
-            data-testid={`feed-item-${item.id}`}
-          >
-            <button
-              className="w-full text-left p-2 space-y-1.5 hover-elevate rounded-md"
-              onClick={() => setExpandedId(isExpanded ? null : item.id)}
-              data-testid={`button-expand-feed-${item.id}`}
-            >
-              <div className="flex items-start gap-2">
-                <Newspaper className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight" data-testid={`text-feed-title-${item.id}`}>
-                    {item.title}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Calendar className="w-3 h-3 text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground" data-testid={`text-feed-date-${item.id}`}>
-                      {formatDate(item.createdAt)}
-                    </p>
-                  </div>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? "rotate-180" : ""}`} />
-              </div>
-
-              {!isExpanded && (
-                <p className="text-xs text-muted-foreground ml-6 line-clamp-3" data-testid={`text-feed-preview-${item.id}`}>
-                  {truncateSummary(item.summary)}
+      {feedItems.map((item) => (
+        <div
+          key={item.id}
+          className="rounded-md bg-sidebar-accent/30 overflow-visible p-2"
+          data-testid={`feed-item-${item.id}`}
+        >
+          <div className="flex items-start gap-2">
+            <Newspaper className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium leading-tight" data-testid={`text-feed-title-${item.id}`}>
+                {item.title}
+              </p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <Calendar className="w-3 h-3 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground" data-testid={`text-feed-date-${item.id}`}>
+                  {formatDate(item.createdAt)}
                 </p>
-              )}
-
-              {highScoringTopics.length > 0 && (
-                <div className="flex flex-wrap gap-1 ml-6">
-                  {highScoringTopics.slice(0, 3).map((t: ScoredTopic, idx: number) => (
-                    <Badge
-                      key={idx}
-                      variant="outline"
-                      className={`text-[10px] ${getScoreColor(t.score)}`}
-                      data-testid={`badge-topic-${item.id}-${idx}`}
-                    >
-                      {t.topic}
-                    </Badge>
-                  ))}
-                  {highScoringTopics.length > 3 && (
-                    <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">
-                      +{highScoringTopics.length - 3}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </button>
-
-            {isExpanded && (
-              <div className="px-2 pb-2 space-y-2" data-testid={`feed-detail-${item.id}`}>
-                <div className="ml-6 text-xs text-foreground whitespace-pre-line" data-testid={`text-feed-summary-${item.id}`}>
-                  {item.summary}
-                </div>
-
-                {newsArticles.length > 0 && (
-                  <div className="ml-6 space-y-1">
-                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Related News</p>
-                    {newsArticles.map((article, idx) => (
-                      <a
-                        key={idx}
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-start gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        data-testid={`link-news-${item.id}-${idx}`}
-                      >
-                        <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{article.title}</p>
-                          <p className="text-[10px]">{article.source}</p>
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                <div className="ml-6">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const topicNames = highScoringTopics.map((t: ScoredTopic) => t.topic).join(", ");
-                      const prompt = topicNames
-                        ? `Tell me more about these recent ${item.town} topics: ${topicNames}`
-                        : `Tell me more about recent developments in ${item.town}`;
-                      onAskAboutTopic(prompt);
-                    }}
-                    data-testid={`button-ask-feed-${item.id}`}
-                  >
-                    <Sparkles className="w-3 h-3 mr-1" />
-                    Ask about this
-                  </Button>
-                </div>
               </div>
-            )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-1.5 -ml-2"
+                onClick={() => onLearnMore(item.id, item.title)}
+                data-testid={`button-learn-more-${item.id}`}
+              >
+                <Sparkles className="w-3 h-3 mr-1" />
+                Learn More
+              </Button>
+            </div>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -335,9 +241,11 @@ function TownFeed({
 function TownFeedOrMinutes({
   selectedTown,
   onInsertPrompt,
+  onLearnMore,
 }: {
   selectedTown: string;
   onInsertPrompt: (prompt: string) => void;
+  onLearnMore: (feedItemId: string, title: string) => void;
 }) {
   const { data: feedItems, isLoading: feedLoading } = useQuery<TownFeedItem[]>({
     queryKey: ["/api/feed/town", selectedTown],
@@ -362,7 +270,7 @@ function TownFeedOrMinutes({
         <CollapsibleContent className="px-3 pb-3">
           <TownFeed
             feedItems={feedItems!}
-            onAskAboutTopic={onInsertPrompt}
+            onLearnMore={onLearnMore}
           />
         </CollapsibleContent>
       </Collapsible>
@@ -393,6 +301,7 @@ function ChatSidebar({
   onSessionSelect, 
   onNewChat,
   onInsertPrompt,
+  onLearnMore,
   selectedTown,
   onTownChange,
   towns,
@@ -402,6 +311,7 @@ function ChatSidebar({
   onSessionSelect: (id: string) => void;
   onNewChat: () => void;
   onInsertPrompt: (prompt: string) => void;
+  onLearnMore: (feedItemId: string, title: string) => void;
   selectedTown: string;
   onTownChange: (town: string) => void;
   towns: string[];
@@ -447,6 +357,7 @@ function ChatSidebar({
       <TownFeedOrMinutes
         selectedTown={selectedTown}
         onInsertPrompt={onInsertPrompt}
+        onLearnMore={onLearnMore}
       />
 
       <Separator />
@@ -836,10 +747,11 @@ export default function Chat() {
   });
 
   const createSessionMutation = useMutation({
-    mutationFn: async (params?: { templateId?: string; title?: string }): Promise<ChatSession> => {
+    mutationFn: async (params?: { templateId?: string; feedItemId?: string; title?: string }): Promise<ChatSession> => {
       const res = await apiRequest("POST", "/api/chat/sessions", {
         title: params?.title || "New conversation",
         templateId: params?.templateId,
+        feedItemId: params?.feedItemId,
       });
       return res.json();
     },
@@ -1105,8 +1017,13 @@ export default function Chat() {
     createSessionMutation.mutate({ templateId, title });
   };
 
+  const handleFeedLearnMore = (feedItemId: string, title: string) => {
+    createSessionMutation.mutate({ feedItemId, title });
+  };
+
   const activeSession = sessions?.find((s) => s.id === activeSessionId);
   const activeTemplateId = (activeSession as any)?.templateId as string | null;
+  const activeFeedItemId = (activeSession as any)?.feedItemId as string | null;
 
   const { data: templateData } = useQuery<{
     id: string;
@@ -1123,6 +1040,23 @@ export default function Chat() {
       return res.json();
     },
     enabled: !!activeTemplateId,
+  });
+
+  const { data: feedItemData } = useQuery<{
+    id: string;
+    title: string;
+    town: string;
+    summary: string;
+    generatedPayload: TemplatePayload | null;
+  } | null>({
+    queryKey: ["/api/feed/items", activeFeedItemId],
+    queryFn: async () => {
+      if (!activeFeedItemId) return null;
+      const res = await fetch(`/api/feed/items/${activeFeedItemId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!activeFeedItemId,
   });
 
   const handleTemplateQuestionClick = (question: string) => {
@@ -1166,6 +1100,7 @@ export default function Chat() {
       onSessionSelect={setActiveSessionId}
       onNewChat={handleNewChat}
       onInsertPrompt={handleInsertPrompt}
+      onLearnMore={handleFeedLearnMore}
       selectedTown={selectedTown}
       onTownChange={handleTownChange}
       towns={towns}
@@ -1240,6 +1175,13 @@ export default function Chat() {
                   <TemplateFirstMessage
                     payload={templateData.generatedPayload}
                     title={templateData.title}
+                    onQuestionClick={handleTemplateQuestionClick}
+                  />
+                )}
+                {feedItemData?.generatedPayload && (
+                  <TemplateFirstMessage
+                    payload={feedItemData.generatedPayload}
+                    title={feedItemData.title}
                     onQuestionClick={handleTemplateQuestionClick}
                   />
                 )}

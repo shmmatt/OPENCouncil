@@ -5,6 +5,7 @@ import { runChatV3Pipeline } from "../chatV2/chatOrchestratorV3";
 import { chatConfig } from "../chatV2/chatConfig";
 import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLimiter";
 import { getChatTemplateById } from "../storage/chatTemplates";
+import { getTownFeedItemById } from "../storage/townFeed";
 
 const sanitizeOptions: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -30,7 +31,7 @@ router.get("/sessions", async (req, res) => {
 
 router.post("/sessions", sessionCreationLimiter, async (req, res) => {
   try {
-    const { title, templateId } = req.body;
+    const { title, templateId, feedItemId } = req.body;
     const actor = req.actor;
     
     if (!actor || (!actor.userId && !actor.anonId)) {
@@ -42,6 +43,7 @@ router.post("/sessions", sessionCreationLimiter, async (req, res) => {
       userId: actor.actorType === 'user' ? actor.userId : undefined,
       anonId: actor.anonId,
       templateId: templateId || undefined,
+      feedItemId: feedItemId || undefined,
     });
     res.json(session);
   } catch (error) {
@@ -96,7 +98,21 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     let citations: string[];
     
     let templateContext: string | null = null;
-    if ((session as any).templateId) {
+    if ((session as any).feedItemId) {
+      try {
+        const feedItem = await getTownFeedItemById((session as any).feedItemId);
+        if (feedItem?.status !== "published") {
+          console.warn("Feed item context skipped: not published", (session as any).feedItemId);
+        } else if (feedItem?.generatedPayload) {
+          const payload = typeof feedItem.generatedPayload === "string"
+            ? JSON.parse(feedItem.generatedPayload as string)
+            : feedItem.generatedPayload;
+          templateContext = `This chat was launched from a town feed summary for ${feedItem.town}: "${feedItem.title}".\n\nSummary:\n${payload.summary || feedItem.summary}\n\nTopics covered:\n${(payload.sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+        }
+      } catch (err) {
+        console.error("Feed item context lookup error:", err);
+      }
+    } else if ((session as any).templateId) {
       try {
         const template = await getChatTemplateById((session as any).templateId);
         if (template?.generatedPayload) {

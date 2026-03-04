@@ -250,6 +250,7 @@ export const chatSessions = pgTable("chat_sessions", {
   userId: varchar("user_id").references(() => users.id),
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
   templateId: varchar("template_id").references(() => chatTemplates.id),
+  feedItemId: varchar("feed_item_id"),
   townPreference: text("town_preference"),
   situationContext: jsonb("situation_context").$type<SituationContext>(),
   sessionSources: jsonb("session_sources").$type<SessionSource[]>(),

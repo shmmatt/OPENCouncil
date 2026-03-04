@@ -128,9 +128,14 @@ adminRouter.post("/feed-items/:id/publish", async (req, res) => {
       ],
     };
 
+    const topArticles = (item.newsArticles || [])
+      .sort((a: any, b: any) => (b.relevancyScore ?? 0) - (a.relevancyScore ?? 0))
+      .slice(0, 5);
+
     const updated = await updateTownFeedItem(req.params.id, {
       status: "published",
       generatedPayload: payload,
+      newsArticles: topArticles,
     } as any);
 
     res.json(updated);
@@ -214,6 +219,19 @@ adminRouter.get("/news-sources", async (_req, res) => {
 });
 
 const publicRouter = Router();
+
+publicRouter.get("/items/:id", async (req, res) => {
+  try {
+    const item = await getTownFeedItemById(req.params.id);
+    if (!item || item.status !== "published") {
+      return res.status(404).json({ message: "Feed item not found" });
+    }
+    res.json(item);
+  } catch (error) {
+    console.error("Error fetching feed item:", error);
+    res.status(500).json({ message: "Failed to fetch feed item" });
+  }
+});
 
 publicRouter.get("/town/:town", async (req, res) => {
   try {

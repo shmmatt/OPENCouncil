@@ -458,8 +458,9 @@ ${articleSummaries}`;
 
     scored.sort((a, b) => (b.relevancyScore ?? 0) - (a.relevancyScore ?? 0));
 
-    logInfo(`[contentGeneration] Scored ${scored.length} articles, ${scored.filter(a => (a.relevancyScore ?? 0) >= 7).length} high-relevancy`);
-    return scored;
+    const top5 = scored.slice(0, 5);
+    logInfo(`[contentGeneration] Scored ${scored.length} articles, keeping top 5, ${top5.filter(a => (a.relevancyScore ?? 0) >= 7).length} high-relevancy`);
+    return top5;
   } catch (error) {
     logError(`[contentGeneration] Article relevancy scoring failed`, { error: String(error) });
     return articles.map(a => ({ ...a, relevancyScore: 1 }));

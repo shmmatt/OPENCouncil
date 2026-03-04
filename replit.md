@@ -49,9 +49,9 @@ A content generation pipeline extracts engaging topics from recent meeting minut
 
 **Admin Panel** (`/admin/content`): Admins can generate content for any town, edit summaries, publish to the Town Feed, and investigate/re-investigate topics by crawling local news sources (Conway Daily Sun, Carroll County Independent, Laconia Daily Sun) via RSS feeds with Jina Reader fallback. Crawled articles are scored for relevancy (1-10) against the extracted topics using Gemini. High-relevancy articles (7+) are visually highlighted and can be incorporated into the summary via "Regenerate with News," which produces an updated summary with inline source attribution (e.g., "as reported by the Conway Daily Sun"). A stub "Generate Video" button is present for future short-form video generation (FB, TikTok, YouTube).
 
-**Town Feed**: Published content replaces the "Recent Minutes" section in the chat sidebar, displaying summaries with topic badges, news article links, and "Ask about this" interaction. Falls back to Recent Minutes when no published feed items exist.
+**Town Feed**: Published content appears in the chat sidebar as headline-only cards with a "Learn More" CTA. Clicking "Learn More" creates a new chat session linked to that feed item (`feedItemId` on `chatSessions`), which displays the full summary with suggested questions (reusing `TemplateFirstMessage`). The LLM receives the feed item context via `templateContext` injection, so it can answer follow-up questions coherently. Falls back to Recent Minutes when no published feed items exist. News articles are capped at 5 per feed item (top relevancy scores). Public endpoint `GET /api/feed/items/:id` only returns published items (drafts return 404).
 
-**Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `shared/schema.ts` (townFeedItems table).
+**Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/routes/chat.ts` (feedItemId context injection), `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `client/src/pages/chat.tsx`, `shared/schema.ts` (townFeedItems table, chatSessions.feedItemId).
 
 ## External Dependencies
 
