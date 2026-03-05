@@ -46,6 +46,10 @@ import type {
   ActorIdentifier,
   SituationContext,
   SessionSource,
+  DeepDiveSession,
+  InsertDeepDiveSession,
+  DeepDiveStep,
+  InsertDeepDiveStep,
 } from "@shared/schema";
 
 // Import all functions from modular storage
@@ -57,6 +61,7 @@ import * as fileBlobs from "./storage/fileBlobs";
 import * as ingestion from "./storage/ingestion";
 import * as analytics from "./storage/analytics";
 import * as tempUploads from "./storage/tempUploads";
+import * as deepDive from "./storage/deepDive";
 
 /**
  * Storage interface - kept for backward compatibility
@@ -200,6 +205,16 @@ export interface IStorage {
   createChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics>;
   getChatAnalyticsBySessionId(sessionId: string): Promise<ChatAnalytics | undefined>;
   upsertChatAnalytics(analytics: InsertChatAnalytics): Promise<ChatAnalytics>;
+
+  // Deep dive
+  createDeepDiveSession(data: InsertDeepDiveSession): Promise<DeepDiveSession>;
+  updateDeepDiveSession(id: string, updates: Partial<Pick<DeepDiveSession, 'status' | 'finalAnswer' | 'qualityScore' | 'completenessScore' | 'iterationCount' | 'totalCostUsd' | 'totalDurationMs' | 'completedAt'>>): Promise<void>;
+  getDeepDiveSession(id: string): Promise<DeepDiveSession | undefined>;
+  getDeepDiveSessions(opts?: { limit?: number; offset?: number; status?: string; town?: string }): Promise<{ sessions: DeepDiveSession[]; total: number }>;
+  getDeepDiveSessionByChatMessage(messageId: string): Promise<DeepDiveSession | undefined>;
+  createDeepDiveStep(data: InsertDeepDiveStep): Promise<DeepDiveStep>;
+  getDeepDiveSteps(deepDiveId: string): Promise<DeepDiveStep[]>;
+  getDeepDiveStats(): Promise<{ totalDives: number; avgQualityScore: number | null; avgCompletenessScore: number | null; avgCostUsd: number | null; avgIterations: number | null; avgDurationMs: number | null; completedCount: number; failedCount: number; runningCount: number }>;
 }
 
 /**
@@ -339,6 +354,16 @@ export class DatabaseStorage implements IStorage {
   createChatAnalytics = analytics.createChatAnalytics;
   getChatAnalyticsBySessionId = analytics.getChatAnalyticsBySessionId;
   upsertChatAnalytics = analytics.upsertChatAnalytics;
+
+  // Deep dive
+  createDeepDiveSession = deepDive.createDeepDiveSession;
+  updateDeepDiveSession = deepDive.updateDeepDiveSession;
+  getDeepDiveSession = deepDive.getDeepDiveSession;
+  getDeepDiveSessions = deepDive.getDeepDiveSessions;
+  getDeepDiveSessionByChatMessage = deepDive.getDeepDiveSessionByChatMessage;
+  createDeepDiveStep = deepDive.createDeepDiveStep;
+  getDeepDiveSteps = deepDive.getDeepDiveSteps;
+  getDeepDiveStats = deepDive.getDeepDiveStats;
 }
 
 // Export singleton instance for backward compatibility

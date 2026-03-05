@@ -65,6 +65,21 @@ Citation titles are formatted using `formatCitationTitle()` which converts raw f
 
 **Key Files**: `server/routes/documentViewer.ts`, `server/chatV2/sources.ts` (title formatting, fallback URL generation), `server/chatV2/audit.ts` (stripInvalidCitationMarkers), `server/chatV2/synthesizerV3.ts` (prompt hardening), `client/src/pages/chat.tsx` (icon distinction, dedup rendering).
 
+### Deep Dive Mode
+A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive 1-2 page analyses. The orchestrator analyzes user intent, devises a research plan, executes tools (RAG pipeline, local news crawl, web search via Brave API + Jina Reader, LLM knowledge), synthesizes findings, self-scores for quality/completeness (1-10), and iterates up to 3 times if scores fall below 7/10. Supplemental iterations include failure reasoning to avoid repeating failed searches.
+
+**Models**: gemini-2.5-flash for planning/assessment steps, gemini-2.5-pro for synthesis. Each step records `modelUsed` for cost debugging.
+
+**SSE Endpoint**: `POST /api/chat/v2/sessions/:sessionId/messages/deep-dive` streams `status`, `progress` (iteration tracking), `answer`, `followups`, `error`, and `done` events. A 10-second heartbeat (`:\n\n`) keeps connections alive during long analyses.
+
+**Frontend**: Toggle button (Sparkles icon) in chat input area activates deep dive mode. Enhanced TypingIndicator shows iteration counts. Deep dive responses display a "Deep Dive" badge. `isDeepDive` and `deepDiveId` stored in V2Metadata for message identification.
+
+**Admin Dashboard** (`/admin/deep-dives`): Summary cards (total dives, avg quality/completeness, avg cost, avg iterations), filterable/paginated session list, expandable chain-of-thought steps with model attribution, input/output, reasoning, tokens, cost, and duration.
+
+**Web Search Tool**: Two-stage approach using Brave Search API for URL discovery + Jina Reader for content extraction. Graceful degradation if `BRAVE_SEARCH_API_KEY` is not set.
+
+**Key Files**: `server/chatV2/deepDiveOrchestrator.ts` (orchestrator engine), `server/chatV2/chatV2Route.ts` (SSE endpoint), `server/services/webSearchTool.ts` (Brave+Jina), `server/storage/deepDive.ts` (CRUD), `server/routes/adminDeepDiveRoutes.ts` (admin API), `client/src/pages/admin-deep-dives.tsx` (admin UI), `client/src/pages/chat.tsx` (toggle + progress UI), `shared/schema.ts` (deep_dive_sessions, deep_dive_steps tables).
+
 ## External Dependencies
 
 *   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.

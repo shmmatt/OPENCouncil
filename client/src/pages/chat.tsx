@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
+import { Badge } from "@/components/ui/badge";
 import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Newspaper, Calendar } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -51,11 +52,12 @@ interface V2Metadata {
   sources: SourceCitation[];
   suggestedFollowUps: string[];
   notices?: ChatNotice[];
-  // Coverage data
   coverageScore?: number;
   missingFacets?: string[];
   showCoverageDisclaimer?: boolean;
   wasTruncated?: boolean;
+  isDeepDive?: boolean;
+  deepDiveId?: string;
 }
 
 function RecentMinutesUpdates({ 
@@ -482,15 +484,21 @@ function MessageBubble({
   const notices = v2Data?.notices || [];
   const showCoverageDisclaimer = v2Data?.showCoverageDisclaimer || false;
   const missingFacets = v2Data?.missingFacets || [];
+  const isDeepDiveMessage = v2Data?.isDeepDive === true;
 
   return (
     <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-          <Bot className="w-4 h-4 text-primary" />
+          {isDeepDiveMessage ? <Sparkles className="w-4 h-4 text-primary" /> : <Bot className="w-4 h-4 text-primary" />}
         </div>
       )}
       <div className={`flex flex-col gap-2 max-w-3xl ${isUser ? "items-end" : "items-start"}`}>
+        {isDeepDiveMessage && !isUser && (
+          <Badge variant="secondary" className="text-xs no-default-hover-elevate no-default-active-elevate" data-testid="badge-deep-dive">
+            <Sparkles className="w-3 h-3 mr-1" /> Deep Dive
+          </Badge>
+        )}
         <div
           className={`rounded-lg px-4 py-3 ${
             isUser
@@ -644,6 +652,9 @@ interface TypingIndicatorProps {
   hasFile?: boolean;
   messageContent?: string;
   pipelineStage?: string | null;
+  isDeepDive?: boolean;
+  deepDiveIteration?: number;
+  deepDiveMaxIterations?: number;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -651,17 +662,31 @@ const STAGE_LABELS: Record<string, string> = {
   retrieving: "Searching through documents...",
   synthesizing: "Writing your answer...",
   auditing: "Verifying accuracy...",
+  deep_dive_starting: "Starting deep dive analysis...",
+  deep_dive_intent: "Analyzing your question...",
+  deep_dive_planning: "Creating research plan...",
+  deep_dive_researching: "Researching...",
+  deep_dive_synthesizing: "Writing analysis...",
+  deep_dive_quality: "Evaluating quality...",
+  deep_dive_replanning: "Refining research plan...",
 };
 
-function TypingIndicator({ hasFile, messageContent, pipelineStage }: TypingIndicatorProps) {
-  const displayText = pipelineStage && STAGE_LABELS[pipelineStage]
+function TypingIndicator({ hasFile, messageContent, pipelineStage, isDeepDive, deepDiveIteration, deepDiveMaxIterations }: TypingIndicatorProps) {
+  let displayText = pipelineStage && STAGE_LABELS[pipelineStage]
     ? STAGE_LABELS[pipelineStage]
     : "Thinking...";
+
+  if (isDeepDive && deepDiveIteration && deepDiveMaxIterations) {
+    const iterLabel = ` (Pass ${deepDiveIteration} of ${deepDiveMaxIterations})`;
+    if (pipelineStage && pipelineStage.startsWith("deep_dive_")) {
+      displayText = displayText.replace("...", iterLabel + "...");
+    }
+  }
 
   return (
     <div className="flex gap-4 justify-start">
       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-        <Bot className="w-4 h-4 text-primary" />
+        {isDeepDive ? <Sparkles className="w-4 h-4 text-primary" /> : <Bot className="w-4 h-4 text-primary" />}
       </div>
       <div className="flex flex-col gap-2 max-w-3xl">
         <div className="rounded-lg px-4 py-3 bg-card border border-card-border">
@@ -677,6 +702,11 @@ function TypingIndicator({ hasFile, messageContent, pipelineStage }: TypingIndic
             >
               {displayText}
             </span>
+            {isDeepDive && (
+              <Badge variant="secondary" className="text-xs no-default-hover-elevate no-default-active-elevate">
+                <Sparkles className="w-3 h-3 mr-1" /> Deep Dive
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -693,6 +723,9 @@ export default function Chat() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
   const [pipelineStage, setPipelineStage] = useState<string | null>(null);
+  const [isDeepDiveMode, setIsDeepDiveMode] = useState(false);
+  const [deepDiveIteration, setDeepDiveIteration] = useState(0);
+  const [deepDiveMaxIterations, setDeepDiveMaxIterations] = useState(3);
   const [isStreaming, setIsStreaming] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -841,13 +874,18 @@ export default function Chat() {
     processSharedLink();
   }, [sharedLinkQuestion, isProcessingSharedLink, sendToSession, toast]);
 
-  const sendStreamingMessage = useCallback(async (content: string) => {
+  const sendStreamingMessage = useCallback(async (content: string, useDeepDive: boolean = false) => {
     if (!activeSessionId) return;
     setIsStreaming(true);
     setPipelineStage(null);
+    setDeepDiveIteration(0);
+
+    const endpoint = useDeepDive
+      ? `/api/chat/v2/sessions/${activeSessionId}/messages/deep-dive`
+      : `/api/chat/v2/sessions/${activeSessionId}/messages/stream`;
 
     try {
-      const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/stream`, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
@@ -887,6 +925,9 @@ export default function Chat() {
               const data = JSON.parse(rawData);
               if (eventType === "status") {
                 setPipelineStage(data.stage || null);
+              } else if (eventType === "progress") {
+                setDeepDiveIteration(data.iteration || 0);
+                setDeepDiveMaxIterations(data.maxIterations || 3);
               } else if (eventType === "answer") {
                 setPendingMessage(null);
                 setPipelineStage(null);
@@ -921,6 +962,7 @@ export default function Chat() {
     } finally {
       setIsStreaming(false);
       setPipelineStage(null);
+      setDeepDiveIteration(0);
     }
   }, [activeSessionId, toast]);
 
@@ -955,7 +997,7 @@ export default function Chat() {
           throw error;
         }
       } else {
-        sendStreamingMessage(content);
+        sendStreamingMessage(content, isDeepDiveMode);
         return null;
       }
     },
@@ -1243,6 +1285,9 @@ export default function Chat() {
                     hasFile={!!selectedFile} 
                     messageContent={pendingMessage || inputValue}
                     pipelineStage={pipelineStage}
+                    isDeepDive={isDeepDiveMode}
+                    deepDiveIteration={deepDiveIteration}
+                    deepDiveMaxIterations={deepDiveMaxIterations}
                   />
                 )}
                 <div ref={messagesEndRef} />
@@ -1274,6 +1319,12 @@ export default function Chat() {
                 </Button>
               </div>
             )}
+            {isDeepDiveMode && (
+              <div className="mb-2 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
+                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-sm text-primary">Deep Dive mode — comprehensive multi-pass analysis</span>
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 ref={fileInputRef}
@@ -1294,11 +1345,28 @@ export default function Chat() {
               >
                 <Paperclip className="w-5 h-5" />
               </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={isDeepDiveMode ? "default" : "outline"}
+                    className={`h-[60px] px-4 flex-shrink-0 toggle-elevate ${isDeepDiveMode ? "toggle-elevated" : ""}`}
+                    onClick={() => setIsDeepDiveMode(!isDeepDiveMode)}
+                    disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
+                    data-testid="button-deep-dive-toggle"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isDeepDiveMode ? "Switch to quick answer" : "Deep Dive: comprehensive analysis"}</p>
+                </TooltipContent>
+              </Tooltip>
               <Textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedFile ? "Ask a question about this document..." : "Ask about your municipal documents..."}
+                placeholder={isDeepDiveMode ? "Ask a question for deep analysis..." : selectedFile ? "Ask a question about this document..." : "Ask about your municipal documents..."}
                 className="min-h-[60px] resize-none"
                 disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
                 data-testid="input-message"
@@ -1318,7 +1386,7 @@ export default function Chat() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Press Enter to send, Shift+Enter for new line
+              Press Enter to send, Shift+Enter for new line{isDeepDiveMode ? " | Deep Dive active" : ""}
             </p>
           </form>
         </div>

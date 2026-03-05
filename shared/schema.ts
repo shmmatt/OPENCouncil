@@ -355,6 +355,44 @@ export const chatReviewRuns = pgTable("chat_review_runs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ============================================================
+// DEEP DIVE TABLES
+// ============================================================
+
+export const deepDiveSessions = pgTable("deep_dive_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatSessionId: varchar("chat_session_id").notNull().references(() => chatSessions.id, { onDelete: "cascade" }),
+  messageId: varchar("message_id").notNull(),
+  question: text("question").notNull(),
+  town: text("town"),
+  status: text("status").notNull().default("running"),
+  finalAnswer: text("final_answer"),
+  qualityScore: integer("quality_score"),
+  completenessScore: integer("completeness_score"),
+  iterationCount: integer("iteration_count").notNull().default(0),
+  totalCostUsd: numeric("total_cost_usd", { precision: 10, scale: 6 }),
+  totalDurationMs: integer("total_duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const deepDiveSteps = pgTable("deep_dive_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deepDiveId: varchar("deep_dive_id").notNull().references(() => deepDiveSessions.id, { onDelete: "cascade" }),
+  stepNumber: integer("step_number").notNull(),
+  stepType: text("step_type").notNull(),
+  input: text("input").notNull(),
+  output: text("output").notNull(),
+  reasoning: text("reasoning"),
+  toolUsed: text("tool_used"),
+  modelUsed: text("model_used"),
+  tokensIn: integer("tokens_in"),
+  tokensOut: integer("tokens_out"),
+  costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // S3 to Gemini File Search Sync: Tracks files synced from S3 to Gemini stores
 export const s3GeminiSync = pgTable("s3_gemini_sync", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -538,6 +576,16 @@ export const insertS3GeminiSyncSchema = createInsertSchema(s3GeminiSync).omit({
   createdAt: true,
 });
 
+export const insertDeepDiveSessionSchema = createInsertSchema(deepDiveSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDeepDiveStepSchema = createInsertSchema(deepDiveSteps).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Admin = typeof admins.$inferSelect;
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;
@@ -594,13 +642,22 @@ export type InsertChatReviewRun = z.infer<typeof insertChatReviewRunSchema>;
 export type S3GeminiSync = typeof s3GeminiSync.$inferSelect;
 export type InsertS3GeminiSync = z.infer<typeof insertS3GeminiSyncSchema>;
 
+export type DeepDiveSession = typeof deepDiveSessions.$inferSelect;
+export type InsertDeepDiveSession = z.infer<typeof insertDeepDiveSessionSchema>;
+
+export type DeepDiveStep = typeof deepDiveSteps.$inferSelect;
+export type InsertDeepDiveStep = z.infer<typeof insertDeepDiveStepSchema>;
+
+export type DeepDiveStatus = 'running' | 'completed' | 'failed';
+export type DeepDiveStepType = 'intent_analysis' | 'research_plan' | 'rag_retrieval' | 'news_search' | 'web_search' | 'llm_reasoning' | 'synthesis' | 'quality_check' | 'supplemental_plan';
+
 // S3 Sync status types
 export type S3SyncStatus = 'pending' | 'synced' | 'failed';
 
 // Actor types for identity tracking
 export type ActorType = 'user' | 'anon';
 export type UserRole = 'user' | 'admin' | 'municipal_admin';
-export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'simpleAnswer' | 'critic' | 'evidenceGate' | 'other';
+export type LlmStage = 'router' | 'retrievalPlanner' | 'synthesis' | 'followups' | 'simpleAnswer' | 'critic' | 'evidenceGate' | 'deepDive' | 'other';
 export type LlmProvider = 'google' | 'openai' | 'other';
 
 // Status types for ingestion jobs

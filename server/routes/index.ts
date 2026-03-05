@@ -18,6 +18,7 @@ import researchRouter from "./research";
 import { contentAdminRouter, contentPublicRouter } from "./contentGeneration";
 import documentGapsRouter from "./adminDocumentGapsRoutes";
 import documentViewerRouter from "./documentViewer";
+import deepDiveRouter from "./adminDeepDiveRoutes";
 
 export {
   adminRouter,
@@ -51,6 +52,8 @@ export function registerAllRoutes(app: Express): void {
   app.use("/api/admin/document-gaps", documentGapsRouter);
 
   app.use("/api/documents/view", documentViewerRouter);
+
+  app.use("/api/admin/deep-dives", deepDiveRouter);
 
   app.use("/api/chat", chatRouter);
   app.use("/api", preferencesRouter);

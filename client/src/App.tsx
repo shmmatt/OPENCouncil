@@ -20,6 +20,7 @@ import AdminTemplates from "@/pages/admin-templates";
 import AdminResearch from "@/pages/admin-research";
 import AdminContent from "@/pages/admin-content";
 import AdminDocumentGaps from "@/pages/admin-document-gaps";
+import AdminDeepDives from "@/pages/admin-deep-dives";
 import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 import Landing from "@/pages/landing";
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/admin/research" component={AdminResearch} />
       <Route path="/admin/content" component={AdminContent} />
       <Route path="/admin/document-gaps" component={AdminDocumentGaps} />
+      <Route path="/admin/deep-dives" component={AdminDeepDives} />
       <Route component={NotFound} />
     </Switch>
   );

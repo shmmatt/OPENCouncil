@@ -9,6 +9,7 @@ import { GeminiQuotaExceededError, getQuotaExceededMessage } from "../utils/gemi
 import { resolveTownPreference, buildTrimmedHistoryForAnswer } from "./pipelineUtils";
 import { runUnifiedChatPipeline } from "./unifiedPipeline";
 import { runChatV3Pipeline } from "./chatOrchestratorV3";
+import { runDeepDive } from "./deepDiveOrchestrator";
 import { extractSituationHeuristic } from "./situationExtractor";
 import { detectDrift, shouldRegenerate } from "./driftDetector";
 import { detectSessionSource } from "./sessionSourceDetector";
@@ -847,6 +848,239 @@ export function registerChatV2Routes(app: Express): void {
         sendEvent("error", { message: error instanceof Error ? error.message : "Failed to process message" });
       }
 
+      sendEvent("done", {});
+      res.end();
+    }
+  });
+
+  // Deep Dive SSE endpoint
+  app.post("/api/chat/v2/sessions/:sessionId/messages/deep-dive", chatMessageLimiter, async (req: IdentityRequest, res: Response) => {
+    const startTime = Date.now();
+    const requestId = randomUUID();
+    const { sessionId } = req.params;
+    const logCtx: PipelineLogContext = { requestId, sessionId, actor: req.actor };
+
+    let aborted = false;
+    req.on("close", () => {
+      aborted = true;
+      logInfo("deep_dive_sse_client_disconnected", { ...logCtx });
+    });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    function sendEvent(event: string, data: any) {
+      if (aborted) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+
+    const heartbeatInterval = setInterval(() => {
+      if (aborted) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
+      res.write(":\n\n");
+    }, 10000);
+
+    try {
+      const { content, metadata }: ChatV2Request = req.body;
+
+      if (!content || !content.trim()) {
+        sendEvent("error", { message: "Message content is required" });
+        clearInterval(heartbeatInterval);
+        res.end();
+        return;
+      }
+
+      const session = await storage.getChatSessionById(sessionId);
+      if (!session) {
+        sendEvent("error", { message: "Chat session not found" });
+        clearInterval(heartbeatInterval);
+        res.end();
+        return;
+      }
+
+      if (aborted) { clearInterval(heartbeatInterval); res.end(); return; }
+
+      const trimmedContent = content.trim();
+
+      const allMessages = await storage.getMessagesBySessionId(sessionId);
+      const now = Date.now();
+      const recentDuplicateWindow = 120000;
+      const recentDuplicate = allMessages.find((m) => {
+        if (m.role !== "user") return false;
+        if (m.content !== trimmedContent) return false;
+        const messageAge = now - new Date(m.createdAt).getTime();
+        return messageAge < recentDuplicateWindow;
+      });
+
+      if (recentDuplicate) {
+        sendEvent("error", { message: "This question is already being processed as a deep dive." });
+        clearInterval(heartbeatInterval);
+        res.end();
+        return;
+      }
+
+      const userMessage = await storage.createChatMessage({
+        sessionId,
+        role: "user",
+        content: trimmedContent,
+        citations: null,
+      });
+
+      if (allMessages.filter((m) => m.role === "user").length === 0) {
+        const title = "Deep Dive: " + trimmedContent.slice(0, 50) + (trimmedContent.length > 50 ? "..." : "");
+        await storage.updateChatSession(sessionId, { title });
+      }
+
+      const resolvedTown = await resolveTownPreference({
+        explicitTown: metadata?.town,
+        sessionId,
+        actor: req.actor,
+      });
+
+      sendEvent("status", { stage: "deep_dive_starting" });
+
+      let currentIteration = 0;
+
+      const result = await runDeepDive({
+        question: trimmedContent,
+        townPreference: resolvedTown,
+        sessionId,
+        messageId: userMessage.id,
+        logContext: logCtx,
+        onStageChange: (stage: string, detail?: string) => {
+          sendEvent("status", { stage, detail });
+          const iterMatch = detail?.match(/Pass (\d+)/);
+          if (iterMatch) {
+            const iter = parseInt(iterMatch[1]);
+            if (iter !== currentIteration) {
+              currentIteration = iter;
+              sendEvent("progress", { iteration: iter, maxIterations: 3, stage });
+            }
+          }
+        },
+      });
+
+      if (aborted) { clearInterval(heartbeatInterval); res.end(); return; }
+
+      const answerMeta: FinalAnswerMeta = {
+        complexity: "complex" as const,
+        requiresClarification: false,
+        criticScore: {
+          relevance: result.qualityScore / 10,
+          completeness: result.completenessScore / 10,
+          clarity: 1,
+          riskOfMisleading: 0,
+        },
+      };
+
+      const v2Metadata = {
+        v2: true,
+        answerMeta,
+        sources: result.sources,
+        suggestedFollowUps: [] as string[],
+        notices: [] as ChatNotice[],
+        isDeepDive: true,
+        deepDiveId: result.deepDiveId,
+      };
+
+      const assistantMessage = await storage.createChatMessage({
+        sessionId,
+        role: "assistant",
+        content: result.answerText,
+        citations: JSON.stringify(v2Metadata),
+      });
+
+      sendEvent("answer", {
+        message: {
+          id: assistantMessage.id,
+          sessionId,
+          role: "assistant",
+          content: result.answerText,
+          createdAt: assistantMessage.createdAt.toISOString(),
+        },
+        answerMeta,
+        sources: result.sources,
+        suggestedFollowUps: [],
+        deepDiveId: result.deepDiveId,
+        isDeepDive: true,
+      });
+
+      const duration = Date.now() - startTime;
+      logInfo("deep_dive_sse_complete", {
+        ...logCtx,
+        deepDiveId: result.deepDiveId,
+        iterations: result.iterationCount,
+        qualityScore: result.qualityScore,
+        completenessScore: result.completenessScore,
+        totalCostUsd: result.totalCostUsd,
+        durationMs: duration,
+      });
+
+      generateFollowups({
+        userQuestion: trimmedContent,
+        answerText: result.answerText,
+        townPreference: resolvedTown,
+        detectedDomains: [],
+        logContext: logCtx,
+      }).then(async (suggestedFollowUps) => {
+        if (suggestedFollowUps.length > 0) {
+          sendEvent("followups", suggestedFollowUps);
+          try {
+            const updatedMetadata = { ...v2Metadata, suggestedFollowUps };
+            await storage.updateChatMessage(assistantMessage.id, {
+              citations: JSON.stringify(updatedMetadata),
+            });
+          } catch (err) {
+            logError("deep_dive_followups_store_error", {
+              ...logCtx,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        clearInterval(heartbeatInterval);
+        sendEvent("done", {});
+        res.end();
+      }).catch((err) => {
+        logError("deep_dive_followups_error", {
+          ...logCtx,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        clearInterval(heartbeatInterval);
+        sendEvent("done", {});
+        res.end();
+      });
+
+    } catch (error) {
+      clearInterval(heartbeatInterval);
+      const duration = Date.now() - startTime;
+
+      logError("deep_dive_sse_error", {
+        ...logCtx,
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: duration,
+      });
+
+      try {
+        await storage.createChatMessage({
+          sessionId,
+          role: "assistant",
+          content: "The deep dive analysis encountered an error. Please try again or use a regular question.",
+          citations: null,
+        });
+      } catch (saveError) {
+        logError("deep_dive_error_save_error", {
+          ...logCtx,
+          error: saveError instanceof Error ? saveError.message : String(saveError),
+        });
+      }
+
+      sendEvent("error", { message: error instanceof Error ? error.message : "Deep dive analysis failed" });
       sendEvent("done", {});
       res.end();
     }
