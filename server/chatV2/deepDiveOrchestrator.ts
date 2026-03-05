@@ -302,7 +302,7 @@ Rules:
           for (const topic of plan.newsTopics.slice(0, 2)) {
             const articles = await searchNewsForTopic(topic);
             for (const article of articles.slice(0, 3)) {
-              iterationEvidence.push(`[News: ${article.title} - ${article.source}]\n${article.snippet}`);
+              iterationEvidence.push(`[News: ${article.title} - ${article.source}]\nURL: ${article.url}\n${article.snippet}`);
             }
           }
           await recordStep(deepDiveSession.id, tracker, "news_search",
@@ -353,18 +353,46 @@ Rules:
 
       const evidenceBlock = allEvidence.map((e, i) => `--- Evidence ${i + 1} ---\n${e}`).join("\n\n");
 
+      const currentDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
       const synthesisResult = await callLLM(
         PRO_MODEL,
-        `You are an expert municipal governance analyst for New Hampshire. Write a comprehensive, well-structured analysis based on the provided evidence.
+        `You are an expert municipal governance analyst for New Hampshire, writing a research report for the OPENCouncil platform.
 
-Requirements:
+Today's date is: ${currentDate}
+
+FORMAT RULES (strict):
+- Start with a clear ## title that captures the core topic
+- Follow immediately with a ### Executive Summary (2-3 sentences)
+- Use ### headers for each major section
+- Use **bold** for key terms, proper nouns, dollar amounts, dates, and vote counts
+- Use bulleted lists for actionable insights and multi-point findings
+- Do NOT use memo/letter formatting (no "To:", "From:", "Date:", "Subject:" headers)
+- Do NOT roleplay a persona or sign off with a name/title
 - Write 500-1000 words
-- Use clear headings and structure (markdown)
-- Cite specific sources using [Document: ...] or [News: ...] references
+
+TEMPORAL AWARENESS (critical):
+- You are writing this analysis on ${currentDate}
+- If the most recent evidence you found is from months or years ago, explicitly state this: e.g., "The most recent official action found in town records was at the [Month Year] meeting..."
+- Frame the recency gap honestly — the paper trail may have gone cold, or the issue may be resolved
+- Never present old information as if it is current
+
+CITATION RULES:
+- When evidence includes a URL, format citations as markdown links: e.g., [[1]](https://example.com) or [Source Title](url)
+- For documents without URLs, use bracketed references: e.g., [Town Annual Report, 2023, pg. 12]
+- Number your sources sequentially and be consistent
+
+ACTIONABLE INSIGHTS:
+- End with a ### What You Can Do section using a bulleted list
+- Be specific and concrete — include actual URLs, board names, meeting schedules, or contact pages when available from the evidence
+- Instead of "check the town website," say "Review the [Ossipee Select Board agenda page](url)" if a URL was found
+- If no specific URL is available, give the most specific direction possible (e.g., "Contact the Planning Board clerk at Town Hall")
+
+CONTENT:
 - Be factual and specific — reference dates, dollar amounts, vote counts when available
 - Identify areas of uncertainty or missing information
-- Provide actionable insights for residents
 - If evidence is limited, acknowledge this honestly rather than speculating
+- Balance multiple perspectives when the evidence shows disagreement
 
 Town context: ${townPreference || "New Hampshire (general)"}`,
         `Research question: ${question}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}`,
@@ -393,8 +421,8 @@ Town context: ${townPreference || "New Hampshire (general)"}`,
         FLASH_MODEL,
         `You are a quality assessor for municipal governance research reports. Score the analysis on two dimensions:
 
-1. Quality (1-10): Is the analysis well-written, accurate, properly cited, and insightful?
-2. Completeness (1-10): Does the analysis fully address the user's question and sub-questions?
+1. Quality (1-10): Is the analysis well-written, uses proper markdown formatting (## title, ### sections, **bold**, bulleted lists), has linked citations, avoids memo/roleplay formatting, and is temporally aware (acknowledges when data is old)?
+2. Completeness (1-10): Does the analysis fully address the user's question and sub-questions? Are actionable insights specific (with URLs/contacts when available)?
 
 Also identify:
 - What aspects are missing or incomplete
