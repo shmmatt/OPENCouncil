@@ -1038,6 +1038,25 @@ function truncateBullets(content: string, maxBullets: number): string {
 }
 
 /**
+ * Strip citation markers that reference non-existent source indices.
+ * For example, if only 5 local chunks were provided, [L6] or [L7] are invalid and will be removed.
+ */
+export function stripInvalidCitationMarkers(
+  answerText: string,
+  localChunkCount: number,
+  stateChunkCount: number,
+  sauChunkCount: number
+): string {
+  return answerText.replace(/\[(L|S|A)(\d+)\]/g, (match, prefix: string, numStr: string) => {
+    const num = parseInt(numStr, 10);
+    if (prefix === "L" && num >= 1 && num <= localChunkCount) return match;
+    if (prefix === "S" && num >= 1 && num <= stateChunkCount) return match;
+    if (prefix === "A" && num >= 1 && num <= sauChunkCount) return match;
+    return "";
+  });
+}
+
+/**
  * Get fallback Tier C minimal answer when repair fails completely
  */
 export function getTierCFallback(issueMap: IssueMap): string {

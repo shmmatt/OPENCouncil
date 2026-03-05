@@ -58,6 +58,11 @@ A content generation pipeline extracts engaging topics from recent meeting minut
 
 **Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/routes/chat.ts` (feedItemId context injection), `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `client/src/pages/chat.tsx`, `shared/schema.ts` (townFeedItems table, chatSessions.feedItemId).
 
+### Document Viewer & Citation Linking
+A document viewer route (`GET /api/documents/view/:fileBlobId`) generates pre-signed URLs for documents stored in S3 or Replit Object Storage, returning a 302 redirect. This acts as a universal fallback for citation linking — when a crawled source URL can't be found, the citation mapper falls back to this internal viewer route using the document's `fileBlobId`. The frontend distinguishes internal document links (FileText icon) from external crawled source URLs (ExternalLink icon). Citation marker validation strips hallucinated markers (e.g., `[L7]` when only 5 local docs exist) in a post-processing step, and the LLM prompt includes strict citation integrity directives.
+
+**Key Files**: `server/routes/documentViewer.ts`, `server/chatV2/sources.ts` (fallback URL generation), `server/chatV2/audit.ts` (stripInvalidCitationMarkers), `server/chatV2/synthesizerV3.ts` (prompt hardening), `client/src/pages/chat.tsx` (icon distinction).
+
 ## External Dependencies
 
 *   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.

@@ -14,7 +14,7 @@ import { runPlannerV3 } from "./plannerV3";
 import { type V3RetrievalResult } from "./twoLaneRetrieve";
 import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane } from "./pgvectorRetrieveAdapter";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
-import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, type AnswerScore } from "./audit";
+import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, stripInvalidCitationMarkers, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
 import { computeQuestionSituationMatch } from "./situationExtractor";
@@ -525,6 +525,16 @@ export async function runChatV3Pipeline(
       }
     }
   }
+
+  // =====================================================
+  // STAGE 4.5: STRIP INVALID CITATION MARKERS
+  // =====================================================
+  answerText = stripInvalidCitationMarkers(
+    answerText,
+    effectiveLocalChunks.length,
+    effectiveStateChunks.length,
+    effectiveSauChunks.length
+  );
 
   // =====================================================
   // BUILD RESULT

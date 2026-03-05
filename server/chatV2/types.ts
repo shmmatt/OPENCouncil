@@ -108,6 +108,7 @@ export interface SourceCitation {
   url?: string;
   meetingDate?: string;
   board?: string;
+  isInternal?: boolean;
 }
 
 export interface ChatV2Request {

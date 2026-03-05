@@ -332,6 +332,7 @@ ${crossRefInstructions}${recencyInstructions}
 - [USER] only when referencing user-provided text
 - If only local sources exist, answer using local only
 - If state sources are weak/irrelevant, do not mention state law
+- **STRICT CITATION INTEGRITY**: You are strictly forbidden from creating citation markers that do not correspond to the provided source index. Only use [Lx] where x is between 1 and the number of LOCAL DOCUMENTS provided. Only use [Sx] where x is between 1 and the number of STATE DOCUMENTS provided. Only use [Ax] where x is between 1 and the number of SAU DOCUMENTS provided. If you combine information from multiple sources, cite multiple valid indices (e.g., [L1][L3]). Never fabricate a citation marker for a source that does not exist.
 ${hasStateChunks ? '- Include at least 1 state citation [Sx] if relevant to the legal framework' : ''}
 ${hasSauChunks ? `
 ## SAU / SCHOOL DISTRICT DISTINCTION (MANDATORY when SAU sources present)

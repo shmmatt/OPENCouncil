@@ -132,6 +132,7 @@ export interface IStorage {
   getDocumentVersionByFileSearchName(fileSearchDocumentName: string): Promise<DocumentVersion | undefined>;
   getCrawledUrlByFileBlobId(fileBlobId: string): Promise<string | null>;
   getCrawledUrlByFilenameAndTown(filename: string, town: string): Promise<string | null>;
+  getFileBlobIdByFilenameAndTown(filename: string, town: string): Promise<string | null>;
   getDocumentMetadataByFileBlobId(fileBlobId: string): Promise<{
     canonicalTitle?: string;
     town?: string;
@@ -288,6 +289,7 @@ export class DatabaseStorage implements IStorage {
   getDocumentVersionByFileSearchName = documents.getDocumentVersionByFileSearchName;
   getCrawledUrlByFileBlobId = documents.getCrawledUrlByFileBlobId;
   getCrawledUrlByFilenameAndTown = documents.getCrawledUrlByFilenameAndTown;
+  getFileBlobIdByFilenameAndTown = documents.getFileBlobIdByFilenameAndTown;
   getDocumentMetadataByFileBlobId = documents.getDocumentMetadataByFileBlobId;
 
   // Minutes updates

@@ -22,6 +22,10 @@ function parseBlobPrefix(docName: string): ParsedDocName {
   return { fileBlobId: null, filenameTown: null, title: docName };
 }
 
+function internalViewerUrl(fileBlobId: string): string {
+  return `/api/documents/view/${fileBlobId}`;
+}
+
 export async function mapFileSearchDocumentsToCitations(
   documentNames: string[]
 ): Promise<SourceCitation[]> {
@@ -42,12 +46,18 @@ export async function mapFileSearchDocumentsToCitations(
         seenIds.add(parsedBlobId);
 
         let sourceUrl: string | undefined = undefined;
+        let isInternal = false;
         try {
           const crawledUrl = await storage.getCrawledUrlByFileBlobId(parsedBlobId);
           if (crawledUrl) {
             sourceUrl = crawledUrl;
           }
         } catch {}
+
+        if (!sourceUrl) {
+          sourceUrl = internalViewerUrl(parsedBlobId);
+          isInternal = true;
+        }
 
         let meta: { canonicalTitle?: string; town?: string; board?: string; year?: string; category?: string; meetingDate?: string } | null = null;
         try {
@@ -58,6 +68,7 @@ export async function mapFileSearchDocumentsToCitations(
           id: parsedBlobId,
           title: meta?.canonicalTitle || parsedTitle,
           url: sourceUrl,
+          isInternal,
           town: meta?.town,
           board: meta?.board,
           year: meta?.year,
@@ -73,6 +84,7 @@ export async function mapFileSearchDocumentsToCitations(
         seenIds.add(dedupeKey);
 
         let sourceUrl: string | undefined = undefined;
+        let isInternal = false;
         try {
           const crawledUrl = await storage.getCrawledUrlByFilenameAndTown(filenameTown.filename, filenameTown.town);
           if (crawledUrl) {
@@ -80,10 +92,21 @@ export async function mapFileSearchDocumentsToCitations(
           }
         } catch {}
 
+        if (!sourceUrl) {
+          try {
+            const fileBlobId = await storage.getFileBlobIdByFilenameAndTown(filenameTown.filename, filenameTown.town);
+            if (fileBlobId) {
+              sourceUrl = internalViewerUrl(fileBlobId);
+              isInternal = true;
+            }
+          } catch {}
+        }
+
         citations.push({
           id: dedupeKey,
           title: parsedTitle,
           url: sourceUrl,
+          isInternal,
           town: filenameTown.town,
         });
         continue;
@@ -104,6 +127,7 @@ export async function mapFileSearchDocumentsToCitations(
           : undefined;
           
         let sourceUrl: string | undefined = undefined;
+        let isInternal = false;
         if (docVersion.fileBlobId) {
           try {
             const crawledUrl = await storage.getCrawledUrlByFileBlobId(docVersion.fileBlobId);
@@ -111,6 +135,11 @@ export async function mapFileSearchDocumentsToCitations(
               sourceUrl = crawledUrl;
             }
           } catch {
+          }
+
+          if (!sourceUrl) {
+            sourceUrl = internalViewerUrl(docVersion.fileBlobId);
+            isInternal = true;
           }
         }
 
@@ -121,6 +150,7 @@ export async function mapFileSearchDocumentsToCitations(
           year: docVersion.year || undefined,
           category: logicalDoc?.category || undefined,
           url: sourceUrl,
+          isInternal,
           meetingDate: meetingDateStr,
           board: logicalDoc?.board || undefined,
         });

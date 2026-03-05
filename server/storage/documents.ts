@@ -364,6 +364,19 @@ export async function getCrawledUrlByFilenameAndTown(filename: string, town: str
   return resolveUrlByStemCandidates(filename, town);
 }
 
+export async function getFileBlobIdByFilenameAndTown(filename: string, town: string): Promise<string | null> {
+  const result = await db.execute(sql`
+    SELECT cd.file_blob_id FROM crawler_documents cd
+    JOIN crawler_towns ct ON cd.town_id = ct.id
+    WHERE ct.name ILIKE ${town}
+      AND cd.filename = ${filename}
+      AND cd.file_blob_id IS NOT NULL
+    LIMIT 1
+  `);
+  const row = result.rows?.[0] as { file_blob_id: string } | undefined;
+  return row?.file_blob_id || null;
+}
+
 // ============================================================
 // RECENT MINUTES UPDATES
 // ============================================================

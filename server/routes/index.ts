@@ -17,6 +17,7 @@ import { templateRouter, publicTemplateRouter } from "./templates";
 import researchRouter from "./research";
 import { contentAdminRouter, contentPublicRouter } from "./contentGeneration";
 import documentGapsRouter from "./adminDocumentGapsRoutes";
+import documentViewerRouter from "./documentViewer";
 
 export {
   adminRouter,
@@ -48,6 +49,8 @@ export function registerAllRoutes(app: Express): void {
   app.use("/api/feed", contentPublicRouter);
 
   app.use("/api/admin/document-gaps", documentGapsRouter);
+
+  app.use("/api/documents/view", documentViewerRouter);
 
   app.use("/api/chat", chatRouter);
   app.use("/api", preferencesRouter);

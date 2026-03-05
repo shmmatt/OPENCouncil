@@ -32,6 +32,7 @@ interface SourceCitation {
   url?: string;
   meetingDate?: string;
   board?: string;
+  isInternal?: boolean;
 }
 
 interface V2Metadata {
@@ -544,7 +545,11 @@ function MessageBubble({
               <div className="mt-1 space-y-1 pl-1">
                 {sources.map((source, idx) => (
                   <div key={source.id || idx} className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid={`source-item-${idx}`}>
-                    <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    {source.isInternal ? (
+                      <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    )}
                     {source.url ? (
                       <a
                         href={source.url}
@@ -564,7 +569,7 @@ function MessageBubble({
                         {source.board ? ` - ${source.board}` : ""}
                       </span>
                     )}
-                    {source.url && <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-50" />}
+                    {source.url && !source.isInternal && <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-50" />}
                   </div>
                 ))}
               </div>
