@@ -1028,6 +1028,34 @@ export type TownFeedItem = typeof townFeedItems.$inferSelect;
 export type InsertTownFeedItem = z.infer<typeof insertTownFeedItemSchema>;
 
 // ============================================================
+// DOCUMENT GAPS: Auto-flagged missing documents from chat pipeline
+// ============================================================
+
+export const documentGaps = pgTable("document_gaps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  town: text("town"),
+  description: text("description").notNull(),
+  userQuery: text("user_query").notNull(),
+  sessionId: varchar("session_id").references(() => chatSessions.id),
+  messageId: varchar("message_id"),
+  detectionSource: text("detection_source").notNull(),
+  recordStrengthTier: text("record_strength_tier"),
+  status: text("status").notNull().default("open"),
+  hitCount: integer("hit_count").notNull().default(1),
+  resolvedAt: timestamp("resolved_at"),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertDocumentGapSchema = createInsertSchema(documentGaps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type DocumentGap = typeof documentGaps.$inferSelect;
+export type InsertDocumentGap = z.infer<typeof insertDocumentGapSchema>;
+
+// ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
 // ============================================================
 export * from './crawler-schema';

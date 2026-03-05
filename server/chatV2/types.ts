@@ -428,4 +428,5 @@ export interface V3PipelineResult {
   recordStrength: RecordStrength;
   debug: V3DebugInfo;
   durationMs: number;
+  missingInformationQuery: string | null;
 }

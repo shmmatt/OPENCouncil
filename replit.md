@@ -41,6 +41,11 @@ A sophisticated crawler system collects data using multi-strategy discovery (sit
 ### OC Research Module
 The OC Research tab provides analytical tools, including a Development Friction Report. This report uses an LLM-driven pipeline to analyze meeting documents, extract structured JSON data from agenda items, perform entity resolution, classify applications, and compute statistical insights such as time-to-decision, friction categories, and a representation gap. It generates narrative insights using Gemini and supports re-analysis of existing data. Key output components include summary statistics, a funnel visualization, representation gap analysis, residential vs. commercial timelines, an attrition curve, days added by constraint, and top friction triggers. Reports can be exported as PDF or CSV.
 
+### Document Gaps Tracker
+The document gaps system automatically flags missing documents when the chat pipeline detects retrieval failures. It hooks into the V3 chat pipeline's response — when `docSourceType` is "none", record strength is "C" with a second hop attempt, or the synthesizer reports insufficient context — a `document_gaps` record is created with the user's query, the detected gap description (from the pipeline's `missingInformationQuery`), town, and detection source. Duplicate gaps within 30 days are deduplicated by incrementing a `hitCount`. Admins can view, filter, sort (by hit count/date/town), and manage gap statuses (open/in_progress/resolved/dismissed) with notes from `/admin/document-gaps`. The page is linked from the Usage & Analytics dashboard's Trust & Risk section.
+
+**Key Files**: `shared/schema.ts` (documentGaps table), `server/storage/documentGaps.ts`, `server/routes/adminDocumentGapsRoutes.ts`, `server/routes/chat.ts` (auto-flagging logic), `client/src/pages/admin-document-gaps.tsx`.
+
 ### Chat Review System
 The chat review system uses Gemini 3.1 Pro for deep, architecture-aware analysis of chat sessions. It includes an architecture context injected into the reviewer LLM, performs per-session analysis to identify gap categories, pipeline stage attribution, critical domain errors, and generates prompting/pipeline suggestions. A batch rollup aggregates analyses into an improvement roadmap.
 

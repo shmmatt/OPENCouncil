@@ -764,10 +764,18 @@ export default function AdminUsageDashboard() {
           <Separator />
 
           <section>
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Trust & Risk Signals
-            </h2>
+            <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Trust & Risk Signals
+              </h2>
+              <Link href="/admin/document-gaps">
+                <Button variant="outline" size="sm" data-testid="button-document-gaps">
+                  <FileText className="h-4 w-4 mr-1" />
+                  Document Gaps Tracker
+                </Button>
+              </Link>
+            </div>
             <TrustSection data={trustQuery.data} />
           </section>
 

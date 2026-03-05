@@ -605,6 +605,7 @@ export async function runChatV3Pipeline(
     recordStrength: effectiveRecordStrength,
     debug: debugInfo,
     durationMs,
+    missingInformationQuery: synthesisResult.missingInformationQuery || secondHopQuery || null,
   };
 }
 

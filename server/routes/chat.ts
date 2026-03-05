@@ -6,6 +6,7 @@ import { chatConfig } from "../chatV2/chatConfig";
 import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLimiter";
 import { getChatTemplateById } from "../storage/chatTemplates";
 import { getTownFeedItemById } from "../storage/townFeed";
+import { createDocumentGap, findSimilarOpenGap, incrementGapHitCount } from "../storage/documentGaps";
 
 const sanitizeOptions: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -126,6 +127,11 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
       }
     }
 
+    let v3DocSourceType: string = "unknown";
+    let v3RecordStrengthTier: string = "C";
+    let v3MissingQuery: string | null = null;
+    let v3SecondHopRan = false;
+
     try {
       const townContext = req.body.townContext || session.townPreference || null;
       const v3Result = await runChatV3Pipeline({
@@ -138,6 +144,10 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
       });
       answer = v3Result.answerText;
       citations = v3Result.sourceDocumentNames || [];
+      v3DocSourceType = v3Result.docSourceType;
+      v3RecordStrengthTier = v3Result.recordStrength.tier;
+      v3MissingQuery = v3Result.missingInformationQuery;
+      v3SecondHopRan = v3Result.debug.secondHopRan || false;
     } catch (aiError) {
       console.error("AI response error:", aiError);
       answer = "An error occurred while processing this question. Please try again in a moment.";
@@ -154,6 +164,45 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     if (allMessages.filter(m => m.role === "user").length === 0) {
       const title = content.trim().slice(0, 60) + (content.trim().length > 60 ? "..." : "");
       await storage.updateChatSession(id, { title });
+    }
+
+    const shouldFlagGap =
+      v3DocSourceType === "none" ||
+      (v3RecordStrengthTier === "C" && v3SecondHopRan) ||
+      (v3MissingQuery && v3RecordStrengthTier === "C");
+
+    if (shouldFlagGap) {
+      try {
+        let detectionSource = "retrieval_empty";
+        if (v3DocSourceType !== "none" && v3SecondHopRan) {
+          detectionSource = "insufficient_context_after_second_hop";
+        } else if (v3MissingQuery) {
+          detectionSource = "insufficient_context";
+        }
+
+        const gapDescription = v3MissingQuery || content.trim().slice(0, 200);
+        const townContext = req.body.townContext || session.townPreference || null;
+
+        const existingGap = await findSimilarOpenGap(townContext, gapDescription);
+
+        if (existingGap) {
+          await incrementGapHitCount(existingGap.id);
+        } else {
+          await createDocumentGap({
+            town: townContext,
+            description: gapDescription,
+            userQuery: content.trim().slice(0, 500),
+            sessionId: id,
+            messageId: assistantMessage.id,
+            detectionSource,
+            recordStrengthTier: v3RecordStrengthTier,
+            status: "open",
+            hitCount: 1,
+          });
+        }
+      } catch (gapErr) {
+        console.error("Failed to flag document gap:", gapErr);
+      }
     }
 
     res.json(assistantMessage);

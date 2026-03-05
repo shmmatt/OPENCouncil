@@ -16,6 +16,7 @@ import crawlerIntelRouter from "./crawlerIntel";
 import { templateRouter, publicTemplateRouter } from "./templates";
 import researchRouter from "./research";
 import { contentAdminRouter, contentPublicRouter } from "./contentGeneration";
+import documentGapsRouter from "./adminDocumentGapsRoutes";
 
 export {
   adminRouter,
@@ -45,6 +46,8 @@ export function registerAllRoutes(app: Express): void {
 
   app.use("/api/admin/content", contentAdminRouter);
   app.use("/api/feed", contentPublicRouter);
+
+  app.use("/api/admin/document-gaps", documentGapsRouter);
 
   app.use("/api/chat", chatRouter);
   app.use("/api", preferencesRouter);
