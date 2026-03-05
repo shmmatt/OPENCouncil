@@ -61,7 +61,9 @@ A content generation pipeline extracts engaging topics from recent meeting minut
 ### Document Viewer & Citation Linking
 A document viewer route (`GET /api/documents/view/:fileBlobId`) generates pre-signed URLs for documents stored in S3 or Replit Object Storage, returning a 302 redirect. This acts as a universal fallback for citation linking — when a crawled source URL can't be found, the citation mapper falls back to this internal viewer route using the document's `fileBlobId`. The frontend distinguishes internal document links (FileText icon) from external crawled source URLs (ExternalLink icon). Citation marker validation strips hallucinated markers (e.g., `[L7]` when only 5 local docs exist) in a post-processing step, and the LLM prompt includes strict citation integrity directives.
 
-**Key Files**: `server/routes/documentViewer.ts`, `server/chatV2/sources.ts` (fallback URL generation), `server/chatV2/audit.ts` (stripInvalidCitationMarkers), `server/chatV2/synthesizerV3.ts` (prompt hardening), `client/src/pages/chat.tsx` (icon distinction).
+Citation titles are formatted using `formatCitationTitle()` which converts raw filenames into governance-aware display names using board abbreviation normalization (PB, ZBA, BOS, CC, etc.), category label mapping (meeting_minutes -> Minutes), date formatting (ISO -> "Mon DD, YYYY"), and fallback title cleaning. Duplicate titles are disambiguated by appending a suffix. The frontend avoids redundant metadata by checking if board/date/year already appear in the formatted title before appending them.
+
+**Key Files**: `server/routes/documentViewer.ts`, `server/chatV2/sources.ts` (title formatting, fallback URL generation), `server/chatV2/audit.ts` (stripInvalidCitationMarkers), `server/chatV2/synthesizerV3.ts` (prompt hardening), `client/src/pages/chat.tsx` (icon distinction, dedup rendering).
 
 ## External Dependencies
 

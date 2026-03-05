@@ -550,25 +550,51 @@ function MessageBubble({
                     ) : (
                       <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     )}
-                    {source.url ? (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline underline-offset-2 hover:text-foreground"
-                        data-testid={`link-source-${idx}`}
-                      >
-                        {source.title}
-                        {source.meetingDate ? ` (${source.meetingDate})` : source.year ? ` (${source.year})` : ""}
-                        {source.board ? ` - ${source.board}` : ""}
-                      </a>
-                    ) : (
-                      <span data-testid={`text-source-${idx}`}>
-                        {source.title}
-                        {source.meetingDate ? ` (${source.meetingDate})` : source.year ? ` (${source.year})` : ""}
-                        {source.board ? ` - ${source.board}` : ""}
-                      </span>
-                    )}
+                    {(() => {
+                      const title = source.title || "";
+                      const titleLower = title.toLowerCase();
+                      const yearFromDate = source.meetingDate ? source.meetingDate.split("-")[0] : null;
+                      const dateAlreadyInTitle = source.meetingDate
+                        ? (titleLower.includes(source.meetingDate) || (yearFromDate && title.includes(yearFromDate)))
+                        : false;
+                      const yearAlreadyInTitle = source.year ? title.includes(source.year) : false;
+                      const dateSuffix = source.meetingDate && !dateAlreadyInTitle
+                        ? ` (${source.meetingDate})`
+                        : source.year && !yearAlreadyInTitle
+                          ? ` (${source.year})`
+                          : "";
+                      const boardAbbrevs: Record<string, string[]> = {
+                        "planning board": ["pb"],
+                        "zoning board of adjustment": ["zba"],
+                        "board of selectmen": ["bos"],
+                        "select board": ["bos"],
+                        "conservation commission": ["cc"],
+                        "budget committee": ["budget comm."],
+                      };
+                      const boardInTitle = source.board
+                        ? titleLower.includes(source.board.toLowerCase()) ||
+                          (boardAbbrevs[source.board.toLowerCase()] || []).some(abbr => titleLower.includes(abbr.toLowerCase()))
+                        : true;
+                      const boardSuffix = source.board && !boardInTitle
+                        ? ` - ${source.board}`
+                        : "";
+                      const suffix = `${dateSuffix}${boardSuffix}`;
+                      return source.url ? (
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline underline-offset-2 hover:text-foreground"
+                          data-testid={`link-source-${idx}`}
+                        >
+                          {source.title}{suffix}
+                        </a>
+                      ) : (
+                        <span data-testid={`text-source-${idx}`}>
+                          {source.title}{suffix}
+                        </span>
+                      );
+                    })()}
                     {source.url && !source.isInternal && <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-50" />}
                   </div>
                 ))}
