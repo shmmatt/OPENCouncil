@@ -1,7 +1,7 @@
 # OPENCouncil - NH Municipal Governance Assistant
 
 ## Overview
-OPENCouncil is an AI-powered assistant designed to support New Hampshire elected officials and municipal workers. Its core function is to provide instant, accurate answers to governance questions by leveraging Google's Gemini AI and performing semantic searches over official municipal documents. The project aims to improve local governance efficiency and transparency by making municipal information readily accessible and actionable.
+OPENCouncil is an AI-powered assistant designed to support New Hampshire elected officials and municipal workers. It provides instant, accurate answers to governance questions by leveraging Google's Gemini AI and performing semantic searches over official municipal documents. The project aims to improve local governance efficiency and transparency by making municipal information readily accessible and actionable. Key capabilities include comprehensive document search, AI-powered research, document gap identification, and content generation for community engagement.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -9,94 +9,69 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend
-The frontend uses React, TypeScript, Vite, `shadcn/ui`, and Tailwind CSS for a responsive UI. State management is handled by TanStack Query, and client-side routing by `wouter`.
+The frontend is built with React, TypeScript, Vite, `shadcn/ui`, and Tailwind CSS, utilizing TanStack Query for state management and `wouter` for routing.
 
 ### Backend
-The backend is an Express.js application in TypeScript, offering a secure RESTful API with JWT authentication, bcrypt for password hashing, and Multer for file uploads.
+The backend uses Express.js with TypeScript, providing a secure RESTful API with JWT authentication, bcrypt for password hashing, and Multer for file uploads.
 
-### Data Storage
-PostgreSQL, hosted on Neon and utilizing Drizzle ORM, stores chat sessions, documents, and document chunks with pgvector embeddings.
-
-### Retrieval Backend
-A hybrid retrieval system combines pgvector-based semantic search with PostgreSQL full-text search. It uses Reciprocal Rank Fusion (RRF) and incorporates temporal re-ranking and document-type weighting.
+### Data Storage & Retrieval
+PostgreSQL, hosted on Neon and using Drizzle ORM, stores chat sessions, documents, and document chunks with pgvector embeddings. A hybrid retrieval system combines pgvector-based semantic search with PostgreSQL full-text search, enhanced by Reciprocal Rank Fusion (RRF), temporal re-ranking, and document-type weighting.
 
 ### AI Integration
-Google Gemini powers answer synthesis, embedding generation, metadata extraction, and multi-query planning.
+Google Gemini powers answer synthesis, embedding generation, metadata extraction, multi-query planning, and various analytical tools.
 
 ### Chat Pipeline (V3)
-The V3 chat pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, and SAU). It processes queries through situation relevance gating, planning, hybrid retrieval, and AI-powered synthesis. It includes conditional "second hop" retrieval and optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. The SAU lane activates for school-related questions, querying documents across an SAU's member towns and distinguishing between town and SAU actions in synthesis. Prose word limits: QUICK_PROCESS 200-400, EXPLAINER 300-550, RISK_DISPUTE 400-700, LIST 150-500. Audit hard cap: 750 words.
+This pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, SAU) and situation relevance gating. It optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. It includes conditional "second hop" retrieval and specific prose word limits for different response types.
 
-### Document Ingestion Pipeline (V2)
-This pipeline manages document lifecycle from upload to indexing, including duplicate detection, AI-powered metadata suggestion, and a multi-tier town detection system.
-
-### OCR Pipeline
-A dual-provider OCR system uses Tesseract.js for low-text PDFs and AWS Textract for production-grade asynchronous OCR.
-
-### Persistent Object Storage
-Document files are stored in Replit Object Storage.
+### Document Ingestion & OCR
+The V2 ingestion pipeline manages document lifecycle, including duplicate detection, AI-powered metadata suggestion, and multi-tier town detection. A dual-provider OCR system uses Tesseract.js and AWS Textract. Documents are stored in Replit Object Storage.
 
 ### Crawler / Data Collection
-A sophisticated crawler system collects data using multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture. It supports town-level, state-level, and SAU-level document collection, including integrations with Google Drive and CourtListener API. The SAU crawling infrastructure extends this to school district websites, linking documents to member towns and integrating with the embedding pipeline.
+A sophisticated crawler uses multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for town-level, state-level, and SAU-level document collection, including integrations with Google Drive and CourtListener API.
 
 ### OC Research Module
-The OC Research tab provides analytical tools, including a Development Friction Report. This report uses an LLM-driven pipeline to analyze meeting documents, extract structured JSON data from agenda items, perform entity resolution, classify applications, and compute statistical insights such as time-to-decision, friction categories, and a representation gap. It generates narrative insights using Gemini and supports re-analysis of existing data. Key output components include summary statistics, a funnel visualization, representation gap analysis, residential vs. commercial timelines, an attrition curve, days added by constraint, and top friction triggers. Reports can be exported as PDF or CSV.
+This module provides analytical tools like the Development Friction Report, which uses LLM-driven pipelines to analyze meeting documents, extract structured data, perform entity resolution, and compute statistical insights such as time-to-decision and friction categories.
 
 ### Document Gaps Tracker
-The document gaps system automatically flags missing documents when the chat pipeline detects retrieval failures. It hooks into the V3 chat pipeline's response — when `docSourceType` is "none", record strength is "C" with a second hop attempt, or the synthesizer reports insufficient context — a `document_gaps` record is created with the user's query, the detected gap description (from the pipeline's `missingInformationQuery`), town, and detection source. Duplicate gaps within 30 days are deduplicated by incrementing a `hitCount`. Admins can view, filter, sort (by hit count/date/town), and manage gap statuses (open/in_progress/resolved/dismissed) with notes from `/admin/document-gaps`. The page is linked from the Usage & Analytics dashboard's Trust & Risk section.
-
-**Key Files**: `shared/schema.ts` (documentGaps table), `server/storage/documentGaps.ts`, `server/routes/adminDocumentGapsRoutes.ts`, `server/routes/chat.ts` (auto-flagging logic), `client/src/pages/admin-document-gaps.tsx`.
+The system automatically flags missing documents when retrieval failures occur in the chat pipeline. It creates records with user queries and detected gap descriptions, supporting admin management of gap statuses.
 
 ### Chat Review System
-The chat review system uses Gemini 3.1 Pro for deep, architecture-aware analysis of chat sessions. It includes an architecture context injected into the reviewer LLM, performs per-session analysis to identify gap categories, pipeline stage attribution, critical domain errors, and generates prompting/pipeline suggestions. A batch rollup aggregates analyses into an improvement roadmap.
+Utilizes Gemini 3.1 Pro for deep, architecture-aware analysis of chat sessions to identify gap categories, attribute pipeline stage errors, and generate improvement suggestions.
 
 ### Content Generation & Town Feed
-A content generation pipeline extracts engaging topics from recent meeting minutes, triages them through a "Story-Worthiness Judge" (scoring 1-10 on Financial Impact, Public Friction, Quality of Life), enriches high-scoring topics (8+) with historical context via pgvector semantic search, and generates polished summaries. Low-scoring topics receive a single-sentence routine roll-up.
+A content generation pipeline extracts engaging topics from meeting minutes, enriches them with historical context, and generates polished summaries for a central, infinite-scroll Town Feed at `/feed`.
 
-**Admin Panel** (`/admin/content`): Admins can generate content for any town, edit summaries, publish to the Town Feed, and investigate/re-investigate topics by crawling local news sources (Conway Daily Sun, Carroll County Independent, Laconia Daily Sun) via RSS feeds with Jina Reader fallback. Crawled articles are scored for relevancy (1-10) against the extracted topics using Gemini. High-relevancy articles (7+) are visually highlighted and can be incorporated into the summary via "Regenerate with News," which produces an updated summary with inline source attribution (e.g., "as reported by the Conway Daily Sun"). A stub "Generate Video" button is present for future short-form video generation (FB, TikTok, YouTube).
+**Town Feed Features:**
+- Cursor-based infinite scroll pagination with `(publishedAt, id)` tie-breaker for deterministic ordering
+- User preferred town filtering via `users.preferredTowns` (JSONB). Town preference picker shown to new authenticated users
+- Atomic upvote toggle ("Important") using database transactions with SQL-level `upvoteCount` increment/decrement (race-safe)
+- `userUpvotes` table with unique `(userId, feedItemId)` constraint prevents duplicate votes
+- Optimistic UI updates for upvotes via React Query cache manipulation (no feed refetch/jumping)
+- Suggested question chips on each post open a slide-out chat drawer from the right
+- Chat drawer uses URL state (`?chat=open&feedId=X`) with `pushState`/`popstate` so browser Back closes the drawer without navigating away; feed scroll position preserved since component stays mounted
+- "Hot Topic" badge on items with topic scores >= 8, with Deep Dive trigger
+- Template promo cards interleaved every 5th position
+- Admin content page enhanced with keyword search, status/town filters, sortable columns, table/card view toggle, and payload editor (including topicEmoji)
 
-**Town Feed**: Published content appears in the chat sidebar as headline-only cards with a "Learn More" CTA. Clicking "Learn More" creates a new chat session linked to that feed item (`feedItemId` on `chatSessions`), which displays the full summary with suggested questions (reusing `TemplateFirstMessage`). The LLM receives the feed item context via `templateContext` injection, so it can answer follow-up questions coherently. Falls back to Recent Minutes when no published feed items exist. News articles are capped at 5 per feed item (top relevancy scores). Public endpoint `GET /api/feed/items/:id` only returns published items (drafts return 404).
-
-**Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/routes/chat.ts` (feedItemId context injection), `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `client/src/pages/chat.tsx`, `shared/schema.ts` (townFeedItems table, chatSessions.feedItemId).
+**Key files:** `client/src/components/TownFeed.tsx`, `client/src/pages/feed-layout.tsx`, `server/routes/feed.ts`, `server/storage/userUpvotes.ts`, `server/storage/townFeed.ts`
 
 ### Promotions Hub
-An outbound growth engine that takes published Town Feed items and generates omni-channel social media content, email copy, and trackable deep links. Deep links power a "zero-click to chat" acquisition loop, dropping users from social media directly into an active, pre-populated chat session.
-
-**LLM Generation**: Uses two parallel Gemini calls to prevent output fatigue — Call A generates reading-optimized content (Facebook post, Instagram caption, email subject/body) and Call B generates short-form video scripts (TikTok, YouTube Shorts, Reels) with visual tags. Email subjects use "Information Gap" curiosity hooks; video scripts use trivia question hooks. All content maintains an objective, non-partisan tone.
-
-**Deep Links**: Generated from the source's `suggestedQuestions` array using clean index-based URLs. Feed item links use `/chat?feedId=X&qId=Y`; template links use `/chat?templateSlug=SLUG&qId=Y`. The chat page intercepts both parameter patterns, immediately strips them via `window.history.replaceState` (preventing duplicate sessions on refresh), fetches the source context, creates a session with `feedItemId` or `templateId`, and auto-submits the question. The backend injects the relevant summary into the LLM system prompt via the existing `templateContext` mechanism.
-
-**Admin Panel** (`/admin/promotions`): Left pane has two tabs — "Feed Items" (published) and "Templates" (with generated payloads). Right pane shows a "Generate Promo Assets" button and editable text areas for all content matrix fields. Bottom section displays deep links with one-click copy-to-clipboard. All API calls use JWT auth via `adminFetch` helper.
-
-**Key Files**: `shared/schema.ts` (promotions table with feedItemId + templateId FKs, PromotionContentMatrix, PromotionDeepLink types), `server/storage/promotions.ts`, `server/services/promotions.ts` (parallel Gemini calls for both sources), `server/routes/promotions.ts`, `client/src/pages/admin-promotions.tsx`, `client/src/pages/chat.tsx` (deep-link interceptor for feedId and templateSlug).
+An outbound growth engine generates omni-channel social media content, email copy, and trackable deep links from published Town Feed items, enabling "zero-click to chat" acquisition. LLMs generate content and video scripts, maintaining an objective tone.
 
 ### Document Viewer & Citation Linking
-A document viewer route (`GET /api/documents/view/:fileBlobId`) generates pre-signed URLs for documents stored in S3 or Replit Object Storage, returning a 302 redirect. This acts as a universal fallback for citation linking — when a crawled source URL can't be found, the citation mapper falls back to this internal viewer route using the document's `fileBlobId`. The frontend distinguishes internal document links (FileText icon) from external crawled source URLs (ExternalLink icon). Citation marker validation strips hallucinated markers (e.g., `[L7]` when only 5 local docs exist) in a post-processing step, and the LLM prompt includes strict citation integrity directives.
-
-Citation titles are formatted using `formatCitationTitle()` which converts raw filenames into governance-aware display names using board abbreviation normalization (PB, ZBA, BOS, CC, etc.), category label mapping (meeting_minutes -> Minutes), date formatting (ISO -> "Mon DD, YYYY"), and fallback title cleaning. Duplicate titles are disambiguated by appending a suffix. The frontend avoids redundant metadata by checking if board/date/year already appear in the formatted title before appending them.
-
-**Key Files**: `server/routes/documentViewer.ts`, `server/chatV2/sources.ts` (title formatting, fallback URL generation), `server/chatV2/audit.ts` (stripInvalidCitationMarkers), `server/chatV2/synthesizerV3.ts` (prompt hardening), `client/src/pages/chat.tsx` (icon distinction, dedup rendering).
+A document viewer provides pre-signed URLs for internal documents. Citation linking handles source URLs and internal viewer fallbacks, with citation marker validation and intelligent title formatting.
 
 ### Deep Dive Mode
-A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive 1-2 page analyses. The orchestrator analyzes user intent, devises a research plan, executes tools (RAG pipeline, local news crawl, web search via Brave API + Jina Reader, LLM knowledge), synthesizes findings, self-scores for quality/completeness (1-10), and iterates up to 3 times if scores fall below 7/10. Supplemental iterations include failure reasoning to avoid repeating failed searches.
-
-**Models**: gemini-2.5-flash for planning/assessment steps, gemini-2.5-pro for synthesis. Each step records `modelUsed` for cost debugging.
-
-**SSE Endpoint**: `POST /api/chat/v2/sessions/:sessionId/messages/deep-dive` streams `status`, `progress` (iteration tracking), `answer`, `followups`, `error`, and `done` events. A 10-second heartbeat (`:\n\n`) keeps connections alive during long analyses.
-
-**Frontend**: Toggle button (Sparkles icon) in chat input area activates deep dive mode. Enhanced TypingIndicator shows iteration counts. Deep dive responses display a "Deep Dive" badge. `isDeepDive` and `deepDiveId` stored in V2Metadata for message identification.
-
-**Admin Dashboard** (`/admin/deep-dives`): Summary cards (total dives, avg quality/completeness, avg cost, avg iterations), filterable/paginated session list, expandable chain-of-thought steps with model attribution, input/output, reasoning, tokens, cost, and duration.
-
-**Web Search Tool**: Two-stage approach using Brave Search API for URL discovery + Jina Reader for content extraction. Graceful degradation if `BRAVE_SEARCH_API_KEY` is not set.
-
-**Key Files**: `server/chatV2/deepDiveOrchestrator.ts` (orchestrator engine), `server/chatV2/chatV2Route.ts` (SSE endpoint), `server/services/webSearchTool.ts` (Brave+Jina), `server/storage/deepDive.ts` (CRUD), `server/routes/adminDeepDiveRoutes.ts` (admin API), `client/src/pages/admin-deep-dives.tsx` (admin UI), `client/src/pages/chat.tsx` (toggle + progress UI), `shared/schema.ts` (deep_dive_sessions, deep_dive_steps tables).
+A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive analyses. It uses an orchestrator to plan research, execute tools (RAG, news crawl, web search), synthesize findings, and self-score for quality, iterating as needed.
 
 ## External Dependencies
 
-*   **Google Gemini API**: For AI functionalities like answer synthesis, embedding generation, and metadata extraction.
-*   **Neon PostgreSQL**: Database hosting with pgvector extension.
+*   **Google Gemini API**: For core AI functionalities.
+*   **Neon PostgreSQL**: Database hosting with pgvector.
 *   **Google Fonts CDN**: For web fonts.
-*   **AWS Textract**: For production-grade OCR processing.
-*   **Web Scraping API (ZenRows/Scrapfly)**: For handling protected websites during crawling.
+*   **AWS Textract**: For production-grade OCR.
+*   **Web Scraping API (ZenRows/Scrapfly)**: For protected website crawling.
 *   **Google Drive API v3**: For crawling public Google Drive folders.
-*   **CourtListener REST API**: For fetching NH Supreme Court slip opinions.
+*   **CourtListener REST API**: For NH Supreme Court slip opinions.
+*   **Brave Search API**: For web search in Deep Dive mode.
+*   **Jina Reader**: For content extraction from web search results.

@@ -167,6 +167,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   role: text("role").notNull().default("user"), // 'user' | 'admin' | 'municipal_admin'
   defaultTown: text("default_town"),
+  preferredTowns: jsonb("preferred_towns").$type<string[]>().default([]),
   isPaying: boolean("is_paying").default(false).notNull(),
   isMunicipalStaff: boolean("is_municipal_staff").default(false).notNull(),
   stripeCustomerId: text("stripe_customer_id"),
@@ -1071,6 +1072,9 @@ export const townFeedItems = pgTable("town_feed_items", {
   status: text("status").notNull().default("draft"),
   generatedPayload: jsonb("generated_payload").$type<TownFeedPayload>(),
   templateId: varchar("template_id"),
+  publishedAt: timestamp("published_at"),
+  upvoteCount: integer("upvote_count").notNull().default(0),
+  topicEmoji: varchar("topic_emoji"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1083,6 +1087,27 @@ export const insertTownFeedItemSchema = createInsertSchema(townFeedItems).omit({
 
 export type TownFeedItem = typeof townFeedItems.$inferSelect;
 export type InsertTownFeedItem = z.infer<typeof insertTownFeedItemSchema>;
+
+// ============================================================
+// USER UPVOTES: Track feed item upvotes per user
+// ============================================================
+
+export const userUpvotes = pgTable("user_upvotes", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  feedItemId: varchar("feed_item_id").notNull().references(() => townFeedItems.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  unique("user_upvotes_user_feed_unique").on(table.userId, table.feedItemId),
+]);
+
+export const insertUserUpvoteSchema = createInsertSchema(userUpvotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type UserUpvote = typeof userUpvotes.$inferSelect;
+export type InsertUserUpvote = z.infer<typeof insertUserUpvoteSchema>;
 
 // ============================================================
 // PROMOTIONS HUB: Omni-channel content & deep links from Town Feed

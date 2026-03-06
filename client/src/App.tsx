@@ -24,6 +24,7 @@ import AdminDeepDives from "@/pages/admin-deep-dives";
 import AdminPromotions from "@/pages/admin-promotions";
 import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
+import FeedLayout from "@/pages/feed-layout";
 import Landing from "@/pages/landing";
 
 function Router() {
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/chat" component={Chat} />
       <Route path="/chat/t/:slug" component={TemplateLauncher} />
+      <Route path="/feed" component={FeedLayout} />
       <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/documents" component={AdminDocuments} />

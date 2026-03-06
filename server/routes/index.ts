@@ -16,6 +16,7 @@ import crawlerIntelRouter from "./crawlerIntel";
 import { templateRouter, publicTemplateRouter } from "./templates";
 import researchRouter from "./research";
 import { contentAdminRouter, contentPublicRouter } from "./contentGeneration";
+import feedUserRouter from "./feed";
 import documentGapsRouter from "./adminDocumentGapsRoutes";
 import documentViewerRouter from "./documentViewer";
 import deepDiveRouter from "./adminDeepDiveRoutes";
@@ -49,6 +50,7 @@ export function registerAllRoutes(app: Express): void {
 
   app.use("/api/admin/content", contentAdminRouter);
   app.use("/api/feed", contentPublicRouter);
+  app.use("/api/feed", feedUserRouter);
 
   app.use("/api/admin/document-gaps", documentGapsRouter);
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -28,21 +28,42 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
+  ArrowUpDown,
   FileText,
+  LayoutGrid,
+  LayoutList,
   Loader2,
   Sparkles,
   Send,
   Search,
+  ThumbsUp,
   Video,
   Trash2,
+  Pencil,
   ExternalLink,
   LogOut,
   GitBranch,
@@ -55,7 +76,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
-import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle } from "@shared/schema";
+import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedPayload } from "@shared/schema";
 
 function adminFetch(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem("adminToken");
@@ -554,21 +575,247 @@ function FeedItemDetail({
   );
 }
 
+function EditPayloadDialog({
+  item,
+  open,
+  onOpenChange,
+}: {
+  item: TownFeedItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const payload = item.generatedPayload as TownFeedPayload | null;
+
+  const [headline, setHeadline] = useState(item.title);
+  const [summary, setSummary] = useState(payload?.summary || item.summary);
+  const [topicEmoji, setTopicEmoji] = useState(item.topicEmoji || "");
+  const [sections, setSections] = useState<{ title: string; description: string; suggestedQuestions: string[] }[]>(
+    payload?.sections || []
+  );
+  const [highLevelQuestions, setHighLevelQuestions] = useState<string[]>(
+    payload?.highLevelQuestions || []
+  );
+
+  useEffect(() => {
+    if (open) {
+      setHeadline(item.title);
+      const p = item.generatedPayload as TownFeedPayload | null;
+      setSummary(p?.summary || item.summary);
+      setTopicEmoji(item.topicEmoji || "");
+      setSections(p?.sections || []);
+      setHighLevelQuestions(p?.highLevelQuestions || []);
+    }
+  }, [open, item]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const updatedPayload: TownFeedPayload = {
+        summary,
+        sections,
+        highLevelQuestions,
+      };
+      const res = await adminFetch(`/api/admin/content/feed-items/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: headline,
+          summary,
+          topicEmoji: topicEmoji || null,
+          generatedPayload: updatedPayload,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      toast({ title: "Payload updated" });
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateSectionQuestion = (sIdx: number, qIdx: number, val: string) => {
+    setSections(prev => prev.map((s, i) =>
+      i === sIdx ? { ...s, suggestedQuestions: s.suggestedQuestions.map((q, j) => j === qIdx ? val : q) } : s
+    ));
+  };
+
+  const addSectionQuestion = (sIdx: number) => {
+    setSections(prev => prev.map((s, i) =>
+      i === sIdx ? { ...s, suggestedQuestions: [...s.suggestedQuestions, ""] } : s
+    ));
+  };
+
+  const removeSectionQuestion = (sIdx: number, qIdx: number) => {
+    setSections(prev => prev.map((s, i) =>
+      i === sIdx ? { ...s, suggestedQuestions: s.suggestedQuestions.filter((_, j) => j !== qIdx) } : s
+    ));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Feed Item Payload</DialogTitle>
+          <DialogDescription>Edit headline, summary, suggested questions, and topic icon for this feed item.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-headline">Headline</Label>
+            <Input
+              id="edit-headline"
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              data-testid="input-edit-headline"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-topic-emoji">Topic Icon (emoji or short label)</Label>
+            <Input
+              id="edit-topic-emoji"
+              value={topicEmoji}
+              onChange={(e) => setTopicEmoji(e.target.value)}
+              placeholder="e.g. budget, zoning, roads"
+              data-testid="input-edit-topic-emoji"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-payload-summary">Summary</Label>
+            <Textarea
+              id="edit-payload-summary"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              rows={5}
+              data-testid="input-edit-payload-summary"
+            />
+          </div>
+
+          {sections.length > 0 && (
+            <div className="space-y-4">
+              <Label>Sections & Suggested Questions</Label>
+              {sections.map((section, sIdx) => (
+                <div key={sIdx} className="border rounded-md p-3 space-y-2">
+                  <div className="font-medium text-sm">{section.title}</div>
+                  <div className="space-y-1">
+                    {section.suggestedQuestions.map((q, qIdx) => (
+                      <div key={qIdx} className="flex items-center gap-2">
+                        <Input
+                          value={q}
+                          onChange={(e) => updateSectionQuestion(sIdx, qIdx, e.target.value)}
+                          className="flex-1"
+                          data-testid={`input-section-${sIdx}-question-${qIdx}`}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeSectionQuestion(sIdx, qIdx)}
+                          data-testid={`button-remove-question-${sIdx}-${qIdx}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addSectionQuestion(sIdx)}
+                      data-testid={`button-add-question-${sIdx}`}
+                    >
+                      Add Question
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>High-Level Questions</Label>
+            {highLevelQuestions.map((q, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  value={q}
+                  onChange={(e) => setHighLevelQuestions(prev => prev.map((v, i) => i === idx ? e.target.value : v))}
+                  className="flex-1"
+                  data-testid={`input-high-level-question-${idx}`}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setHighLevelQuestions(prev => prev.filter((_, i) => i !== idx))}
+                  data-testid={`button-remove-hl-question-${idx}`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHighLevelQuestions(prev => [...prev, ""])}
+              data-testid="button-add-hl-question"
+            >
+              Add Question
+            </Button>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-edit-payload">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            data-testid="button-save-payload"
+          >
+            {saveMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Save Payload
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminContent() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedTown, setSelectedTown] = useState("");
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [townFilter, setTownFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [editPayloadItem, setEditPayloadItem] = useState<TownFeedItem | null>(null);
+
   const token = localStorage.getItem("adminToken");
   useEffect(() => {
     if (!token) setLocation("/admin/login");
   }, [token, setLocation]);
 
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (townFilter !== "all") params.set("town", townFilter);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (searchQuery) params.set("search", searchQuery);
+    if (sortBy !== "date") params.set("sortBy", sortBy);
+    if (sortDir !== "desc") params.set("sortDir", sortDir);
+    return params.toString();
+  }, [townFilter, statusFilter, searchQuery, sortBy, sortDir]);
+
   const { data: feedItems, isLoading: itemsLoading } = useQuery<TownFeedItem[]>({
-    queryKey: ["/api/admin/content/feed-items"],
+    queryKey: ["/api/admin/content/feed-items", queryParams],
     queryFn: async () => {
-      const res = await adminFetch("/api/admin/content/feed-items");
+      const url = queryParams
+        ? `/api/admin/content/feed-items?${queryParams}`
+        : "/api/admin/content/feed-items";
+      const res = await adminFetch(url);
       if (res.status === 401) {
         localStorage.removeItem("adminToken");
         setLocation("/admin/login");
@@ -617,6 +864,21 @@ export default function AdminContent() {
     setLocation("/admin/login");
   };
 
+  const toggleSort = (col: string) => {
+    if (sortBy === col) {
+      setSortDir(prev => prev === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+  };
+
+  const availableTowns = useMemo(() => {
+    if (!feedItems) return [];
+    const towns = new Set(feedItems.map(i => i.town));
+    return Array.from(towns).sort();
+  }, [feedItems]);
+
   const viewingItem = viewingItemId ? (feedItems || []).find(i => i.id === viewingItemId) : null;
 
   if (viewingItem) {
@@ -644,6 +906,192 @@ export default function AdminContent() {
       </div>
     );
   }
+
+  const renderCardView = (items: TownFeedItem[]) => (
+    <div className="space-y-3">
+      {items.map(item => {
+        const topics = (item.topics || []) as ScoredTopic[];
+        const highTopics = topics.filter(t => t.score >= 8);
+        return (
+          <Card
+            key={item.id}
+            className="hover-elevate cursor-pointer"
+            onClick={() => setViewingItemId(item.id)}
+            data-testid={`card-feed-item-${item.id}`}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {item.topicEmoji && (
+                      <span className="text-sm" data-testid={`text-emoji-${item.id}`}>{item.topicEmoji}</span>
+                    )}
+                    <h3 className="font-medium text-sm truncate" data-testid={`text-item-title-${item.id}`}>
+                      {item.title}
+                    </h3>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="outline" className="text-xs">{item.town}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                    {item.publishedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        Published: {new Date(item.publishedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                    {highTopics.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {highTopics.length} high-scoring topic{highTopics.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {((item.newsArticles || []) as TownFeedNewsArticle[]).length > 0 && (
+                      <Badge variant="outline" className="text-xs gap-1">
+                        <Newspaper className="w-3 h-3" />
+                        {((item.newsArticles || []) as TownFeedNewsArticle[]).length}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      <ThumbsUp className="w-3 h-3" />
+                      {item.upvoteCount ?? 0}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">{item.summary}</p>
+                  {topics.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {topics.slice(0, 5).map((t, idx) => (
+                        <TopicBadge key={idx} topic={t} />
+                      ))}
+                      {topics.length > 5 && (
+                        <Badge variant="secondary" className="text-xs">+{topics.length - 5} more</Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditPayloadItem(item);
+                    }}
+                    data-testid={`button-edit-payload-${item.id}`}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteMutation.mutate(item.id);
+                    }}
+                    data-testid={`button-delete-${item.id}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+
+  const renderTableView = (items: TownFeedItem[]) => (
+    <div className="border rounded-md">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="cursor-pointer" onClick={() => toggleSort("town")} data-testid="table-head-town">
+              <span className="flex items-center gap-1">Town <ArrowUpDown className="w-3 h-3" /></span>
+            </TableHead>
+            <TableHead>Title</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="cursor-pointer" onClick={() => toggleSort("date")} data-testid="table-head-date">
+              <span className="flex items-center gap-1">Date <ArrowUpDown className="w-3 h-3" /></span>
+            </TableHead>
+            <TableHead className="cursor-pointer" onClick={() => toggleSort("upvoteCount")} data-testid="table-head-upvotes">
+              <span className="flex items-center gap-1">Upvotes <ArrowUpDown className="w-3 h-3" /></span>
+            </TableHead>
+            <TableHead>Topics</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map(item => {
+            const topics = (item.topics || []) as ScoredTopic[];
+            const highTopics = topics.filter(t => t.score >= 8);
+            return (
+              <TableRow
+                key={item.id}
+                className="cursor-pointer"
+                onClick={() => setViewingItemId(item.id)}
+                data-testid={`row-feed-item-${item.id}`}
+              >
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">{item.town}</Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    {item.topicEmoji && <span className="text-sm">{item.topicEmoji}</span>}
+                    <span className="text-sm font-medium truncate max-w-[250px]">{item.title}</span>
+                  </div>
+                </TableCell>
+                <TableCell><StatusBadge status={item.status} /></TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {new Date(item.createdAt).toLocaleDateString()}
+                  {item.publishedAt && (
+                    <div className="text-xs">Pub: {new Date(item.publishedAt).toLocaleDateString()}</div>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <ThumbsUp className="w-3 h-3" />
+                    {item.upvoteCount ?? 0}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs text-muted-foreground">
+                    {highTopics.length > 0 ? `${highTopics.length} high` : `${topics.length} total`}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditPayloadItem(item);
+                      }}
+                      data-testid={`button-table-edit-${item.id}`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMutation.mutate(item.id);
+                      }}
+                      data-testid={`button-table-delete-${item.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -770,12 +1218,86 @@ export default function AdminContent() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Feed Items</CardTitle>
-            <CardDescription>
-              {(feedItems || []).length} item{(feedItems || []).length !== 1 ? "s" : ""} generated
-            </CardDescription>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <CardTitle>Feed Items</CardTitle>
+                <CardDescription>
+                  {(feedItems || []).length} item{(feedItems || []).length !== 1 ? "s" : ""} generated
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={viewMode === "card" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("card")}
+                  data-testid="button-view-card"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("table")}
+                  data-testid="button-view-table"
+                >
+                  <LayoutList className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-items"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={townFilter} onValueChange={setTownFilter}>
+                <SelectTrigger className="w-[160px]" data-testid="select-town-filter">
+                  <SelectValue placeholder="Town" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Towns</SelectItem>
+                  {availableTowns.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setSortDir("desc"); }}>
+                <SelectTrigger className="w-[150px]" data-testid="select-sort-by">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="upvoteCount">Upvotes</SelectItem>
+                  <SelectItem value="town">Town</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setSortDir(prev => prev === "desc" ? "asc" : "desc")}
+                data-testid="button-toggle-sort-dir"
+              >
+                <ArrowUpDown className="w-4 h-4" />
+              </Button>
+            </div>
+
             {itemsLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
@@ -790,77 +1312,22 @@ export default function AdminContent() {
                   Select a town above and click "Generate Content" to get started.
                 </p>
               </div>
+            ) : viewMode === "card" ? (
+              renderCardView(feedItems)
             ) : (
-              <div className="space-y-3">
-                {feedItems.map(item => {
-                  const topics = (item.topics || []) as ScoredTopic[];
-                  const highTopics = topics.filter(t => t.score >= 8);
-                  return (
-                    <Card
-                      key={item.id}
-                      className="hover-elevate cursor-pointer"
-                      onClick={() => setViewingItemId(item.id)}
-                      data-testid={`card-feed-item-${item.id}`}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0 space-y-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-medium text-sm truncate" data-testid={`text-item-title-${item.id}`}>
-                                {item.title}
-                              </h3>
-                              <StatusBadge status={item.status} />
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="text-xs">{item.town}</Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(item.createdAt).toLocaleDateString()}
-                              </span>
-                              {highTopics.length > 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  {highTopics.length} high-scoring topic{highTopics.length !== 1 ? "s" : ""}
-                                </span>
-                              )}
-                              {((item.newsArticles || []) as TownFeedNewsArticle[]).length > 0 && (
-                                <Badge variant="outline" className="text-xs gap-1">
-                                  <Newspaper className="w-3 h-3" />
-                                  {((item.newsArticles || []) as TownFeedNewsArticle[]).length}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground line-clamp-2">{item.summary}</p>
-                            {topics.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {topics.slice(0, 5).map((t, idx) => (
-                                  <TopicBadge key={idx} topic={t} />
-                                ))}
-                                {topics.length > 5 && (
-                                  <Badge variant="secondary" className="text-xs">+{topics.length - 5} more</Badge>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteMutation.mutate(item.id);
-                            }}
-                            data-testid={`button-delete-${item.id}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+              renderTableView(feedItems)
             )}
           </CardContent>
         </Card>
       </main>
+
+      {editPayloadItem && (
+        <EditPayloadDialog
+          item={editPayloadItem}
+          open={!!editPayloadItem}
+          onOpenChange={(open) => { if (!open) setEditPayloadItem(null); }}
+        />
+      )}
     </div>
   );
 }

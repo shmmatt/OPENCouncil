@@ -44,10 +44,10 @@ adminRouter.get("/feed-items", async (req, res) => {
   try {
     const town = req.query.town as string | undefined;
     const status = req.query.status as string | undefined;
-    let items = await getTownFeedItems(town);
-    if (status) {
-      items = items.filter(i => i.status === status);
-    }
+    const search = req.query.search as string | undefined;
+    const sortBy = req.query.sortBy as string | undefined;
+    const sortDir = req.query.sortDir as string | undefined;
+    const items = await getTownFeedItems(town, { status, search, sortBy, sortDir });
     res.json(items);
   } catch (error) {
     console.error("Error fetching feed items:", error);
@@ -75,6 +75,8 @@ adminRouter.patch("/feed-items/:id", async (req, res) => {
       summary: z.string().min(1).optional(),
       topics: z.any().optional(),
       routineTopics: z.any().optional(),
+      topicEmoji: z.string().optional().nullable(),
+      generatedPayload: z.any().optional(),
     });
     const data = updateSchema.parse(req.body);
     const updated = await updateTownFeedItem(req.params.id, data);
@@ -138,6 +140,7 @@ adminRouter.post("/feed-items/:id/publish", async (req, res) => {
 
     const updated = await updateTownFeedItem(req.params.id, {
       status: "published",
+      publishedAt: new Date(),
       generatedPayload: payload,
       newsArticles: topArticles,
     } as any);
@@ -153,6 +156,7 @@ adminRouter.post("/feed-items/:id/unpublish", async (req, res) => {
   try {
     const updated = await updateTownFeedItem(req.params.id, {
       status: "draft",
+      publishedAt: null,
     } as any);
     if (!updated) {
       return res.status(404).json({ message: "Feed item not found" });
