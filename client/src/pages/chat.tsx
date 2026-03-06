@@ -767,6 +767,76 @@ export default function Chat() {
     }
   }, []);
 
+  // Detect ?feedId=&qId= URL parameters for deep-link promotions (zero-click to chat)
+  const deepLinkProcessedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkProcessedRef.current) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const feedId = urlParams.get("feedId");
+    const qIdStr = urlParams.get("qId");
+
+    if (!feedId || qIdStr === null) return;
+
+    deepLinkProcessedRef.current = true;
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    const qId = parseInt(qIdStr, 10);
+
+    const processDeepLink = async () => {
+      try {
+        const feedRes = await fetch(`/api/feed/items/${feedId}`, { credentials: "include" });
+        if (!feedRes.ok) throw new Error("Feed item not found");
+        const feedItem = await feedRes.json();
+
+        const payload = feedItem.generatedPayload;
+        if (!payload) throw new Error("No payload in feed item");
+
+        const allQuestions: string[] = [];
+        if (payload.sections) {
+          for (const section of payload.sections) {
+            if (section.suggestedQuestions) {
+              allQuestions.push(...section.suggestedQuestions);
+            }
+          }
+        }
+        if (payload.highLevelQuestions) {
+          allQuestions.push(...payload.highLevelQuestions);
+        }
+
+        const question = allQuestions[qId];
+        if (!question) throw new Error(`Question index ${qId} out of range`);
+
+        setSharedLinkQuestion(question);
+        setIsProcessingSharedLink(true);
+        sharedLinkProcessedRef.current = true;
+
+        const sessionRes = await apiRequest("POST", "/api/chat/sessions", {
+          title: question.slice(0, 50) + (question.length > 50 ? "..." : ""),
+          feedItemId: feedId,
+        });
+        const newSession = await sessionRes.json();
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+        setActiveSessionId(newSession.id);
+
+        await sendToSession(newSession.id, question);
+        setSharedLinkQuestion(null);
+        setIsProcessingSharedLink(false);
+      } catch (error) {
+        console.error("Failed to process deep link:", error);
+        setIsProcessingSharedLink(false);
+        setSharedLinkQuestion(null);
+        toast({
+          title: "Could not process deep link",
+          description: "The linked question could not be loaded. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    processDeepLink();
+  }, [sendToSession, toast]);
+
   const { data: townsData } = useQuery<{ towns: string[] }>({
     queryKey: ["/api/meta/towns"],
   });

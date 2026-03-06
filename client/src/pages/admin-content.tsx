@@ -52,6 +52,7 @@ import {
   Globe,
   FlaskConical,
   Newspaper,
+  Megaphone,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle } from "@shared/schema";
@@ -704,6 +705,12 @@ export default function AdminContent() {
               <Link href="/admin/research">
                 <FlaskConical className="w-4 h-4 mr-2" />
                 OC Research
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-promotions">
+              <Link href="/admin/promotions">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Promotions
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">

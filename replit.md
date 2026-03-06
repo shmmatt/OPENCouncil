@@ -58,6 +58,17 @@ A content generation pipeline extracts engaging topics from recent meeting minut
 
 **Key Files**: `server/services/contentGeneration.ts`, `server/services/newsCrawler.ts`, `server/routes/contentGeneration.ts`, `server/routes/chat.ts` (feedItemId context injection), `server/storage/townFeed.ts`, `client/src/pages/admin-content.tsx`, `client/src/pages/chat.tsx`, `shared/schema.ts` (townFeedItems table, chatSessions.feedItemId).
 
+### Promotions Hub
+An outbound growth engine that takes published Town Feed items and generates omni-channel social media content, email copy, and trackable deep links. Deep links power a "zero-click to chat" acquisition loop, dropping users from social media directly into an active, pre-populated chat session.
+
+**LLM Generation**: Uses two parallel Gemini calls to prevent output fatigue — Call A generates reading-optimized content (Facebook post, Instagram caption, email subject/body) and Call B generates short-form video scripts (TikTok, YouTube Shorts, Reels) with visual tags. Email subjects use "Information Gap" curiosity hooks; video scripts use trivia question hooks. All content maintains an objective, non-partisan tone.
+
+**Deep Links**: Generated from the feed item's `suggestedQuestions` array using clean index-based URLs (`/chat?feedId=X&qId=Y`). The chat page intercepts these parameters, immediately strips them via `window.history.replaceState` (preventing duplicate sessions on refresh), fetches the feed item context, creates a session with `feedItemId`, and auto-submits the question. The backend injects the feed item's summary into the LLM system prompt via the existing `templateContext` mechanism.
+
+**Admin Panel** (`/admin/promotions`): Left pane lists published feed items; right pane shows a "Generate Promo Assets" button and editable text areas for all content matrix fields. Bottom section displays deep links with one-click copy-to-clipboard.
+
+**Key Files**: `shared/schema.ts` (promotions table, PromotionContentMatrix, PromotionDeepLink types), `server/storage/promotions.ts`, `server/services/promotions.ts` (parallel Gemini calls), `server/routes/promotions.ts`, `client/src/pages/admin-promotions.tsx`, `client/src/pages/chat.tsx` (deep-link interceptor).
+
 ### Document Viewer & Citation Linking
 A document viewer route (`GET /api/documents/view/:fileBlobId`) generates pre-signed URLs for documents stored in S3 or Replit Object Storage, returning a 302 redirect. This acts as a universal fallback for citation linking — when a crawled source URL can't be found, the citation mapper falls back to this internal viewer route using the document's `fileBlobId`. The frontend distinguishes internal document links (FileText icon) from external crawled source URLs (ExternalLink icon). Citation marker validation strips hallucinated markers (e.g., `[L7]` when only 5 local docs exist) in a post-processing step, and the LLM prompt includes strict citation integrity directives.
 

@@ -1085,6 +1085,45 @@ export type TownFeedItem = typeof townFeedItems.$inferSelect;
 export type InsertTownFeedItem = z.infer<typeof insertTownFeedItemSchema>;
 
 // ============================================================
+// PROMOTIONS HUB: Omni-channel content & deep links from Town Feed
+// ============================================================
+
+export interface PromotionContentMatrix {
+  facebookPost: string;
+  instagramCaption: string;
+  emailSubject: string;
+  emailBody: string;
+  tiktokScript: string;
+  youtubeShortScript: string;
+  reelsScript: string;
+}
+
+export interface PromotionDeepLink {
+  question: string;
+  url: string;
+}
+
+export const promotions = pgTable("promotions", {
+  id: serial("id").primaryKey(),
+  feedItemId: varchar("feed_item_id").notNull().references(() => townFeedItems.id),
+  status: text("status").notNull().default("draft"),
+  contentMatrix: jsonb("content_matrix").$type<PromotionContentMatrix>(),
+  deepLinks: jsonb("deep_links").$type<PromotionDeepLink[]>().notNull().default([]),
+  mediaAssets: jsonb("media_assets").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPromotionSchema = createInsertSchema(promotions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Promotion = typeof promotions.$inferSelect;
+export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
+
+// ============================================================
 // DOCUMENT GAPS: Auto-flagged missing documents from chat pipeline
 // ============================================================
 
