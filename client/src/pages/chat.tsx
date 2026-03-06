@@ -767,16 +767,17 @@ export default function Chat() {
     }
   }, []);
 
-  // Detect ?feedId=&qId= URL parameters for deep-link promotions (zero-click to chat)
+  // Detect ?feedId=&qId= or ?templateSlug=&qId= URL parameters for deep-link promotions (zero-click to chat)
   const deepLinkProcessedRef = useRef(false);
   useEffect(() => {
     if (deepLinkProcessedRef.current) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const feedId = urlParams.get("feedId");
+    const templateSlug = urlParams.get("templateSlug");
     const qIdStr = urlParams.get("qId");
 
-    if (!feedId || qIdStr === null) return;
+    if ((!feedId && !templateSlug) || qIdStr === null) return;
 
     deepLinkProcessedRef.current = true;
     window.history.replaceState({}, document.title, window.location.pathname);
@@ -785,12 +786,24 @@ export default function Chat() {
 
     const processDeepLink = async () => {
       try {
-        const feedRes = await fetch(`/api/feed/items/${feedId}`, { credentials: "include" });
-        if (!feedRes.ok) throw new Error("Feed item not found");
-        const feedItem = await feedRes.json();
+        let payload: any = null;
+        let sessionPayload: Record<string, string> = {};
 
-        const payload = feedItem.generatedPayload;
-        if (!payload) throw new Error("No payload in feed item");
+        if (feedId) {
+          const feedRes = await fetch(`/api/feed/items/${feedId}`, { credentials: "include" });
+          if (!feedRes.ok) throw new Error("Feed item not found");
+          const feedItem = await feedRes.json();
+          payload = feedItem.generatedPayload;
+          sessionPayload = { feedItemId: feedId };
+        } else if (templateSlug) {
+          const templateRes = await fetch(`/api/templates/by-slug/${templateSlug}`, { credentials: "include" });
+          if (!templateRes.ok) throw new Error("Template not found");
+          const template = await templateRes.json();
+          payload = template.generatedPayload;
+          sessionPayload = { templateId: template.id };
+        }
+
+        if (!payload) throw new Error("No payload found");
 
         const allQuestions: string[] = [];
         if (payload.sections) {
@@ -813,7 +826,7 @@ export default function Chat() {
 
         const sessionRes = await apiRequest("POST", "/api/chat/sessions", {
           title: question.slice(0, 50) + (question.length > 50 ? "..." : ""),
-          feedItemId: feedId,
+          ...sessionPayload,
         });
         const newSession = await sessionRes.json();
         queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });

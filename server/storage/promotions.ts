@@ -22,6 +22,14 @@ export async function getPromotionByFeedItemId(feedItemId: string): Promise<Prom
   return result;
 }
 
+export async function getPromotionByTemplateId(templateId: string): Promise<Promotion | undefined> {
+  const [result] = await db
+    .select()
+    .from(schema.promotions)
+    .where(eq(schema.promotions.templateId, templateId));
+  return result;
+}
+
 export async function getAllPromotions(): Promise<Promotion[]> {
   return await db
     .select()

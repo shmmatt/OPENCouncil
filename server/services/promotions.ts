@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { getTownFeedItemById } from "../storage/townFeed";
-import { createPromotion, getPromotionByFeedItemId, updatePromotion } from "../storage/promotions";
-import type { PromotionContentMatrix, PromotionDeepLink, TownFeedPayload } from "@shared/schema";
+import { createPromotion, getPromotionByFeedItemId, getPromotionByTemplateId, updatePromotion } from "../storage/promotions";
+import { db, schema, eq } from "../storage/db";
+import type { PromotionContentMatrix, PromotionDeepLink, TownFeedPayload, TemplatePayload } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const MODEL = "gemini-2.5-flash";
@@ -58,7 +59,12 @@ Generate the following as a JSON object with exactly these keys:
 Return ONLY the JSON object, no markdown fences or other text.`;
 }
 
-function flattenSuggestedQuestions(payload: TownFeedPayload): string[] {
+interface PayloadWithQuestions {
+  sections?: { suggestedQuestions?: string[] }[];
+  highLevelQuestions?: string[];
+}
+
+function flattenSuggestedQuestions(payload: PayloadWithQuestions): string[] {
   const questions: string[] = [];
   if (payload.sections) {
     for (const section of payload.sections) {
@@ -71,13 +77,6 @@ function flattenSuggestedQuestions(payload: TownFeedPayload): string[] {
     questions.push(...payload.highLevelQuestions);
   }
   return questions;
-}
-
-function generateDeepLinks(feedItemId: string, questions: string[]): PromotionDeepLink[] {
-  return questions.map((question, index) => ({
-    question,
-    url: `/chat?feedId=${feedItemId}&qId=${index}`,
-  }));
 }
 
 async function callGemini(prompt: string): Promise<Record<string, string>> {
@@ -98,21 +97,15 @@ async function callGemini(prompt: string): Promise<Record<string, string>> {
   }
 }
 
-export async function generatePromotionAssets(feedItemId: string) {
-  const feedItem = await getTownFeedItemById(feedItemId);
-  if (!feedItem) {
-    throw new Error(`Town feed item not found: ${feedItemId}`);
-  }
-  if (feedItem.status !== "published") {
-    throw new Error(`Town feed item is not published: ${feedItemId}`);
-  }
-
-  const topicDetails = (feedItem.topics || [])
-    .map((t: any) => `- ${t.topic}: ${(t.keyPoints || []).join("; ")}`)
-    .join("\n");
-
-  const textPrompt = buildTextMatrixPrompt(feedItem.title, feedItem.summary, topicDetails);
-  const videoPrompt = buildVideoMatrixPrompt(feedItem.title, feedItem.summary, topicDetails);
+async function generateContentAndLinks(
+  title: string,
+  summary: string,
+  topicDetails: string,
+  payload: PayloadWithQuestions | null,
+  deepLinkBuilder: (questions: string[]) => PromotionDeepLink[],
+): Promise<{ contentMatrix: PromotionContentMatrix; deepLinks: PromotionDeepLink[] }> {
+  const textPrompt = buildTextMatrixPrompt(title, summary, topicDetails);
+  const videoPrompt = buildVideoMatrixPrompt(title, summary, topicDetails);
 
   const [textResult, videoResult] = await Promise.all([
     callGemini(textPrompt),
@@ -129,9 +122,36 @@ export async function generatePromotionAssets(feedItemId: string) {
     reelsScript: videoResult.reelsScript || "",
   };
 
-  const payload = feedItem.generatedPayload as TownFeedPayload | null;
   const questions = payload ? flattenSuggestedQuestions(payload) : [];
-  const deepLinks = generateDeepLinks(feedItemId, questions);
+  const deepLinks = deepLinkBuilder(questions);
+
+  return { contentMatrix, deepLinks };
+}
+
+export async function generatePromotionAssets(feedItemId: string) {
+  const feedItem = await getTownFeedItemById(feedItemId);
+  if (!feedItem) {
+    throw new Error(`Town feed item not found: ${feedItemId}`);
+  }
+  if (feedItem.status !== "published") {
+    throw new Error(`Town feed item is not published: ${feedItemId}`);
+  }
+
+  const topicDetails = (feedItem.topics || [])
+    .map((t: any) => `- ${t.topic}: ${(t.keyPoints || []).join("; ")}`)
+    .join("\n");
+
+  const payload = feedItem.generatedPayload as TownFeedPayload | null;
+  const { contentMatrix, deepLinks } = await generateContentAndLinks(
+    feedItem.title,
+    feedItem.summary,
+    topicDetails,
+    payload,
+    (questions) => questions.map((question, index) => ({
+      question,
+      url: `/chat?feedId=${feedItemId}&qId=${index}`,
+    })),
+  );
 
   const existing = await getPromotionByFeedItemId(feedItemId);
   let promotion;
@@ -145,6 +165,59 @@ export async function generatePromotionAssets(feedItemId: string) {
   } else {
     promotion = await createPromotion({
       feedItemId,
+      status: "draft",
+      contentMatrix,
+      deepLinks,
+      mediaAssets: {},
+    });
+  }
+
+  return promotion;
+}
+
+export async function generatePromotionAssetsFromTemplate(templateId: string) {
+  const [template] = await db
+    .select()
+    .from(schema.chatTemplates)
+    .where(eq(schema.chatTemplates.id, templateId));
+
+  if (!template) {
+    throw new Error(`Template not found: ${templateId}`);
+  }
+
+  const payload = template.generatedPayload as TemplatePayload | null;
+  const summary = payload?.summary || template.bannerText || "";
+  const topicDetails = payload?.sections
+    ?.map(s => `- ${s.title}: ${s.description}`)
+    .join("\n") || "";
+
+  if (!template.slug) {
+    throw new Error(`Template "${template.title}" has no slug configured. Please set a slug before generating promotions.`);
+  }
+
+  const { contentMatrix, deepLinks } = await generateContentAndLinks(
+    template.title,
+    summary,
+    topicDetails,
+    payload,
+    (questions) => questions.map((question, index) => ({
+      question,
+      url: `/chat?templateSlug=${template.slug}&qId=${index}`,
+    })),
+  );
+
+  const existing = await getPromotionByTemplateId(templateId);
+  let promotion;
+
+  if (existing) {
+    promotion = await updatePromotion(existing.id, {
+      contentMatrix,
+      deepLinks,
+      status: "draft",
+    });
+  } else {
+    promotion = await createPromotion({
+      templateId,
       status: "draft",
       contentMatrix,
       deepLinks,

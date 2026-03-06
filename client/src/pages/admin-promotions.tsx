@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,43 @@ import {
   Save,
   Sparkles,
   Link as LinkIcon,
+  Newspaper,
+  BookOpen,
 } from "lucide-react";
 import type { TownFeedItem, Promotion, PromotionContentMatrix } from "@shared/schema";
+
+type ChatTemplate = {
+  id: string;
+  title: string;
+  slug: string | null;
+  town: string;
+  bannerText: string;
+  generatedPayload: any;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type SourceTab = "feedItems" | "templates";
+
+type SelectedSource = {
+  type: "feedItem" | "template";
+  id: string;
+  title: string;
+  town: string;
+  updatedAt: string;
+};
+
+function adminFetch(url: string, options: RequestInit = {}) {
+  const token = localStorage.getItem("adminToken");
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
 
 const CONTENT_FIELDS: { key: keyof PromotionContentMatrix; label: string; category: string }[] = [
   { key: "facebookPost", label: "Facebook Post", category: "Social Media" },
@@ -35,39 +70,86 @@ const CONTENT_FIELDS: { key: keyof PromotionContentMatrix; label: string; catego
 
 export default function AdminPromotions() {
   const { toast } = useToast();
-  const [selectedFeedItemId, setSelectedFeedItemId] = useState<string | null>(null);
+  const [sourceTab, setSourceTab] = useState<SourceTab>("feedItems");
+  const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(null);
   const [editedMatrix, setEditedMatrix] = useState<PromotionContentMatrix | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      window.location.href = "/admin/login";
+    }
+  }, []);
+
   const { data: feedItems, isLoading: feedLoading } = useQuery<TownFeedItem[]>({
-    queryKey: ["/api/admin/content/feed-items?status=published"],
+    queryKey: ["admin-promotions-feed-items"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/feed-items?status=published");
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("adminToken");
+          window.location.href = "/admin/login";
+          return [];
+        }
+        throw new Error("Failed to fetch feed items");
+      }
+      return res.json();
+    },
   });
 
-  const { data: promotion, isLoading: promoLoading } = useQuery<Promotion | null>({
-    queryKey: ["/api/admin/promotions/by-feed-item", selectedFeedItemId],
-    enabled: !!selectedFeedItemId,
+  const { data: templates, isLoading: templatesLoading } = useQuery<ChatTemplate[]>({
+    queryKey: ["admin-promotions-templates"],
     queryFn: async () => {
-      if (!selectedFeedItemId) return null;
-      try {
-        const res = await fetch(`/api/admin/promotions/by-feed-item/${selectedFeedItemId}`, {
-          credentials: "include",
-        });
-        if (res.status === 404) return null;
-        if (!res.ok) throw new Error("Failed to fetch promotion");
-        return await res.json();
-      } catch {
-        return null;
+      const res = await adminFetch("/api/admin/templates");
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("adminToken");
+          window.location.href = "/admin/login";
+          return [];
+        }
+        throw new Error("Failed to fetch templates");
       }
+      return res.json();
+    },
+  });
+
+  const promoQueryKey = selectedSource
+    ? selectedSource.type === "feedItem"
+      ? ["admin-promotions-promo", "feed", selectedSource.id]
+      : ["admin-promotions-promo", "template", selectedSource.id]
+    : ["admin-promotions-promo", "none"];
+
+  const { data: promotion, isLoading: promoLoading } = useQuery<Promotion | null>({
+    queryKey: promoQueryKey,
+    enabled: !!selectedSource,
+    queryFn: async () => {
+      if (!selectedSource) return null;
+      const endpoint = selectedSource.type === "feedItem"
+        ? `/api/admin/promotions/by-feed-item/${selectedSource.id}`
+        : `/api/admin/promotions/by-template/${selectedSource.id}`;
+      const res = await adminFetch(endpoint);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to fetch promotion");
+      return res.json();
     },
   });
 
   const generateMutation = useMutation({
-    mutationFn: async (feedItemId: string) => {
-      const res = await apiRequest("POST", `/api/admin/promotions/generate/${feedItemId}`);
-      return await res.json();
+    mutationFn: async () => {
+      if (!selectedSource) throw new Error("No source selected");
+      const endpoint = selectedSource.type === "feedItem"
+        ? `/api/admin/promotions/generate/${selectedSource.id}`
+        : `/api/admin/promotions/generate-from-template/${selectedSource.id}`;
+      const res = await adminFetch(endpoint, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Generation failed" }));
+        throw new Error(err.message);
+      }
+      return res.json();
     },
     onSuccess: (data: Promotion) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions/by-feed-item", selectedFeedItemId] });
+      queryClient.invalidateQueries({ queryKey: promoQueryKey });
       setEditedMatrix(data.contentMatrix || null);
       toast({ title: "Promotion assets generated" });
     },
@@ -79,13 +161,16 @@ export default function AdminPromotions() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!promotion || !editedMatrix) return;
-      const res = await apiRequest("PATCH", `/api/admin/promotions/${promotion.id}`, {
-        contentMatrix: editedMatrix,
+      const res = await adminFetch(`/api/admin/promotions/${promotion.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentMatrix: editedMatrix }),
       });
-      return await res.json();
+      if (!res.ok) throw new Error("Save failed");
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotions/by-feed-item", selectedFeedItemId] });
+      queryClient.invalidateQueries({ queryKey: promoQueryKey });
       toast({ title: "Changes saved" });
     },
     onError: (error: Error) => {
@@ -109,14 +194,14 @@ export default function AdminPromotions() {
     window.location.href = "/admin/login";
   };
 
-  const handleSelectFeedItem = (id: string) => {
-    setSelectedFeedItemId(id);
+  const handleSelectSource = (source: SelectedSource) => {
+    setSelectedSource(source);
     setEditedMatrix(null);
   };
 
   const currentPromoMatrix = editedMatrix || promotion?.contentMatrix || null;
 
-  const selectedItem = feedItems?.find(item => item.id === selectedFeedItemId);
+  const templatesWithPayload = templates?.filter(t => t.generatedPayload && t.slug) || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -160,53 +245,118 @@ export default function AdminPromotions() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base" data-testid="text-feed-items-title">Published Feed Items</CardTitle>
+              <CardHeader className="pb-3">
+                <div className="flex gap-1">
+                  <Button
+                    variant={sourceTab === "feedItems" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setSourceTab("feedItems")}
+                    data-testid="tab-feed-items"
+                  >
+                    <Newspaper className="w-4 h-4 mr-1.5" />
+                    Feed Items
+                  </Button>
+                  <Button
+                    variant={sourceTab === "templates" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setSourceTab("templates")}
+                    data-testid="tab-templates"
+                  >
+                    <BookOpen className="w-4 h-4 mr-1.5" />
+                    Templates
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {feedLoading ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
-                  </div>
-                ) : !feedItems?.length ? (
-                  <p className="text-sm text-muted-foreground" data-testid="text-no-items">
-                    No published feed items found. Generate and publish content first.
-                  </p>
+                {sourceTab === "feedItems" ? (
+                  feedLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+                    </div>
+                  ) : !feedItems?.length ? (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-feed-items">
+                      No published feed items found.
+                    </p>
+                  ) : (
+                    feedItems.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleSelectSource({
+                          type: "feedItem",
+                          id: item.id,
+                          title: item.title,
+                          town: item.town,
+                          updatedAt: item.updatedAt as any,
+                        })}
+                        className={`w-full text-left p-3 rounded-md border transition-colors ${
+                          selectedSource?.type === "feedItem" && selectedSource.id === item.id
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover-elevate"
+                        }`}
+                        data-testid={`button-feed-item-${item.id}`}
+                      >
+                        <p className="text-sm font-medium line-clamp-2">{item.title}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-xs">{item.town}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(item.updatedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </button>
+                    ))
+                  )
                 ) : (
-                  feedItems.map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleSelectFeedItem(item.id)}
-                      className={`w-full text-left p-3 rounded-md border transition-colors ${
-                        selectedFeedItemId === item.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover-elevate"
-                      }`}
-                      data-testid={`button-feed-item-${item.id}`}
-                    >
-                      <p className="text-sm font-medium line-clamp-2">{item.title}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">{item.town}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(item.updatedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </button>
-                  ))
+                  templatesLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+                    </div>
+                  ) : !templatesWithPayload.length ? (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-templates">
+                      No templates with generated content found.
+                    </p>
+                  ) : (
+                    templatesWithPayload.map(template => (
+                      <button
+                        key={template.id}
+                        onClick={() => handleSelectSource({
+                          type: "template",
+                          id: template.id,
+                          title: template.title,
+                          town: template.town,
+                          updatedAt: template.updatedAt,
+                        })}
+                        className={`w-full text-left p-3 rounded-md border transition-colors ${
+                          selectedSource?.type === "template" && selectedSource.id === template.id
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover-elevate"
+                        }`}
+                        data-testid={`button-template-${template.id}`}
+                      >
+                        <p className="text-sm font-medium line-clamp-2">{template.title}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-xs">{template.town}</Badge>
+                          {template.isActive && <Badge variant="default" className="text-xs">Active</Badge>}
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(template.updatedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </button>
+                    ))
+                  )
                 )}
               </CardContent>
             </Card>
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            {!selectedFeedItemId ? (
+            {!selectedSource ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Megaphone className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
                   <p className="text-muted-foreground" data-testid="text-select-prompt">
-                    Select a published feed item from the left to generate promotion assets.
+                    Select a feed item or template from the left to generate promotion assets.
                   </p>
                 </CardContent>
               </Card>
@@ -216,10 +366,11 @@ export default function AdminPromotions() {
                   <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
                     <div>
                       <CardTitle className="text-base" data-testid="text-selected-title">
-                        {selectedItem?.title || "Selected Feed Item"}
+                        {selectedSource.title}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {selectedItem?.town} &middot; {selectedItem && new Date(selectedItem.updatedAt).toLocaleDateString()}
+                        {selectedSource.town} &middot; {new Date(selectedSource.updatedAt).toLocaleDateString()}
+                        &middot; <span className="capitalize">{selectedSource.type === "feedItem" ? "Feed Item" : "Template"}</span>
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -241,7 +392,7 @@ export default function AdminPromotions() {
                       )}
                       <Button
                         size="sm"
-                        onClick={() => generateMutation.mutate(selectedFeedItemId)}
+                        onClick={() => generateMutation.mutate()}
                         disabled={generateMutation.isPending}
                         data-testid="button-generate"
                       >

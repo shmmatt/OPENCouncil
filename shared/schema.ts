@@ -1105,7 +1105,8 @@ export interface PromotionDeepLink {
 
 export const promotions = pgTable("promotions", {
   id: serial("id").primaryKey(),
-  feedItemId: varchar("feed_item_id").notNull().references(() => townFeedItems.id),
+  feedItemId: varchar("feed_item_id").references(() => townFeedItems.id),
+  templateId: varchar("template_id").references(() => chatTemplates.id),
   status: text("status").notNull().default("draft"),
   contentMatrix: jsonb("content_matrix").$type<PromotionContentMatrix>(),
   deepLinks: jsonb("deep_links").$type<PromotionDeepLink[]>().notNull().default([]),

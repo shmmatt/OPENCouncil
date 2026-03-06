@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authenticateAdmin } from "../middleware/auth";
-import { generatePromotionAssets } from "../services/promotions";
+import { generatePromotionAssets, generatePromotionAssetsFromTemplate } from "../services/promotions";
 import {
   getAllPromotions,
   getPromotionById,
   getPromotionByFeedItemId,
+  getPromotionByTemplateId,
   updatePromotion,
 } from "../storage/promotions";
 
@@ -19,6 +20,17 @@ router.post("/generate/:feedItemId", async (req, res) => {
     res.json(promotion);
   } catch (error: any) {
     console.error("Promotion generation failed:", error);
+    res.status(500).json({ message: error.message || "Promotion generation failed" });
+  }
+});
+
+router.post("/generate-from-template/:templateId", async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const promotion = await generatePromotionAssetsFromTemplate(templateId);
+    res.json(promotion);
+  } catch (error: any) {
+    console.error("Promotion generation from template failed:", error);
     res.status(500).json({ message: error.message || "Promotion generation failed" });
   }
 });
@@ -37,6 +49,18 @@ router.get("/by-feed-item/:feedItemId", async (req, res) => {
     const promotion = await getPromotionByFeedItemId(req.params.feedItemId);
     if (!promotion) {
       return res.status(404).json({ message: "No promotion found for this feed item" });
+    }
+    res.json(promotion);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/by-template/:templateId", async (req, res) => {
+  try {
+    const promotion = await getPromotionByTemplateId(req.params.templateId);
+    if (!promotion) {
+      return res.status(404).json({ message: "No promotion found for this template" });
     }
     res.json(promotion);
   } catch (error: any) {
