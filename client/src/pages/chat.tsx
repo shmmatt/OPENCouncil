@@ -767,7 +767,78 @@ export default function Chat() {
     }
   }, []);
 
-  // Detect ?feedId=&qId= or ?templateSlug=&qId= URL parameters for deep-link promotions (zero-click to chat)
+  const { data: townsData } = useQuery<{ towns: string[] }>({
+    queryKey: ["/api/meta/towns"],
+  });
+
+  const { data: prefData } = useQuery<{ town: string }>({
+    queryKey: ["/api/preferences/town"],
+  });
+
+  useEffect(() => {
+    if (prefData?.town) {
+      setSelectedTown(prefData.town);
+    }
+  }, [prefData?.town]);
+
+  const { data: sessions } = useQuery<ChatSession[]>({
+    queryKey: ["/api/chat/sessions"],
+  });
+
+  const setTownMutation = useMutation({
+    mutationFn: async (town: string) => {
+      await apiRequest("POST", "/api/preferences/town", { 
+        town,
+        sessionId: activeSessionId 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
+    },
+  });
+
+  const handleTownChange = (town: string) => {
+    setSelectedTown(town);
+    setTownMutation.mutate(town);
+  };
+
+  const towns = townsData?.towns || ["Ossipee"];
+
+  const { data: messages, isLoading: messagesLoading } = useQuery<ChatMessage[]>({
+    queryKey: ["/api/chat/sessions", activeSessionId],
+    enabled: !!activeSessionId,
+  });
+
+  const createSessionMutation = useMutation({
+    mutationFn: async (params?: { templateId?: string; feedItemId?: string; title?: string }): Promise<ChatSession> => {
+      const res = await apiRequest("POST", "/api/chat/sessions", {
+        title: params?.title || "New conversation",
+        templateId: params?.templateId,
+        feedItemId: params?.feedItemId,
+      });
+      return res.json();
+    },
+    onSuccess: (newSession: ChatSession) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      setActiveSessionId(newSession.id);
+    },
+  });
+
+  // Send message to a specific session (used for shared links)
+  const sendToSession = useCallback(async (sessionId: string, content: string) => {
+    setPendingMessage(content);
+    try {
+      await apiRequest("POST", `/api/chat/v2/sessions/${sessionId}/messages`, { content });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+    } finally {
+      setPendingMessage(null);
+      setIsProcessingSharedLink(false);
+    }
+  }, []);
+
   const deepLinkProcessedRef = useRef(false);
   useEffect(() => {
     if (deepLinkProcessedRef.current) return;
@@ -849,78 +920,6 @@ export default function Chat() {
 
     processDeepLink();
   }, [sendToSession, toast]);
-
-  const { data: townsData } = useQuery<{ towns: string[] }>({
-    queryKey: ["/api/meta/towns"],
-  });
-
-  const { data: prefData } = useQuery<{ town: string }>({
-    queryKey: ["/api/preferences/town"],
-  });
-
-  useEffect(() => {
-    if (prefData?.town) {
-      setSelectedTown(prefData.town);
-    }
-  }, [prefData?.town]);
-
-  const { data: sessions } = useQuery<ChatSession[]>({
-    queryKey: ["/api/chat/sessions"],
-  });
-
-  const setTownMutation = useMutation({
-    mutationFn: async (town: string) => {
-      await apiRequest("POST", "/api/preferences/town", { 
-        town,
-        sessionId: activeSessionId 
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
-    },
-  });
-
-  const handleTownChange = (town: string) => {
-    setSelectedTown(town);
-    setTownMutation.mutate(town);
-  };
-
-  const towns = townsData?.towns || ["Ossipee"];
-
-  const { data: messages, isLoading: messagesLoading } = useQuery<ChatMessage[]>({
-    queryKey: ["/api/chat/sessions", activeSessionId],
-    enabled: !!activeSessionId,
-  });
-
-  const createSessionMutation = useMutation({
-    mutationFn: async (params?: { templateId?: string; feedItemId?: string; title?: string }): Promise<ChatSession> => {
-      const res = await apiRequest("POST", "/api/chat/sessions", {
-        title: params?.title || "New conversation",
-        templateId: params?.templateId,
-        feedItemId: params?.feedItemId,
-      });
-      return res.json();
-    },
-    onSuccess: (newSession: ChatSession) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      setActiveSessionId(newSession.id);
-    },
-  });
-
-  // Send message to a specific session (used for shared links)
-  const sendToSession = useCallback(async (sessionId: string, content: string) => {
-    setPendingMessage(content);
-    try {
-      await apiRequest("POST", `/api/chat/v2/sessions/${sessionId}/messages`, { content });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
-    } finally {
-      setPendingMessage(null);
-      setIsProcessingSharedLink(false);
-    }
-  }, []);
 
   // Auto-create session and send message when shared link question is detected
   useEffect(() => {
