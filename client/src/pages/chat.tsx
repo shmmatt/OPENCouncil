@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Newspaper, Calendar } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Newspaper, Calendar, Rss } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -319,18 +320,32 @@ function ChatSidebar({
   onTownChange: (town: string) => void;
   towns: string[];
 }) {
+  const [location] = useLocation();
+  const isFeedActive = location.startsWith("/feed");
+  const isChatActive = location.startsWith("/chat");
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4 space-y-2 border-b border-sidebar-border">
         <Button 
           onClick={onNewChat} 
-          className="w-full" 
-          variant="default"
+          className="w-full"
+          variant={isChatActive ? "default" : "outline"}
           data-testid="button-new-chat"
         >
           <Plus className="w-4 h-4 mr-2" />
           New Chat
+        </Button>
+        <Button
+          asChild
+          className="w-full"
+          variant={isFeedActive ? "default" : "outline"}
+          data-testid="link-town-feed"
+        >
+          <Link href="/feed">
+            <Rss className="w-4 h-4 mr-2" />
+            Town Feed
+          </Link>
         </Button>
       </div>
 

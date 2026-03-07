@@ -10,6 +10,7 @@ import {
   MapPin,
   RefreshCw,
   ArrowRight,
+  Rss,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -125,6 +126,12 @@ export default function Landing() {
               <Link href="/chat">
                 Ask a Question
                 <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="backdrop-blur-sm bg-white/10 border-white/30 text-white" data-testid="link-landing-feed">
+              <Link href="/feed">
+                <Rss className="mr-2 h-4 w-4" />
+                See What's Happening
               </Link>
             </Button>
           </div>

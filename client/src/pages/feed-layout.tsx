@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Link } from "wouter";
 import TownFeedComponent from "@/components/TownFeed";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { X, Loader2, MessageSquare, Sparkles, ArrowRight } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { UserStatusBar } from "@/components/user-status-bar";
+import { X, Loader2, MessageSquare, Sparkles, ArrowRight, Menu, MessageCircle, Rss } from "lucide-react";
 import type { ChatSession, ChatMessage, TownFeedPayload } from "@shared/schema";
 
 interface DrawerState {
@@ -285,6 +288,40 @@ function ChatDrawer({
   );
 }
 
+function FeedNav() {
+  return (
+    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+      <div className="p-4 space-y-2 border-b border-sidebar-border">
+        <Button
+          asChild
+          className="w-full"
+          variant="outline"
+          data-testid="link-nav-chat"
+        >
+          <Link href="/chat">
+            <MessageCircle className="w-4 h-4 mr-2" />
+            Go to Chat
+          </Link>
+        </Button>
+        <Button
+          className="w-full"
+          variant="default"
+          disabled
+          data-testid="link-nav-feed-active"
+        >
+          <Rss className="w-4 h-4 mr-2" />
+          Town Feed
+        </Button>
+      </div>
+      <div className="p-4 flex-1">
+        <p className="text-xs text-muted-foreground">
+          Browse the latest updates from your selected towns. Click a suggested question to start a chat.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function FeedLayout() {
   const [drawer, setDrawer] = useState<DrawerState>({ isOpen: false });
 
@@ -336,8 +373,36 @@ export default function FeedLayout() {
   }, [drawer.isOpen]);
 
   return (
-    <div className="min-h-screen bg-background" data-testid="feed-layout">
-      <TownFeedComponent onQuestionClick={handleQuestionClick} />
+    <div className="flex h-screen bg-background" data-testid="feed-layout">
+      <div className="hidden md:block w-72 h-full">
+        <FeedNav />
+      </div>
+
+      <div className="flex-1 flex flex-col h-full min-w-0">
+        <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-[999]">
+          <div className="flex items-center gap-3">
+            <Sheet>
+              <SheetTrigger asChild className="md:hidden">
+                <Button variant="ghost" size="icon" data-testid="button-feed-menu">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0 w-72">
+                <FeedNav />
+              </SheetContent>
+            </Sheet>
+            <div>
+              <h1 className="text-lg font-semibold">Town Feed</h1>
+              <p className="text-xs text-muted-foreground">Latest updates from your communities</p>
+            </div>
+          </div>
+          <UserStatusBar />
+        </header>
+
+        <div className="flex-1 overflow-y-auto">
+          <TownFeedComponent onQuestionClick={handleQuestionClick} />
+        </div>
+      </div>
 
       {drawer.isOpen && (
         <ChatDrawer state={drawer} onClose={handleCloseDrawer} />
