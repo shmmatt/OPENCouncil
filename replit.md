@@ -26,7 +26,7 @@ Google Gemini powers answer synthesis, embedding generation, metadata extraction
 - `SUMMARY_MODEL` → `gemini-3.1-pro-preview` — used only for feed summary generation (in `contentGeneration.ts`)
 - Content generation `MODEL` → `gemini-3.1-flash-lite-preview` — topic extraction, story-worthiness, curiosity questions
 
-**Thinking config**: Synthesizer uses `thinkingLevel: "HIGH"`, follow-up generator uses `thinkingLevel: "LOW"`.
+**Thinking config**: Synthesizer uses `thinkingLevel: "LOW"`, follow-up generator uses `thinkingLevel: "LOW"`. (HIGH was too slow on the lite model — 178s per call.)
 
 ### Chat Pipeline (V3)
 This pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, SAU) and situation relevance gating. It optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. It includes conditional "second hop" retrieval and specific prose word limits for different response types.

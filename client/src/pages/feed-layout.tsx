@@ -117,7 +117,13 @@ function ChatDrawer({
               try {
                 const data = JSON.parse(dataLines.join("\n"));
                 if (eventType === "status") {
-                  setStreamStatus(data.stage || "Processing...");
+                  const STAGE_LABELS: Record<string, string> = {
+                    planning: "Analyzing your question...",
+                    retrieving: "Searching documents...",
+                    synthesizing: "Writing your answer...",
+                    auditing: "Verifying accuracy...",
+                  };
+                  setStreamStatus(STAGE_LABELS[data.stage] || data.stage || "Processing...");
                 } else if (eventType === "answer") {
                   setStreamStatus(null);
                   queryClient.invalidateQueries({

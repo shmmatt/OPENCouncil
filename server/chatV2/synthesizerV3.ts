@@ -160,7 +160,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
         maxOutputTokens: 65536,
         responseMimeType: "application/json",
         responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingLevel: "HIGH" as const },
+        thinkingConfig: { thinkingLevel: "LOW" as const },
       },
     });
 
