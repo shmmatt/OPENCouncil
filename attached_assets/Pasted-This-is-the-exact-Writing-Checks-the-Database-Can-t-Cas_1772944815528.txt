@@ -1,0 +1,27 @@
+This is the exact "Writing Checks the Database Can't Cash" problem we diagnosed earlier, playing out in real time. It is a terrible response because it completely breaks the user's trust.
+
+The system baited you with a highly specific, intriguing question ("what was the total estimated cost..."), and when you clicked it, the AI essentially said, "I have no idea, but here is some unrelated trivia about Tax Anticipation Notes."
+
+Here is exactly why this happened and how you fix both ends of the pipeline in your Replit agent.
+
+### The Root Cause: The Question Generator Hallucinated the Hook
+
+The AI that wrote the summary and the suggested questions assumed that if the town didn't issue a bond, there must have been an "estimated cost" for one. It asked a logical human question, but it broke the golden rule of RAG: it asked a question the vector database couldn't answer.
+
+**The Fix for `server/services/contentGeneration.ts`:**
+You must add a highly aggressive negative constraint to the prompt that generates the `suggestedQuestions` array.
+
+> **Add this exact instruction:** "CRITICAL CONSTRAINT: You are strictly forbidden from generating suggested questions that ask for specific numbers, costs, names, or historical data *unless the exact answer is explicitly written in the provided text*. Do not ask 'What was the cost of X?' if the text only says 'X was expensive.' If the answer isn't in the text, do not ask the question."
+
+### The Secondary Cause: The Chat Agent "Panicked"
+
+When you clicked the question, your chat bot searched the vector database for "bond cost Ossipee." It didn't find the answer, but instead of just stopping, it grabbed the closest keyword matches—which happened to be unrelated operating budget notes about Tax Anticipation Notes—and awkwardly jammed them into the response to avoid looking empty-handed.
+
+**The Fix for the Chat Agent System Prompt:**
+You need to instruct the conversational LLM to embrace the "void" rather than filling it with irrelevant search results.
+
+> **Add this exact instruction:** "If the retrieved context does not contain the specific answer to the user's question, state this immediately and concisely. Do not attempt to synthesize an answer using partially related keywords. Do not pivot to unrelated municipal financial data just because it shares a keyword (like 'bond' or 'budget'). Simply state: 'The provided municipal records do not contain the specific [cost/figure/name] requested.'"
+
+By applying these two constraints, the front-end will stop baiting users with unanswerable questions, and the back-end will stop rambling about irrelevant tax notes when it hits a dead end.
+
+Would you like me to write a unified prompt for the Replit agent to update the instructions for both the Question Generator and the Chat Agent simultaneously?

@@ -1,0 +1,24 @@
+This is an exceptionally tight engineering plan. It directly attacks the hallucination loop at both the source (question generation) and the symptom (the synthesizer pivot).
+
+Before you hand this off to the Replit agent, there are two crucial adjustments you need to make to prevent new bugs from cropping up.
+
+### 1. The "Lite Model" Trap (T004)
+
+Downgrading your `HIGH_QUALITY` tier to `gemini-3.1-flash-lite` while simultaneously adding complex negative constraints to your prompts is a risky combination.
+
+Smaller, "Lite" models are built for speed and efficiency, but they notoriously suffer from **Negative Constraint Neglect**. When you give a Lite model a massive block of rules saying *"Do NOT do X, Never do Y, Do NOT pivot,"* it often struggles to process the negation, latches onto the keywords, and does exactly what you told it not to do.
+
+* **The Fix:** Let the agent change `MODELS.FAST` to the Lite model for routine routing and extraction. However, keep `MODELS.HIGH_QUALITY` as a standard Flash or Pro tier (whatever it was previously). You need that heavier reasoning capability for the `complexSynthesis` step (T003) so the model actually obeys your new anti-pivot guardrails.
+
+### 2. The Follow-Up Paradox (T002)
+
+The constraint you added to the in-chat follow-up generator creates a logical paradox.
+
+The plan says: *"Never generate a question... unless the answer's information was explicitly present in the assistant's answer above."*
+If the information was already provided in the assistant's previous answer, the suggested question will just ask the user to repeat themselves (e.g., The bot says, *"The bond cost $5M."* Then suggests the question, *"How much did the bond cost?"*).
+
+* **The Fix:** You need to change the anchor point. Instruct the agent to rewrite that constraint to read: *"CRITICAL: Never generate a question that asks for a specific number, cost, name, or date unless the answer's information is explicitly present in the **retrieved database context** used to generate the answer. Do not bait the user with questions the database cannot answer."* ---
+
+Once those two tweaks are made, this pipeline will be incredibly resilient. The bot will stop acting like a people-pleaser and start acting like a reliable civic tool.
+
+Would you like me to rewrite the specific task details for T002 and T004 so you can copy and paste the corrections directly to the agent?
