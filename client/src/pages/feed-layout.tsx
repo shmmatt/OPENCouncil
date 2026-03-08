@@ -63,7 +63,7 @@ function ChatDrawer({
       });
       if (!res.ok) return [];
       const data = await res.json();
-      return data.messages || [];
+      return data || [];
     },
     enabled: !!sessionId,
     refetchInterval: isStreaming ? 2000 : false,
@@ -168,6 +168,7 @@ function ChatDrawer({
         });
         const newSession: ChatSession = await res.json();
         setSessionId(newSession.id);
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
         setIsCreating(false);
 
         setIsSending(true);
