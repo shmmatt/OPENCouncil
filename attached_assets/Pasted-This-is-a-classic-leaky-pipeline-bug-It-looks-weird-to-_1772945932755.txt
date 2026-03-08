@@ -1,0 +1,36 @@
+This is a classic "leaky pipeline" bug. It looks weird to the user, but from an engineering perspective, it actually proves your new anti-hallucination guardrails are working perfectly behind the scenes.
+
+You are seeing raw JSON code because the LLM is outputting a structured data object instead of plain text, and your frontend chat drawer is just printing the raw code onto the screen.
+
+Notice how the `has_sufficient_context` field is set to `false`, and it generated a `missing_information_query`? That means your new guardrails successfully caught the fact that the database didn't have the answer, and it prevented the hallucination.
+
+The problem is simply that the backend forgot to "unwrap" the final response before sending it to the user.
+
+### How to Fix This
+
+This happens because `server/chatV2/synthesizerV3.ts` is instructed (either by its prompt or a `responseSchema`) to return a JSON object containing its internal reasoning flags alongside the final text.
+
+You need to tell the Replit agent to intercept that JSON payload on the server, parse it, and *only* send the `response` string to the frontend chat UI.
+
+Here is the exact task you can feed to the Replit agent to patch this up:
+
+---
+
+**Task: Fix Leaky JSON in Chat Synthesizer Output**
+
+**Objective:**
+The `complexSynthesis` step is successfully catching missing context, but it is returning a raw JSON string to the frontend UI instead of just the formatted markdown text. We need to parse this JSON on the backend and only yield the `response` field to the chat drawer.
+
+**Details:**
+
+1. In `server/chatV2/synthesizerV3.ts` (or the routing file that handles the final stream/response for the chat drawer), locate where the LLM's output is received.
+2. The model is currently returning a JSON object that looks like this:
+`{ "has_sufficient_context": false, "missing_information_query": "...", "suggested_year": 2023, "response": "**Summary**..." }`
+3. Add a parsing step: If the output is a JSON string, run `JSON.parse(output)`.
+4. Extract the `response` property from that parsed object.
+5. Ensure that *only* the string value of the `response` property is sent back to the client/streamed to the UI. The user should never see the `has_sufficient_context` or `missing_information_query` keys.
+6. Add a standard `try/catch` block around the `JSON.parse` step. If the model occasionally outputs raw markdown instead of JSON (or malformed JSON), it should gracefully fall back to just returning the raw text.
+
+---
+
+Would you like me to also check if we need to adjust the UI's streaming chunk processor to handle this JSON parsing, just in case the backend is streaming the JSON character-by-character?
