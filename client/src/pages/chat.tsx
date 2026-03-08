@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Newspaper, Calendar, Rss } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Rss } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatSession, ChatMessage, MinutesUpdateItem, TemplatePayload, TownFeedItem } from "@shared/schema";
+import type { ChatSession, ChatMessage, TemplatePayload } from "@shared/schema";
 import type { ChatNotice } from "@shared/chatNotices";
 import { MessageNotices } from "@/components/MessageNotices";
 import { TemplateBanner } from "@/components/TemplateBanner";
@@ -61,251 +61,11 @@ interface V2Metadata {
   deepDiveId?: string;
 }
 
-function RecentMinutesUpdates({ 
-  selectedTown,
-  onAskAboutMeeting 
-}: { 
-  selectedTown: string;
-  onAskAboutMeeting: (prompt: string) => void;
-}) {
-  const { data: minutesData, isLoading } = useQuery<{ items: MinutesUpdateItem[] }>({
-    queryKey: ["/api/updates/minutes", selectedTown],
-    queryFn: async () => {
-      const res = await fetch(`/api/updates/minutes?town=${encodeURIComponent(selectedTown)}&limit=5`);
-      if (!res.ok) throw new Error("Failed to fetch minutes updates");
-      return res.json();
-    },
-  });
-
-  const items = minutesData?.items || [];
-
-  if (isLoading) {
-    return (
-      <div className="p-3 space-y-2">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="p-3 text-center text-muted-foreground text-sm">
-        No recent minutes have been added yet.
-      </div>
-    );
-  }
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return null;
-    try {
-      return new Date(dateStr).toLocaleDateString("en-US", { 
-        month: "short", 
-        day: "numeric", 
-        year: "numeric" 
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  const handleAskClick = (item: MinutesUpdateItem) => {
-    const meetingDateStr = item.meetingDate 
-      ? formatDate(item.meetingDate) 
-      : "recent meeting";
-    const boardStr = item.board || "board";
-    const prompt = `Summarize key decisions, votes, and any budget impacts from the ${item.town} ${boardStr} minutes for ${meetingDateStr}. Cite the minutes.`;
-    onAskAboutMeeting(prompt);
-  };
-
-  return (
-    <div className="space-y-1">
-      {items.map((item) => (
-        <div 
-          key={item.documentVersionId}
-          className="p-2 rounded-md bg-sidebar-accent/30 space-y-1"
-          data-testid={`minutes-item-${item.documentVersionId}`}
-        >
-          <div className="flex items-start gap-2">
-            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {item.town}{item.board ? ` — ${item.board}` : ""}
-              </p>
-              {item.meetingDate && (
-                <p className="text-xs text-muted-foreground">
-                  Meeting: {formatDate(item.meetingDate)}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Added: {formatDate(item.ingestedAt)}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-1 ml-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs px-2"
-              onClick={() => handleAskClick(item)}
-              data-testid={`button-ask-about-${item.documentVersionId}`}
-            >
-              <Sparkles className="w-3 h-3 mr-1" />
-              Ask
-            </Button>
-            {item.fileSearchDocumentName && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs px-2"
-                asChild
-                data-testid={`button-view-${item.documentVersionId}`}
-              >
-                <a 
-                  href={`/admin/documents?doc=${item.logicalDocumentId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  View
-                </a>
-              </Button>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TownFeed({
-  feedItems,
-  onLearnMore,
-}: {
-  feedItems: TownFeedItem[];
-  onLearnMore: (feedItemId: string, title: string) => void;
-}) {
-  if (feedItems.length === 0) {
-    return null;
-  }
-
-  const formatDate = (dateVal: string | Date | null) => {
-    if (!dateVal) return null;
-    try {
-      const d = typeof dateVal === "string" ? new Date(dateVal) : dateVal;
-      return d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  return (
-    <div className="space-y-1">
-      {feedItems.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-md bg-sidebar-accent/30 overflow-visible p-2"
-          data-testid={`feed-item-${item.id}`}
-        >
-          <div className="flex items-start gap-2">
-            <Newspaper className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-tight" data-testid={`text-feed-title-${item.id}`}>
-                {item.title}
-              </p>
-              <div className="flex items-center gap-1.5 mt-1">
-                <Calendar className="w-3 h-3 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground" data-testid={`text-feed-date-${item.id}`}>
-                  {formatDate(item.createdAt)}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-1.5 -ml-2"
-                onClick={() => onLearnMore(item.id, item.title)}
-                data-testid={`button-learn-more-${item.id}`}
-              >
-                <Sparkles className="w-3 h-3 mr-1" />
-                Learn More
-              </Button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TownFeedOrMinutes({
-  selectedTown,
-  onInsertPrompt,
-  onLearnMore,
-}: {
-  selectedTown: string;
-  onInsertPrompt: (prompt: string) => void;
-  onLearnMore: (feedItemId: string, title: string) => void;
-}) {
-  const { data: feedItems, isLoading: feedLoading } = useQuery<TownFeedItem[]>({
-    queryKey: ["/api/feed/town", selectedTown],
-    queryFn: async () => {
-      const res = await fetch(`/api/feed/town/${encodeURIComponent(selectedTown)}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
-
-  const hasFeedItems = !feedLoading && feedItems && feedItems.length > 0;
-
-  if (hasFeedItems) {
-    return (
-      <Collapsible defaultOpen={true} className="border-b border-sidebar-border">
-        <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover-elevate" data-testid="button-toggle-feed">
-          <h3 className="text-xs font-medium text-muted-foreground">
-            Town Feed
-          </h3>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="px-3 pb-3">
-          <TownFeed
-            feedItems={feedItems!}
-            onLearnMore={onLearnMore}
-          />
-        </CollapsibleContent>
-      </Collapsible>
-    );
-  }
-
-  return (
-    <Collapsible defaultOpen={false} className="border-b border-sidebar-border">
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover-elevate" data-testid="button-toggle-minutes">
-        <h3 className="text-xs font-medium text-muted-foreground">
-          Recent Minutes Updates
-        </h3>
-        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="px-3 pb-3">
-        <RecentMinutesUpdates
-          selectedTown={selectedTown}
-          onAskAboutMeeting={onInsertPrompt}
-        />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 function ChatSidebar({ 
   sessions, 
   activeSessionId, 
   onSessionSelect, 
   onNewChat,
-  onInsertPrompt,
-  onLearnMore,
   selectedTown,
   onTownChange,
   towns,
@@ -314,8 +74,6 @@ function ChatSidebar({
   activeSessionId: string | null;
   onSessionSelect: (id: string) => void;
   onNewChat: () => void;
-  onInsertPrompt: (prompt: string) => void;
-  onLearnMore: (feedItemId: string, title: string) => void;
   selectedTown: string;
   onTownChange: (town: string) => void;
   towns: string[];
@@ -370,13 +128,6 @@ function ChatSidebar({
           </SelectContent>
         </Select>
       </div>
-
-      {/* Town Feed (published items) or Recent Minutes Updates fallback */}
-      <TownFeedOrMinutes
-        selectedTown={selectedTown}
-        onInsertPrompt={onInsertPrompt}
-        onLearnMore={onLearnMore}
-      />
 
       <Separator />
 
@@ -1187,10 +938,6 @@ export default function Chat() {
     createSessionMutation.mutate({ templateId, title });
   };
 
-  const handleFeedLearnMore = (feedItemId: string, title: string) => {
-    createSessionMutation.mutate({ feedItemId, title });
-  };
-
   const activeSession = sessions?.find((s) => s.id === activeSessionId);
   const activeTemplateId = (activeSession as any)?.templateId as string | null;
   const activeFeedItemId = (activeSession as any)?.feedItemId as string | null;
@@ -1259,18 +1006,12 @@ export default function Chat() {
     }
   };
 
-  const handleInsertPrompt = (prompt: string) => {
-    setInputValue(prompt);
-  };
-
   const sidebarContent = (
     <ChatSidebar
       sessions={sessions}
       activeSessionId={activeSessionId}
       onSessionSelect={setActiveSessionId}
       onNewChat={handleNewChat}
-      onInsertPrompt={handleInsertPrompt}
-      onLearnMore={handleFeedLearnMore}
       selectedTown={selectedTown}
       onTownChange={handleTownChange}
       towns={towns}
