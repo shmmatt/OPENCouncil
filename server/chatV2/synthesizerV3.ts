@@ -157,10 +157,9 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       config: {
         systemInstruction: systemPrompt,
         temperature: synthesisTemperature,
-        maxOutputTokens: 65536,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
         responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingLevel: "LOW" as const },
       },
     });
 

@@ -5,11 +5,39 @@
  * Uses text-embedding-004 model which produces 768-dimensional embeddings.
  */
 
-import { logDebug, logError } from "../utils/logger";
+import { logDebug, logError, logInfo } from "../utils/logger";
 
-const EMBEDDING_MODEL = "gemini-embedding-001";  // Correct Gemini embedding model name
+const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_DIMENSIONS = 768;
 const MAX_BATCH_SIZE = 100;
+
+const QUERY_EMBEDDING_CACHE_MAX = 500;
+const QUERY_EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CacheEntry {
+  embedding: number[];
+  timestamp: number;
+}
+
+const queryEmbeddingCache = new Map<string, CacheEntry>();
+
+function getCachedEmbedding(query: string): number[] | null {
+  const entry = queryEmbeddingCache.get(query);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > QUERY_EMBEDDING_CACHE_TTL_MS) {
+    queryEmbeddingCache.delete(query);
+    return null;
+  }
+  return entry.embedding;
+}
+
+function setCachedEmbedding(query: string, embedding: number[]): void {
+  if (queryEmbeddingCache.size >= QUERY_EMBEDDING_CACHE_MAX) {
+    const firstKey = queryEmbeddingCache.keys().next().value;
+    if (firstKey !== undefined) queryEmbeddingCache.delete(firstKey);
+  }
+  queryEmbeddingCache.set(query, { embedding, timestamp: Date.now() });
+}
 
 function getApiKey(): string {
   const apiKey = process.env.GEM_API_KEY;
@@ -155,6 +183,79 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
     logError("[embeddingService]", "Failed to generate query embedding", error);
     throw error;
   }
+}
+
+export async function generateBatchQueryEmbeddings(queries: string[]): Promise<Map<string, number[]>> {
+  const result = new Map<string, number[]>();
+  if (queries.length === 0) return result;
+
+  const uniqueQueries = Array.from(new Set(queries));
+  const uncached: string[] = [];
+
+  for (const q of uniqueQueries) {
+    const cached = getCachedEmbedding(q);
+    if (cached) {
+      result.set(q, cached);
+    } else {
+      uncached.push(q);
+    }
+  }
+
+  if (uncached.length === 0) {
+    logInfo(`[embeddingService] Batch query embeddings: ${uniqueQueries.length} cached, 0 to generate`, { stage: "embeddingService" });
+    return result;
+  }
+
+  const startTime = Date.now();
+
+  for (let i = 0; i < uncached.length; i += MAX_BATCH_SIZE) {
+    const batch = uncached.slice(i, i + MAX_BATCH_SIZE);
+    try {
+      const apiKey = getApiKey();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:batchEmbedContents?key=${apiKey}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requests: batch.map(text => ({
+            model: `models/${EMBEDDING_MODEL}`,
+            content: { parts: [{ text }] },
+            taskType: "RETRIEVAL_QUERY",
+            outputDimensionality: EMBEDDING_DIMENSIONS,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Gemini batchEmbedContents error: ${response.status} - ${error}`);
+      }
+
+      const apiResult = await response.json();
+      if (!apiResult.embeddings || apiResult.embeddings.length !== batch.length) {
+        throw new Error(`Expected ${batch.length} embeddings, got ${apiResult.embeddings?.length ?? 0}`);
+      }
+
+      for (let j = 0; j < batch.length; j++) {
+        const embedding = apiResult.embeddings[j].values;
+        if (!embedding) throw new Error(`No values in batch embedding at index ${j}`);
+        result.set(batch[j], embedding);
+        setCachedEmbedding(batch[j], embedding);
+      }
+    } catch (error) {
+      logError(`[embeddingService] Batch query embedding failed: ${error}`, { stage: "embeddingService" });
+      throw error;
+    }
+  }
+
+  const durationMs = Date.now() - startTime;
+  logInfo(
+    `[embeddingService] Batch query embeddings: ${result.size} total (${uncached.length} generated in ${durationMs}ms, ${uniqueQueries.length - uncached.length} cached)`,
+    { stage: "embeddingService" }
+  );
+
+  return result;
 }
 
 /**

@@ -26,10 +26,15 @@ Google Gemini powers answer synthesis, embedding generation, metadata extraction
 - `SUMMARY_MODEL` → `gemini-3.1-pro-preview` — used only for feed summary generation (in `contentGeneration.ts`)
 - Content generation `MODEL` → `gemini-3.1-flash-lite-preview` — topic extraction, story-worthiness, curiosity questions
 
-**Thinking config**: Synthesizer uses `thinkingLevel: "LOW"`, follow-up generator uses `thinkingLevel: "LOW"`. (HIGH was too slow on the lite model — 178s per call.)
+**Thinking config**: Follow-up generator uses `thinkingLevel: "LOW"`. Synthesizer has no thinking config (removed for latency — explicit RELEVANCE GUARDRAIL in the system prompt is sufficient).
 
 ### Chat Pipeline (V3)
 This pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, SAU) and situation relevance gating. It optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. It includes conditional "second hop" retrieval and specific prose word limits for different response types.
+
+**Performance optimizations:**
+- **Batch embedding via `batchEmbedContents`**: All retrieval queries (up to 6 across lanes) are deduplicated and embedded in a single Gemini API call instead of N individual calls. In-memory LRU cache (500 entries, 5-min TTL) prevents re-embedding repeated queries within a session.
+- **Batch enrichment**: Document metadata lookups use `WHERE id IN (...)` queries instead of per-chunk N+1 individual lookups.
+- **SSE flush**: Both SSE endpoints use `flushHeaders()`, `setNoDelay(true)`, and per-event `flush()` to ensure status stage events reach the client in real-time.
 
 ### Document Ingestion & OCR
 The V2 ingestion pipeline manages document lifecycle, including duplicate detection, AI-powered metadata suggestion, and multi-tier town detection. A dual-provider OCR system uses Tesseract.js and AWS Textract. Documents are stored in Replit Object Storage.

@@ -553,10 +553,15 @@ export function registerChatV2Routes(app: Express): void {
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     });
+    res.flushHeaders();
+    if (res.socket) {
+      res.socket.setNoDelay(true);
+    }
 
     function sendEvent(event: string, data: any) {
       if (aborted) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      (res as any).flush?.();
     }
 
     try {
@@ -872,10 +877,15 @@ export function registerChatV2Routes(app: Express): void {
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     });
+    res.flushHeaders();
+    if (res.socket) {
+      res.socket.setNoDelay(true);
+    }
 
     function sendEvent(event: string, data: any) {
       if (aborted) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      (res as any).flush?.();
     }
 
     const heartbeatInterval = setInterval(() => {

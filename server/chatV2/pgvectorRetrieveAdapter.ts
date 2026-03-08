@@ -1,7 +1,8 @@
-import { generateQueryEmbedding } from "../services/embeddingService";
+import { generateQueryEmbedding, generateBatchQueryEmbeddings } from "../services/embeddingService";
 import { semanticSearch, hybridSearch, type SearchResult, type HybridSearchResult } from "../services/embeddingStorage";
 import { getDocumentVersionById, getLogicalDocumentById } from "../storage/documents";
 import { db, sql } from "../storage/db";
+import * as schema from "@shared/schema";
 import { logDebug, logInfo } from "../utils/logger";
 import { computeSituationMatchScore } from "./situationExtractor";
 import { chatConfigV3 } from "./chatConfigV3";
@@ -33,18 +34,54 @@ interface EnrichedResult {
   category?: string;
 }
 
-async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
-  const meta = result.chunk.metadata;
-  const fileBlobId = meta?.fileBlobId || undefined;
-  const filename = meta?.filename || undefined;
-  const town = meta?.town || undefined;
-  const board = meta?.board || undefined;
-  const year = meta?.year != null ? String(meta.year) : undefined;
-  const category = meta?.documentType || undefined;
+async function batchEnrichResults(results: SearchResult[]): Promise<EnrichedResult[]> {
+  const docIds = new Set<string>();
+  const blobIds = new Set<string>();
 
+  for (const r of results) {
+    if (r.chunk.documentId) docIds.add(r.chunk.documentId);
+    const meta = r.chunk.metadata;
+    if (meta?.fileBlobId && !meta?.filename) blobIds.add(meta.fileBlobId);
+  }
+
+  const logicalDocMap = new Map<string, typeof schema.logicalDocuments.$inferSelect>();
+  const blobFilenameMap = new Map<string, string>();
+
+  let logicalDocs: (typeof schema.logicalDocuments.$inferSelect)[] = [];
+  let blobRows: any = { rows: [] };
   try {
+    [logicalDocs, blobRows] = await Promise.all([
+      docIds.size > 0
+        ? db.select().from(schema.logicalDocuments)
+            .where(sql`${schema.logicalDocuments.id} IN (${sql.join(Array.from(docIds).map(id => sql`${id}`), sql`, `)})`)
+        : Promise.resolve([]),
+      blobIds.size > 0
+        ? db.execute(sql`SELECT id, original_filename FROM file_blobs WHERE id IN (${sql.join(Array.from(blobIds).map(id => sql`${id}`), sql`, `)})`)
+        : Promise.resolve({ rows: [] } as any),
+    ]);
+  } catch {
+    logInfo("batchEnrichResults: DB lookup failed, falling back to metadata-only enrichment", { stage: "pgvectorRetrieve" });
+  }
+
+  for (const doc of logicalDocs) {
+    logicalDocMap.set(doc.id, doc);
+  }
+  const rows = (blobRows.rows || blobRows) as any[];
+  for (const row of rows) {
+    if (row.original_filename) blobFilenameMap.set(row.id, row.original_filename);
+  }
+
+  return results.map(result => {
+    const meta = result.chunk.metadata;
+    const fileBlobId = meta?.fileBlobId || undefined;
+    const filename = meta?.filename || undefined;
+    const town = meta?.town || undefined;
+    const board = meta?.board || undefined;
+    const year = meta?.year != null ? String(meta.year) : undefined;
+    const category = meta?.documentType || undefined;
+
     if (result.chunk.documentId) {
-      const logicalDoc = await getLogicalDocumentById(result.chunk.documentId);
+      const logicalDoc = logicalDocMap.get(result.chunk.documentId);
       if (logicalDoc) {
         return {
           title: logicalDoc.canonicalTitle,
@@ -53,21 +90,15 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
           filename: filename || logicalDoc.canonicalTitle,
           town: logicalDoc.town || town,
           board: logicalDoc.board || board,
-          year: year,
+          year,
           category: logicalDoc.category || category,
         };
       }
     }
-  } catch {}
 
-  if (fileBlobId && !filename) {
-    try {
-      const blobResult = await db.execute(sql`
-        SELECT original_filename FROM file_blobs WHERE id = ${fileBlobId} LIMIT 1
-      `);
-      const rows = (blobResult.rows || blobResult) as any[];
-      if (rows.length > 0 && rows[0].original_filename) {
-        const resolvedFilename = rows[0].original_filename;
+    if (fileBlobId && !filename) {
+      const resolvedFilename = blobFilenameMap.get(fileBlobId);
+      if (resolvedFilename) {
         return {
           title: resolvedFilename,
           content: result.chunk.content,
@@ -79,20 +110,20 @@ async function enrichResult(result: SearchResult): Promise<EnrichedResult> {
           category,
         };
       }
-    } catch {}
-  }
+    }
 
-  const metaTitle = filename || meta?.documentType;
-  return {
-    title: metaTitle || `chunk-${result.chunk.chunkIndex}`,
-    content: result.chunk.content,
-    fileBlobId,
-    filename,
-    town,
-    board,
-    year,
-    category,
-  };
+    const metaTitle = filename || meta?.documentType;
+    return {
+      title: metaTitle || `chunk-${result.chunk.chunkIndex}`,
+      content: result.chunk.content,
+      fileBlobId,
+      filename,
+      town,
+      board,
+      year,
+      category,
+    };
+  });
 }
 
 export interface LaneQueryOptions {
@@ -109,8 +140,9 @@ export async function executeQueryOnLane(
   town: string | null,
   maxResults: number,
   laneOptions?: LaneQueryOptions,
+  precomputedEmbedding?: number[],
 ): Promise<PgvectorLaneChunk[]> {
-  const queryEmbedding = await generateQueryEmbedding(query);
+  const queryEmbedding = precomputedEmbedding || await generateQueryEmbedding(query);
 
   const townFilter = lane === "local" && town ? town : lane === "state" ? "statewide" : undefined;
   const townsFilter = lane === "sau" && laneOptions?.sauTowns ? laneOptions.sauTowns : undefined;
@@ -154,34 +186,28 @@ export async function executeQueryOnLane(
     });
   }
 
-  const ENRICH_BATCH_SIZE = 5;
-  const enriched: PgvectorLaneChunk[] = [];
-  for (let i = 0; i < results.length; i += ENRICH_BATCH_SIZE) {
-    const batch = results.slice(i, i + ENRICH_BATCH_SIZE);
-    const batchResults = await Promise.all(batch.map(async (r, batchIdx) => {
-      const idx = i + batchIdx;
-      const enrichedResult = await enrichResult({ chunk: r.chunk, similarity: r.similarity, documentId: r.documentId });
-      let docName: string;
-      if (enrichedResult.fileBlobId) {
-        docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
-      } else if (enrichedResult.filename && enrichedResult.town) {
-        docName = `[file:${enrichedResult.town}:${enrichedResult.filename}] ${enrichedResult.title}`;
-      } else {
-        docName = enrichedResult.title;
-      }
-      return {
-        docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
-        title: enrichedResult.title,
-        content: enrichedResult.content,
-        lane,
-        score: r.similarity,
-        documentNames: [docName],
-        year: enrichedResult.year,
-        category: enrichedResult.category,
-      } as PgvectorLaneChunk;
-    }));
-    enriched.push(...batchResults);
-  }
+  const enrichedResults = await batchEnrichResults(results);
+  const enriched: PgvectorLaneChunk[] = enrichedResults.map((enrichedResult, idx) => {
+    const r = results[idx];
+    let docName: string;
+    if (enrichedResult.fileBlobId) {
+      docName = `[blob:${enrichedResult.fileBlobId}] ${enrichedResult.title}`;
+    } else if (enrichedResult.filename && enrichedResult.town) {
+      docName = `[file:${enrichedResult.town}:${enrichedResult.filename}] ${enrichedResult.title}`;
+    } else {
+      docName = enrichedResult.title;
+    }
+    return {
+      docId: `${lane}_pgv_${idx}_${r.chunk.documentId || r.chunk.id}`,
+      title: enrichedResult.title,
+      content: enrichedResult.content,
+      lane,
+      score: r.similarity,
+      documentNames: [docName],
+      year: enrichedResult.year,
+      category: enrichedResult.category,
+    } as PgvectorLaneChunk;
+  });
 
   return enriched;
 }
@@ -252,6 +278,9 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   const stateQueries = plan.state.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE);
   const sauQueries = plan.sau ? plan.sau.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE) : [];
 
+  const allQueryStrings = [...localQueries, ...stateQueries, ...sauQueries];
+  const embeddingMap = await generateBatchQueryEmbeddings(allQueryStrings);
+
   const laneOpts: LaneQueryOptions = {
     keywordTerms: plan.keywordTerms && plan.keywordTerms.length > 0 ? plan.keywordTerms : undefined,
     temporalFilter: plan.temporalFilter,
@@ -270,7 +299,7 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
     ...sauQueries.map(query => ({ query, lane: "sau" as const, k: plan.sau!.k, opts: sauLaneOpts })),
   ].map(async ({ query, lane, k, opts }) => {
     try {
-      const result = await executeQueryOnLane(query, lane, townPreference || null, k, opts);
+      const result = await executeQueryOnLane(query, lane, townPreference || null, k, opts, embeddingMap.get(query));
       return { chunks: result, query, lane, success: true };
     } catch (err) {
       logInfo(`pgvector query failed for ${lane}: ${err}`, { stage: "pgvectorRetrieve" });
