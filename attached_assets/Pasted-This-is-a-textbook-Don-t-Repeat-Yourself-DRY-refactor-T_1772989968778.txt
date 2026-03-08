@@ -1,0 +1,50 @@
+This is a textbook "Don't Repeat Yourself" (DRY) refactor. The Replit agent is absolutely making the right call here.
+
+When you have a streaming architecture, duplicating the stream-parsing logic across multiple UI components is a ticking time bomb. The moment you add a new stage to your backend pipeline (like a "cross-referencing" step), you'd have to remember to update both `chat.tsx` and `feed-layout.tsx`. By centralizing it in `sseParser.ts`, you solve that permanently. The `SSEHandlers` callback interface is also a very clean React pattern.
+
+However, writing a custom SSE parser from a raw `ReadableStreamDefaultReader<Uint8Array>` is notoriously tricky, and there are two major architectural traps the agent’s plan currently overlooks.
+
+If you don't explicitly warn the agent about these two things, your UI will randomly crash when the AI generates long responses.
+
+### 1. The TCP Chunking Trap (The Buffer Bug)
+
+The plan mentions "correct state management," but it doesn't explicitly mention string buffering.
+
+When your Node.js backend sends a large `data: { ... }` payload (like a massive chunk of synthesized text), the network will split that string into multiple, unpredictable TCP packets. The browser's `reader.read()` will give you a `Uint8Array` that might cut off right in the middle of a JSON string.
+
+If the parser loop just loops through the current chunk and tries to run `JSON.parse()` on an incomplete string, the entire UI will crash. The parser **must** maintain a string buffer across loop iterations, only processing events when it detects the double-newline (`\n\n`) that marks the end of an SSE event.
+
+### 2. Stream Cancellation (The "Stop" Button)
+
+In a modern chat app, users often navigate away, close a drawer, or hit a "Stop Generating" button while the stream is still running. The current plan does not pass an `AbortSignal` into the utility. If the component unmounts while `parseSSEStream` is still locked in its `while` loop, React will throw memory leak warnings, and the browser will keep downloading data in the background.
+
+---
+
+### Feedback for the Replit Agent
+
+Copy and paste this directly to the agent to bulletproof the implementation before it starts coding:
+
+**Feedback for Replit Agent: SSE Parser Refactor**
+
+This architectural refactor is approved. The `SSEHandlers` interface is clean. However, please ensure the `parseSSEStream` implementation in T001 strictly handles the following edge cases:
+
+**1. Robust Chunk Buffering:**
+Network chunks do not neatly align with SSE events. The parser MUST maintain a persistent string buffer outside the `reader.read()` while-loop.
+
+* Append the decoded `Uint8Array` chunk to the buffer.
+* Split the buffer by `\n\n` to isolate complete events.
+* **Crucially:** Keep the last, incomplete segment in the buffer to be prepended to the next chunk. Do not attempt to parse incomplete data lines.
+
+**2. JSON Safety:**
+Wrap the `JSON.parse()` call for the event data payload in a `try/catch`. If the payload is malformed, log the error or call `handlers.onError`, but do NOT let the exception bubble up and crash the React component loop.
+
+**3. AbortController Support:**
+Update the signature to accept an optional `AbortSignal`:
+`parseSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>, handlers: SSEHandlers, signal?: AbortSignal)`
+Ensure the `while` loop checks `if (signal?.aborted) break;` and gracefully handles the `DOMException` (AbortError) that the reader will throw if the fetch request is aborted by the UI.
+
+Please proceed with T001, T002, and T003 with these constraints in mind.
+
+---
+
+Would you like me to review the specific `while` loop code for the buffer once the agent writes it? It is the most common place for bugs to hide in custom SSE implementations.
