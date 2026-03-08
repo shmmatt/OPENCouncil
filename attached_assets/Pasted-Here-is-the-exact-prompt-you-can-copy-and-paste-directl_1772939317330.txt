@@ -1,0 +1,27 @@
+Here is the exact prompt you can copy and paste directly to your Replit agent. It is structured to separate the frontend UI fixes from the backend LLM prompt adjustments so the agent can execute them systematically.
+
+---
+
+**Prompt for Replit Agent:**
+
+Please implement the following UI and content generation fixes for the `TownFeed` component and its associated backend pipeline. We need to transition the feed from looking like a database dump to a polished, Axios-style news feed.
+
+**Part 1: Frontend UI Updates (Likely in `client/src/pages/chat.tsx` or related feed components)**
+
+1. **Fix Markdown Rendering:** The summary preview in the feed card is currently rendering raw markdown (e.g., showing `**$363,500`). Wrap the summary output in the same `react-markdown` component used in our main chat interface so it renders bolding and formatting correctly.
+2. **Update the 'Hot Topic' Badge:** The solid red badge is too alarmist. Change the background to a subtle, neutral color (like a soft gray or muted blue) and change the default text to something more objective, like "High Impact" or "Major Vote".
+3. **Style the Suggested Questions:** The suggested question buttons are currently full-width gray rectangles. Update their CSS/Tailwind classes to exactly match the "suggested prompt" pills from our main chat interface (rounded borders, transparent or light backgrounds, clear hover states).
+4. **Add a Section Header:** Add a small, semi-bold heading directly above the suggested question buttons that says "Dig Deeper:" or "Ask about this:" to guide the user's eye.
+5. **Consolidate CTAs:** We currently have "Read more", four question buttons, and a "Deep Dive" button all competing for attention. Please remove the "Deep Dive" button entirely. Ensure that clicking "Read more" or clicking any of the suggested questions opens the new chat session with that context.
+
+**Part 2: Backend LLM Prompt Updates (in `server/services/contentGeneration.ts`)**
+Please update the system prompt/instructions for the `generateSummary` function to strictly enforce the following journalistic standards:
+
+1. **The Journalistic Lede:** The very first sentence of the summary must contain the Who, What, When, and Where. It must read like a newspaper lede, not a report title.
+2. **No Redundancy:** Explicitly forbid the LLM from repeating the town name in the first sentence or echoing the title. (e.g., If the location is Ossipee, do not start the summary with "The Ossipee Select Board...").
+3. **Strict Length Constraint for Lede:** The first paragraph must be strictly under 40 words so that the preview before the "Read more" truncation is punchy and gets straight to the point.
+4. **Tone:** Maintain a strict, dry, and objective journalistic tone. No PR language or evaluative adjectives (e.g., do not use words like "pleased," "successfully," or "fortunately").
+
+---
+
+This will give the agent a very clear checklist to run through. Let me know how the feed looks after the agent runs this update!
