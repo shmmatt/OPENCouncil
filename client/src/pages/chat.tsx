@@ -23,6 +23,7 @@ import { MessageNotices } from "@/components/MessageNotices";
 import { TemplateBanner } from "@/components/TemplateBanner";
 import { TemplateFirstMessage } from "@/components/TemplateFirstMessage";
 import { useToast } from "@/hooks/use-toast";
+import { parseSSEStream, getStageLabel } from "@/lib/sseParser";
 
 // V2 response types
 interface SourceCitation {
@@ -423,23 +424,9 @@ interface TypingIndicatorProps {
   deepDiveMaxIterations?: number;
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  planning: "Analyzing your question...",
-  retrieving: "Searching through documents...",
-  synthesizing: "Writing your answer...",
-  auditing: "Verifying accuracy...",
-  deep_dive_starting: "Starting deep dive analysis...",
-  deep_dive_intent: "Analyzing your question...",
-  deep_dive_planning: "Creating research plan...",
-  deep_dive_researching: "Researching...",
-  deep_dive_synthesizing: "Writing analysis...",
-  deep_dive_quality: "Evaluating quality...",
-  deep_dive_replanning: "Refining research plan...",
-};
-
 function TypingIndicator({ hasFile, messageContent, pipelineStage, isDeepDive, deepDiveIteration, deepDiveMaxIterations }: TypingIndicatorProps) {
-  let displayText = pipelineStage && STAGE_LABELS[pipelineStage]
-    ? STAGE_LABELS[pipelineStage]
+  let displayText = pipelineStage
+    ? getStageLabel(pipelineStage)
     : "Thinking...";
 
   if (isDeepDive && deepDiveIteration && deepDiveMaxIterations) {
@@ -732,12 +719,15 @@ export default function Chat() {
       ? `/api/chat/v2/sessions/${activeSessionId}/messages/deep-dive`
       : `/api/chat/v2/sessions/${activeSessionId}/messages/stream`;
 
+    const abortController = new AbortController();
+
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
         credentials: "include",
+        signal: abortController.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -746,57 +736,28 @@ export default function Chat() {
       }
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamDone = false;
       let sseError: Error | null = null;
 
-      while (!streamDone) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        let eventType = "";
-        let dataLines: string[] = [];
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-            dataLines = [];
-          } else if (line.startsWith("data: ")) {
-            dataLines.push(line.slice(6));
-          } else if (line === "" && eventType && dataLines.length > 0) {
-            const rawData = dataLines.join("\n");
-            try {
-              const data = JSON.parse(rawData);
-              if (eventType === "status") {
-                setPipelineStage(data.stage || null);
-              } else if (eventType === "progress") {
-                setDeepDiveIteration(data.iteration || 0);
-                setDeepDiveMaxIterations(data.maxIterations || 3);
-              } else if (eventType === "answer") {
-                setPendingMessage(null);
-                setPipelineStage(null);
-                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
-                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
-              } else if (eventType === "followups") {
-                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
-              } else if (eventType === "error") {
-                sseError = new Error(data.message || "An error occurred");
-                streamDone = true;
-              } else if (eventType === "done") {
-                streamDone = true;
-              }
-            } catch {
-            }
-            eventType = "";
-            dataLines = [];
-          }
-        }
-      }
+      await parseSSEStream(reader, {
+        onStatus: (stage) => setPipelineStage(stage || null),
+        onProgress: ({ iteration, maxIterations }) => {
+          setDeepDiveIteration(iteration);
+          setDeepDiveMaxIterations(maxIterations);
+        },
+        onAnswer: () => {
+          setPendingMessage(null);
+          setPipelineStage(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+        },
+        onFollowups: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+        },
+        onError: (data) => {
+          sseError = new Error(data?.message || "An error occurred");
+        },
+      }, abortController.signal);
 
       reader.cancel().catch(() => {});
       if (sseError) throw sseError;

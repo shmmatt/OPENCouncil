@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { parseSSEStream, getStageLabel } from "@/lib/sseParser";
 import { Link } from "wouter";
 import TownFeedComponent from "@/components/TownFeed";
 import { Button } from "@/components/ui/button";
@@ -93,57 +94,21 @@ function ChatDrawer({
         }
 
         const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let streamDone = false;
-        let eventType = "";
-        let dataLines: string[] = [];
 
-        while (!streamDone) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              eventType = line.slice(7).trim();
-              dataLines = [];
-            } else if (line.startsWith("data: ")) {
-              dataLines.push(line.slice(6));
-            } else if (line === "" && eventType && dataLines.length > 0) {
-              try {
-                const data = JSON.parse(dataLines.join("\n"));
-                if (eventType === "status") {
-                  const STAGE_LABELS: Record<string, string> = {
-                    planning: "Analyzing your question...",
-                    retrieving: "Searching documents...",
-                    synthesizing: "Writing your answer...",
-                    auditing: "Verifying accuracy...",
-                  };
-                  setStreamStatus(STAGE_LABELS[data.stage] || data.stage || "Processing...");
-                } else if (eventType === "answer") {
-                  setStreamStatus(null);
-                  queryClient.invalidateQueries({
-                    queryKey: ["/api/chat/sessions", sid],
-                  });
-                } else if (eventType === "followups") {
-                  queryClient.invalidateQueries({
-                    queryKey: ["/api/chat/sessions", sid],
-                  });
-                } else if (eventType === "error") {
-                  streamDone = true;
-                } else if (eventType === "done") {
-                  streamDone = true;
-                }
-              } catch {}
-              eventType = "";
-              dataLines = [];
-            }
-          }
-        }
+        await parseSSEStream(reader, {
+          onStatus: (stage) => setStreamStatus(getStageLabel(stage)),
+          onAnswer: () => {
+            setStreamStatus(null);
+            queryClient.invalidateQueries({
+              queryKey: ["/api/chat/sessions", sid],
+            });
+          },
+          onFollowups: () => {
+            queryClient.invalidateQueries({
+              queryKey: ["/api/chat/sessions", sid],
+            });
+          },
+        });
 
         reader.cancel().catch(() => {});
       } catch (error) {

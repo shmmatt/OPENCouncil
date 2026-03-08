@@ -35,6 +35,7 @@ This pipeline implements a self-reflective RAG approach with three-lane parallel
 - **Batch embedding via `batchEmbedContents`**: All retrieval queries (up to 6 across lanes) are deduplicated and embedded in a single Gemini API call instead of N individual calls. In-memory LRU cache (500 entries, 5-min TTL) prevents re-embedding repeated queries within a session.
 - **Batch enrichment**: Document metadata lookups use `WHERE id IN (...)` queries instead of per-chunk N+1 individual lookups.
 - **SSE flush**: Both SSE endpoints use `flushHeaders()`, `setNoDelay(true)`, and per-event `flush()` to ensure status stage events reach the client in real-time.
+- **Shared SSE parser** (`client/src/lib/sseParser.ts`): Single source of truth for SSE stream parsing used by both `chat.tsx` and `feed-layout.tsx`. Handles chunk buffering (splits on `\n\n` event boundaries), AbortSignal support, and typed event handlers (`onStatus`, `onProgress`, `onAnswer`, `onFollowups`, `onError`, `onDone`). `STAGE_LABELS` and `getStageLabel()` are also exported from here.
 
 ### Document Ingestion & OCR
 The V2 ingestion pipeline manages document lifecycle, including duplicate detection, AI-powered metadata suggestion, and multi-tier town detection. A dual-provider OCR system uses Tesseract.js and AWS Textract. Documents are stored in Replit Object Storage.
