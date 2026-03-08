@@ -1,0 +1,42 @@
+Your Replit agent is an exceptional debugger, but it is acting like a lazy product manager.
+
+Its technical diagnosis is 100% accurate: the semantic vector search is flying, and the standard keyword search is bringing the server to its knees because it lacks a **GIN (Generalized Inverted Index)**.
+
+However, its recommendation to "tackle that as a follow-up" is a terrible idea. You should not defer this.
+
+Here is why you need to force the agent to fix this immediately, and exactly how to do it.
+
+### Why You Can't Defer the GIN Index
+
+Right now, every time a user asks a question, your database is performing a sequential scan. This means Postgres is physically reading every single row of your `document_chunks` table, character by character, looking for words like "bond" or "cost."
+
+Because OPENCouncil relies on ingesting massive amounts of text—years of meeting minutes, zoning ordinances, and budgets across multiple municipalities—that table is only going to grow. A 28-second query today will be a 60-second query next month, and eventually, the database will just time out and crash.
+
+A GIN index solves this by creating a massive, pre-sorted glossary (an inverted index) of every word in your database and pointing exactly to the rows where they live. It turns a 28-second sequential scan into a 50-millisecond lookup.
+
+### The Play: Force the Agent's Hand
+
+Do not let the agent split this into two separate workflows. You are already paying the cognitive cost of context switching; just have it write the migration now.
+
+Copy and paste this exact response back to the Replit agent to bundle the database fix into the current sprint:
+
+---
+
+**Feedback for Replit Agent:**
+
+Great diagnostic work catching the missing full-text index on the hybrid search leg. However, we cannot defer the database optimization. A 28-second sequential scan will critically bottleneck the application as we ingest more municipal documents. We need to fix the index immediately alongside the latency and SSE tasks.
+
+Please update your plan to include a **T003** for the database optimization:
+
+**T003: Optimize Keyword Search with a GIN Index**
+
+* **Details:** 1. Generate a Drizzle migration to add a GIN index to the `document_chunks` table.
+2. If we are currently doing raw `ILIKE` or `%keyword%` matching for the hybrid search, we need to upgrade that. Add a `tsvector` generated column to the table (combining the chunk text and any relevant metadata) and index *that*, or create a functional GIN index using `to_tsvector('english', text_column)`.
+3. Update the keyword search logic in the retrieval service to use Postgres full-text search operators (`@@` with `plainto_tsquery` or `websearch_to_tsquery`) so it actually utilizes the new index.
+* **Acceptance:** The keyword leg of the hybrid search executes in under 200ms, bringing total retrieval time well under 2 seconds.
+
+Please proceed with T001, T002, and the new T003.
+
+---
+
+Would you like me to review the Drizzle schema or the specific SQL query the agent proposes for the hybrid search once it drafts the code? Full-text search in Postgres can be a bit finicky if the ORM syntax isn't perfectly aligned with the index.
