@@ -96,6 +96,8 @@ function ChatDrawer({
         const decoder = new TextDecoder();
         let buffer = "";
         let streamDone = false;
+        let eventType = "";
+        let dataLines: string[] = [];
 
         while (!streamDone) {
           const { done, value } = await reader.read();
@@ -105,8 +107,6 @@ function ChatDrawer({
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
 
-          let eventType = "";
-          let dataLines: string[] = [];
           for (const line of lines) {
             if (line.startsWith("event: ")) {
               eventType = line.slice(7).trim();

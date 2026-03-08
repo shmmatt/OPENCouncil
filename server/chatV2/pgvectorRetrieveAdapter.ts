@@ -279,7 +279,13 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
   const sauQueries = plan.sau ? plan.sau.queries.slice(0, chatConfigV3.MAX_QUERIES_PER_LANE) : [];
 
   const allQueryStrings = [...localQueries, ...stateQueries, ...sauQueries];
+  const embeddingStartTime = Date.now();
   const embeddingMap = await generateBatchQueryEmbeddings(allQueryStrings);
+  logInfo(`pgvector embeddings: ${embeddingMap.size} vectors for ${allQueryStrings.length} queries (${Date.now() - embeddingStartTime}ms)`, {
+    stage: "pgvectorRetrieve",
+    requestId: logContext?.requestId,
+    sessionId: logContext?.sessionId,
+  });
 
   const laneOpts: LaneQueryOptions = {
     keywordTerms: plan.keywordTerms && plan.keywordTerms.length > 0 ? plan.keywordTerms : undefined,
