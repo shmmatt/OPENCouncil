@@ -6,7 +6,7 @@ import { logInfo, logError, logDebug } from "../utils/logger";
 import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.1-flash-lite";
 const SUMMARY_MODEL = "gemini-3.1-pro-preview";
 
 interface RawTopic {
@@ -371,6 +371,7 @@ TOPICS:
 ${topicDetails}
 
 STRICT RULES FOR QUESTION GENERATION:
+0. ANSWERABLE ONLY — You are strictly forbidden from generating questions that ask for specific numbers, costs, names, vote counts, or historical data UNLESS the exact answer is explicitly stated in the summary text above. If the summary says "the town avoided a bond" but does NOT state the estimated cost, do NOT ask "What was the estimated cost of the bond?" If the answer isn't in the text, do not ask the question. Every question you generate must be answerable using only the summary and topic details provided.
 1. NO TEMPLATES — Never use generic formats like "What is the history of [Topic]?" or "How does [Topic] affect residents?" or "What decisions were made about [Topic]?"
 2. BE SPECIFIC — Anchor every question in a specific number, person, dollar figure, vote count, date, or conflict actually mentioned in the summary text.
 3. SEEK THE UNANSWERED — Ask the natural next question the summary implies but does not fully resolve. What would a reader wonder after reading this?
@@ -381,6 +382,7 @@ BAD EXAMPLES (never generate questions like these):
 - "What is the history of zoning variances in ${town}?"
 - "How does the budget affect ${town} residents?"
 - "Summarize recent municipal activity in ${town}."
+- "What was the total estimated cost of the construction bond?" (if the summary only says a bond was avoided, without stating a cost)
 
 GOOD EXAMPLES (generate questions like these):
 - "Which paving projects lost $300,000 to fund the new police station?"

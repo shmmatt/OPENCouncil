@@ -24,6 +24,7 @@ RULES:
 
 • Each question must be under 100 characters.
 • Avoid redundancy with information already explained.
+• CRITICAL: Never generate a question that asks for a specific number, cost, name, or date unless the information is explicitly present in the retrieved database context used to generate the answer. Do not bait the user with questions the database cannot answer.
 
 Do not generate follow-ups that exist only because the initial answer was incomplete.
 
@@ -93,6 +94,7 @@ Remember:
       config: {
         systemInstruction: FOLLOWUP_SYSTEM_PROMPT,
         temperature: 0.4,
+        thinkingConfig: { thinkingLevel: "LOW" as const },
       },
     });
 

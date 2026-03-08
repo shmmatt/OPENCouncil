@@ -33,7 +33,7 @@ export interface ModelSelection {
 }
 
 const MODELS = {
-  FAST: 'gemini-2.5-flash',
+  FAST: 'gemini-3.1-flash-lite',
   HIGH_QUALITY: 'gemini-3-flash-preview',
 } as const;
 

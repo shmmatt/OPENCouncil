@@ -101,7 +101,13 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
 - If you see a proposal (e.g., a warrant article) but no document confirming the result (vote outcome, approval, rejection), you MUST set has_sufficient_context to false.
 - When has_sufficient_context is false, generate a highly targeted missing_information_query (e.g., "March 2025 Town Meeting election results Article 13 passed failed").
 - Set suggested_year to the year the missing information is most likely found in (this may differ from the year the user asked about).
-- If all critical evidence is present, set has_sufficient_context to true, missing_information_query to null, and suggested_year to null.`;
+- If all critical evidence is present, set has_sufficient_context to true, missing_information_query to null, and suggested_year to null.
+
+## RELEVANCE GUARDRAIL
+- If the retrieved context does not contain the specific answer to the user's question, state this immediately and concisely.
+- Do NOT attempt to synthesize an answer using partially related keyword matches. Do NOT pivot to unrelated municipal data just because it shares a keyword (e.g., do not discuss Tax Anticipation Notes when asked about a construction bond cost).
+- When the answer is not in the database, say: "The municipal records currently available do not contain [the specific information requested]." Then briefly explain what IS known from the available records, if anything directly relevant exists.
+- Never pad a response with tangentially related content to avoid appearing empty-handed.`;
 
   if (isFinalAttempt) {
     systemPrompt += `\n\n## FINAL ATTEMPT — NO FURTHER SEARCHES
@@ -154,6 +160,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
         maxOutputTokens: 8192,
         responseMimeType: "application/json",
         responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
+        thinkingConfig: { thinkingLevel: "HIGH" as const },
       },
     });
 

@@ -20,6 +20,14 @@ PostgreSQL, hosted on Neon and using Drizzle ORM, stores chat sessions, document
 ### AI Integration
 Google Gemini powers answer synthesis, embedding generation, metadata extraction, multi-query planning, and various analytical tools.
 
+**Model tiers** (defined in `server/llm/modelRegistry.ts`):
+- `FAST` → `gemini-3.1-flash-lite` — default for all chat pipeline stages (router, planner, synthesizer, followups, etc.)
+- `HIGH_QUALITY` → `gemini-3-flash-preview` — used for escalated synthesis
+- `SUMMARY_MODEL` → `gemini-3.1-pro-preview` — used only for feed summary generation (in `contentGeneration.ts`)
+- Content generation `MODEL` → `gemini-3.1-flash-lite` — topic extraction, story-worthiness, curiosity questions
+
+**Thinking config**: Synthesizer uses `thinkingLevel: "HIGH"`, follow-up generator uses `thinkingLevel: "LOW"`.
+
 ### Chat Pipeline (V3)
 This pipeline implements a self-reflective RAG approach with three-lane parallel retrieval (Local, Statewide, SAU) and situation relevance gating. It optimizes for latency with parallel retrieval, SSE streaming, and asynchronous follow-up generation. It includes conditional "second hop" retrieval and specific prose word limits for different response types.
 
