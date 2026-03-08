@@ -11,12 +11,14 @@ import {
   ArrowBigUp,
   Clock,
   MapPin,
-  Flame,
+  TrendingUp,
   ChevronDown,
   ChevronUp,
   Sparkles,
   Check,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { NH_TOWNS } from "@shared/schema";
 import type { TownFeedItem, TownFeedPayload, ChatTemplate } from "@shared/schema";
 
@@ -167,14 +169,18 @@ function PostCard({
 
   const topics = (item.topics || []) as Array<{ topic: string; score: number }>;
   const maxScore = topics.reduce((m, t) => Math.max(m, t.score ?? 0), 0);
-  const isHotTopic = maxScore >= 8;
+  const isHighImpact = maxScore >= 8;
 
   const summaryText = item.summary || "";
   const truncateLength = 280;
   const needsTruncation = summaryText.length > truncateLength;
-  const displaySummary = expanded || !needsTruncation
-    ? summaryText
-    : summaryText.slice(0, truncateLength) + "...";
+  const displaySummary = useMemo(() => {
+    if (expanded || !needsTruncation) return summaryText;
+    let truncated = summaryText.slice(0, truncateLength);
+    const boldCount = (truncated.match(/\*\*/g) || []).length;
+    if (boldCount % 2 !== 0) truncated += "**";
+    return truncated + "...";
+  }, [summaryText, expanded, needsTruncation]);
 
   return (
     <Card className="overflow-visible" data-testid={`feed-card-${item.id}`}>
@@ -191,10 +197,10 @@ function PostCard({
               {item.topicEmoji}
             </span>
           )}
-          {isHotTopic && (
-            <Badge variant="destructive" className="text-xs no-default-hover-elevate no-default-active-elevate" data-testid={`badge-hot-topic-${item.id}`}>
-              <Flame className="w-3 h-3 mr-0.5" />
-              Hot Topic
+          {isHighImpact && (
+            <Badge variant="secondary" className="text-xs no-default-hover-elevate no-default-active-elevate" data-testid={`badge-high-impact-${item.id}`}>
+              <TrendingUp className="w-3 h-3 mr-0.5" />
+              High Impact
             </Badge>
           )}
         </div>
@@ -210,9 +216,9 @@ function PostCard({
         <h3 className="text-base font-semibold leading-snug" data-testid={`text-title-${item.id}`}>
           {item.title}
         </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed" data-testid={`text-summary-${item.id}`}>
-          {displaySummary}
-        </p>
+        <div className="text-sm text-muted-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:text-muted-foreground prose-strong:text-foreground [&>p]:mb-2 [&>p:last-child]:mb-0" data-testid={`text-summary-${item.id}`}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{displaySummary}</ReactMarkdown>
+        </div>
         {needsTruncation && (
           <button
             className="text-xs text-primary font-medium flex items-center gap-0.5"
@@ -247,32 +253,22 @@ function PostCard({
         </div>
 
         {allQuestions.length > 0 && (
-          <div className="flex flex-wrap gap-2 w-full">
-            {allQuestions.map((q, idx) => (
-              <Button
-                key={idx}
-                variant="ghost"
-                size="sm"
-                className="text-xs text-left whitespace-normal border border-border"
-                onClick={() => onQuestionClick(q, item.id)}
-                data-testid={`button-question-${item.id}-${idx}`}
-              >
-                {q}
-              </Button>
-            ))}
+          <div className="w-full space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Ask about this:</p>
+            <div className="flex flex-wrap gap-2">
+              {allQuestions.map((q, idx) => (
+                <Badge
+                  key={idx}
+                  variant="outline"
+                  className="cursor-pointer text-xs font-normal text-left whitespace-normal"
+                  onClick={() => onQuestionClick(q, item.id)}
+                  data-testid={`button-question-${item.id}-${idx}`}
+                >
+                  {q}
+                </Badge>
+              ))}
+            </div>
           </div>
-        )}
-
-        {isHotTopic && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onQuestionClick(`Deep dive: What's the full story on ${item.title}?`, item.id)}
-            data-testid={`button-deep-dive-${item.id}`}
-          >
-            <Sparkles className="w-3.5 h-3.5 mr-1" />
-            Deep Dive
-          </Button>
         )}
       </CardFooter>
     </Card>

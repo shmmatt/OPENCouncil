@@ -299,9 +299,17 @@ STRICT TONE RULES:
 - Never use rhetorical questions
 - Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
 - Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never use PR language or evaluative adjectives: "pleased," "successfully," "fortunately," "unfortunately," "proud," "committed to"
 - Never title the piece with the town name followed by an exclamation mark or informal phrasing
 - Do NOT write: "Big changes are coming to ${town}!" or "${town} Update!"
 - DO write: "The ${town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
+
+JOURNALISTIC LEDE RULES:
+- The very first sentence MUST be a newspaper-style lede containing Who, What, When, and Where
+- The first paragraph must be strictly under 40 words — punchy and direct
+- Do NOT repeat the town name in the first sentence if it is already clear from context (e.g., if the reader already knows the town, do not start with "The ${town} Select Board...")
+- Do NOT echo or rephrase the headline/title in the opening sentence — the lede must add new information
+- Example of a good lede: "A **$363,500** purchase of the former bank building on Main Street was approved unanimously at the **Feb. 12** meeting."
 
 HIGH-PRIORITY TOPICS:
 ${highTopicText || "(None — all topics were routine this period)"}
@@ -310,7 +318,7 @@ ROUTINE ITEMS:
 ${routineText || "(None)"}
 
 Structure:
-- Open with the most consequential action taken, stated as a single declarative sentence
+- Open with the most consequential action taken, stated as a single declarative sentence (the journalistic lede)
 - One topic per paragraph, 2-4 sentences each
 - For each topic: what was decided, by whom, and what changes for residents
 - Use "Why it matters:" as a label before a single factual sentence where relevant — never as editorial commentary

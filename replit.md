@@ -49,7 +49,8 @@ A content generation pipeline extracts engaging topics from meeting minutes, enr
 - Optimistic UI updates for upvotes via React Query cache manipulation (no feed refetch/jumping)
 - Suggested question chips on each post open a slide-out chat drawer from the right
 - Chat drawer uses URL state (`?chat=open&feedId=X`) with `pushState`/`popstate` so browser Back closes the drawer without navigating away; feed scroll position preserved since component stays mounted
-- "Hot Topic" badge on items with topic scores >= 8, with Deep Dive trigger
+- "High Impact" badge (secondary variant, TrendingUp icon) on items with topic scores >= 8
+- Markdown rendering in feed card summaries via ReactMarkdown with remarkGfm; truncation closes unclosed bold markers
 - Template promo cards interleaved every 5th position
 - Admin content page enhanced with keyword search, status/town filters, sortable columns, table/card view toggle, and payload editor (including topicEmoji)
 
