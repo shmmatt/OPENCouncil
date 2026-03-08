@@ -157,7 +157,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
       config: {
         systemInstruction: systemPrompt,
         temperature: synthesisTemperature,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         responseMimeType: "application/json",
         responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
         thinkingConfig: { thinkingLevel: "HIGH" as const },
@@ -257,12 +257,27 @@ function parseSynthesisJsonResponse(rawText: string, isFinalAttempt?: boolean): 
 
     return { hasSufficientContext: hasSufficient, missingInformationQuery: missingQuery, suggestedYear: sugYear, response };
   } catch {
-    logDebug("synthesizerV3: JSON parse failed, treating raw text as response");
+    logDebug("synthesizerV3: JSON parse failed, attempting partial extraction");
+    let extracted = rawText || "";
+    if (extracted.startsWith("{") && extracted.includes('"response"')) {
+      const match = extracted.match(/"response"\s*:\s*"([\s\S]*)$/);
+      if (match) {
+        let val = match[1];
+        if (val.endsWith('"}') || val.endsWith('"\n}')) {
+          val = val.replace(/"\s*\}?\s*$/, '');
+        }
+        val = val.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        if (val.length > 20) {
+          extracted = val;
+          logDebug("synthesizerV3: extracted response field from truncated JSON");
+        }
+      }
+    }
     return {
       hasSufficientContext: true,
       missingInformationQuery: null,
       suggestedYear: null,
-      response: rawText || "Unable to synthesize an answer from the available sources.",
+      response: extracted || "Unable to synthesize an answer from the available sources.",
     };
   }
 }
