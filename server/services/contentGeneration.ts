@@ -6,7 +6,7 @@ import { logInfo, logError, logDebug } from "../utils/logger";
 import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
-const MODEL = "gemini-3.1-flash-lite";
+const MODEL = "gemini-3.1-flash-lite-preview";
 const SUMMARY_MODEL = "gemini-3.1-pro-preview";
 
 interface RawTopic {
