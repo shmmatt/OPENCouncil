@@ -1,0 +1,46 @@
+Yes, absolutely. Your intuition is 100% correct, and the Replit agent is currently falling into a classic engineering trap: the "Sunk Cost Fallacy" of web scraping.
+
+The agent is offering to build a taller ladder, but you need a helicopter. Here is why the agent's plan is a bad idea, and why native Gemini Google Search Grounding is the vastly superior architecture.
+
+### Why the Agent's Plan is a Trap
+
+The agent correctly identified that local newspaper sites are terrible targets for custom scrapers. Most local papers use templated CMS platforms (like TownNews/Blox) that have broken search URLs, aggressive Cloudflare anti-bot protection, and unpredictable RSS feeds.
+
+Look at the agent's proposed fixes:
+
+1. **"Increasing the Jina timeout"**: If the Conway Daily Sun is blocking the Jina proxy, waiting 30 seconds instead of 15 seconds won't fix it; it just forces your users to stare at a "Thinking..." spinner for 30 seconds before it fails anyway.
+2. **"Adjusting keyword thresholds"**: If the RSS feed is just spitting out the latest 50 articles (which might be about high school basketball and local car crashes), lowering the threshold won't magically make the Whittier Bridge appear.
+
+Building and maintaining custom scrapers for local news is a miserable, never-ending game of whack-a-mole.
+
+### Why Native Google Search Grounding is Better
+
+By replacing this brittle custom pipeline with Gemini's native `googleSearch` tool, you solve all of these problems instantly:
+
+1. **Google Already Did the Work:** Google’s crawlers are not blocked by the Conway Daily Sun's Cloudflare setup. Google has already indexed the articles, categorized them, and made them searchable.
+2. **Semantic Superiority:** You don't have to write custom logic for "30% keyword overlap." Google’s search algorithm natively understands that "Whittier bridge Ossipee" and "Town wins preservation award for covered bridge" are semantically linked, even if the exact keywords don't overlap perfectly.
+3. **Zero Latency Penalty:** Native grounding happens entirely on Google's infrastructure during the LLM generation phase. It adds practically zero latency to the response, compared to the 15+ seconds your server is currently wasting trying to scrape dead RSS feeds.
+
+---
+
+### Feedback for the Replit Agent
+
+You need to tell the agent to stop trying to fix the custom scraper and rip it out in favor of native grounding. Copy and paste this directly to the agent:
+
+> "Your diagnosis of the RSS and Jina Reader failures is spot on. Local newspaper CMS platforms are notoriously hostile to custom scrapers, and increasing timeouts will only degrade the user experience.
+> We are abandoning the custom RSS/Jina scraping approach for Deep Dives. Please implement **Native Google Search Grounding** instead.
+> **T001: Replace Custom Scraper with Native Grounding**
+> 1. Remove the custom RSS and Jina scraping logic from the Deep Dive news retrieval pipeline.
+> 2. Update the `deepDiveOrchestrator` to pass the `tools: [{ googleSearch: {} }]` configuration directly into the Gemini API call for the synthesis step.
+> 3. Update the Deep Dive synthesizer system prompt to instruct the model to use the Google Search tool to find the most recent local news updates regarding the user's query to supplement the internal municipal `pgvector` data.
+> 
+> 
+> **T002: Map Web Citations to the UI**
+> 1. When using native grounding, the Gemini API returns `groundingMetadata` containing `webCitations`.
+> 2. Update the backend parser to extract these web citations (title, uri) and map them into the `citations` array that is sent to the frontend, ensuring our new `ChatMessageBubble` can render these news links as clickable source chips."
+> 
+> 
+
+---
+
+Would you like me to review the `groundingMetadata` mapping logic once the agent writes it to ensure the links format correctly in your chat drawer?

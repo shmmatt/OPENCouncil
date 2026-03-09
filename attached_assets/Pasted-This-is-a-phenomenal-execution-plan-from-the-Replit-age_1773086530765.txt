@@ -1,0 +1,36 @@
+This is a phenomenal execution plan from the Replit agent. It successfully guts the brittle scraping logic and seamlessly maps Google's native capabilities into your existing `SourceCitation` interface so the frontend doesn't break.
+
+However, because your chat UI relies heavily on streaming and specific markdown citation formats (the `` tags), there are two technical traps the agent is going to fall into if you don't warn it right now.
+
+### 1. The Streaming Metadata Trap
+
+In **T001**, the agent plans to extract `groundingMetadata` from the response object.
+
+Because this is a chat application, the Deep Dive orchestrator is likely using Gemini's `streamGenerateContent` method so the user sees the text typing out in real-time. The trap is that `groundingMetadata` does **not** consistently exist on the individual chunks as they stream in. It is usually only available at the very end of the stream.
+
+**The Fix:** The agent must be instructed to await the final aggregated response promise (`await result.response`) after the stream completes to reliably extract the `groundingMetadata`. If it tries to parse it from the streaming chunks, it will crash or miss the citations entirely.
+
+### 2. The Inline Citation Disconnect
+
+In **T002**, the agent brilliantly plans to map the Google Search URLs to the `id` field of your `SourceCitation` objects. This ensures they show up in the collapsible "Sources" list at the bottom of the chat bubble.
+
+However, the agent forgot about the *inline* citations (the little bracketed numbers in the text). When Gemini natively searches the web, it does not naturally format its output using your custom `` markdown. It will just write the text, and your frontend won't know where to place the clickable citation pills.
+
+**The Fix:** You must add a strict instruction to the synthesizer prompt telling the LLM exactly how to cite the web results it finds.
+
+---
+
+### Feedback for the Replit Agent
+
+Copy and paste this directly to the agent to bulletproof the implementation before it writes the code:
+
+> "This plan perfectly executes the transition to native Google Search Grounding. The frontend mappings in T002 and T004 are exactly what we need.
+> However, please ensure you handle these two critical technical details during implementation:
+> **1. Await the Final Response for Metadata (T001/T002):**
+> Because we are streaming the response to the frontend, you cannot reliably extract `groundingMetadata` from the stream chunks. You must extract it from the final aggregated response object once the stream is complete (e.g., `const finalResponse = await streamResult.response; const metadata = finalResponse.candidates[0].groundingMetadata;`).
+> **2. Force Inline Markdown Citations (T001):**
+> By default, Gemini will not use our custom `markdown for its web search results. You must explicitly add this constraint to the Deep Dive synthesizer system prompt: *'When you incorporate information from the Google Search tool, you MUST include an inline citation immediately following the fact. The citation format must be`, using the exact web URL provided by the search tool as the ID. Do not use standard footnotes.'* This ensures the `ChatMessageBubble` can render the inline clickable pills properly."
+
+---
+
+Would you like me to review the final `ChatMessageBubble.tsx` code once the agent updates it to ensure the new Globe icon and external URL routing don't conflict with your internal `pgvector` document links?
