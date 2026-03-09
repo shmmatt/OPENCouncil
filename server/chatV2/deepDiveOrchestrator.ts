@@ -198,7 +198,7 @@ export async function runDeepDive(options: {
       `You are a municipal governance research analyst for New Hampshire. Analyze the user's question to extract:
 1. The core research question
 2. Sub-questions that need answering
-3. Which tools would be most useful (document_search, news_search, web_search)
+3. Which tools would be most useful (document_search, web_search)
 4. Key entities (towns, boards, people, statutes)
 5. Time period of interest
 
@@ -206,7 +206,7 @@ Respond in JSON format:
 {
   "coreQuestion": "...",
   "subQuestions": ["..."],
-  "recommendedTools": ["document_search", "news_search", "web_search"],
+  "recommendedTools": ["document_search", "web_search"],
   "entities": { "towns": [], "boards": [], "people": [], "statutes": [] },
   "timePeriod": "...",
   "reasoning": "..."
@@ -238,7 +238,7 @@ Respond in JSON format:
       FLASH_MODEL,
       `You are a research planner for NH municipal governance. Given the intent analysis, create a concrete research plan.
 
-Note: Current local news and recent developments will be found automatically via Google Search during synthesis. Focus your plan on document retrieval and targeted web queries.
+Note: Current local news and recent developments will be found automatically via a dedicated Google Search web research phase. Focus your plan on document retrieval and targeted web queries.
 
 Respond in JSON:
 {
@@ -279,6 +279,7 @@ Rules:
     let completenessScore = 0;
     let finalAnswer = "";
     let lastSynthesisResponse: any = null;
+    let lastWebResearchResponse: any = null;
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       iterationCount = iteration + 1;
@@ -349,12 +350,50 @@ Rules:
 
       allEvidence.push(...iterationEvidence);
 
-      // Synthesis
+      // Phase 1: Dedicated web research call with minimal context to force Google Search
+      onStageChange("deep_dive_web_research", `Searching for recent news and updates...`);
+
+      const currentDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      let webResearchText = "";
+      let webResearchResponse: any = null;
+      lastWebResearchResponse = null;
+
+      try {
+        const webResearchResult = await callLLM(
+          FLASH_MODEL,
+          `You are a web research assistant. Today's date is: ${currentDate}.
+Your ONLY job is to search Google for the MOST RECENT information about the topic below.
+You MUST search — do not answer from memory. Use the googleSearch tool to find current news articles, government press releases, project updates, and official announcements.
+Search for multiple angles: recent news coverage, official project status, awards, controversies, and any developments in the last 1-2 years.
+After searching, compile a factual summary of what you found, including exact URLs for every source. If you found nothing recent, state that clearly.`,
+          `Search for the latest information about: ${question}\nLocation context: ${townPreference || "New Hampshire"}`,
+          tracker,
+          logContext,
+          [{ googleSearch: {} }],
+        );
+        webResearchText = webResearchResult.text;
+        webResearchResponse = webResearchResult.rawResponse;
+        lastWebResearchResponse = webResearchResponse;
+
+        const webGm = webResearchResponse?.candidates?.[0]?.groundingMetadata;
+        logInfo("deep_dive_web_research_grounding", {
+          ...logContext,
+          hasGroundingMetadata: !!webGm,
+          groundingChunkCount: webGm?.groundingChunks?.length || 0,
+        });
+      } catch (err) {
+        logWarn("deep_dive_web_research_error", { ...logContext, error: err instanceof Error ? err.message : String(err) });
+      }
+
+      // Phase 2: Synthesis combining RAG evidence + web research results
       onStageChange("deep_dive_synthesizing", `Writing analysis (Pass ${iterationCount})...`);
 
       const evidenceBlock = allEvidence.map((e, i) => `--- Evidence ${i + 1} ---\n${e}`).join("\n\n");
 
-      const currentDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      let webResearchSection = "";
+      if (webResearchText) {
+        webResearchSection = `\n\n--- Recent Web Research (from Google Search, conducted ${currentDate}) ---\n${webResearchText}`;
+      }
 
       const synthesisResult = await callLLM(
         PRO_MODEL,
@@ -372,16 +411,11 @@ FORMAT RULES (strict):
 - Do NOT roleplay a persona or sign off with a name/title
 - Write 500-1000 words
 
-TEMPORAL AWARENESS (critical):
-- You are writing this analysis on ${currentDate}
-- If the most recent evidence you found is from months or years ago, explicitly state this: e.g., "The most recent official action found in town records was at the [Month Year] meeting..."
-- Frame the recency gap honestly — the paper trail may have gone cold, or the issue may be resolved
-- Never present old information as if it is current
-
-GOOGLE SEARCH USAGE (important):
-- You have access to Google Search. Use it to find the latest local news, recent developments, and current status updates related to the research question.
-- Actively search for recent news articles from local NH newspapers and government sources to supplement the provided municipal document evidence.
-- When you incorporate information found via Google Search, you MUST cite it inline using markdown link format: e.g., [Source Title](https://example.com) or [[N]](https://example.com). Use the exact URL provided by the search results.
+INTEGRATING WEB RESEARCH:
+- The evidence below includes BOTH municipal documents AND recent web research results gathered via Google Search.
+- The "Recent Web Research" section at the end contains the latest publicly available information. Integrate these findings into your report where relevant.
+- When citing web research results, use the exact URLs provided in that section as markdown links: [Source Title](https://example.com).
+- When municipal documents and web research conflict, note both and indicate which is more recent.
 
 CITATION RULES:
 - When evidence includes a URL, format citations as markdown links: e.g., [[1]](https://example.com) or [Source Title](url)
@@ -400,15 +434,28 @@ CONTENT:
 - If evidence is limited, acknowledge this honestly rather than speculating
 - Balance multiple perspectives when the evidence shows disagreement
 
-Town context: ${townPreference || "New Hampshire (general)"}`,
-        `Research question: ${question}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}`,
+Town context: ${townPreference || "New Hampshire (general)"}
+
+CRITICAL CONSTRAINT — TONE AND TEMPORAL HONESTY:
+- Use a neutral, factual, professional tone throughout. You are a municipal governance analyst, not a journalist or storyteller.
+- NEVER use dramatic, editorial, or speculative language. Specifically BANNED phrases include: "has gone cold", "remains shrouded", "a mystery", "only time will tell", "the clock is ticking", "behind closed doors", "raises questions", "silence is deafening", and similar editorial language.
+- Today's date is ${currentDate}. If the most recent evidence is from months or years ago, state this with dry neutrality: "The most recent official municipal record provided regarding this topic is dated [Month Year]."
+- Do NOT speculate on why records stopped or editorialize about the gap.
+- Never present old information as if it is current.`,
+        `Research question: ${question}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}${webResearchSection}`,
         tracker,
         logContext,
-        [{ googleSearch: {} }],
       );
 
       finalAnswer = synthesisResult.text;
       lastSynthesisResponse = synthesisResult.rawResponse;
+
+      const gm = webResearchResponse?.candidates?.[0]?.groundingMetadata;
+      logInfo("deep_dive_grounding_metadata", {
+        ...logContext,
+        hasGroundingMetadata: !!gm,
+        groundingChunkCount: gm?.groundingChunks?.length || 0,
+      });
 
       await recordStep(deepDiveSession.id, tracker, "synthesis",
         `Question: ${question}\nEvidence items: ${allEvidence.length}`,
@@ -498,7 +545,7 @@ IMPORTANT: Do NOT repeat queries that already failed. Try completely different a
 - Different document types or time periods
 - Different tools than what was tried before
 
-Note: Current local news is handled automatically via Google Search during synthesis. Focus on document retrieval and web queries.
+Note: Current local news is handled automatically via a dedicated Google Search web research phase. Focus on document retrieval and web queries.
 
 Respond in JSON:
 {
@@ -557,7 +604,7 @@ Previous queries used:
     const uniqueDocNames = [...new Set(allDocumentNames)];
     const sources: SourceCitation[] = await mapFileSearchDocumentsToCitations(uniqueDocNames);
 
-    const webCitations = extractWebCitationsFromGrounding(lastSynthesisResponse);
+    const webCitations = extractWebCitationsFromGrounding(lastWebResearchResponse);
     if (webCitations.length > 0) {
       const beforeCount = sources.length;
       const existingUrls = new Set(sources.filter(s => s.url).map(s => s.url));
