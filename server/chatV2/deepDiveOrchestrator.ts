@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { logInfo, logError, logWarn } from "../utils/logger";
 import { pgvectorTwoLaneRetrieveWithPlan } from "./pgvectorRetrieveAdapter";
+import { buildRetrievalPlanForQuery } from "./plannerV3";
 import { searchNewsForTopic } from "../services/newsCrawler";
 import { searchWeb, isWebSearchConfigured } from "../services/webSearchTool";
 import { mapFileSearchDocumentsToCitations } from "./sources";
@@ -251,25 +252,11 @@ Rules:
         const ragStart = Date.now();
         try {
           for (const query of plan.ragQueries.slice(0, 4)) {
-            const retrievalPlan = {
-              localLane: {
-                queries: [{ text: query, weight: 1.0 }],
-                keywordFilters: [],
-                temporalTarget: null,
-                queryFocus: "general" as const,
-              },
-              stateLane: {
-                queries: [{ text: query, weight: 1.0 }],
-                keywordFilters: [],
-                temporalTarget: null,
-                queryFocus: "general" as const,
-              },
-              sauLane: null,
-            };
+            const { retrievalPlan, issueMap } = buildRetrievalPlanForQuery(query, townPreference || undefined);
 
             const result = await pgvectorTwoLaneRetrieveWithPlan(
               retrievalPlan,
-              { topics: [question], entities: [], legalTopics: [], boardsDiscussed: [], legalSalience: 0, keySignals: [], temporalSignals: [], queryFocus: "general" },
+              issueMap,
               { townPreference, logContext }
             );
 

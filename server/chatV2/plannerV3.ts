@@ -381,36 +381,39 @@ function parseAndValidatePlannerOutput(
 
   } catch (parseError) {
     validationWarnings.push(`JSON parse failed: ${parseError}`);
-    return getFallbackPlannerOutput(userMessage);
+    return getFallbackPlannerOutput(userMessage, townHint);
   }
 }
 
-function getFallbackPlannerOutput(userMessage: string, townHint?: string): PlannerOutput {
-  const hardEntities = extractHardEntitiesHeuristic(userMessage);
+export function buildRetrievalPlanForQuery(
+  query: string,
+  townHint?: string
+): { retrievalPlan: RetrievalPlanV3; issueMap: IssueMap } {
+  const hardEntities = extractHardEntitiesHeuristic(query);
   const issueMap: IssueMap = {
     town: townHint,
-    situationTitle: extractDefaultTitle(userMessage),
-    entities: extractEntitiesHeuristic(userMessage),
+    situationTitle: extractDefaultTitle(query),
+    entities: extractEntitiesHeuristic(query),
     actions: [],
-    legalTopics: extractLegalTopicsHeuristic(userMessage),
-    boards: extractBoardsHeuristic(userMessage),
+    legalTopics: extractLegalTopicsHeuristic(query),
+    boards: extractBoardsHeuristic(query),
     timeHints: [],
     requestedOutput: "explain",
-    legalSalience: computeLegalSalience(userMessage),
+    legalSalience: computeLegalSalience(query),
     plannerConfidence: 0.3,
-    temporalTarget: extractTemporalTargetHeuristic(userMessage),
+    temporalTarget: extractTemporalTargetHeuristic(query),
     hardEntities,
-    queryFocus: inferQueryFocusHeuristic(userMessage),
+    queryFocus: inferQueryFocusHeuristic(query),
   };
 
   const retrievalPlan: RetrievalPlanV3 = {
     local: {
-      queries: [buildDefaultLocalQuery(userMessage, issueMap)],
+      queries: [buildDefaultLocalQuery(query, issueMap)],
       k: chatConfigV3.DEFAULT_LOCAL_K,
       cap: chatConfigV3.DEFAULT_LOCAL_CAP,
     },
     state: {
-      queries: [buildDefaultStateQuery(userMessage, issueMap)],
+      queries: [buildDefaultStateQuery(query, issueMap)],
       k: chatConfigV3.DEFAULT_STATE_K,
       cap: chatConfigV3.DEFAULT_STATE_CAP,
     },
@@ -419,18 +422,18 @@ function getFallbackPlannerOutput(userMessage: string, townHint?: string): Plann
       minLocalFacts: 2,
     },
     priority: issueMap.legalSalience >= 0.6 ? "law-first" : "facts-first",
-    reason: "Fallback plan due to planner error",
+    reason: "Default retrieval plan for query",
     temporalFilter: issueMap.temporalTarget,
     keywordTerms: hardEntities,
     queryFocus: issueMap.queryFocus,
   };
 
-  if (shouldTriggerSauLane(userMessage, issueMap) && townHint) {
+  if (shouldTriggerSauLane(query, issueMap) && townHint) {
     const sauId = getSauIdForTown(townHint);
     if (sauId) {
       const sauTowns = getTownsForSau(sauId);
       retrievalPlan.sau = {
-        queries: buildSauLaneQueries(userMessage, sauId),
+        queries: buildSauLaneQueries(query, sauId),
         k: 8,
         cap: 5,
       };
@@ -439,6 +442,11 @@ function getFallbackPlannerOutput(userMessage: string, townHint?: string): Plann
     }
   }
 
+  return { retrievalPlan, issueMap };
+}
+
+function getFallbackPlannerOutput(userMessage: string, townHint?: string): PlannerOutput {
+  const { retrievalPlan, issueMap } = buildRetrievalPlanForQuery(userMessage, townHint);
   return {
     issueMap,
     retrievalPlan,
