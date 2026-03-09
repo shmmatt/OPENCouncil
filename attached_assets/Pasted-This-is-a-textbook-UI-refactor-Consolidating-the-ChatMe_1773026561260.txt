@@ -1,0 +1,41 @@
+This is a textbook UI refactor. Consolidating the `ChatMessageBubble` is exactly what you need to do to ensure the OPENCouncil experience feels cohesive, whether a user is deep in a chat session or just clicking a quick follow-up from the town feed.
+
+The Replit agent’s plan is structurally very sound, but there is one glaring contradiction in its logic, plus a minor architectural trap regarding how React handles API mutations.
+
+Here is the feedback you need to give the agent before it starts ripping up your UI components.
+
+### 1. The Typing Indicator Contradiction
+
+In **T002**, the agent states: *"Keep the TypingIndicator component in chat.tsx (it's specific to the full chat page)."*
+However, in **T003**, the agent states: *"Add the animated typing indicator (bouncing dots + stage label) to match the main chat, replacing the plain Loader2 spinner."*
+
+**The Fix:** The agent cannot have it both ways. If the feed drawer needs the exact same bouncing dots and stage labels as the main chat, the `TypingIndicator` must *also* be extracted into a shared component (e.g., `client/src/components/TypingIndicator.tsx`). Do not let the agent copy and paste that animation logic into two different files.
+
+### 2. The Feedback Button API Trap
+
+The plan suggests moving the `FeedbackButtons` into the shared `ChatMessageBubble`.
+
+In the main chat page, hitting "Thumbs Up" or "Thumbs Down" likely triggers a database mutation to save that feedback to a specific `messageId` or `sessionId`. If the agent hardcodes that API call inside the generic UI component, it might break when rendered in the feed drawer if the drawer manages its session state slightly differently.
+
+**The Fix:** Instruct the agent to keep the component "dumb." The `ChatMessageBubble` should accept an `onFeedbackSubmit?: (feedbackType: 'up' | 'down') => void` prop. This allows the parent pages (`chat.tsx` and `feed-layout.tsx`) to handle the actual database mutation logic themselves.
+
+### 3. Tailwind "Prose" Sizing for the Compact View
+
+The agent smartly suggested adding a `compact?: boolean` prop for the feed drawer to tighten up the spacing.
+
+**The Fix:** Ensure the agent actually applies this to the React Markdown renderer. If you are using Tailwind's Typography plugin, the agent needs to explicitly toggle the class from `prose` (or `prose-base`) to `prose-sm` when `compact` is true. Otherwise, the markdown text will look comically large in the narrow side-drawer.
+
+---
+
+### Feedback for the Replit Agent
+
+You can copy and paste this directly to the agent to course-correct the plan:
+
+> "This refactor plan is approved, but please make the following three adjustments to ensure the components remain truly reusable:
+> 1. **Extract TypingIndicator:** In T002 and T003, you contradict yourself by keeping `TypingIndicator` in `chat.tsx` but trying to use it in `feed-layout.tsx`. Please extract `TypingIndicator` into its own shared file in `@/components/TypingIndicator.tsx` so both pages can import it cleanly.
+> 2. **Dumb Feedback Component:** Do not hardcode the API mutation for feedback inside `ChatMessageBubble`. Instead, add an `onFeedbackSubmit?: (type: 'up' | 'down') => void` prop so the parent components (`chat.tsx` and `feed-layout.tsx`) can handle the network request contextually.
+> 3. **Compact Markdown:** When implementing the `compact` prop, ensure the Tailwind typography class on the `ReactMarkdown` wrapper switches to `prose-sm` so the text scales down nicely in the drawer view."
+> 
+> 
+
+Would you like me to review the `ChatMessageBubble.tsx` code once the agent generates it to ensure the markdown and citation parsing ported over cleanly?
