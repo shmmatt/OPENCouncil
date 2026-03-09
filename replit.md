@@ -62,6 +62,7 @@ A content generation pipeline extracts engaging topics from meeting minutes, enr
 - `userUpvotes` table with unique `(userId, feedItemId)` constraint prevents duplicate votes
 - Optimistic UI updates for upvotes via React Query cache manipulation (no feed refetch/jumping)
 - Suggested question chips on each post open a slide-out chat drawer from the right
+- Chat drawer uses shared `ChatMessageBubble` (compact mode) and `TypingIndicator` components, providing the same experience as the main chat page: markdown rendering, source citations, follow-up chips, feedback buttons, AI disclaimer, and animated pipeline stage labels
 - Chat drawer uses URL state (`?chat=open&feedId=X`) with `pushState`/`popstate` so browser Back closes the drawer without navigating away; feed scroll position preserved since component stays mounted
 - "High Impact" badge (secondary variant, TrendingUp icon) on items with topic scores >= 8
 - Markdown rendering in feed card summaries via ReactMarkdown with remarkGfm; truncation closes unclosed bold markers
@@ -69,6 +70,11 @@ A content generation pipeline extracts engaging topics from meeting minutes, enr
 - Admin content page enhanced with keyword search, status/town filters, sortable columns, table/card view toggle, and payload editor (including topicEmoji)
 
 **Key files:** `client/src/components/TownFeed.tsx`, `client/src/pages/feed-layout.tsx`, `server/routes/feed.ts`, `server/storage/userUpvotes.ts`, `server/storage/townFeed.ts`
+
+### Shared Chat Components
+- `client/src/components/ChatMessageBubble.tsx` — "Dumb" message renderer used by both `chat.tsx` and `feed-layout.tsx`. Handles V2 metadata parsing, ReactMarkdown rendering, collapsible citations, follow-up chips, coverage disclaimer, feedback buttons (via props), AI disclaimer, timestamps. Accepts `compact` prop for tighter drawer layout.
+- `client/src/components/TypingIndicator.tsx` — Animated bouncing dots with pipeline stage labels. Uses `getStageLabel()` from `sseParser.ts`. Supports deep dive iteration display.
+- `client/src/lib/sseParser.ts` — Shared SSE stream parser with `\n\n` event boundary splitting, typed handlers, `STAGE_LABELS` map, and `getStageLabel()` utility.
 
 ### Promotions Hub
 An outbound growth engine generates omni-channel social media content, email copy, and trackable deep links from published Town Feed items, enabling "zero-click to chat" acquisition. LLMs generate content and video scripts, maintaining an objective tone.

@@ -1,16 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { parseSSEStream, getStageLabel } from "@/lib/sseParser";
+import { parseSSEStream } from "@/lib/sseParser";
 import { Link } from "wouter";
 import TownFeedComponent from "@/components/TownFeed";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
-import { X, Loader2, MessageSquare, Sparkles, ArrowRight, Menu, MessageCircle, Rss } from "lucide-react";
+import { X, Loader2, MessageSquare, ArrowRight, Menu, MessageCircle, Rss } from "lucide-react";
 import type { ChatSession, ChatMessage, TownFeedPayload } from "@shared/schema";
+import { ChatMessageBubble } from "@/components/ChatMessageBubble";
+import { TypingIndicator } from "@/components/TypingIndicator";
 
 interface DrawerState {
   isOpen: boolean;
@@ -18,26 +19,6 @@ interface DrawerState {
   templateId?: string;
   question?: string;
   sessionId?: string;
-}
-
-function ChatMessageBubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === "user";
-  return (
-    <div
-      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-      data-testid={`chat-message-${message.id}`}
-    >
-      <div
-        className={`max-w-[85%] rounded-md px-4 py-3 text-sm whitespace-pre-wrap ${
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground"
-        }`}
-      >
-        {message.content}
-      </div>
-    </div>
-  );
 }
 
 function ChatDrawer({
@@ -51,7 +32,7 @@ function ChatDrawer({
   const [isSending, setIsSending] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(state.sessionId || null);
-  const [streamStatus, setStreamStatus] = useState<string | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState("");
   const hasInitialized = useRef(false);
@@ -77,7 +58,7 @@ function ChatDrawer({
   const sendStreamingMessage = useCallback(
     async (sid: string, content: string) => {
       setIsStreaming(true);
-      setStreamStatus("Thinking...");
+      setPipelineStage(null);
       try {
         const response = await fetch(
           `/api/chat/v2/sessions/${sid}/messages/stream`,
@@ -96,9 +77,9 @@ function ChatDrawer({
         const reader = response.body.getReader();
 
         await parseSSEStream(reader, {
-          onStatus: (stage) => setStreamStatus(getStageLabel(stage)),
+          onStatus: (stage) => setPipelineStage(stage || null),
           onAnswer: () => {
-            setStreamStatus(null);
+            setPipelineStage(null);
             queryClient.invalidateQueries({
               queryKey: ["/api/chat/sessions", sid],
             });
@@ -115,7 +96,7 @@ function ChatDrawer({
         console.error("Chat stream error:", error);
       } finally {
         setIsStreaming(false);
-        setStreamStatus(null);
+        setPipelineStage(null);
         queryClient.invalidateQueries({
           queryKey: ["/api/chat/sessions", sid],
         });
@@ -218,14 +199,28 @@ function ChatDrawer({
 
           {messages &&
             messages.map((msg) => (
-              <ChatMessageBubble key={msg.id} message={msg} />
+              <ChatMessageBubble
+                key={msg.id}
+                message={msg}
+                compact
+                onFollowUpClick={(question) => {
+                  if (sessionId) {
+                    sendStreamingMessage(sessionId, question);
+                  }
+                }}
+                onFeedbackSubmit={(type) => {
+                  const current = msg.feedback;
+                  const newFeedback = current === type ? null : type;
+                  apiRequest("POST", `/api/chat/messages/${msg.id}/feedback`, { feedback: newFeedback })
+                    .then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
+                    });
+                }}
+              />
             ))}
 
           {(isSending || isStreaming) && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-stream-status">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {streamStatus || "Thinking..."}
-            </div>
+            <TypingIndicator pipelineStage={pipelineStage} />
           )}
 
           <div ref={messagesEndRef} />

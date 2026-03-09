@@ -1,66 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { apiRequest } from "@/lib/queryClient";
-import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Plus, Send, Loader2, User, Bot, Menu, FileText, ExternalLink, Sparkles, ChevronDown, Link2, Paperclip, X, AlertCircle, ThumbsUp, ThumbsDown, Rss } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, Rss } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { ChatSession, ChatMessage, TemplatePayload } from "@shared/schema";
-import type { ChatNotice } from "@shared/chatNotices";
-import { MessageNotices } from "@/components/MessageNotices";
 import { TemplateBanner } from "@/components/TemplateBanner";
 import { TemplateFirstMessage } from "@/components/TemplateFirstMessage";
 import { useToast } from "@/hooks/use-toast";
-import { parseSSEStream, getStageLabel } from "@/lib/sseParser";
-
-// V2 response types
-interface SourceCitation {
-  id: string;
-  title: string;
-  town?: string;
-  year?: string;
-  category?: string;
-  url?: string;
-  meetingDate?: string;
-  board?: string;
-  isInternal?: boolean;
-}
-
-interface V2Metadata {
-  v2: true;
-  answerMeta: {
-    complexity: "simple" | "complex";
-    requiresClarification: boolean;
-    criticScore: {
-      relevance: number;
-      completeness: number;
-      clarity: number;
-      riskOfMisleading: number;
-    };
-    limitationsNote?: string;
-  };
-  sources: SourceCitation[];
-  suggestedFollowUps: string[];
-  notices?: ChatNotice[];
-  coverageScore?: number;
-  missingFacets?: string[];
-  showCoverageDisclaimer?: boolean;
-  wasTruncated?: boolean;
-  isDeepDive?: boolean;
-  deepDiveId?: string;
-}
+import { parseSSEStream } from "@/lib/sseParser";
+import { ChatMessageBubble } from "@/components/ChatMessageBubble";
+import { TypingIndicator } from "@/components/TypingIndicator";
 
 function ChatSidebar({ 
   sessions, 
@@ -164,305 +121,6 @@ function ChatSidebar({
           ))}
         </div>
       </ScrollArea>
-    </div>
-  );
-}
-
-function FeedbackButtons({ message }: { message: ChatMessage }) {
-  const feedbackMutation = useMutation({
-    mutationFn: async ({ feedback }: { feedback: string | null }) => {
-      await apiRequest("POST", `/api/chat/messages/${message.id}/feedback`, { feedback });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", message.sessionId] });
-    },
-  });
-
-  const currentFeedback = message.feedback;
-
-  return (
-    <div className="flex items-center gap-1">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={() => feedbackMutation.mutate({ feedback: currentFeedback === "up" ? null : "up" })}
-            className={`p-1 rounded transition-colors ${
-              currentFeedback === "up" 
-                ? "text-primary bg-primary/10" 
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            disabled={feedbackMutation.isPending}
-            data-testid={`button-thumbs-up-${message.id}`}
-          >
-            <ThumbsUp className="w-3.5 h-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Helpful</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={() => feedbackMutation.mutate({ feedback: currentFeedback === "down" ? null : "down" })}
-            className={`p-1 rounded transition-colors ${
-              currentFeedback === "down" 
-                ? "text-destructive bg-destructive/10" 
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            disabled={feedbackMutation.isPending}
-            data-testid={`button-thumbs-down-${message.id}`}
-          >
-            <ThumbsDown className="w-3.5 h-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Not helpful</TooltipContent>
-      </Tooltip>
-    </div>
-  );
-}
-
-function MessageBubble({ 
-  message, 
-  onFollowUpClick 
-}: { 
-  message: ChatMessage;
-  onFollowUpClick?: (question: string) => void;
-}) {
-  const isUser = message.role === "user";
-  
-  // Parse v2 metadata from citations field
-  let v2Data: V2Metadata | null = null;
-  let legacyCitations: string[] | null = null;
-  
-  if (message.citations) {
-    try {
-      const parsed = JSON.parse(message.citations);
-      if (parsed.v2 === true) {
-        v2Data = parsed as V2Metadata;
-      } else if (Array.isArray(parsed)) {
-        legacyCitations = parsed;
-      }
-    } catch (e) {
-      console.error("Failed to parse citations:", e);
-    }
-  }
-
-  const sources = v2Data?.sources || [];
-  const suggestedFollowUps = v2Data?.suggestedFollowUps || [];
-  const notices = v2Data?.notices || [];
-  const showCoverageDisclaimer = v2Data?.showCoverageDisclaimer || false;
-  const missingFacets = v2Data?.missingFacets || [];
-  const isDeepDiveMessage = v2Data?.isDeepDive === true;
-
-  return (
-    <div className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
-      {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-          {isDeepDiveMessage ? <Sparkles className="w-4 h-4 text-primary" /> : <Bot className="w-4 h-4 text-primary" />}
-        </div>
-      )}
-      <div className={`flex flex-col gap-2 max-w-3xl ${isUser ? "items-end" : "items-start"}`}>
-        {isDeepDiveMessage && !isUser && (
-          <Badge variant="secondary" className="text-xs no-default-hover-elevate no-default-active-elevate" data-testid="badge-deep-dive">
-            <Sparkles className="w-3 h-3 mr-1" /> Deep Dive
-          </Badge>
-        )}
-        <div
-          className={`rounded-lg px-4 py-3 ${
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-card border border-card-border"
-          }`}
-          data-testid={`message-${message.id}`}
-        >
-          {isUser ? (
-            <p className="text-base whitespace-pre-wrap">{message.content}</p>
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-headings:my-3 prose-headings:font-semibold prose-table:w-full prose-table:border-collapse prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:font-semibold prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            </div>
-          )}
-        </div>
-        
-        
-        {/* V2 Notices (scope, disclaimers, system messages) */}
-        {!isUser && notices.length > 0 && (
-          <MessageNotices notices={notices} />
-        )}
-        
-        {/* Coverage disclaimer - "What we couldn't confirm" */}
-        {!isUser && showCoverageDisclaimer && missingFacets.length > 0 && (
-          <div className="mt-2 p-3 rounded-md bg-muted/50 border border-border" data-testid="coverage-disclaimer">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-muted-foreground mb-1">
-                  What we couldn't fully confirm
-                </p>
-                <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
-                  {missingFacets.map((facet, idx) => (
-                    <li key={idx} className="leading-relaxed">{facet}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Source documents collapsible */}
-        {!isUser && sources.length > 0 && (
-          <Collapsible data-testid={`sources-collapsible-${message.id}`}>
-            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid={`button-sources-toggle-${message.id}`}>
-              <FileText className="w-3 h-3" />
-              <span>Sources ({sources.length})</span>
-              <ChevronDown className="w-3 h-3 transition-transform [[data-state=open]_&]:rotate-180" />
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-1 space-y-1 pl-1">
-                {sources.map((source, idx) => (
-                  <div key={source.id || idx} className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid={`source-item-${idx}`}>
-                    {source.isInternal ? (
-                      <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    ) : (
-                      <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    )}
-                    {(() => {
-                      const title = source.title || "";
-                      const titleLower = title.toLowerCase();
-                      const yearFromDate = source.meetingDate ? source.meetingDate.split("-")[0] : null;
-                      const dateAlreadyInTitle = source.meetingDate
-                        ? (titleLower.includes(source.meetingDate) || (yearFromDate && title.includes(yearFromDate)))
-                        : false;
-                      const yearAlreadyInTitle = source.year ? title.includes(source.year) : false;
-                      const dateSuffix = source.meetingDate && !dateAlreadyInTitle
-                        ? ` (${source.meetingDate})`
-                        : source.year && !yearAlreadyInTitle
-                          ? ` (${source.year})`
-                          : "";
-                      const boardAbbrevs: Record<string, string[]> = {
-                        "planning board": ["pb"],
-                        "zoning board of adjustment": ["zba"],
-                        "board of selectmen": ["bos"],
-                        "select board": ["bos"],
-                        "conservation commission": ["cc"],
-                        "budget committee": ["budget comm."],
-                      };
-                      const boardInTitle = source.board
-                        ? titleLower.includes(source.board.toLowerCase()) ||
-                          (boardAbbrevs[source.board.toLowerCase()] || []).some(abbr => titleLower.includes(abbr.toLowerCase()))
-                        : true;
-                      const boardSuffix = source.board && !boardInTitle
-                        ? ` - ${source.board}`
-                        : "";
-                      const suffix = `${dateSuffix}${boardSuffix}`;
-                      return source.url ? (
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline underline-offset-2 hover:text-foreground"
-                          data-testid={`link-source-${idx}`}
-                        >
-                          {source.title}{suffix}
-                        </a>
-                      ) : (
-                        <span data-testid={`text-source-${idx}`}>
-                          {source.title}{suffix}
-                        </span>
-                      );
-                    })()}
-                    {source.url && !source.isInternal && <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-50" />}
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-
-        {/* Suggested follow-up questions */}
-        {suggestedFollowUps.length > 0 && onFollowUpClick && (
-          <div className="flex flex-wrap gap-2 mt-1">
-            {suggestedFollowUps.map((question, idx) => (
-              <button
-                key={idx}
-                onClick={() => onFollowUpClick(question)}
-                className="text-xs bg-primary/10 text-primary hover-elevate active-elevate-2 rounded-full px-3 py-1 transition-colors"
-                data-testid={`button-followup-${idx}`}
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-        )}
-        
-        <div className="flex items-center gap-2 flex-wrap px-1">
-          <p className="text-xs text-muted-foreground">
-            {new Date(message.createdAt).toLocaleTimeString()}
-          </p>
-          {!isUser && <FeedbackButtons message={message} />}
-        </div>
-        {!isUser && (
-          <p className="text-[10px] text-muted-foreground/60 px-1" data-testid="text-ai-disclaimer">
-            AI can make mistakes — verify with official records
-          </p>
-        )}
-      </div>
-      {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-          <User className="w-4 h-4 text-muted-foreground" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface TypingIndicatorProps {
-  hasFile?: boolean;
-  messageContent?: string;
-  pipelineStage?: string | null;
-  isDeepDive?: boolean;
-  deepDiveIteration?: number;
-  deepDiveMaxIterations?: number;
-}
-
-function TypingIndicator({ hasFile, messageContent, pipelineStage, isDeepDive, deepDiveIteration, deepDiveMaxIterations }: TypingIndicatorProps) {
-  let displayText = pipelineStage
-    ? getStageLabel(pipelineStage)
-    : "Thinking...";
-
-  if (isDeepDive && deepDiveIteration && deepDiveMaxIterations) {
-    const iterLabel = ` (Pass ${deepDiveIteration} of ${deepDiveMaxIterations})`;
-    if (pipelineStage && pipelineStage.startsWith("deep_dive_")) {
-      displayText = displayText.replace("...", iterLabel + "...");
-    }
-  }
-
-  return (
-    <div className="flex gap-4 justify-start">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-        {isDeepDive ? <Sparkles className="w-4 h-4 text-primary" /> : <Bot className="w-4 h-4 text-primary" />}
-      </div>
-      <div className="flex flex-col gap-2 max-w-3xl">
-        <div className="rounded-lg px-4 py-3 bg-card border border-card-border">
-          <div className="flex items-center gap-3">
-            <div className="flex gap-1">
-              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
-              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
-              <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
-            </div>
-            <span 
-              className="text-sm text-muted-foreground animate-in fade-in duration-300"
-              data-testid="text-typing-status"
-            >
-              {displayText}
-            </span>
-            {isDeepDive && (
-              <Badge variant="secondary" className="text-xs no-default-hover-elevate no-default-active-elevate">
-                <Sparkles className="w-3 h-3 mr-1" /> Deep Dive
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1058,10 +716,18 @@ export default function Chat() {
                   />
                 )}
                 {messages?.map((message) => (
-                  <MessageBubble 
+                  <ChatMessageBubble 
                     key={message.id} 
                     message={message} 
                     onFollowUpClick={handleFollowUpClick}
+                    onFeedbackSubmit={(type) => {
+                      const current = message.feedback;
+                      const newFeedback = current === type ? null : type;
+                      apiRequest("POST", `/api/chat/messages/${message.id}/feedback`, { feedback: newFeedback })
+                        .then(() => {
+                          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
+                        });
+                    }}
                   />
                 ))}
                 {pendingMessage && (
@@ -1081,8 +747,6 @@ export default function Chat() {
                 )}
                 {(sendMessageMutation.isPending || isStreaming) && (
                   <TypingIndicator 
-                    hasFile={!!selectedFile} 
-                    messageContent={pendingMessage || inputValue}
                     pipelineStage={pipelineStage}
                     isDeepDive={isDeepDiveMode}
                     deepDiveIteration={deepDiveIteration}
