@@ -953,6 +953,11 @@ export function registerChatV2Routes(app: Express): void {
         actor: req.actor,
       });
 
+      const chatHistory: ChatHistoryMessage[] = allMessages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-6)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
       sendEvent("status", { stage: "deep_dive_starting" });
 
       let currentIteration = 0;
@@ -962,6 +967,7 @@ export function registerChatV2Routes(app: Express): void {
         townPreference: resolvedTown,
         sessionId,
         messageId: userMessage.id,
+        chatHistory,
         logContext: logCtx,
         onStageChange: (stage: string, detail?: string) => {
           sendEvent("status", { stage, detail });

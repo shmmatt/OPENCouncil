@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
+import { logLLMCall } from "../llm/callLLMWithLogging";
 import { logInfo, logError, logWarn } from "../utils/logger";
 import { pgvectorTwoLaneRetrieveWithPlan } from "./pgvectorRetrieveAdapter";
 import { buildRetrievalPlanForQuery } from "./plannerV3";
@@ -10,7 +10,7 @@ import {
   updateDeepDiveSession,
   createDeepDiveStep,
 } from "../storage/deepDive";
-import type { PipelineLogContext, SourceCitation } from "./types";
+import type { PipelineLogContext, SourceCitation, ChatHistoryMessage } from "./types";
 import type { DeepDiveSession, DeepDiveStep, DeepDiveStepType } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
@@ -167,11 +167,16 @@ export async function runDeepDive(options: {
   townPreference?: string | null;
   sessionId: string;
   messageId: string;
+  chatHistory?: ChatHistoryMessage[];
   logContext: PipelineLogContext;
   onStageChange: (stage: string, detail?: string) => void;
 }): Promise<DeepDiveResult> {
-  const { question, townPreference, sessionId, messageId, logContext, onStageChange } = options;
+  const { question, townPreference, sessionId, messageId, chatHistory, logContext, onStageChange } = options;
   const startTime = Date.now();
+
+  const formattedChatHistory = (chatHistory && chatHistory.length > 0)
+    ? chatHistory.map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 1500)}`).join("\n")
+    : "(No prior conversation in this session)";
 
   const deepDiveSession = await createDeepDiveSession({
     chatSessionId: sessionId,
@@ -195,23 +200,20 @@ export async function runDeepDive(options: {
 
     const intentResult = await callLLM(
       FLASH_MODEL,
-      `You are a municipal governance research analyst for New Hampshire. Analyze the user's question to extract:
-1. The core research question
-2. Sub-questions that need answering
-3. Which tools would be most useful (document_search, web_search)
-4. Key entities (towns, boards, people, statutes)
-5. Time period of interest
+      `You are an expert municipal research analyst. Your job is to analyze the user's latest query within the context of the recent conversation history.
+
+CRITICAL INSTRUCTION: Read the Chat History first. The user's latest question may contain pronouns ("it", "he", "the project", "the town"). You MUST resolve these pronouns using the history to formulate a complete, standalone coreQuestion and specific subQuestions.
 
 Respond in JSON format:
 {
-  "coreQuestion": "...",
-  "subQuestions": ["..."],
+  "coreQuestion": "Fully resolved, standalone research question",
+  "subQuestions": ["Specific angle 1", "Specific angle 2"],
   "recommendedTools": ["document_search", "web_search"],
   "entities": { "towns": [], "boards": [], "people": [], "statutes": [] },
-  "timePeriod": "...",
-  "reasoning": "..."
+  "timePeriod": "Any specific years mentioned or implied",
+  "reasoning": "Brief explanation of how you resolved the intent"
 }`,
-      `User question: ${question}\nTown context: ${townPreference || "not specified"}`,
+      `Town context: ${townPreference || "not specified"}\n\n--- Recent Chat History ---\n${formattedChatHistory}\n\n--- Latest User Question ---\n${question}`,
       tracker,
       logContext,
     );
@@ -232,25 +234,24 @@ Respond in JSON format:
       intentData = { coreQuestion: question, subQuestions: [question], recommendedTools: ["document_search"] };
     }
 
+    const resolvedQuestion = intentData.coreQuestion || question;
+
     onStageChange("deep_dive_planning", "Creating research plan...");
 
     const planResult = await callLLM(
       FLASH_MODEL,
-      `You are a research planner for NH municipal governance. Given the intent analysis, create a concrete research plan.
+      `You are a research planner for municipal governance. Based on the Intent Analysis, create a targeted search plan.
 
-Note: Current local news and recent developments will be found automatically via a dedicated Google Search web research phase. Focus your plan on document retrieval and targeted web queries.
+RULES:
+- ragQueries (2-4): Highly specific keyword and semantic searches for our internal municipal database (minutes, budgets, ordinances, town reports). Use exact entity names, board names, and town names.
+- webQueries (0-2): Broad searches intended for the live web to catch state-level data or context. (Note: Google Search Grounding will automatically run in a dedicated web research phase to find recent local news, so these are supplementary.)
 
 Respond in JSON:
 {
   "ragQueries": ["query1", "query2", ...],
   "webQueries": ["query1", ...],
   "reasoning": "Why these queries will find what we need"
-}
-
-Rules:
-- ragQueries: 2-4 specific queries for searching municipal documents (minutes, ordinances, budgets)
-- webQueries: 0-2 web search queries (only if broader context or NH state-level info is needed)
-- Be specific with town names and board names when known`,
+}`,
       `Intent analysis:\n${intentResult.text}\n\nTown: ${townPreference || "not specified"}`,
       tracker,
       logContext,
@@ -366,7 +367,7 @@ Your ONLY job is to search Google for the MOST RECENT information about the topi
 You MUST search — do not answer from memory. Use the googleSearch tool to find current news articles, government press releases, project updates, and official announcements.
 Search for multiple angles: recent news coverage, official project status, awards, controversies, and any developments in the last 1-2 years.
 After searching, compile a factual summary of what you found, including exact URLs for every source. If you found nothing recent, state that clearly.`,
-          `Search for the latest information about: ${question}\nLocation context: ${townPreference || "New Hampshire"}`,
+          `Search for the latest information about: ${resolvedQuestion}\nLocation context: ${townPreference || "New Hampshire"}`,
           tracker,
           logContext,
           [{ googleSearch: {} }],
@@ -397,52 +398,47 @@ After searching, compile a factual summary of what you found, including exact UR
 
       const synthesisResult = await callLLM(
         PRO_MODEL,
-        `You are an expert municipal governance analyst for New Hampshire, writing a research report for the OPENCouncil platform.
+        `You are an expert municipal governance journalist writing a comprehensive research report for OPENCouncil.
 
 Today's date is: ${currentDate}
 
-FORMAT RULES (strict):
-- Start with a clear ## title that captures the core topic
-- Follow immediately with a ### Executive Summary (2-3 sentences)
-- Use ### headers for each major section
-- Use **bold** for key terms, proper nouns, dollar amounts, dates, and vote counts
-- Use bulleted lists for actionable insights and multi-point findings
-- Do NOT use memo/letter formatting (no "To:", "From:", "Date:", "Subject:" headers)
-- Do NOT roleplay a persona or sign off with a name/title
-- Write 500-1000 words
+NARRATIVE & STYLE RULES (CRITICAL):
+- Do NOT write a disconnected, chronological list of meeting minutes or a "trivia dump."
+- Synthesize the evidence into a cohesive, highly readable narrative. Group facts logically by theme (e.g., Funding Challenges, Project Milestones, Community Response, Regulatory Context) using descriptive ### headers.
+- Start with a clear ## title that captures the core topic.
+- Follow immediately with a ### Executive Summary (2-3 punchy sentences that answer the user's question upfront).
+- Write in Smart Brevity style: punchy, factual, and easy to scan. Use bullet points only for actionable lists or distinct data sets, not as a substitute for narrative prose.
+- Use **bold** for key terms, proper nouns, dollar amounts, dates, and vote counts.
+- Do NOT use memo/letter formatting (no "To:", "From:", "Date:", "Subject:" headers).
+- Do NOT roleplay a persona or sign off with a name/title.
+- Write 500-1000 words.
 
 INTEGRATING WEB RESEARCH:
 - The evidence below includes BOTH municipal documents AND recent web research results gathered via Google Search.
 - The "Recent Web Research" section at the end contains the latest publicly available information. Integrate these findings into your report where relevant.
-- When citing web research results, use the exact URLs provided in that section as markdown links: [Source Title](https://example.com).
 - When municipal documents and web research conflict, note both and indicate which is more recent.
 
 CITATION RULES:
-- When evidence includes a URL, format citations as markdown links: e.g., [[1]](https://example.com) or [Source Title](url)
-- For documents without URLs, use bracketed references: e.g., [Town Annual Report, 2023, pg. 12]
-- Number your sources sequentially and be consistent
+- Every factual claim MUST be cited inline at the end of the sentence.
+- For web sources with URLs, use markdown links: [Source Title](https://example.com). Use the exact URL provided by the search results.
+- For internal documents without URLs, use bracketed references: [Town Annual Report, 2023, pg. 12] or [Board of Selectmen Minutes, Oct 2022].
+- Be consistent with citation formatting throughout.
 
-ACTIONABLE INSIGHTS:
-- End with a ### What You Can Do section using a bulleted list
-- Be specific and concrete — include actual URLs, board names, meeting schedules, or contact pages when available from the evidence
-- Instead of "check the town website," say "Review the [Ossipee Select Board agenda page](url)" if a URL was found
-- If no specific URL is available, give the most specific direction possible (e.g., "Contact the Planning Board clerk at Town Hall")
-
-CONTENT:
-- Be factual and specific — reference dates, dollar amounts, vote counts when available
-- Identify areas of uncertainty or missing information
-- If evidence is limited, acknowledge this honestly rather than speculating
-- Balance multiple perspectives when the evidence shows disagreement
+ENDING:
+- Conclude with a ### What You Can Do section containing 2-3 highly specific, actionable next steps for the citizen.
+- Be concrete — include actual URLs, board names, meeting schedules, or contact pages when available from the evidence.
+- Instead of "check the town website," say "Review the [Ossipee Select Board agenda page](url)" if a URL was found.
+- If no specific URL is available, give the most specific direction possible (e.g., "Contact the Planning Board clerk at Town Hall").
 
 Town context: ${townPreference || "New Hampshire (general)"}
 
 CRITICAL CONSTRAINT — TONE AND TEMPORAL HONESTY:
-- Use a neutral, factual, professional tone throughout. You are a municipal governance analyst, not a journalist or storyteller.
-- NEVER use dramatic, editorial, or speculative language. Specifically BANNED phrases include: "has gone cold", "remains shrouded", "a mystery", "only time will tell", "the clock is ticking", "behind closed doors", "raises questions", "silence is deafening", and similar editorial language.
+- Use a neutral, factual, professional tone throughout.
+- NEVER use dramatic, editorial, or speculative language. Specifically BANNED phrases include: "has gone cold", "remains shrouded", "a mystery", "only time will tell", "the clock is ticking", "behind closed doors", "raises questions", "silence is deafening", "unanswered questions", and similar editorial language.
 - Today's date is ${currentDate}. If the most recent evidence is from months or years ago, state this with dry neutrality: "The most recent official municipal record provided regarding this topic is dated [Month Year]."
 - Do NOT speculate on why records stopped or editorialize about the gap.
 - Never present old information as if it is current.`,
-        `Research question: ${question}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}${webResearchSection}`,
+        `Research question: ${resolvedQuestion}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}${webResearchSection}`,
         tracker,
         logContext,
       );
@@ -474,10 +470,10 @@ CRITICAL CONSTRAINT — TONE AND TEMPORAL HONESTY:
 
       const assessmentResult = await callLLM(
         FLASH_MODEL,
-        `You are a quality assessor for municipal governance research reports. Score the analysis on two dimensions:
+        `You are a senior editorial editor grading a municipal research report. Score it strictly on two dimensions:
 
-1. Quality (1-10): Is the analysis well-written, uses proper markdown formatting (## title, ### sections, **bold**, bulleted lists), has linked citations, avoids memo/roleplay formatting, and is temporally aware (acknowledges when data is old)?
-2. Completeness (1-10): Does the analysis fully address the user's question and sub-questions? Are actionable insights specific (with URLs/contacts when available)?
+1. Quality (1-10): Does this read like a cohesive, journalistic narrative? Is it grouped by logical themes rather than a boring chronological list of facts? Does it use proper markdown formatting (## title, ### sections, **bold**)? Does it cite sources inline at sentence ends? Does it avoid dramatic "true-crime" phrasing ("gone cold", "remains a mystery", etc.)? Is the Executive Summary punchy and does it answer the question upfront?
+2. Completeness (1-10): Did it fully answer the core question? Did web research successfully find recent news to bridge gaps in older municipal records? Are the "What You Can Do" action items specific (with board names, URLs, or contacts)?
 
 Also identify:
 - What aspects are missing or incomplete
@@ -493,7 +489,7 @@ Respond in JSON:
   "failedApproaches": ["..."],
   "suggestedNewAngles": ["..."]
 }`,
-        `Original question: ${question}\n\nAnalysis to assess:\n${finalAnswer}\n\nEvidence count: ${allEvidence.length}\nIteration: ${iterationCount} of ${MAX_ITERATIONS}`,
+        `Original question: ${resolvedQuestion}\n\nAnalysis to assess:\n${finalAnswer}\n\nEvidence count: ${allEvidence.length}\nIteration: ${iterationCount} of ${MAX_ITERATIONS}`,
         tracker,
         logContext,
       );
@@ -553,7 +549,7 @@ Respond in JSON:
   "webQueries": ["new query", ...],
   "reasoning": "Why these new approaches should find what was missing"
 }`,
-          `Original question: ${question}
+          `Original question: ${resolvedQuestion}
 Town: ${townPreference || "not specified"}
 
 Previous assessment:
