@@ -418,11 +418,10 @@ INTEGRATING WEB RESEARCH:
 - The "Recent Web Research" section at the end contains the latest publicly available information. Integrate these findings into your report where relevant.
 - When municipal documents and web research conflict, note both and indicate which is more recent.
 
-CITATION RULES:
-- Every factual claim MUST be cited inline at the end of the sentence.
-- For web sources with URLs, use markdown links: [Source Title](https://example.com). Use the exact URL provided by the search results.
-- For internal documents without URLs, use bracketed references: [Town Annual Report, 2023, pg. 12] or [Board of Selectmen Minutes, Oct 2022].
-- Be consistent with citation formatting throughout.
+CITATION RULES (STRICT):
+- Do NOT use any inline citations, footnotes, or bracketed references in the text (e.g., do not write [minutes-117.pdf] or [1]).
+- Do NOT insert markdown links for the web sources in the body of the text.
+- Write the narrative smoothly and seamlessly as a clean article. The user interface will automatically provide a separate list of all sources at the bottom of the screen.
 
 ENDING:
 - Conclude with a ### What You Can Do section containing 2-3 highly specific, actionable next steps for the citizen.
@@ -472,7 +471,7 @@ CRITICAL CONSTRAINT — TONE AND TEMPORAL HONESTY:
         FLASH_MODEL,
         `You are a senior editorial editor grading a municipal research report. Score it strictly on two dimensions:
 
-1. Quality (1-10): Does this read like a cohesive, journalistic narrative? Is it grouped by logical themes rather than a boring chronological list of facts? Does it use proper markdown formatting (## title, ### sections, **bold**)? Does it cite sources inline at sentence ends? Does it avoid dramatic "true-crime" phrasing ("gone cold", "remains a mystery", etc.)? Is the Executive Summary punchy and does it answer the question upfront?
+1. Quality (1-10): Does this read like a cohesive, journalistic narrative? Is it grouped by logical themes rather than a boring chronological list of facts? Does it use proper markdown formatting (## title, ### sections, **bold**)? Is the text free of inline citations, bracketed references, or raw filenames (those are shown separately in the UI)? Does it avoid dramatic "true-crime" phrasing ("gone cold", "remains a mystery", etc.)? Is the Executive Summary punchy and does it answer the question upfront?
 2. Completeness (1-10): Did it fully answer the core question? Did web research successfully find recent news to bridge gaps in older municipal records? Are the "What You Can Do" action items specific (with board names, URLs, or contacts)?
 
 Also identify:
