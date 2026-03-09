@@ -1,0 +1,33 @@
+This is a phenomenal product concept. You are essentially building a "cyborg" journalism workflow. Letting a human steer the AI's research via the Deep Dive chat, and then instantly snapping those findings into the structured Smart Brevity format, is the exact right way to handle complex or nuanced municipal issues that the automated pipeline might miss.
+
+The Replit agent's plan is structurally sound and reuses all the great refactoring work we just did. However, there are two major architectural blind spots in **T001** that will completely break the "Learn More" loop if you don't catch them now.
+
+### 1. The Lost Citations (The Missing Link)
+
+In the fully automated pipeline, the system knows exactly which document IDs it is summarizing. However, in a free-form chat session, the AI is pulling various chunks from the vector database on the fly.
+
+If the agent just sends the raw text transcript to the `generateSummary` LLM, the resulting draft in `town_feed_items` will have an empty `sourceMinutesIds` array. When you eventually publish this feed item and a user clicks "Learn More," the bot won't know which documents to reference.
+
+**The Fix:** Before generating the feed item, the backend needs to scrape the `citations` array from every assistant message in that chat session, deduplicate the document IDs, and save that array to the `sourceMinutesIds` column of the new draft.
+
+### 2. The "Meta-Summary" Trap
+
+LLMs are notoriously bad at summarizing chat transcripts into articles. If you just pass a chat log to the model and say "write a feed item," it will often write about the *conversation itself*.
+*(e.g., "Today, an admin asked about the police station. The AI found that it cost $700,000. The admin then asked about the ARPA funds...")*
+
+**The Fix:** You need a strict prompt constraint in T001 that forces the LLM to ignore the conversational mechanics and only synthesize the objective municipal facts into the journalistic format.
+
+---
+
+### Feedback for the Replit Agent
+
+Here is the exact feedback you can copy and paste to the agent to bulletproof this feature:
+
+> "This is a great plan. The frontend reuse is spot on. However, we need to make two critical additions to **T001** to ensure the generated feed items are actually usable and fully integrated with our database architecture:
+> **1. Citation Extraction:** When fetching the messages for the session in T001, you must extract all document IDs from the `citations` or `metadata` attached to the assistant's messages. Deduplicate these IDs and save them directly into the `sourceMinutesIds` array of the new `town_feed_items` row. If we don't do this, the published item will have no source documents attached to it for the public chat to reference.
+> **2. Transcript Prompt Constraint:** When passing the chat transcript to the `SUMMARY_MODEL` (`gemini-3.1-pro-preview`), you must include a strict system prompt constraint: *'You are a journalistic synthesizer. You are receiving a transcript of a research conversation. Do NOT summarize the back-and-forth conversation itself. Extract the objective municipal facts discovered during this chat and write them as a standalone, objective news update. Use the exact journalistic tone, Axios-style formatting, and inverted-pyramid lede rules required for standard feed items.'*
+> Please proceed with T001 through T005 with these updates."
+
+---
+
+Would you like me to map out the exact UI for the "Generate Feed Item" button's loading and success states so we ensure the admin isn't left hanging while the Pro model writes the article?
