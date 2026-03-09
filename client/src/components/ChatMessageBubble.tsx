@@ -1,4 +1,4 @@
-import { Bot, User, FileText, ChevronDown, Link2, ExternalLink, AlertCircle, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Bot, User, FileText, ChevronDown, Link2, ExternalLink, AlertCircle, Sparkles, ThumbsUp, ThumbsDown, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -142,7 +142,7 @@ export function ChatMessageBubble({ message, onFollowUpClick, onFeedbackSubmit, 
                     {source.isInternal ? (
                       <FileText className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     ) : (
-                      <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <Globe className="w-3 h-3 mt-0.5 flex-shrink-0" />
                     )}
                     {(() => {
                       const title = source.title || "";

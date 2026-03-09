@@ -3,7 +3,6 @@ import { logLLMCall, extractTokenCounts } from "../llm/callLLMWithLogging";
 import { logInfo, logError, logWarn } from "../utils/logger";
 import { pgvectorTwoLaneRetrieveWithPlan } from "./pgvectorRetrieveAdapter";
 import { buildRetrievalPlanForQuery } from "./plannerV3";
-import { searchNewsForTopic } from "../services/newsCrawler";
 import { searchWeb, isWebSearchConfigured } from "../services/webSearchTool";
 import { mapFileSearchDocumentsToCitations } from "./sources";
 import {
@@ -11,7 +10,7 @@ import {
   updateDeepDiveSession,
   createDeepDiveStep,
 } from "../storage/deepDive";
-import type { PipelineLogContext } from "./types";
+import type { PipelineLogContext, SourceCitation } from "./types";
 import type { DeepDiveSession, DeepDiveStep, DeepDiveStepType } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
@@ -42,7 +41,6 @@ interface StepTracker {
 
 interface ResearchPlan {
   ragQueries: string[];
-  newsTopics: string[];
   webQueries: string[];
   reasoning: string;
 }
@@ -63,21 +61,61 @@ function estimateCost(model: string, tokensIn: number, tokensOut: number): numbe
   return (tokensIn * 0.15 + tokensOut * 0.6) / 1_000_000;
 }
 
+function extractWebCitationsFromGrounding(response: any): SourceCitation[] {
+  const citations: SourceCitation[] = [];
+  if (!response) return citations;
+
+  try {
+    const candidate = response.candidates?.[0];
+    const metadata = candidate?.groundingMetadata;
+    if (!metadata?.groundingChunks) return citations;
+
+    const seenUrls = new Set<string>();
+    for (const chunk of metadata.groundingChunks) {
+      try {
+        if (!chunk.web?.uri || seenUrls.has(chunk.web.uri)) continue;
+        const uri = chunk.web.uri;
+        const parsed = new URL(uri);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+        seenUrls.add(uri);
+        const domain = chunk.web.domain || parsed.hostname;
+        citations.push({
+          id: uri,
+          title: chunk.web.title || domain,
+          url: uri,
+          isInternal: false,
+        });
+      } catch (chunkErr) {
+        logWarn("grounding_citation_chunk_error", { error: chunkErr instanceof Error ? chunkErr.message : String(chunkErr) });
+      }
+    }
+  } catch (err) {
+    logWarn("grounding_citation_extraction_error", { error: err instanceof Error ? err.message : String(err) });
+  }
+
+  return citations;
+}
+
 async function callLLM(
   model: string,
   systemPrompt: string,
   userPrompt: string,
   tracker: StepTracker,
   logContext: PipelineLogContext,
-): Promise<{ text: string; tokensIn: number; tokensOut: number; costUsd: number; durationMs: number }> {
+  tools?: any[],
+): Promise<{ text: string; tokensIn: number; tokensOut: number; costUsd: number; durationMs: number; rawResponse: any }> {
   const start = Date.now();
+  const config: any = {
+    systemInstruction: systemPrompt,
+    temperature: 0.3,
+  };
+  if (tools && tools.length > 0) {
+    config.tools = tools;
+  }
   const response = await ai.models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.3,
-    },
+    config,
   });
 
   const text = response.text || "";
@@ -96,7 +134,7 @@ async function callLLM(
     { tokensIn, tokensOut }
   ).catch(() => {});
 
-  return { text, tokensIn, tokensOut, costUsd, durationMs };
+  return { text, tokensIn, tokensOut, costUsd, durationMs, rawResponse: response };
 }
 
 async function recordStep(
@@ -200,17 +238,17 @@ Respond in JSON format:
       FLASH_MODEL,
       `You are a research planner for NH municipal governance. Given the intent analysis, create a concrete research plan.
 
+Note: Current local news and recent developments will be found automatically via Google Search during synthesis. Focus your plan on document retrieval and targeted web queries.
+
 Respond in JSON:
 {
   "ragQueries": ["query1", "query2", ...],
-  "newsTopics": ["topic1", ...],
   "webQueries": ["query1", ...],
   "reasoning": "Why these queries will find what we need"
 }
 
 Rules:
 - ragQueries: 2-4 specific queries for searching municipal documents (minutes, ordinances, budgets)
-- newsTopics: 0-2 topics for local news search (only if current events are relevant)
 - webQueries: 0-2 web search queries (only if broader context or NH state-level info is needed)
 - Be specific with town names and board names when known`,
       `Intent analysis:\n${intentResult.text}\n\nTown: ${townPreference || "not specified"}`,
@@ -229,9 +267,9 @@ Rules:
     let plan: ResearchPlan;
     try {
       const jsonMatch = planResult.text.match(/\{[\s\S]*\}/);
-      plan = jsonMatch ? JSON.parse(jsonMatch[0]) : { ragQueries: [question], newsTopics: [], webQueries: [], reasoning: "" };
+      plan = jsonMatch ? JSON.parse(jsonMatch[0]) : { ragQueries: [question], webQueries: [], reasoning: "" };
     } catch {
-      plan = { ragQueries: [question], newsTopics: [], webQueries: [], reasoning: "" };
+      plan = { ragQueries: [question], webQueries: [], reasoning: "" };
     }
 
     let allEvidence: string[] = [];
@@ -240,6 +278,7 @@ Rules:
     let qualityScore = 0;
     let completenessScore = 0;
     let finalAnswer = "";
+    let lastSynthesisResponse: any = null;
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       iterationCount = iteration + 1;
@@ -278,31 +317,6 @@ Rules:
             JSON.stringify(plan.ragQueries),
             `Error: ${err instanceof Error ? err.message : String(err)}`,
             { toolUsed: "rag_pipeline", durationMs: Date.now() - ragStart }
-          );
-        }
-      }
-
-      // Execute news search
-      if (plan.newsTopics.length > 0) {
-        const newsStart = Date.now();
-        try {
-          for (const topic of plan.newsTopics.slice(0, 2)) {
-            const articles = await searchNewsForTopic(topic);
-            for (const article of articles.slice(0, 3)) {
-              iterationEvidence.push(`[News: ${article.title} - ${article.source}]\nURL: ${article.url}\n${article.snippet}`);
-            }
-          }
-          await recordStep(deepDiveSession.id, tracker, "news_search",
-            JSON.stringify(plan.newsTopics),
-            `Found ${iterationEvidence.length} news results`,
-            { toolUsed: "news_crawler", durationMs: Date.now() - newsStart }
-          );
-        } catch (err) {
-          logWarn("deep_dive_news_error", { error: err instanceof Error ? err.message : String(err) });
-          await recordStep(deepDiveSession.id, tracker, "news_search",
-            JSON.stringify(plan.newsTopics),
-            `Error: ${err instanceof Error ? err.message : String(err)}`,
-            { toolUsed: "news_crawler", durationMs: Date.now() - newsStart }
           );
         }
       }
@@ -364,6 +378,11 @@ TEMPORAL AWARENESS (critical):
 - Frame the recency gap honestly — the paper trail may have gone cold, or the issue may be resolved
 - Never present old information as if it is current
 
+GOOGLE SEARCH USAGE (important):
+- You have access to Google Search. Use it to find the latest local news, recent developments, and current status updates related to the research question.
+- Actively search for recent news articles from local NH newspapers and government sources to supplement the provided municipal document evidence.
+- When you incorporate information found via Google Search, you MUST cite it inline using markdown link format: e.g., [Source Title](https://example.com) or [[N]](https://example.com). Use the exact URL provided by the search results.
+
 CITATION RULES:
 - When evidence includes a URL, format citations as markdown links: e.g., [[1]](https://example.com) or [Source Title](url)
 - For documents without URLs, use bracketed references: e.g., [Town Annual Report, 2023, pg. 12]
@@ -385,9 +404,11 @@ Town context: ${townPreference || "New Hampshire (general)"}`,
         `Research question: ${question}\n\nGathered Evidence:\n${evidenceBlock.slice(0, 30000)}`,
         tracker,
         logContext,
+        [{ googleSearch: {} }],
       );
 
       finalAnswer = synthesisResult.text;
+      lastSynthesisResponse = synthesisResult.rawResponse;
 
       await recordStep(deepDiveSession.id, tracker, "synthesis",
         `Question: ${question}\nEvidence items: ${allEvidence.length}`,
@@ -477,10 +498,11 @@ IMPORTANT: Do NOT repeat queries that already failed. Try completely different a
 - Different document types or time periods
 - Different tools than what was tried before
 
+Note: Current local news is handled automatically via Google Search during synthesis. Focus on document retrieval and web queries.
+
 Respond in JSON:
 {
   "ragQueries": ["new query 1", ...],
-  "newsTopics": ["new topic", ...],
   "webQueries": ["new query", ...],
   "reasoning": "Why these new approaches should find what was missing"
 }`,
@@ -496,7 +518,6 @@ Previous assessment:
 
 Previous queries used:
 - RAG: ${plan.ragQueries.join(", ")}
-- News: ${plan.newsTopics.join(", ")}
 - Web: ${plan.webQueries.join(", ")}`,
           tracker,
           logContext,
@@ -521,7 +542,6 @@ Previous queries used:
           if (supplemental) {
             plan = {
               ragQueries: supplemental.ragQueries || [],
-              newsTopics: supplemental.newsTopics || [],
               webQueries: supplemental.webQueries || [],
               reasoning: supplemental.reasoning || "",
             };
@@ -535,7 +555,24 @@ Previous queries used:
     const totalDurationMs = Date.now() - startTime;
 
     const uniqueDocNames = [...new Set(allDocumentNames)];
-    const sources = await mapFileSearchDocumentsToCitations(uniqueDocNames);
+    const sources: SourceCitation[] = await mapFileSearchDocumentsToCitations(uniqueDocNames);
+
+    const webCitations = extractWebCitationsFromGrounding(lastSynthesisResponse);
+    if (webCitations.length > 0) {
+      const beforeCount = sources.length;
+      const existingUrls = new Set(sources.filter(s => s.url).map(s => s.url));
+      for (const wc of webCitations) {
+        if (!existingUrls.has(wc.url)) {
+          existingUrls.add(wc.url);
+          sources.push(wc);
+        }
+      }
+      logInfo("deep_dive_web_citations", {
+        ...logContext,
+        webCitationCount: webCitations.length,
+        addedCount: sources.length - beforeCount,
+      });
+    }
 
     await updateDeepDiveSession(deepDiveSession.id, {
       status: "completed",

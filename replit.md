@@ -97,7 +97,11 @@ An outbound growth engine generates omni-channel social media content, email cop
 A document viewer provides pre-signed URLs for internal documents. Citation linking handles source URLs and internal viewer fallbacks, with citation marker validation and intelligent title formatting.
 
 ### Deep Dive Mode
-A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive analyses. It uses an orchestrator to plan research, execute tools (RAG, news crawl, web search), synthesize findings, and self-score for quality, iterating as needed.
+A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive analyses. It uses an orchestrator to plan research, execute tools (RAG, web search), synthesize findings with **Gemini Google Search Grounding**, and self-score for quality, iterating as needed.
+
+**Google Search Grounding**: The synthesis step passes `tools: [{ googleSearch: {} }]` to the Gemini API, enabling the model to natively search Google during generation. This replaces the previous custom RSS/Jina news scraping pipeline, which was unreliable due to local newspaper CMS platforms blocking scrapers. Web citations from `groundingMetadata.groundingChunks` are extracted and merged into the sources array alongside pgvector document citations. The `ChatMessageBubble` renders web sources with a Globe icon and internal documents with a FileText icon.
+
+**Shared retrieval plan factory**: `buildRetrievalPlanForQuery(query, townHint?)` exported from `plannerV3.ts` is the single source of truth for constructing valid `RetrievalPlanV3` objects. Used by both `getFallbackPlannerOutput` and `deepDiveOrchestrator.ts`.
 
 ## External Dependencies
 
@@ -109,4 +113,4 @@ A semi-agentic research feature that chains multiple reasoning loops to produce 
 *   **Google Drive API v3**: For crawling public Google Drive folders.
 *   **CourtListener REST API**: For NH Supreme Court slip opinions.
 *   **Brave Search API**: For web search in Deep Dive mode.
-*   **Jina Reader**: For content extraction from web search results.
+*   **Jina Reader**: For content extraction in news crawler (used by content generation, not deep dives).
