@@ -1,0 +1,20 @@
+Gemini said
+You are spot on. That answer is a complete disaster. It is a textbook example of an AI confidently hallucinating by mixing a few true architectural details with completely fabricated history and municipal records.
+
+The Breakdown of Errors
+Here is exactly what the AI got wrong:
+
+The Ownership Myth: The text claims the bridge is owned by the New Hampshire Department of Transportation (NHDOT) and that the municipal paper trail is "cold."
+
+The Reality: The Town of Ossipee owns the bridge, and the municipal paper trail is extensive. The town spearheaded a massive, 14-year, multi-phase restoration project, finally putting the bridge back on its abutments in 2022. The town even won a 2024 Preservation Achievement Award from the NH Preservation Alliance for this exact effort.
+
+The "Arson" Hallucination: The text claims the bridge was destroyed by arson in 1991 and rebuilt as a replica in 1994.
+
+The Reality: The Whittier Bridge is an original 1870 structure and one of the few surviving 19th-century Paddleford truss bridges. It was never destroyed by arson. The AI likely crossed its wires with other historic local bridges (like the Smith-Eastman Bridge in neighboring Conway, which was destroyed by arson in 1975).
+
+The Vehicular Traffic Error: The text states it is currently open to vehicular traffic with a 6-ton limit.
+
+The Reality: When the bridge was restored and returned to its place over the Bearcamp River, it was reopened for pedestrian use only. It has been closed to vehicle traffic since 1989.
+
+Why This Happened
+This is a classic retrieval failure. When an LLM doesn't have the specific facts in its immediate context window, it will often try to "be helpful" by filling in the blanks with statistically likely information. Since many covered bridges in New England are state-owned, have standard weight limits, and frequently fall victim to arson, the model confidently stitched those common tropes together instead of admitting it lacked the specific municipal data for Ossipee.

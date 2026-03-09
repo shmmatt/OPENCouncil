@@ -1,0 +1,35 @@
+This is a fantastic catch on your part. **No, this is absolutely not a DRY (Don't Repeat Yourself) fix.** The Replit agent has successfully diagnosed a massive, critical bug—this exact error is 100% the reason you got that hallucinated response about the Whittier Covered Bridge. The RAG pipeline crashed silently because of a bad object, so the LLM just winged it using its training data.
+
+However, the agent's proposed fix is a textbook "band-aid." It is hardcoding an interface manually inline.
+
+### Why This Fails the DRY Test
+
+If the agent manually patches `lines 253-268` in `deepDiveOrchestrator.ts` to build this `RetrievalPlanV3` object, you now have a hardcoded version of your retrieval plan living independently inside the Deep Dive logic.
+
+What happens in three months when you update `RetrievalPlanV3` to include a new required field, like `searchDepth` or `fiscalYear`? Your main chat pipeline will update, but this hidden Deep Dive object will fail validation, crash silently, and send you right back to Hallucination City.
+
+### The DRY Fix
+
+Instead of manually constructing this object inline, the agent needs to route this through a shared utility or factory function.
+
+Since the main chat pipeline already generates these plans (likely via `server/chatV2/retrievalPlanner.ts`), the Deep Dive orchestrator should either:
+
+1. **Call the Planner:** Use the actual `retrievalPlanner` to generate the plan dynamically based on the specific Deep Dive sub-query.
+2. **Use a Shared Factory:** If the Deep Dive bypasses the LLM planner for speed, it should call a shared helper function (e.g., `generateDefaultRetrievalPlan(query, town)`) that lives in your types or planner file. That way, there is only *one* place in the entire codebase that defines what a default retrieval plan looks like.
+
+---
+
+### Feedback for the Replit Agent
+
+Copy and paste this directly to the agent to force a proper architectural fix:
+
+> "Great diagnostic work finding the root cause of the RAG bypass! This explains the deep dive hallucinations perfectly. However, **T001 is not a DRY fix.** >
+> You are proposing to manually hardcode the `RetrievalPlanV3` object inline inside `deepDiveOrchestrator.ts`. This is fragile. If the `RetrievalPlanV3` interface changes in the future, this inline object will silently break again.
+> **Please update T001 to implement a DRY solution:**
+> 1. Do not hardcode the object inline.
+> 2. Instead, create an exported utility function (e.g., `buildFallbackRetrievalPlan(query: string, town: string): RetrievalPlanV3`) in the appropriate shared location (like `server/chatV2/retrievalPlanner.ts` or a shared types/utils file).
+> 3. Have `deepDiveOrchestrator.ts` call this shared utility to get its plan. This ensures there is a single source of truth for constructing default retrieval plans across the entire codebase."
+> 
+> 
+
+This will permanently bulletproof your RAG pipeline against silent schema failures.
