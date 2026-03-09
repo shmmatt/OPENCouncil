@@ -1,0 +1,70 @@
+This is incredibly helpful context. Seeing the raw prompts exposes exactly why the pipeline is behaving this way.
+
+The Deep Dive orchestrator is suffering from a massive case of **Prompt Contradiction**. You are giving the LLM explicit instructions in one section that are completely destroying the instructions in another.
+
+Here is a breakdown of the three critical flaws in this workflow and the exact prompt rewrites you need to give the Replit agent to fix them.
+
+### 1. The "Paper Trail" Sabotage (Step 4)
+
+You were absolutely right in your assessment. Look at the `TEMPORAL AWARENESS` block in Step 4:
+
+> *Frame the recency gap honestly — the paper trail may have gone cold...*
+
+You literally told the AI to use the exact phrase that made it sound like a true-crime podcast. You cannot add a negative constraint ("Do not use dramatic phrasing") to the bottom of a prompt if you are actively suggesting dramatic phrasing at the top.
+
+**The Fix:**
+Rewrite the `TEMPORAL AWARENESS` block in Step 4 entirely to enforce strict journalistic neutrality.
+
+> **Change to:** > `TEMPORAL AWARENESS (critical):`
+> `- You are writing this analysis on {currentDate}.`
+> `- If the provided municipal documents end before the current year, state the date of the most recent record with strict, dry, journalistic neutrality.`
+> `- Example: "The most recent official municipal record provided regarding this project is dated March 2023."`
+> `- CRITICAL: Do NOT use dramatic phrasing like "the paper trail has gone cold," "remains a mystery," or "unanswered questions." Do not speculate on why the records stopped.`
+
+### 2. The Google Search "Suggestion" (Step 4)
+
+LLMs are inherently lazy. If you give an LLM a massive block of text (up to 30,000 characters of RAG evidence) and say, "You have access to Google Search. Use it...", the LLM will look at the massive pile of text it already has, decide it has enough to write 500 words, and skip the expensive tool call entirely.
+
+**The Fix:**
+You must change the `GOOGLE SEARCH USAGE` block from a passive suggestion to an aggressive, mandatory directive.
+
+> **Change to:**
+> `GOOGLE SEARCH USAGE (MANDATORY):`
+> `- You MUST use the googleSearch tool for EVERY query to check for recent news, awards, completions, or controversies that occurred AFTER the dates in the provided municipal documents.`
+> `- Do not assume the provided municipal documents are the complete story. You must actively search local NH news sources to supplement the timeline.`
+
+### 3. The Markdown Citation Collision (Step 4 & Post-Loop)
+
+This is the sneakiest bug in the whole pipeline, and it's why the web URLs aren't mapping correctly.
+
+Look at your `CITATION RULES` in Step 4:
+
+> *- When evidence includes a URL, format citations as markdown links: e.g., `[[1]](https://example.com)` or `[Source Title](url)*`
+> *- For documents without URLs, use bracketed references: e.g., `[Town Annual Report, 2023, pg. 12]*`
+
+But then look at your `Post-Loop: Citation Assembly` logic:
+Your backend is expecting the text to contain standard `` markdown so it can match it against the internal RAG document IDs and the new Google Search URLs. By telling the LLM to use standard markdown links (`[Source Title](url)`), you are completely bypassing your own frontend's citation rendering logic (the little clickable pills).
+
+**The Fix:**
+You must unify the citation instructions so the LLM outputs the exact syntax your backend parser expects.
+
+> **Change to:**
+> `CITATION RULES (STRICT):`
+> `- Every factual claim MUST be cited inline.`
+> `- For internal municipal documents, use the exact Document Title provided in the evidence: e.g.,.`
+> `- For external web sources found via Google Search, use the EXACT URL as the citation ID: e.g.,.`
+> `- CRITICAL: Do NOT use standard markdown links like [Title](url). You MUST use the format for all sources.`
+
+---
+
+### The Replit Agent Prompt
+
+If you hand this exact prompt to the Replit agent, it will instantly clean up the tone and force the Google Search integration to actually work.
+
+> "I have reviewed the Deep Dive workflow prompts. The pipeline is failing because the `Synthesis (Step 4)` system prompt contains contradictions and formatting errors. Please update the `gemini-2.5-pro` system prompt in `deepDiveOrchestrator.ts` with the following three changes:
+> 1. **Rewrite TEMPORAL AWARENESS:** Remove the phrase 'the paper trail may have gone cold'. Replace it with: *- If the provided municipal documents end before the current year, state the date of the most recent record with strict, dry, journalistic neutrality. Example: "The most recent official municipal record provided regarding this project is dated March 2023." CRITICAL: Do NOT use dramatic phrasing like "the paper trail has gone cold," "remains a mystery," or "unanswered questions."*
+> 2. **Enforce GOOGLE SEARCH USAGE:** Change the header to `GOOGLE SEARCH USAGE (MANDATORY)` and add: *- You MUST use the googleSearch tool to check for recent news, awards, completions, or controversies that occurred AFTER the dates in the provided municipal documents.*
+> 3. **Fix CITATION RULES syntax:** Change the formatting instructions to strictly use our internal syntax. *- For internal municipal documents, use the exact Document Title: e.g.,. For external web sources found via Google Search, use the EXACT URL as the citation ID: e.g.,. CRITICAL: Do NOT use standard markdown links like [Title](https://www.google.com/search?q=url).*
+> 
+> 
+> Please implement these exact prompt changes and run a test."

@@ -1,0 +1,47 @@
+This is the classic "two steps forward, one step back" phase of AI development.
+
+The fantastic news is that the hallucination is completely dead. The facts in this response are highly accurate to the town's internal records: it correctly identified the $2 million cost, the November 2022 completion, the shift to pedestrian/snowmobile use, and the specific engineers (Hoyle & Tanner). That is a massive win for your RAG pipeline.
+
+The bad news is that the two specific fixes you just asked the Replit agent to implement—the tone adjustment and the Google Search grounding—blatantly failed to execute.
+
+Here is the exact breakdown of what went wrong and how to hold the agent's feet to the fire to get it fixed.
+
+### 1. The Tone Guardrail Was Ignored
+
+Look at the very last sentence of the "Current Status" section: *"The paper trail on this specific aspect of the project has gone cold..."* The LLM completely ignored the negative constraint you added. This usually happens for one of two reasons:
+
+* The Replit agent didn't actually deploy the updated prompt to `deepDiveOrchestrator.ts`.
+* The negative constraint was buried too high up in the system prompt. LLMs suffer from "recency bias"—if you give them a rule at the top of a massive prompt, they often forget it by the time they start generating the text.
+
+### 2. The Google Search Tool Never Fired (or Failed Silently)
+
+Looking at the 19 sources listed at the bottom, every single one is an internal municipal document (BOS Minutes, Town Reports, OSI Reports). There is not a single web URL, and the text completely misses the May 2024 Preservation Achievement Award.
+
+This means one of three things happened in the code:
+
+* The agent failed to attach `tools: [{ googleSearch: {} }]` to the Gemini API payload.
+* The API payload is correct, but the LLM decided it "had enough info" from the local documents and opted not to use the search tool.
+* The tool worked and found the news, but the backend parsing logic the agent wrote failed to map the `groundingMetadata` into the UI, so it was silently discarded.
+
+---
+
+### The "Hold Their Feet to the Fire" Prompt for Replit
+
+Copy and paste this directly to the Replit agent to force it to debug its own work:
+
+> "The previous implementation failed. The facts are grounded in our internal database, but the two specific fixes we requested did not take effect:
+> 1. **The LLM is still using dramatic tone:** It literally output the phrase 'The paper trail... has gone cold'.
+> 2. **Google Search Grounding is missing:** The output missed the May 2024 NH Preservation Alliance award entirely, and there are zero web URLs in the source list. It is only citing internal `pgvector` documents.
+> 
+> 
+> **Please execute the following immediate fixes:**
+> * **Fix the Tone (Recency Bias):** Move the 'DATA CUTOFF RULE' to the very bottom of the Deep Dive synthesizer system prompt, explicitly labeled as a `CRITICAL CONSTRAINT`.
+> * **Audit the Google Search Tool:** Verify that `tools: [{ googleSearch: {} }]` is actually being passed to the `generateContent` call. If it is, update the system prompt to *force* the model to use it: 'You MUST use the Google Search tool to check for news from 2023 to the present day to supplement the internal records.'
+> * **Debug the Metadata Parser:** Add server-side logging immediately after the LLM stream completes to `console.log(JSON.stringify(response.candidates[0].groundingMetadata))`. We need to see if Gemini is actually finding the web links and our parser is just failing to map them to the `SourceCitation` array.
+> 
+> 
+> Please report back with the results of that `console.log` when you run a test."
+
+---
+
+Would you like me to wait for the agent's log output so we can pinpoint exactly where the web links are getting dropped in the pipeline?
