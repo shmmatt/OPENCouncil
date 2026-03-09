@@ -3,7 +3,9 @@ import { db, schema, eq, and, desc, sql, gte } from "../storage/db";
 import { generateQueryEmbedding } from "./embeddingService";
 import { semanticSearch } from "./embeddingStorage";
 import { logInfo, logError, logDebug } from "../utils/logger";
-import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem } from "@shared/schema";
+import { getMessagesBySessionId } from "../storage/chat";
+import { createTownFeedItem } from "../storage/townFeed";
+import type { ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedItem, TownFeedPayload } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const MODEL = "gemini-3.1-flash-lite-preview";
@@ -606,6 +608,185 @@ ${articleSummaries}`;
     logError(`[contentGeneration] Article relevancy scoring failed`, { error: String(error) });
     return articles.map(a => ({ ...a, relevancyScore: 1 }));
   }
+}
+
+export async function generateFeedItemFromChat(sessionId: string, town: string): Promise<TownFeedItem> {
+  logInfo(`[contentGeneration] Generating feed item from chat session ${sessionId} for ${town}`);
+
+  const messages = await getMessagesBySessionId(sessionId);
+
+  if (messages.length === 0) {
+    throw new Error("No messages found in this chat session");
+  }
+
+  const assistantMessages = messages.filter(m => m.role === "assistant");
+  if (assistantMessages.length === 0) {
+    throw new Error("No assistant messages found in this chat session");
+  }
+
+  const sourceMinutesIds: string[] = [];
+  for (const msg of assistantMessages) {
+    if (!msg.citations) continue;
+    try {
+      const citationData = JSON.parse(msg.citations);
+      const sources = citationData.sources || [];
+      for (const source of sources) {
+        if (source.documentId && !sourceMinutesIds.includes(source.documentId)) {
+          sourceMinutesIds.push(source.documentId);
+        }
+        if (source.id && !sourceMinutesIds.includes(source.id)) {
+          sourceMinutesIds.push(source.id);
+        }
+      }
+    } catch {
+    }
+  }
+
+  const transcript = messages
+    .filter(m => m.role === "user" || m.role === "assistant")
+    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .join("\n\n");
+
+  const truncatedTranscript = transcript.slice(0, 80000);
+
+  const prompt = `You are a journalistic synthesizer. You are receiving a transcript of a research conversation about municipal affairs in ${town}, New Hampshire. Do NOT summarize the back-and-forth conversation itself. Extract the objective municipal facts discovered during this chat and write them as a standalone, objective news update.
+
+CRITICAL CONSTRAINT — ANTI-META-SUMMARY:
+- You MUST write a standalone journalistic article as if no conversation ever happened.
+- NEVER reference "the conversation," "the researcher," "the user asked," "as discussed," or any meta-commentary about the chat.
+- NEVER write phrases like "Based on the research discussion..." or "The conversation revealed..."
+- Extract the FACTS and present them directly, as a reporter would after attending a meeting.
+
+STRICT TONE RULES:
+- Never use exclamation marks
+- Never use rhetorical questions
+- Never use conversational phrases like "Let's dive in," "Here's what you need to know," "Big news," or "Stay tuned"
+- Never use subjective adjectives: "exciting," "impressive," "concerning," "remarkable," "important," "significant"
+- Never use PR language or evaluative adjectives: "pleased," "successfully," "fortunately," "unfortunately," "proud," "committed to"
+- Do NOT write: "Big changes are coming to ${town}!" or "${town} Update!"
+- DO write: "The ${town} Select Board approved a $2.1M bond for road repairs at its Feb. 12 meeting."
+
+JOURNALISTIC LEDE RULES:
+- The summary's first sentence MUST be a newspaper-style lede containing Who, What, When, and Where
+- The first paragraph must be strictly under 40 words — punchy and direct
+- Do NOT echo or rephrase the headline/title in the opening sentence — the lede must add new information
+- Example of a good lede: "A $363,500 purchase of the former bank building on Main Street was approved unanimously at the Feb. 12 meeting."
+
+RESEARCH TRANSCRIPT:
+${truncatedTranscript}
+
+Respond with valid JSON matching this exact structure:
+{
+  "title": "Headline in newspaper style — factual, no hype",
+  "summary": "Full journalistic article, 400-800 words, standalone news update",
+  "topics": [
+    {
+      "topic": "Topic name",
+      "score": 8,
+      "relevance": 8,
+      "financialImpact": 5,
+      "publicFriction": 3,
+      "qualityOfLife": 6,
+      "board": "Select Board",
+      "meetingDate": "2026-02-12",
+      "keyPoints": ["Key point 1", "Key point 2"]
+    }
+  ],
+  "routineTopics": [
+    {
+      "topic": "Routine item name",
+      "score": 3,
+      "board": "Select Board",
+      "rollupSentence": "The board discussed routine item."
+    }
+  ],
+  "generatedPayload": {
+    "summary": "Same summary text as above",
+    "sections": [
+      {
+        "title": "Section title",
+        "description": "Brief description",
+        "suggestedQuestions": ["Follow-up question 1", "Follow-up question 2"]
+      }
+    ],
+    "highLevelQuestions": ["Cross-cutting question 1", "Cross-cutting question 2"]
+  }
+}
+
+Extract 3-10 topics depending on how much substantive content exists. Score them honestly on the 1-10 axes. Generate 2-3 suggested questions per section and 2-3 high-level questions.`;
+
+  const response = await ai.models.generateContent({
+    model: SUMMARY_MODEL,
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      temperature: 0.2,
+      maxOutputTokens: 8192,
+      responseMimeType: "application/json",
+    },
+  });
+
+  const rawText = response.text || "{}";
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsed = JSON.parse(jsonMatch[0]);
+    } else {
+      throw new Error("Failed to parse LLM response as JSON");
+    }
+  }
+
+  const title = parsed.title || `${town} Research Update`;
+  const summary = parsed.summary || "Unable to generate summary from research conversation.";
+
+  const topics: ScoredTopic[] = (parsed.topics || []).map((t: any) => ({
+    topic: t.topic || "Unknown Topic",
+    score: t.score || 5,
+    relevance: t.relevance || t.score || 5,
+    financialImpact: t.financialImpact || 1,
+    publicFriction: t.publicFriction || 1,
+    qualityOfLife: t.qualityOfLife || 1,
+    board: t.board || null,
+    meetingDate: t.meetingDate || null,
+    keyPoints: Array.isArray(t.keyPoints) ? t.keyPoints : [],
+    historicalContext: t.historicalContext || undefined,
+  }));
+
+  const routineTopics: RoutineTopic[] = (parsed.routineTopics || []).map((r: any) => ({
+    topic: r.topic || "Unknown",
+    score: r.score || 3,
+    board: r.board || null,
+    rollupSentence: r.rollupSentence || `The board discussed ${r.topic || "an item"}.`,
+  }));
+
+  const generatedPayload: TownFeedPayload | undefined = parsed.generatedPayload ? {
+    summary: parsed.generatedPayload.summary || summary,
+    sections: (parsed.generatedPayload.sections || []).map((s: any) => ({
+      title: s.title || "",
+      description: s.description || "",
+      suggestedQuestions: Array.isArray(s.suggestedQuestions) ? s.suggestedQuestions : [],
+    })),
+    highLevelQuestions: Array.isArray(parsed.generatedPayload.highLevelQuestions)
+      ? parsed.generatedPayload.highLevelQuestions
+      : [],
+  } : undefined;
+
+  const feedItem = await createTownFeedItem({
+    town,
+    title,
+    summary,
+    topics,
+    routineTopics,
+    sourceMinutesIds,
+    newsArticles: [],
+    status: "draft",
+    generatedPayload: generatedPayload,
+  });
+
+  logInfo(`[contentGeneration] Created draft feed item ${feedItem.id} from chat session ${sessionId}: "${title}"`);
+  return feedItem;
 }
 
 export async function regenerateSummaryWithNews(item: TownFeedItem): Promise<string> {

@@ -22,6 +22,7 @@ import AdminContent from "@/pages/admin-content";
 import AdminDocumentGaps from "@/pages/admin-document-gaps";
 import AdminDeepDives from "@/pages/admin-deep-dives";
 import AdminPromotions from "@/pages/admin-promotions";
+import AdminResearchChat from "@/pages/admin-research-chat";
 import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 import FeedLayout from "@/pages/feed-layout";
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/admin/document-gaps" component={AdminDocumentGaps} />
       <Route path="/admin/deep-dives" component={AdminDeepDives} />
       <Route path="/admin/promotions" component={AdminPromotions} />
+      <Route path="/admin/research-chat" component={AdminResearchChat} />
       <Route component={NotFound} />
     </Switch>
   );

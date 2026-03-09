@@ -76,6 +76,19 @@ A content generation pipeline extracts engaging topics from meeting minutes, enr
 - `client/src/components/TypingIndicator.tsx` — Animated bouncing dots with pipeline stage labels. Uses `getStageLabel()` from `sseParser.ts`. Supports deep dive iteration display.
 - `client/src/lib/sseParser.ts` — Shared SSE stream parser with `\n\n` event boundary splitting, typed handlers, `STAGE_LABELS` map, and `getStageLabel()` utility.
 
+### Admin Research Chat
+An admin-only chat interface at `/admin/research-chat` that lets admins use the full chat system (including deep dive) to research municipal topics, then generate a draft feed item from the conversation. Key features:
+- Town selector (locked after first message to prevent scope drift)
+- Full SSE streaming chat with deep dive toggle, markdown rendering, citations, follow-up chips
+- "Generate Feed Item" button calls `POST /api/admin/content/generate-from-chat` which:
+  1. Extracts all document IDs from assistant message citations into `sourceMinutesIds`
+  2. Sends the conversation transcript to `SUMMARY_MODEL` with anti-meta-summary constraints (the LLM produces standalone journalism, not a conversation recap)
+  3. Generates structured JSON matching `TownFeedPayload` format (title, summary, topics, sections, suggestedQuestions)
+  4. Creates a `draft` row in `town_feed_items` — fully compatible with the normal publish workflow
+- Navigation link added to the admin content page header
+
+**Key files:** `client/src/pages/admin-research-chat.tsx`, `server/services/contentGeneration.ts` (`generateFeedItemFromChat`), `server/routes/contentGeneration.ts`
+
 ### Promotions Hub
 An outbound growth engine generates omni-channel social media content, email copy, and trackable deep links from published Town Feed items, enabling "zero-click to chat" acquisition. LLMs generate content and video scripts, maintaining an objective tone.
 

@@ -9,7 +9,7 @@ import {
   deleteTownFeedItem,
   getPublishedFeedItems,
 } from "../storage/townFeed";
-import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions } from "../services/contentGeneration";
+import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions, generateFeedItemFromChat } from "../services/contentGeneration";
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
 import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
@@ -37,6 +37,21 @@ adminRouter.post("/generate", async (req, res) => {
   } catch (error: any) {
     console.error("Content generation failed:", error);
     res.status(500).json({ message: error.message || "Content generation failed" });
+  }
+});
+
+adminRouter.post("/generate-from-chat", async (req, res) => {
+  try {
+    const { sessionId, town } = z.object({
+      sessionId: z.string().min(1),
+      town: z.string().min(1),
+    }).parse(req.body);
+
+    const feedItem = await generateFeedItemFromChat(sessionId, town);
+    res.json(feedItem);
+  } catch (error: any) {
+    console.error("Content generation from chat failed:", error);
+    res.status(500).json({ message: error.message || "Content generation from chat failed" });
   }
 });
 
