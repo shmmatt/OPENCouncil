@@ -36,6 +36,10 @@ import {
   User,
   LogOut,
   FlaskConical,
+  MessageCircle,
+  PanelLeftClose,
+  PanelLeft,
+  Plus,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { ChatSession, ChatMessage } from "@shared/schema";
@@ -63,12 +67,17 @@ export default function AdminResearchChat() {
   const [deepDiveIteration, setDeepDiveIteration] = useState(0);
   const [deepDiveMaxIterations, setDeepDiveMaxIterations] = useState(3);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const towns = NH_TOWNS.filter(t => t !== "statewide");
+
+  const { data: sessions, isLoading: sessionsLoading } = useQuery<ChatSession[]>({
+    queryKey: ["/api/chat/sessions"],
+  });
 
   const { data: messages, isLoading: messagesLoading } = useQuery<ChatMessage[]>({
     queryKey: ["/api/chat/sessions", sessionId],
@@ -77,6 +86,18 @@ export default function AdminResearchChat() {
 
   const assistantMessages = messages?.filter(m => m.role === "assistant") || [];
   const canGenerate = !!selectedTown && assistantMessages.length > 0 && !!sessionId;
+
+  const handleSessionSelect = (session: ChatSession) => {
+    setSessionId(session.id);
+    setSelectedTown(session.townPreference || "");
+    setInputValue("");
+    setPendingMessage(null);
+    setSelectedFile(null);
+    setPipelineStage(null);
+    setIsStreaming(false);
+    setIsDeepDiveMode(false);
+    setDeepDiveIteration(0);
+  };
 
   const sendStreamingMessage = useCallback(async (content: string, useDeepDive: boolean = false) => {
     if (!sessionId) return;
@@ -117,6 +138,7 @@ export default function AdminResearchChat() {
           setPendingMessage(null);
           setPipelineStage(null);
           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
         },
         onFollowups: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", sessionId] });
@@ -296,6 +318,8 @@ export default function AdminResearchChat() {
         }).catch(() => {});
       }
 
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+
       const displayMessage = selectedFile
         ? `${messageContent}\n\n[Attached: ${selectedFile.name}]`
         : messageContent;
@@ -352,6 +376,7 @@ export default function AdminResearchChat() {
                 setPendingMessage(null);
                 setPipelineStage(null);
                 queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", newSession.id] });
+                queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
               },
               onFollowups: () => {
                 queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", newSession.id] });
@@ -414,255 +439,353 @@ export default function AdminResearchChat() {
 
   const isBusy = sendMessageMutation.isPending || isStreaming;
 
+  const sortedSessions = sessions
+    ?.slice()
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    || [];
+
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <header className="border-b bg-card shrink-0">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
-              <Microscope className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold" data-testid="text-page-title">Research Chat</h1>
-              <p className="text-sm text-muted-foreground">Research topics and generate feed items</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" asChild data-testid="link-content">
-              <Link href="/admin/content">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Content
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild data-testid="link-research">
-              <Link href="/admin/research">
-                <FlaskConical className="w-4 h-4 mr-2" />
-                OC Research
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild data-testid="link-documents">
-              <Link href="/admin/documents">
-                <FileText className="w-4 h-4 mr-2" />
-                Documents
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="border-b bg-card px-6 py-3 shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <label className="text-sm font-medium text-muted-foreground shrink-0">Town:</label>
-            <Select value={selectedTown} onValueChange={setSelectedTown} disabled={!!sessionId}>
-              <SelectTrigger className="w-full max-w-[240px]" data-testid="select-research-town">
-                <SelectValue placeholder="Select a town..." />
-              </SelectTrigger>
-              <SelectContent>
-                {towns.map((town) => (
-                  <SelectItem key={town} value={town} data-testid={`town-option-${town}`}>
-                    {town}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
+    <div className="flex h-screen bg-background">
+      {sidebarOpen && (
+        <div className="flex flex-col h-full w-72 shrink-0 bg-sidebar border-r border-sidebar-border" data-testid="sidebar-sessions">
+          <div className="p-3 border-b border-sidebar-border space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-sidebar-foreground">Research Sessions</h2>
               <Button
-                variant={isDeepDiveMode ? "default" : "outline"}
-                size="sm"
-                className={`toggle-elevate ${isDeepDiveMode ? "toggle-elevated" : ""}`}
-                onClick={() => setIsDeepDiveMode(!isDeepDiveMode)}
-                disabled={isBusy}
-                data-testid="button-deep-dive-toggle"
-              >
-                <Sparkles className="w-4 h-4 mr-1" />
-                Deep Dive
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{isDeepDiveMode ? "Switch to quick answer" : "Enable multi-pass deep analysis"}</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Button
-            onClick={() => generateFeedItemMutation.mutate()}
-            disabled={!canGenerate || generateFeedItemMutation.isPending || isBusy}
-            data-testid="button-generate-feed-item"
-          >
-            {generateFeedItemMutation.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating draft...
-              </>
-            ) : (
-              <>
-                <FileText className="w-4 h-4 mr-2" />
-                Generate Feed Item
-              </>
-            )}
-          </Button>
-
-          {sessionId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNewResearch}
-              disabled={isBusy || generateFeedItemMutation.isPending}
-              data-testid="button-new-research"
-            >
-              <RotateCcw className="w-4 h-4 mr-1" />
-              New Research
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1 p-4">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {!sessionId && !pendingMessage ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Microscope className="w-8 h-8 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold mb-2" data-testid="text-empty-state">Start Your Research</h2>
-              <p className="text-muted-foreground mb-2 max-w-md">
-                Select a town, ask questions about municipal documents, then generate a feed item from your findings.
-              </p>
-              {!selectedTown && (
-                <Badge variant="secondary" className="mt-2 no-default-hover-elevate no-default-active-elevate" data-testid="badge-select-town-hint">
-                  Select a town above to get started
-                </Badge>
-              )}
-            </div>
-          ) : messagesLoading && sessionId ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton className="w-8 h-8 rounded-full" />
-                  <Skeleton className="h-20 flex-1" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {messages?.map((message) => (
-                <ChatMessageBubble
-                  key={message.id}
-                  message={message}
-                  onFollowUpClick={handleFollowUpClick}
-                />
-              ))}
-              {pendingMessage && (
-                <div className="flex gap-4 justify-end">
-                  <div className="flex flex-col gap-2 max-w-3xl items-end">
-                    <div className="rounded-lg px-4 py-3 bg-primary text-primary-foreground">
-                      <p className="text-sm whitespace-pre-wrap">{pendingMessage}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground px-1">
-                      {new Date().toLocaleTimeString()}
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </div>
-              )}
-              {(sendMessageMutation.isPending || isStreaming) && (
-                <TypingIndicator
-                  pipelineStage={pipelineStage}
-                  isDeepDive={isDeepDiveMode}
-                  deepDiveIteration={deepDiveIteration}
-                  deepDiveMaxIterations={deepDiveMaxIterations}
-                />
-              )}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
-      </ScrollArea>
-
-      <div className="border-t bg-card p-4 shrink-0">
-        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto" data-testid="form-research-chat">
-          {selectedFile && (
-            <div className="mb-2 flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
-              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-sm truncate flex-1" data-testid="text-attached-file">
-                {selectedFile.name}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                ({(selectedFile.size / 1024).toFixed(1)} KB)
-              </span>
-              <Button
-                type="button"
                 variant="ghost"
                 size="icon"
-                onClick={handleRemoveFile}
-                data-testid="button-remove-file"
+                onClick={() => setSidebarOpen(false)}
+                data-testid="button-close-sidebar"
               >
-                <X className="w-4 h-4" />
+                <PanelLeftClose className="w-4 h-4" />
               </Button>
             </div>
-          )}
-          {isDeepDiveMode && (
-            <div className="mb-2 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
-              <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
-              <span className="text-sm text-primary">Deep Dive mode — comprehensive multi-pass analysis</span>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.txt"
-              onChange={handleFileSelect}
-              className="hidden"
-              data-testid="input-file"
-            />
             <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-[60px] w-[60px] flex-shrink-0"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handleNewResearch}
+              className="w-full"
+              variant={!sessionId ? "default" : "outline"}
               disabled={isBusy}
-              data-testid="button-attach-file"
+              data-testid="button-new-research-sidebar"
             >
-              <Paperclip className="w-5 h-5" />
-            </Button>
-            <Textarea
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isDeepDiveMode ? "Ask a question for deep analysis..." : "Ask about municipal documents..."}
-              className="min-h-[60px] resize-none"
-              disabled={isBusy}
-              data-testid="input-message"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={(!inputValue.trim() && !selectedFile) || isBusy}
-              className="h-[60px] w-[60px]"
-              data-testid="button-send"
-            >
-              {isBusy ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              <Plus className="w-4 h-4 mr-2" />
+              New Research
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Press Enter to send, Shift+Enter for new line{isDeepDiveMode ? " | Deep Dive active" : ""}
-          </p>
-        </form>
+
+          <ScrollArea className="flex-1">
+            <div className="px-2 py-2 space-y-1">
+              {sessionsLoading && (
+                <div className="space-y-2 px-2 py-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-2 p-3">
+                      <Skeleton className="w-4 h-4 rounded-full mt-0.5" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!sessionsLoading && sortedSessions.length === 0 && (
+                <p className="text-xs text-muted-foreground px-3 py-4 text-center">
+                  No previous sessions
+                </p>
+              )}
+              {sortedSessions.map((session) => (
+                <button
+                  key={session.id}
+                  onClick={() => handleSessionSelect(session)}
+                  disabled={isBusy}
+                  className={`w-full text-left p-3 rounded-md hover-elevate active-elevate-2 transition-colors ${
+                    sessionId === session.id
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground"
+                  } ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+                  data-testid={`button-session-${session.id}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <MessageCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{session.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(session.updatedAt).toLocaleDateString()}
+                        </span>
+                        {session.townPreference && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 no-default-hover-elevate no-default-active-elevate">
+                            {session.townPreference}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      <div className="flex flex-col flex-1 min-w-0">
+        <header className="border-b bg-card shrink-0">
+          <div className="px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              {!sidebarOpen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(true)}
+                  data-testid="button-open-sidebar"
+                >
+                  <PanelLeft className="w-5 h-5" />
+                </Button>
+              )}
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+                <Microscope className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold" data-testid="text-page-title">Research Chat</h1>
+                <p className="text-sm text-muted-foreground">Research topics and generate feed items</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="sm" asChild data-testid="link-content">
+                <Link href="/admin/content">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Content
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild data-testid="link-research">
+                <Link href="/admin/research">
+                  <FlaskConical className="w-4 h-4 mr-2" />
+                  OC Research
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild data-testid="link-documents">
+                <Link href="/admin/documents">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Documents
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="border-b bg-card px-6 py-3 shrink-0">
+          <div className="max-w-4xl mx-auto flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <label className="text-sm font-medium text-muted-foreground shrink-0">Town:</label>
+              <Select value={selectedTown} onValueChange={setSelectedTown} disabled={!!sessionId}>
+                <SelectTrigger className="w-full max-w-[240px]" data-testid="select-research-town">
+                  <SelectValue placeholder="Select a town..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {towns.map((town) => (
+                    <SelectItem key={town} value={town} data-testid={`town-option-${town}`}>
+                      {town}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isDeepDiveMode ? "default" : "outline"}
+                  size="sm"
+                  className={`toggle-elevate ${isDeepDiveMode ? "toggle-elevated" : ""}`}
+                  onClick={() => setIsDeepDiveMode(!isDeepDiveMode)}
+                  disabled={isBusy}
+                  data-testid="button-deep-dive-toggle"
+                >
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  Deep Dive
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isDeepDiveMode ? "Switch to quick answer" : "Enable multi-pass deep analysis"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Button
+              onClick={() => generateFeedItemMutation.mutate()}
+              disabled={!canGenerate || generateFeedItemMutation.isPending || isBusy}
+              data-testid="button-generate-feed-item"
+            >
+              {generateFeedItemMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating draft...
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Generate Feed Item
+                </>
+              )}
+            </Button>
+
+            {sessionId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewResearch}
+                disabled={isBusy || generateFeedItemMutation.isPending}
+                data-testid="button-new-research"
+              >
+                <RotateCcw className="w-4 h-4 mr-1" />
+                New Research
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <ScrollArea className="flex-1 p-4">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {!sessionId && !pendingMessage ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Microscope className="w-8 h-8 text-primary" />
+                </div>
+                <h2 className="text-xl font-semibold mb-2" data-testid="text-empty-state">Start Your Research</h2>
+                <p className="text-muted-foreground mb-2 max-w-md">
+                  Select a town, ask questions about municipal documents, then generate a feed item from your findings.
+                </p>
+                {!selectedTown && (
+                  <Badge variant="secondary" className="mt-2 no-default-hover-elevate no-default-active-elevate" data-testid="badge-select-town-hint">
+                    Select a town above to get started
+                  </Badge>
+                )}
+              </div>
+            ) : messagesLoading && sessionId ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-4">
+                    <Skeleton className="w-8 h-8 rounded-full" />
+                    <Skeleton className="h-20 flex-1" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                {messages?.map((message) => (
+                  <ChatMessageBubble
+                    key={message.id}
+                    message={message}
+                    onFollowUpClick={handleFollowUpClick}
+                  />
+                ))}
+                {pendingMessage && (
+                  <div className="flex gap-4 justify-end">
+                    <div className="flex flex-col gap-2 max-w-3xl items-end">
+                      <div className="rounded-lg px-4 py-3 bg-primary text-primary-foreground">
+                        <p className="text-sm whitespace-pre-wrap">{pendingMessage}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground px-1">
+                        {new Date().toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                )}
+                {(sendMessageMutation.isPending || isStreaming) && (
+                  <TypingIndicator
+                    pipelineStage={pipelineStage}
+                    isDeepDive={isDeepDiveMode}
+                    deepDiveIteration={deepDiveIteration}
+                    deepDiveMaxIterations={deepDiveMaxIterations}
+                  />
+                )}
+                <div ref={messagesEndRef} />
+              </>
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="border-t bg-card p-4 shrink-0">
+          <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto" data-testid="form-research-chat">
+            {selectedFile && (
+              <div className="mb-2 flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
+                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm truncate flex-1" data-testid="text-attached-file">
+                  {selectedFile.name}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  ({(selectedFile.size / 1024).toFixed(1)} KB)
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleRemoveFile}
+                  data-testid="button-remove-file"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+            {isDeepDiveMode && (
+              <div className="mb-2 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
+                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-sm text-primary">Deep Dive mode — comprehensive multi-pass analysis</span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-[60px] w-[60px] flex-shrink-0"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isBusy}
+                data-testid="button-attach-file"
+              >
+                <Paperclip className="w-5 h-5" />
+              </Button>
+              <Textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isDeepDiveMode ? "Ask a question for deep analysis..." : "Ask about municipal documents..."}
+                className="min-h-[60px] resize-none"
+                disabled={isBusy}
+                data-testid="input-message"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                disabled={(!inputValue.trim() && !selectedFile) || isBusy}
+                className="h-[60px] w-[60px]"
+                data-testid="button-send"
+              >
+                {isBusy ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Press Enter to send, Shift+Enter for new line{isDeepDiveMode ? " | Deep Dive active" : ""}
+            </p>
+          </form>
+        </div>
       </div>
     </div>
   );

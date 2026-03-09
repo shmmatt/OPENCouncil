@@ -85,6 +85,7 @@ An admin-only chat interface at `/admin/research-chat` that lets admins use the 
   2. Sends the conversation transcript to `SUMMARY_MODEL` with anti-meta-summary constraints (the LLM produces standalone journalism, not a conversation recap)
   3. Generates structured JSON matching `TownFeedPayload` format (title, summary, topics, sections, suggestedQuestions)
   4. Creates a `draft` row in `town_feed_items` — fully compatible with the normal publish workflow
+- Collapsible session history sidebar lists all previous research sessions (sorted by most recent), showing title, date, and town badge; clicking a session loads its messages and restores the town context; sidebar can be toggled open/closed; session switching is disabled while streaming
 - Navigation link added to the admin content page header
 
 **Key files:** `client/src/pages/admin-research-chat.tsx`, `server/services/contentGeneration.ts` (`generateFeedItemFromChat`), `server/routes/contentGeneration.ts`
