@@ -240,6 +240,7 @@ export const chatTemplates = pgTable("chat_templates", {
   targetDocumentIds: jsonb("target_document_ids").$type<string[]>().notNull().default([]),
   generatedPayload: jsonb("generated_payload").$type<TemplatePayload>(),
   isActive: boolean("is_active").notNull().default(false),
+  linkedFeedItemId: varchar("linked_feed_item_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -49,10 +49,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
   ArrowUpDown,
+  CalendarDays,
   FileText,
   LayoutGrid,
   LayoutList,
@@ -77,7 +79,7 @@ import {
   Microscope,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
-import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedPayload } from "@shared/schema";
+import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedPayload, MinutesUpdateItem } from "@shared/schema";
 
 function adminFetch(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem("adminToken");
@@ -781,6 +783,205 @@ function EditPayloadDialog({
   );
 }
 
+interface EnrichedMinutesItem extends MinutesUpdateItem {
+  canonicalTitle: string | null;
+}
+
+const MAX_MINUTES_SELECTION = 3;
+
+function RecentMinutesPanel({ onGenerateSuccess }: { onGenerateSuccess: (itemId: string) => void }) {
+  const { toast } = useToast();
+  const [minutesTown, setMinutesTown] = useState("");
+  const [selectedMinutes, setSelectedMinutes] = useState<Set<string>>(new Set());
+
+  const { data: minutesData, isLoading: minutesLoading } = useQuery<{ items: EnrichedMinutesItem[] }>({
+    queryKey: ["/api/admin/content/recent-minutes", minutesTown],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/content/recent-minutes?town=${encodeURIComponent(minutesTown)}&limit=20`);
+      if (!res.ok) throw new Error("Failed to fetch minutes");
+      return res.json();
+    },
+    enabled: !!minutesTown,
+  });
+
+  const minutesItems = minutesData?.items || [];
+
+  const generateFromDocsMutation = useMutation({
+    mutationFn: async (documentVersionIds: string[]) => {
+      const res = await adminFetch("/api/admin/content/generate-from-documents", {
+        method: "POST",
+        body: JSON.stringify({ town: minutesTown, documentVersionIds }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Generation failed" }));
+        throw new Error(err.message || "Generation failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      toast({ title: "Feed item generated", description: `Draft created from ${selectedMinutes.size} document(s)` });
+      setSelectedMinutes(new Set());
+      onGenerateSuccess(data.id);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleMinuteSelection = (docVersionId: string) => {
+    setSelectedMinutes(prev => {
+      const next = new Set(prev);
+      if (next.has(docVersionId)) {
+        next.delete(docVersionId);
+      } else {
+        if (next.size >= MAX_MINUTES_SELECTION) {
+          toast({
+            title: "Selection limit reached",
+            description: "Maximum 3 documents per generation to keep summaries focused",
+            variant: "destructive",
+          });
+          return prev;
+        }
+        next.add(docVersionId);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle data-testid="text-recent-minutes-title">Recent Minutes</CardTitle>
+        <CardDescription>
+          Select a town, then choose up to 3 minutes documents to generate a feed item from.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-end gap-4 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <Label className="mb-2 block">Select Town</Label>
+            <Select value={minutesTown} onValueChange={(v) => { setMinutesTown(v); setSelectedMinutes(new Set()); }}>
+              <SelectTrigger data-testid="select-minutes-town">
+                <SelectValue placeholder="Choose a town..." />
+              </SelectTrigger>
+              <SelectContent>
+                {NH_TOWNS.filter(t => t !== "statewide").map(t => (
+                  <SelectItem key={t} value={t} data-testid={`option-minutes-town-${t}`}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={() => generateFromDocsMutation.mutate(Array.from(selectedMinutes))}
+            disabled={selectedMinutes.size === 0 || generateFromDocsMutation.isPending}
+            data-testid="button-generate-from-minutes"
+          >
+            {generateFromDocsMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate Feed Item ({selectedMinutes.size})
+              </>
+            )}
+          </Button>
+        </div>
+
+        {generateFromDocsMutation.isPending && (
+          <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground" data-testid="text-generating-notice">
+              Generation may take 30-60 seconds for multiple documents...
+            </span>
+          </div>
+        )}
+
+        {!minutesTown ? (
+          <div className="text-center py-8">
+            <CalendarDays className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+            <p className="text-muted-foreground" data-testid="text-select-town-prompt">
+              Select a town to see recent minutes
+            </p>
+          </div>
+        ) : minutesLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : minutesItems.length === 0 ? (
+          <div className="text-center py-8">
+            <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+            <p className="text-muted-foreground" data-testid="text-no-minutes">
+              No minutes found for {minutesTown}
+            </p>
+          </div>
+        ) : (
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead>Board</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Meeting Date</TableHead>
+                  <TableHead>Ingested</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {minutesItems.map((item, idx) => {
+                  const isSelected = selectedMinutes.has(item.documentVersionId);
+                  const isDisabled = !isSelected && selectedMinutes.size >= MAX_MINUTES_SELECTION;
+                  return (
+                    <TableRow
+                      key={item.documentVersionId}
+                      className={isSelected ? "bg-primary/5" : ""}
+                      data-testid={`row-minutes-${item.documentVersionId}`}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onCheckedChange={() => toggleMinuteSelection(item.documentVersionId)}
+                          data-testid={`checkbox-minutes-${item.documentVersionId}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {item.board || "Unknown Board"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm font-medium" data-testid={`text-minutes-title-${item.documentVersionId}`}>
+                          {item.canonicalTitle || `${item.board || "Minutes"} - ${item.town}`}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.meetingDate
+                          ? new Date(item.meetingDate).toLocaleDateString()
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(item.ingestedAt).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminContent() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -1177,6 +1378,23 @@ export default function AdminContent() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <Tabs defaultValue="feed-items" className="space-y-6">
+          <TabsList data-testid="tabs-content-management">
+            <TabsTrigger value="feed-items" data-testid="tab-feed-items">
+              <Newspaper className="w-4 h-4 mr-2" />
+              Feed Items
+            </TabsTrigger>
+            <TabsTrigger value="recent-minutes" data-testid="tab-recent-minutes">
+              <CalendarDays className="w-4 h-4 mr-2" />
+              Recent Minutes
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="recent-minutes" className="space-y-6">
+            <RecentMinutesPanel onGenerateSuccess={(itemId) => setViewingItemId(itemId)} />
+          </TabsContent>
+
+          <TabsContent value="feed-items" className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle data-testid="text-generate-title">Generate Town Content</CardTitle>
@@ -1326,6 +1544,8 @@ export default function AdminContent() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {editPayloadItem && (

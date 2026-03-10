@@ -9,8 +9,9 @@ import {
   deleteTownFeedItem,
   getPublishedFeedItems,
 } from "../storage/townFeed";
-import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions, generateFeedItemFromChat } from "../services/contentGeneration";
+import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions, generateFeedItemFromChat, generateFeedItemFromDocuments } from "../services/contentGeneration";
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
+import { getChatTemplateById, updateChatTemplate } from "../storage/chatTemplates";
 import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
 const adminRouter = Router();
@@ -52,6 +53,134 @@ adminRouter.post("/generate-from-chat", async (req, res) => {
   } catch (error: any) {
     console.error("Content generation from chat failed:", error);
     res.status(500).json({ message: error.message || "Content generation from chat failed" });
+  }
+});
+
+adminRouter.post("/generate-from-documents", async (req, res) => {
+  try {
+    const { town, documentVersionIds } = z.object({
+      town: z.string().min(1),
+      documentVersionIds: z.array(z.string().min(1)).min(1).max(3),
+    }).parse(req.body);
+
+    const { getDocumentVersionById } = await import("../storage/documents");
+    const { db, schema, eq } = await import("../storage/db");
+    for (const versionId of documentVersionIds) {
+      const version = await getDocumentVersionById(versionId);
+      if (!version) {
+        return res.status(400).json({ message: `Document version not found: ${versionId}` });
+      }
+      const [logDoc] = await db.select({ town: schema.logicalDocuments.town })
+        .from(schema.logicalDocuments)
+        .where(eq(schema.logicalDocuments.id, version.documentId))
+        .limit(1);
+      if (logDoc && logDoc.town !== town) {
+        return res.status(400).json({ message: `Document ${versionId} belongs to ${logDoc.town}, not ${town}` });
+      }
+    }
+
+    const feedItem = await generateFeedItemFromDocuments(town, documentVersionIds);
+    res.json(feedItem);
+  } catch (error: any) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input. Maximum 3 documents allowed per generation.", errors: error.issues });
+    }
+    console.error("Content generation from documents failed:", error);
+    res.status(500).json({ message: error.message || "Content generation from documents failed" });
+  }
+});
+
+adminRouter.post("/publish-from-template", async (req, res) => {
+  try {
+    const { templateId } = z.object({
+      templateId: z.string().min(1),
+    }).parse(req.body);
+
+    const template = await getChatTemplateById(templateId);
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+
+    if (!template.generatedPayload) {
+      return res.status(400).json({ message: "Template has no generated payload. Generate a summary first." });
+    }
+
+    if (template.linkedFeedItemId) {
+      const existingItem = await getTownFeedItemById(template.linkedFeedItemId);
+      if (existingItem) {
+        return res.json({ feedItem: existingItem, alreadyPublished: true });
+      }
+    }
+
+    const payload = template.generatedPayload as any;
+    const feedItem = await createTownFeedItem({
+      town: template.town,
+      title: template.title,
+      summary: payload.summary || "",
+      topics: [],
+      routineTopics: [],
+      sourceMinutesIds: (template.targetDocumentIds as string[]) || [],
+      newsArticles: [],
+      status: "draft",
+      templateId: template.id,
+      generatedPayload: {
+        summary: payload.summary || "",
+        sections: (payload.sections || []).map((s: any) => ({
+          title: s.title || "",
+          description: s.description || "",
+          suggestedQuestions: Array.isArray(s.suggestedQuestions) ? s.suggestedQuestions : [],
+        })),
+        highLevelQuestions: Array.isArray(payload.highLevelQuestions) ? payload.highLevelQuestions : [],
+      },
+    });
+
+    await updateChatTemplate(template.id, { linkedFeedItemId: feedItem.id });
+
+    res.json({ feedItem, alreadyPublished: false });
+  } catch (error: any) {
+    console.error("Publishing template to feed failed:", error);
+    res.status(500).json({ message: error.message || "Failed to publish template to feed" });
+  }
+});
+
+adminRouter.get("/recent-minutes", async (req, res) => {
+  try {
+    const town = req.query.town as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    if (!town) {
+      return res.status(400).json({ message: "Town parameter is required" });
+    }
+
+    const { getRecentMinutesUpdatesAdmin } = await import("../storage/documents");
+    const items = await getRecentMinutesUpdatesAdmin({ town, limit });
+    
+    const { db } = await import("../storage/db");
+    const schema = await import("@shared/schema");
+    const { eq, inArray } = await import("drizzle-orm");
+    
+    const logicalDocIdSet = new Set(items.map(i => i.logicalDocumentId));
+    const logicalDocIds = Array.from(logicalDocIdSet);
+    let titleMap: Record<string, string> = {};
+    if (logicalDocIds.length > 0) {
+      const docs = await db
+        .select({ id: schema.logicalDocuments.id, canonicalTitle: schema.logicalDocuments.canonicalTitle })
+        .from(schema.logicalDocuments)
+        .where(inArray(schema.logicalDocuments.id, logicalDocIds));
+      for (const doc of docs) {
+        titleMap[doc.id] = doc.canonicalTitle;
+      }
+    }
+
+    const enriched = items.map(item => ({
+      ...item,
+      canonicalTitle: titleMap[item.logicalDocumentId] || null,
+    }));
+
+    res.json({ items: enriched });
+  } catch (error) {
+    console.error("Error fetching recent minutes:", error);
+    res.status(500).json({ message: "Failed to fetch recent minutes" });
   }
 });
 

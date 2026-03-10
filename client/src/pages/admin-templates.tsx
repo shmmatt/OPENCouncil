@@ -33,6 +33,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   ArrowLeft,
   Plus,
   Loader2,
@@ -45,6 +50,8 @@ import {
   HelpCircle,
   CheckCircle2,
   X,
+  Send,
+  ExternalLink,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { ChatTemplate, TemplatePayload, TemplateSection } from "@shared/schema";
@@ -570,6 +577,38 @@ export default function AdminTemplates() {
     },
   });
 
+  const publishToFeedMutation = useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await adminFetch("/api/admin/content/publish-from-template", {
+        method: "POST",
+        body: JSON.stringify({ templateId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to publish to feed" }));
+        throw new Error(err.message);
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/templates"] });
+      const feedItemId = data.feedItem?.id;
+      if (data.alreadyPublished) {
+        toast({
+          title: "Already in Feed",
+          description: "This template was already published to the feed.",
+        });
+      } else {
+        toast({
+          title: "Published to Feed",
+          description: "Draft feed item created successfully. Edit and publish it from the Content page.",
+        });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Publish failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isCreating || editingTemplate) {
     return (
       <div className="min-h-screen bg-background p-4 md:p-8">
@@ -684,6 +723,60 @@ export default function AdminTemplates() {
                         No summary yet
                       </Badge>
                     )}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    {t.linkedFeedItemId && (
+                      <>
+                        <Badge variant="secondary" data-testid={`badge-already-in-feed-${t.id}`}>
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Already in Feed
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setLocation("/admin/content")}
+                          data-testid={`link-view-feed-item-${t.id}`}
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          View in Content
+                        </Button>
+                      </>
+                    )}
+                    {!t.linkedFeedItemId && t.generatedPayload ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => publishToFeedMutation.mutate(t.id)}
+                        disabled={publishToFeedMutation.isPending}
+                        data-testid={`button-publish-to-feed-${t.id}`}
+                      >
+                        {publishToFeedMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Send className="w-3 h-3 mr-1" />
+                        )}
+                        Publish to Feed
+                      </Button>
+                    ) : !t.linkedFeedItemId && !t.generatedPayload ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              data-testid={`button-publish-to-feed-disabled-${t.id}`}
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Publish to Feed
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Generate a summary first before publishing to the feed</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
