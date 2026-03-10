@@ -23,6 +23,14 @@ import {
   getQueueStatus,
   clearQueue,
 } from "../services/crawlerEngine";
+import { incrementalCrawl } from "../services/incrementalCrawler";
+import {
+  startScheduler,
+  stopScheduler,
+  getSchedulerStatus,
+  getStaleTowns,
+  getIncrementalCrawlStats,
+} from "../services/crawlScheduler";
 
 const router = Router();
 
@@ -416,6 +424,72 @@ router.get("/gaps/:townId", async (req, res) => {
   } catch (error: any) {
     const status = error.message?.includes("not found") || error.message?.includes("No coverage assessment") ? 404 : 500;
     res.status(status).json({ message: error.message });
+  }
+});
+
+router.post("/incremental/:townId", async (req, res) => {
+  try {
+    const { townId } = req.params;
+    const town = await crawlerStorage.getCrawlerTownById(townId);
+    if (!town) {
+      return res.status(404).json({ message: "Town not found" });
+    }
+
+    const existingActive = getActiveCrawls().find(c => c.townId === townId && c.status === 'running');
+    if (existingActive) {
+      return res.status(409).json({ message: `Crawl already running for ${town.name}`, runId: existingActive.runId });
+    }
+
+    res.json({ message: `Incremental crawl started for ${town.name}`, townId });
+    incrementalCrawl(townId, 'manual').then(result => {
+      console.log(`[CrawlerRoute] Incremental crawl finished for ${town.name}: ${result.newDocsFound} new docs`);
+    }).catch(err => {
+      console.error(`[CrawlerRoute] Incremental crawl error for ${town.name}: ${err.message}`);
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/schedule/start", async (_req, res) => {
+  try {
+    const started = startScheduler();
+    if (started) {
+      res.json({ message: "Scheduler started", status: getSchedulerStatus() });
+    } else {
+      res.json({ message: "Scheduler already running", status: getSchedulerStatus() });
+    }
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/schedule/stop", async (_req, res) => {
+  try {
+    const stopped = stopScheduler();
+    if (stopped) {
+      res.json({ message: "Scheduler stopped", status: getSchedulerStatus() });
+    } else {
+      res.json({ message: "Scheduler was not running", status: getSchedulerStatus() });
+    }
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/schedule/status", async (_req, res) => {
+  try {
+    const status = getSchedulerStatus();
+    const staleTowns = await getStaleTowns(20);
+    const stats7d = await getIncrementalCrawlStats(7);
+    const stats30d = await getIncrementalCrawlStats(30);
+    res.json({
+      scheduler: status,
+      staleTowns,
+      stats: { last7Days: stats7d, last30Days: stats30d },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 });
 

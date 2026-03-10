@@ -43,6 +43,11 @@ The V2 ingestion pipeline manages document lifecycle, including duplicate detect
 ### Crawler / Data Collection
 A sophisticated crawler uses multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for town-level, state-level, and SAU-level document collection, including integrations with Google Drive and CourtListener API.
 
+### Incremental Crawling & Scheduler
+An incremental crawling system (`server/services/incrementalCrawler.ts`) efficiently discovers new documents without full re-crawls. Uses CMS-aware "walk until known territory" pagination (stops when a page contains only already-known documents), sitemap diffing, and HTTP HEAD checks for draft-to-approved document updates. A stateless scheduler (`server/services/crawlScheduler.ts`) periodically picks the most stale active town from the database and triggers an incremental crawl. Controlled via `ENABLE_CRAWL_SCHEDULER=true` env var and admin UI. URL normalization strips tracking/session params before hashing to prevent duplicate downloads. Key routes: `POST /api/admin/crawler/incremental/:townId`, `POST/GET /api/admin/crawler/schedule/*`.
+
+**Key files:** `server/services/incrementalCrawler.ts`, `server/services/crawlScheduler.ts`, `server/routes/crawler.ts`
+
 ### OC Research Module
 This module provides analytical tools like the Development Friction Report, which uses LLM-driven pipelines to analyze meeting documents, extract structured data, perform entity resolution, and compute statistical insights such as time-to-decision and friction categories.
 

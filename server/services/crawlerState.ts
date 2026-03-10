@@ -190,12 +190,15 @@ export async function diffSitemap(
 // URL MANAGEMENT
 // ============================================================
 
+const STRIP_PARAMS = /[?&](session_?id|sid|token|jsessionid|phpsessid|asp\.net_sessionid|cfid|cftoken|utm_source|utm_medium|utm_campaign|utm_term|utm_content|utm_id|fbclid|gclid|msclkid|__cf_chl_tk|__cf_chl_rt_tk|__cf_chl_jschl_tk__|_ga|_gl|_hsenc|_hsmi|mc_cid|mc_eid|yclid|wicket:bookmarkablePage|wicket:interface|no_cache|nocache|timestamp|cb|rand|trk)=[^&]*/gi;
+
 export function hashUrl(url: string): string {
-  // Normalize URL before hashing
   try {
     const u = new URL(url);
     u.hash = '';
-    u.search = u.search.replace(/[?&](session|token|sid)=[^&]*/g, '');
+    u.search = u.search.replace(STRIP_PARAMS, '');
+    u.search = u.search.replace(/\?&/, '?').replace(/&&+/g, '&').replace(/[?&]$/, '');
+    if (u.search === '?') u.search = '';
     return crypto.createHash('sha256').update(u.href).digest('hex');
   } catch {
     return crypto.createHash('sha256').update(url).digest('hex');
@@ -331,12 +334,14 @@ export async function batchRecordDocuments(docs: InsertCrawlerDocument[]): Promi
   }
 }
 
-export async function getAllTownDocumentUrls(townId: string): Promise<Array<{ url: string; urlHash: string; status: string; discoveredFrom: string | null }>> {
+export async function getAllTownDocumentUrls(townId: string): Promise<Array<{ url: string; urlHash: string; status: string; discoveredFrom: string | null; updatedAt: Date; s3UploadedAt: Date | null }>> {
   return db.select({
     url: crawlerDocuments.url,
     urlHash: crawlerDocuments.urlHash,
     status: crawlerDocuments.status,
     discoveredFrom: crawlerDocuments.discoveredFrom,
+    updatedAt: crawlerDocuments.updatedAt,
+    s3UploadedAt: crawlerDocuments.s3UploadedAt,
   })
     .from(crawlerDocuments)
     .where(eq(crawlerDocuments.townId, townId));

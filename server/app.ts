@@ -113,6 +113,10 @@ export default async function runApp(
   startOcrWorker();
   startTextractWorkers();
 
+  // Initialize incremental crawl scheduler (if enabled)
+  const { initSchedulerOnBoot } = await import('./services/crawlScheduler');
+  initSchedulerOnBoot();
+
   // importantly run the final setup after setting up all the other routes so
   // the catch-all route doesn't interfere with the other routes
   await setup(app, server);

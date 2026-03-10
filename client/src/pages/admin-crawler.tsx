@@ -336,6 +336,23 @@ function TownsDashboard({
     },
   });
 
+  const triggerIncrementalCrawl = useMutation({
+    mutationFn: async (townId: string) => {
+      const res = await adminFetch(`/api/admin/crawler/incremental/${townId}`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Incremental Crawl Started", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/towns"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const forceClearRun = async (runId: string) => {
     try {
       const res = await adminFetch(`/api/admin/crawler/runs/${runId}/abort`, { method: "POST" });
@@ -438,15 +455,26 @@ function TownsDashboard({
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => triggerCrawl.mutate({ townId: town.id, mode: "full" })}
-                        disabled={triggerCrawl.isPending}
-                        data-testid={`button-crawl-${town.slug}`}
-                      >
-                        <Play className="w-3 h-3 mr-1" />Crawl
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => triggerIncrementalCrawl.mutate(town.id)}
+                          disabled={triggerIncrementalCrawl.isPending}
+                          data-testid={`button-incremental-crawl-${town.slug}`}
+                        >
+                          <RefreshCw className="w-3 h-3 mr-1" />Incremental
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => triggerCrawl.mutate({ townId: town.id, mode: "full" })}
+                          disabled={triggerCrawl.isPending}
+                          data-testid={`button-crawl-${town.slug}`}
+                        >
+                          <Play className="w-3 h-3 mr-1" />Full
+                        </Button>
+                      </>
                     )}
                   </div>
                 </TableCell>
@@ -3851,6 +3879,35 @@ export default function AdminCrawler() {
     },
   });
 
+  const { data: scheduleStatus } = useQuery<{
+    scheduler: { running: boolean; currentlyCrawling: string | null; startedAt: string | null; checkIntervalMinutes: number; crawlIntervalDays: number; lastRunResult: any };
+    staleTowns: Array<{ id: string; slug: string; name: string; lastIncrementalCrawl: string | null; daysSinceLastCrawl: number | null; consecutiveFailures: number }>;
+    stats: { last7Days: { totalRuns: number; successfulRuns: number; failedRuns: number; totalDocsDiscovered: number; avgDocsPerRun: number }; last30Days: { totalRuns: number; successfulRuns: number; failedRuns: number; totalDocsDiscovered: number; avgDocsPerRun: number } };
+  }>({
+    queryKey: ["/api/admin/crawler/schedule/status"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/crawler/schedule/status");
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: 15000,
+  });
+
+  const toggleScheduler = useMutation({
+    mutationFn: async (action: "start" | "stop") => {
+      const res = await adminFetch(`/api/admin/crawler/schedule/${action}`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Scheduler", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/schedule/status"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b">
@@ -3865,6 +3922,34 @@ export default function AdminCrawler() {
               <h1 className="text-xl font-bold">Crawler Management</h1>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {scheduleStatus?.scheduler && (
+                <Badge
+                  variant="outline"
+                  className={scheduleStatus.scheduler.running ? "text-green-600 border-green-600" : "text-muted-foreground"}
+                  data-testid="badge-scheduler-status"
+                >
+                  {scheduleStatus.scheduler.running ? (
+                    <><CheckCircle2 className="w-3 h-3 mr-1" />Scheduler On</>
+                  ) : (
+                    <><Clock className="w-3 h-3 mr-1" />Scheduler Off</>
+                  )}
+                </Badge>
+              )}
+              {scheduleStatus?.scheduler.currentlyCrawling && (
+                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Crawling: {scheduleStatus.scheduler.currentlyCrawling}
+                </Badge>
+              )}
+              <Button
+                variant={scheduleStatus?.scheduler.running ? "destructive" : "default"}
+                size="sm"
+                onClick={() => toggleScheduler.mutate(scheduleStatus?.scheduler.running ? "stop" : "start")}
+                disabled={toggleScheduler.isPending}
+                data-testid="button-toggle-scheduler"
+              >
+                {scheduleStatus?.scheduler.running ? "Stop Scheduler" : "Start Scheduler"}
+              </Button>
               {(stats?.activeRuns || 0) > 0 && (
                 <Badge variant="outline" className="text-blue-600 border-blue-600">
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -3966,6 +4051,9 @@ export default function AdminCrawler() {
               <TabsTrigger value="sau-sources" data-testid="tab-sau-sources">
                 <GraduationCap className="w-3 h-3 mr-1" />SAU Sources
               </TabsTrigger>
+              <TabsTrigger value="incremental" data-testid="tab-incremental">
+                <RefreshCw className="w-3 h-3 mr-1" />Incremental
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="towns">
@@ -3986,6 +4074,92 @@ export default function AdminCrawler() {
 
             <TabsContent value="sau-sources">
               <SauSourcesDashboard onSelectSource={setSelectedSauSource} />
+            </TabsContent>
+
+            <TabsContent value="incremental">
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Incremental Crawl Stats</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {scheduleStatus?.stats ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-sm text-muted-foreground">Runs (7d)</div>
+                          <div className="text-2xl font-bold" data-testid="text-runs-7d">{scheduleStatus.stats.last7Days.totalRuns}</div>
+                          <div className="text-xs text-muted-foreground">{scheduleStatus.stats.last7Days.successfulRuns} ok, {scheduleStatus.stats.last7Days.failedRuns} failed</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Docs Found (7d)</div>
+                          <div className="text-2xl font-bold" data-testid="text-docs-7d">{scheduleStatus.stats.last7Days.totalDocsDiscovered}</div>
+                          <div className="text-xs text-muted-foreground">avg {scheduleStatus.stats.last7Days.avgDocsPerRun.toFixed(1)}/run</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Runs (30d)</div>
+                          <div className="text-2xl font-bold" data-testid="text-runs-30d">{scheduleStatus.stats.last30Days.totalRuns}</div>
+                          <div className="text-xs text-muted-foreground">{scheduleStatus.stats.last30Days.successfulRuns} ok, {scheduleStatus.stats.last30Days.failedRuns} failed</div>
+                        </div>
+                        <div>
+                          <div className="text-sm text-muted-foreground">Docs Found (30d)</div>
+                          <div className="text-2xl font-bold" data-testid="text-docs-30d">{scheduleStatus.stats.last30Days.totalDocsDiscovered}</div>
+                          <div className="text-xs text-muted-foreground">avg {scheduleStatus.stats.last30Days.avgDocsPerRun.toFixed(1)}/run</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground text-sm">Loading stats...</div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Towns by Staleness</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {scheduleStatus?.staleTowns && scheduleStatus.staleTowns.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Town</TableHead>
+                            <TableHead>Last Incremental</TableHead>
+                            <TableHead>Days Stale</TableHead>
+                            <TableHead>Failures</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {scheduleStatus.staleTowns.map((town) => (
+                            <TableRow key={town.id}>
+                              <TableCell className="font-medium" data-testid={`text-stale-town-${town.slug}`}>{town.name}</TableCell>
+                              <TableCell data-testid={`text-last-incremental-${town.slug}`}>
+                                {town.lastIncrementalCrawl ? new Date(town.lastIncrementalCrawl).toLocaleDateString() : "Never"}
+                              </TableCell>
+                              <TableCell>
+                                {town.daysSinceLastCrawl !== null ? (
+                                  <Badge variant={town.daysSinceLastCrawl > 14 ? "destructive" : town.daysSinceLastCrawl > 7 ? "outline" : "secondary"}>
+                                    {town.daysSinceLastCrawl}d
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive">Never</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {town.consecutiveFailures > 0 ? (
+                                  <Badge variant="destructive">{town.consecutiveFailures}</Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">0</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-muted-foreground text-sm">No stale towns found</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
           </Tabs>
         )}

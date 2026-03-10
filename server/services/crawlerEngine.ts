@@ -264,7 +264,8 @@ export interface CrawlJob {
 
 type CmsType = 'CivicPlus' | 'WordPress' | 'Revize' | 'Squarespace' | 'Custom' | null;
 
-function detectCmsFromHtml(html: string, url: string): CmsType {
+export type { CmsType };
+export function detectCmsFromHtml(html: string, url: string): CmsType {
   const lower = html.toLowerCase();
 
   if (lower.includes('civicplus') || lower.includes('civiccms') ||
@@ -285,7 +286,7 @@ function detectCmsFromHtml(html: string, url: string): CmsType {
   return 'Custom';
 }
 
-function detectProtection(html: string): string | null {
+export function detectProtection(html: string): string | null {
   const lower = html.toLowerCase();
   if (lower.includes('just a moment') && (lower.includes('cloudflare') || lower.includes('checking your browser'))) {
     return 'cloudflare';
@@ -315,7 +316,7 @@ function detectProtection(html: string): string | null {
   return null;
 }
 
-function isDocumentUrl(url: string): boolean {
+export function isDocumentUrl(url: string): boolean {
   const lower = url.toLowerCase();
   const docExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.rtf', '.csv', '.txt'];
   if (docExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?') || lower.includes(ext + '#'))) return true;
@@ -396,13 +397,19 @@ interface DriveFolderFile {
   folderName: string;
 }
 
-async function crawlDriveFolderHtml(
+export interface DriveFolderFileResult {
+  fileId: string;
+  filename: string;
+  folderName: string;
+}
+
+export async function crawlDriveFolderHtml(
   folderId: string,
   signal?: AbortSignal,
   depth: number = 0,
   maxDepth: number = 2,
   folderName: string = '',
-): Promise<DriveFolderFile[]> {
+): Promise<DriveFolderFileResult[]> {
   if (depth >= maxDepth || signal?.aborted) return [];
 
   const url = `https://drive.google.com/drive/folders/${folderId}`;
@@ -519,7 +526,7 @@ function isHighPriorityUrl(url: string): boolean {
   return /agenda|document|form|meeting|minute|board|committee|selectm|planning|zoning|conservation|budget|ordinance|warrant|report|annual/.test(lower);
 }
 
-function normalizeUrl(url: string, baseUrl: string): string | null {
+export function normalizeUrl(url: string, baseUrl: string): string | null {
   try {
     const resolved = new URL(url, baseUrl);
     resolved.hash = '';
@@ -710,7 +717,7 @@ async function bridgeToLogicalDocument(fileBlobId: string, opts: {
   }
 }
 
-function extractLinksFromHtml(html: string, pageUrl: string): Array<{ href: string; text: string }> {
+export function extractLinksFromHtml(html: string, pageUrl: string): Array<{ href: string; text: string }> {
   const links: Array<{ href: string; text: string }> = [];
   const linkRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
@@ -821,7 +828,7 @@ function getKnownPathsForCms(cms: CmsType): string[] {
   }
 }
 
-function getCivicPlusPaginationUrls(html: string, pageUrl: string): string[] {
+export function getCivicPlusPaginationUrls(html: string, pageUrl: string): string[] {
   const urls: string[] = [];
   const pageRegex = /page=(\d+)/gi;
   let maxPage = 1;
@@ -853,7 +860,7 @@ function getCivicPlusDeepPaths(baseUrl: string): string[] {
   return paths;
 }
 
-async function probeWordPressMediaApi(baseUrl: string, signal: AbortSignal): Promise<string[]> {
+export async function probeWordPressMediaApi(baseUrl: string, signal: AbortSignal): Promise<string[]> {
   const docs: string[] = [];
   const perPage = 100;
   for (let page = 1; page <= 10; page++) {
@@ -880,7 +887,7 @@ async function probeWordPressMediaApi(baseUrl: string, signal: AbortSignal): Pro
   return docs;
 }
 
-interface FetchPageResult {
+export interface FetchPageResult {
   html: string;
   status: number;
   headers: Record<string, string>;
@@ -935,7 +942,7 @@ async function fetchPageOnce(
   }
 }
 
-async function fetchPage(
+export async function fetchPage(
   url: string, 
   signal: AbortSignal, 
   timeout = 15000,
@@ -973,7 +980,7 @@ async function fetchPage(
 }
 
 
-async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult & { needsHeavyLane?: boolean; viaHeavyLane?: boolean } | null> {
+export async function fetchHomepage(baseUrl: string, signal: AbortSignal): Promise<FetchPageResult & { needsHeavyLane?: boolean; viaHeavyLane?: boolean } | null> {
   let result = await fetchPage(baseUrl, signal);
   if (result && result.status === 200 && result.html.length > 100) return result;
 
