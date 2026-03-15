@@ -782,12 +782,20 @@ function TownDetail({
       const res = await adminFetch(`/api/admin/crawler/incremental/${town.id}`, {
         method: "POST",
       });
-      if (!res.ok) throw new Error((await res.json()).message);
+      if (!res.ok) {
+        const body = await res.json();
+        if (res.status === 409 && body.runId) {
+          setActiveRunId(body.runId);
+        }
+        throw new Error(body.message);
+      }
       return res.json();
     },
     onSuccess: (data) => {
       toast({ title: "Incremental Crawl Started", description: data.message });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+      setActiveRunId("incremental-" + town.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/towns", town.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/runs", town.id] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
