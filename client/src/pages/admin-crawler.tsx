@@ -777,6 +777,23 @@ function TownDetail({
     },
   });
 
+  const triggerIncrementalCrawl = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/admin/crawler/incremental/${town.id}`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Incremental Crawl Started", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const updateTown = useMutation({
     mutationFn: async (updates: any) => {
       const res = await adminFetch(`/api/admin/crawler/towns/${town.id}`, {
@@ -829,6 +846,20 @@ function TownDetail({
               <TownProfileEditor town={townData || town} onSave={(updates) => updateTown.mutate(updates)} saving={updateTown.isPending} />
             </DialogContent>
           </Dialog>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => triggerIncrementalCrawl.mutate()}
+            disabled={triggerIncrementalCrawl.isPending || !!activeRunId}
+            data-testid="button-incremental-crawl"
+          >
+            {triggerIncrementalCrawl.isPending ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3 h-3 mr-1" />
+            )}
+            Incremental
+          </Button>
           <Button
             size="sm"
             onClick={() => triggerCrawl.mutate("full")}
