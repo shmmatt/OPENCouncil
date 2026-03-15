@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -707,7 +707,14 @@ function TownDetail({
       return res.json();
     },
     initialData: town,
+    refetchInterval: 10000,
   });
+
+  useEffect(() => {
+    if (townData?.activeRunId !== undefined) {
+      setActiveRunId(townData.activeRunId);
+    }
+  }, [townData?.activeRunId]);
 
   const { data: docsData, isLoading: docsLoading } = useQuery<{ documents: CrawlerDocument[]; total: number }>({
     queryKey: ["/api/admin/crawler/documents", town.id, docStatus, docSearch, docPage],
@@ -793,7 +800,6 @@ function TownDetail({
     },
     onSuccess: (data) => {
       toast({ title: "Incremental Crawl Started", description: data.message });
-      setActiveRunId("incremental-" + town.id);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/towns", town.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler/runs", town.id] });
     },
