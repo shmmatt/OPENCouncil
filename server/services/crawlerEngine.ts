@@ -1652,7 +1652,7 @@ async function executeCrawl(
   } // end if (!isIncrementalMode) — skip Phases 2-3
 
   if (town.driveFolderId) {
-    addLog(progress, '--- Google Drive Discovery ---');
+    addLog(progress, '--- Phase 3c: Google Drive Discovery ---');
     if (isGoogleDriveConfigured()) {
       try {
         const driveFiles = await listFolderRecursive(town.driveFolderId, undefined, '', signal);
