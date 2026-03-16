@@ -1,7 +1,8 @@
 import { db } from '../storage/db';
 import { crawlerTowns } from '../../shared/crawler-schema';
 import { eq, and, or, lt, isNull, sql, asc } from 'drizzle-orm';
-import { incrementalCrawl, type IncrementalCrawlResult } from './incrementalCrawler';
+import { startCrawl, getActiveCrawls } from './crawlerEngine';
+import { getCrawlerTownById, createCrawlerRun, getDiscoveredFromSeedUrls } from '../storage/crawler';
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const CRAWL_INTERVAL_DAYS = 7;
@@ -10,7 +11,7 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 let currentlyCrawling: string | null = null;
-let lastRunResult: IncrementalCrawlResult | null = null;
+let lastRunResult: { runId: string; townSlug: string; error?: string } | null = null;
 let startedAt: Date | null = null;
 
 export function isSchedulerRunning(): boolean {
@@ -20,7 +21,7 @@ export function isSchedulerRunning(): boolean {
 export function getSchedulerStatus(): {
   running: boolean;
   currentlyCrawling: string | null;
-  lastRunResult: IncrementalCrawlResult | null;
+  lastRunResult: { runId: string; townSlug: string; error?: string } | null;
   startedAt: Date | null;
   checkIntervalMinutes: number;
   crawlIntervalDays: number;
@@ -75,19 +76,35 @@ async function runSchedulerCycle(): Promise<void> {
       return;
     }
 
+    const anyActive = getActiveCrawls().some(c => c.status === 'running');
+    if (anyActive) {
+      console.log(`[CrawlScheduler] A crawl is already running, skipping cycle`);
+      return;
+    }
+
     console.log(`[CrawlScheduler] Starting incremental crawl for ${town.name} (${town.slug})`);
     currentlyCrawling = town.slug;
 
-    const result = await incrementalCrawl(town.id, 'scheduled');
-    lastRunResult = result;
-
-    if (result.error) {
-      console.warn(`[CrawlScheduler] Crawl failed for ${town.name}: ${result.error}`);
-    } else {
-      console.log(`[CrawlScheduler] Crawl complete for ${town.name}: ${result.newDocsFound} new, ${result.updatedDocsFound} updated (${result.durationMs}ms)`);
+    const fullTown = await getCrawlerTownById(town.id);
+    if (!fullTown) {
+      console.warn(`[CrawlScheduler] Town ${town.id} not found in DB`);
+      currentlyCrawling = null;
+      return;
     }
+
+    const seedUrls = await getDiscoveredFromSeedUrls(town.id);
+    const run = await createCrawlerRun(town.id, 'incremental', 'scheduled', fullTown.maxPages || undefined);
+    const runId = await startCrawl(fullTown, run, {
+      maxPages: fullTown.maxPages || undefined,
+      mode: 'incremental',
+      seedUrls,
+    });
+
+    lastRunResult = { runId, townSlug: town.slug };
+    console.log(`[CrawlScheduler] Incremental crawl started for ${town.name} (runId: ${runId})`);
   } catch (error: any) {
     console.error(`[CrawlScheduler] Unexpected error in cycle: ${error.message}`);
+    lastRunResult = { runId: '', townSlug: currentlyCrawling || '', error: error.message };
   } finally {
     currentlyCrawling = null;
   }

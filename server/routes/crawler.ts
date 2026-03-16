@@ -23,7 +23,7 @@ import {
   getQueueStatus,
   clearQueue,
 } from "../services/crawlerEngine";
-import { incrementalCrawl } from "../services/incrementalCrawler";
+import { getDiscoveredFromSeedUrls } from "../storage/crawler";
 import {
   startScheduler,
   stopScheduler,
@@ -440,11 +440,24 @@ router.post("/incremental/:townId", async (req, res) => {
       return res.status(409).json({ message: `Crawl already running for ${town.name}`, runId: existingActive.runId });
     }
 
-    res.json({ message: `Incremental crawl started for ${town.name}`, townId });
-    incrementalCrawl(townId, 'manual').then(result => {
-      console.log(`[CrawlerRoute] Incremental crawl finished for ${town.name}: ${result.newDocsFound} new docs`);
-    }).catch(err => {
-      console.error(`[CrawlerRoute] Incremental crawl error for ${town.name}: ${err.message}`);
+    const seedUrls = await getDiscoveredFromSeedUrls(townId);
+
+    const run = await crawlerStorage.createCrawlerRun(
+      townId,
+      "incremental",
+      "manual",
+      town.maxPages || undefined
+    );
+
+    const runId = await startCrawl(town, run, {
+      maxPages: town.maxPages || undefined,
+      mode: 'incremental',
+      seedUrls,
+    });
+
+    res.json({
+      message: `Incremental crawl started for ${town.name}`,
+      runId,
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

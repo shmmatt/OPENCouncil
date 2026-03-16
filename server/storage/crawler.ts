@@ -590,3 +590,19 @@ export async function forceFailCrawlRun(runId: string): Promise<boolean> {
     .returning({ id: schema.crawlerRuns.id });
   return result.length > 0;
 }
+
+export async function getDiscoveredFromSeedUrls(townId: string, limit = 500): Promise<string[]> {
+  const results = await db.execute(sql`
+    SELECT discovered_from, MAX(COALESCE(s3_uploaded_at, updated_at)) as last_doc_date
+    FROM crawler_documents
+    WHERE town_id = ${townId}
+      AND discovered_from IS NOT NULL
+      AND discovered_from != ''
+      AND (discovered_from LIKE 'http://%' OR discovered_from LIKE 'https://%')
+    GROUP BY discovered_from
+    ORDER BY last_doc_date DESC
+    LIMIT ${limit}
+  `);
+  const rows = results.rows as Array<{ discovered_from: string; last_doc_date: string }>;
+  return rows.map(row => row.discovered_from);
+}

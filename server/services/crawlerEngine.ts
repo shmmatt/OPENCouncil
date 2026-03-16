@@ -260,6 +260,7 @@ interface FoundDocument {
 export interface CrawlJob {
   progress: CrawlProgress;
   abortController: AbortController;
+  gracefulStopTimer?: ReturnType<typeof setTimeout>;
 }
 
 type CmsType = 'CivicPlus' | 'WordPress' | 'Revize' | 'Squarespace' | 'Custom' | null;
@@ -1141,7 +1142,7 @@ async function parseSitemapRecursive(
 export async function startCrawl(
   town: CrawlerTown,
   run: CrawlerRun,
-  options: { maxPages?: number; mode?: string } = {}
+  options: { maxPages?: number; mode?: string; seedUrls?: string[] } = {}
 ): Promise<string> {
   const runId = run.id;
   if (activeCrawls.has(runId)) {
@@ -1174,6 +1175,11 @@ export async function startCrawl(
     progress.errorMessage = err.message;
     addLog(progress, `FATAL: Unhandled exception — ${err.message}`);
     addLog(progress, `FATAL: Stack — ${err.stack?.split('\n').slice(0, 3).join(' | ') || 'no stack'}`);
+
+    if (job.gracefulStopTimer) {
+      clearTimeout(job.gracefulStopTimer);
+      job.gracefulStopTimer = undefined;
+    }
 
     try {
       await db.update(crawlerRuns)
@@ -1231,7 +1237,7 @@ async function executeCrawl(
   town: CrawlerTown,
   run: CrawlerRun,
   job: CrawlJob,
-  options: { maxPages?: number; mode?: string }
+  options: { maxPages?: number; mode?: string; seedUrls?: string[] }
 ) {
   const { progress, abortController } = job;
   const signal = abortController.signal;
@@ -1261,6 +1267,32 @@ async function executeCrawl(
     else preSeededOther++;
   }
   addLog(progress, `Pre-seeded ${existingDocs.length} known URLs (${preSeededUploaded} uploaded, ${preSeededOther} discovered/failed)`);
+
+  const isIncrementalMode = options.mode === 'incremental';
+  let gracefulStop = false;
+  let gracefulStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+  if (isIncrementalMode && options.seedUrls && options.seedUrls.length > 0) {
+    let seeded = 0;
+    const queuedSeeds = new Set<string>();
+    for (const seedUrl of options.seedUrls) {
+      if (!visited.has(seedUrl) && !queuedSeeds.has(seedUrl)) {
+        queue.push({ url: seedUrl, depth: 0, priority: 0 });
+        queuedSeeds.add(seedUrl);
+        seeded++;
+      }
+    }
+    addLog(progress, `Incremental mode: Pre-seeded ${seeded} high-value pages from discoveredFrom URLs (${options.seedUrls.length} total, ${options.seedUrls.length - seeded} already visited/deduped)`);
+  }
+
+  if (isIncrementalMode) {
+    const INCREMENTAL_TIME_CAP_MS = 15 * 60 * 1000;
+    gracefulStopTimer = setTimeout(() => {
+      gracefulStop = true;
+      addLog(progress, `Incremental time cap reached (15 minutes). Gracefully stopping — no new URLs will be dequeued.`);
+    }, INCREMENTAL_TIME_CAP_MS);
+    job.gracefulStopTimer = gracefulStopTimer;
+  }
 
   const isResumeMode = options.mode === 'resume';
 
@@ -1427,6 +1459,11 @@ async function executeCrawl(
     }
   }
 
+  if (isIncrementalMode) {
+    addLog(progress, 'Incremental mode: Skipping Phases 2-3 (sitemap/known-path probing) — seed URLs already target high-value pages');
+  }
+
+  if (!isIncrementalMode) {
   addLog(progress, '--- Phase 2: Sitemap Discovery ---');
   const sitemapUrls = [
     `${baseUrl}/sitemap.xml`,
@@ -1643,6 +1680,8 @@ async function executeCrawl(
     }
   }
 
+  } // end if (!isIncrementalMode) — skip Phases 2-3
+
   addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
   progress.pagesQueued = queue.length;
   let progressUpdateCounter = 0;
@@ -1652,6 +1691,11 @@ async function executeCrawl(
   while (queue.length > 0 && progress.pagesVisited < maxPages) {
     if (signal.aborted) {
       addLog(progress, 'Crawl aborted by user');
+      break;
+    }
+
+    if (gracefulStop) {
+      addLog(progress, 'Graceful stop: incremental time cap reached, exiting BFS loop');
       break;
     }
 
@@ -2243,6 +2287,11 @@ async function executeCrawl(
   (summary as any).interstitialsBypassed = interstitialsBypassed;
   (summary as any).statusReason = statusReason;
 
+  if (gracefulStopTimer) {
+    clearTimeout(gracefulStopTimer);
+    job.gracefulStopTimer = undefined;
+  }
+
   await db.update(crawlerRuns)
     .set({
       status: finalStatus,
@@ -2259,7 +2308,8 @@ async function executeCrawl(
 
   await db.update(crawlerTowns)
     .set({
-      lastFullCrawl: new Date(),
+      lastFullCrawl: isIncrementalMode ? sql`last_full_crawl` : new Date(),
+      lastIncrementalCrawl: isIncrementalMode ? new Date() : sql`last_incremental_crawl`,
       totalDocuments: sql`(SELECT COUNT(*) FROM crawler_documents WHERE town_id = ${town.id})`,
       totalUploaded: sql`(SELECT COUNT(*) FROM crawler_documents WHERE town_id = ${town.id} AND status = 'uploaded')`,
       lastCrawlDocsFound: progress.documentsDiscovered,
