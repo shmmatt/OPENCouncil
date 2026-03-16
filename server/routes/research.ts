@@ -786,14 +786,27 @@ DESIGN RULES:
 3. Use Axios Smart Brevity for summary_text (punchy, bullet points, bold text).
 4. Do not output empty charts if data is missing; explain the gap in summary_text.`;
 
+  const compactedExtractions = allExtractions.map((ext) => {
+    const compacted: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(ext)) {
+      if (val === null || val === undefined || val === "") continue;
+      if (typeof val === "string" && val.length > 250) {
+        compacted[key] = val.slice(0, 250);
+      } else {
+        compacted[key] = val;
+      }
+    }
+    return compacted;
+  });
+
   const synthesisPrompt = `User query: "${userPrompt}"
 Board type: ${boardType}
 Town: ${townName}
 Documents analyzed: ${documents.length}
 Date range: ${documents[0]?.meetingDate || "unknown"} to ${documents[documents.length - 1]?.meetingDate || "unknown"}
 
-Extracted data (${allExtractions.length} items):
-${JSON.stringify(allExtractions.slice(0, 500), null, 1)}`;
+Extracted data (${compactedExtractions.length} items):
+${JSON.stringify(compactedExtractions)}`;
 
   const reduceResponseSchema = {
     type: "object" as const,
