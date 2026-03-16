@@ -566,6 +566,18 @@ async function runDynamicPipeline(
     ORDER BY dv.meeting_date ASC NULLS LAST
   `);
 
+  function defaultQuantitativeFields() {
+    return [
+      { name: "meetingDate", type: "string", description: "Exact date of the meeting (YYYY-MM-DD)" },
+      { name: "year", type: "string", description: "Year of the meeting" },
+      { name: "decisionMade", type: "string", description: "Specific decision or action taken" },
+      { name: "financialImpactDollars", type: "number", description: "Dollar amount discussed or approved" },
+      { name: "namedVendorsOrPeople", type: "array", description: "Specific people, companies, or organizations referenced" },
+      { name: "specificLocationsOrStreets", type: "array", description: "Named roads, parcels, or addresses mentioned" },
+      { name: "categoricalTags", type: "array", description: "Topic categories (e.g. Infrastructure, Zoning, Personnel, Budget, Public Safety)" },
+    ];
+  }
+
   const documents = (docsResult.rows as any[]).map(r => ({
     fileBlobId: r.file_blob_id as string,
     title: r.title as string || "Unknown",
@@ -638,17 +650,10 @@ STRICT SCHEMA DESIGN RULES:
       },
     });
     const schemaParsed = JSON.parse(schemaResponse.text || "{}");
-    extractionFields = schemaParsed.fields || [
-      { name: "meetingDate", type: "string", description: "Date of the meeting" },
-      { name: "summary", type: "string", description: "Key discussion points" },
-    ];
+    extractionFields = schemaParsed.fields || defaultQuantitativeFields();
   } catch (err) {
     logError("[DynamicPipeline] Phase 1 schema generation failed, using defaults", { error: String(err) });
-    extractionFields = [
-      { name: "meetingDate", type: "string", description: "Date of the meeting" },
-      { name: "summary", type: "string", description: "Key relevant points from the document" },
-      { name: "keyFacts", type: "array", description: "Array of key facts or data points" },
-    ];
+    extractionFields = defaultQuantitativeFields();
   }
 
   logInfo(`[DynamicPipeline] Phase 1 complete: ${extractionFields.length} extraction fields defined`, { stage: "research" });
