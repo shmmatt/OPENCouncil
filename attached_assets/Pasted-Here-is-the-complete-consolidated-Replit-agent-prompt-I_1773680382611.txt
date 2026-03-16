@@ -1,0 +1,48 @@
+Here is the complete, consolidated Replit agent prompt. It takes the mechanical fixes we just implemented and pairs them with the ruthless, anti-fluff prompt engineering needed to make the output actually valuable.
+
+Copy and paste this directly to your agent:
+
+---
+
+### #6 - Intelligence Engine Prompt Optimization (Anti-Fluff & Smart Extraction)
+
+**What & Why**
+The MapReduce pipeline is now mechanically stable and successfully processing 400+ extractions, but the resulting dashboard is too vague ("fluffy") and sometimes fails to render charts because the underlying extracted data lacks quantitative anchors. We need to upgrade the system prompts in Phase 0 and Phase 3 to force the LLMs to extract hard data (dates, dollars, names) and synthesize it with extreme density. We must also introduce conditional rendering logic so the AI only generates a chart when it actually adds analytical value, rather than forcing a useless graphic just to fill the schema.
+
+**Done looks like**
+
+* Phase 0 generates granular JSON schemas that explicitly request dates, financial impacts, specific names, and categorical tags.
+* Phase 3 synthesis outputs dense, Axios Smart Brevity-style bullet points with bolded entities and exact numbers.
+* Vague adjectives ("various", "several", "significant") are virtually eliminated from the output.
+* Charts (`bar_chart`) are only rendered when robust time-series or categorical comparison data exists; otherwise, the AI intelligently relies on `stat_card` and `summary_text` widgets.
+
+**Out of scope**
+
+* Changing the underlying MapReduce execution logic, batching, or payload compression built in Tasks 4 & 5.
+* Modifying the React frontend or the `DynamicReportPayload` TypeScript schema.
+
+**Tasks**
+
+**1. Update Phase 0 System Prompt (Dynamic Schema Generator)**
+Locate the `gemini-2.5-flash` prompt responsible for Phase 0. Append strict instructions forcing it to design quantitative schemas.
+*Add this specific directive:*
+
+> "You are designing a JSON data extraction schema. You MUST avoid broad, open-ended summary fields. To ensure the final dashboard is data-dense, your schema MUST include explicit fields for: 1. `exact_date` or `year` (critical for timeline graphing), 2. `financial_impact_dollars` (if money is discussed), 3. `specific_locations_or_streets`, 4. `named_vendors_or_people`, and 5. `categorical_tags` (e.g., 'Infrastructure', 'Zoning', 'Personnel'). If the user asks a broad question, create a highly granular, quantitative schema to anchor the downstream analysis."
+
+**2. Update Phase 3 System Prompt (Final Synthesis)**
+Locate the `gemini-2.5-pro` prompt responsible for Phase 3. Replace the existing design rules with these aggressive anti-fluff and conditional rendering constraints.
+*Replace the DESIGN RULES section with this exact block:*
+
+> "DESIGN RULES & ANTI-FLUFF CONSTRAINTS:
+> 1. ZERO FLUFF: You are banned from using vague, generalized adjectives like 'various', 'several', 'significant', 'many', or 'a number of'.
+> 2. PRINT RECEIPTS: If a project is mentioned, name the exact project. If money is spent, print the exact dollar amount. If a street is debated, name the exact street.
+> 3. DENSITY: Write exclusively in Axios Smart Brevity format for `summary_text`. Use punchy, high-information-density bullet points. **Bold** key entities, names, and numbers.
+> 4. CONDITIONAL WIDGET SELECTION (Value is Paramount): Do NOT force a `bar_chart` unless it adds immediate analytical value. Only use `bar_chart` if you have robust time-series data or a clear numerical comparison (e.g., top 5 most frequent topics). If the extracted data is heavily narrative or sparse, do not output an empty or meaningless chart; rely entirely on dense `summary_text` bullet points and use `stat_card` to highlight extreme anomalies, totals, or the single highest value in the dataset."
+> 
+> 
+
+**Relevant files**
+
+* `server/routes/research.ts` (specifically the Phase 0 and Phase 3 prompt string definitions)
+
+*** Once the agent deploys this, run the Ossipee Selectboard contentious topics query again. You should see a massive shift in the quality of the intelligence it returns.
