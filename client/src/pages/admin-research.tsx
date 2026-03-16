@@ -163,7 +163,7 @@ export default function AdminResearch() {
   const dynamicGenerateMutation = useMutation({
     mutationFn: async () => {
       const token = localStorage.getItem("adminToken");
-      const res = await fetch("/api/admin/research/dynamic-generate-sync", {
+      const res = await fetch("/api/admin/research/dynamic-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({

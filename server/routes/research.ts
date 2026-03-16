@@ -462,30 +462,6 @@ router.post("/dynamic-generate", async (req, res) => {
 
     const { townName, boardType, dateRange, prompt } = parsed.data;
 
-    res.json({ status: "processing" });
-
-    runDynamicPipeline(townName, boardType, dateRange, prompt).catch((err) => {
-      logError("Dynamic pipeline failed", { error: String(err) });
-    });
-  } catch (error) {
-    logError("Dynamic generate route error", { error: String(error) });
-    res.status(500).json({ message: "Failed to start dynamic report generation" });
-  }
-});
-
-router.post("/dynamic-generate-sync", async (req, res) => {
-  try {
-    const parsed = dynamicGenerateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
-    }
-
-    if (!process.env.GEM_API_KEY) {
-      return res.status(500).json({ message: "GEM_API_KEY is not configured" });
-    }
-
-    const { townName, boardType, dateRange, prompt } = parsed.data;
-
     const payload = await runDynamicPipeline(townName, boardType, dateRange, prompt);
     res.json({ status: "completed", payload });
   } catch (error) {
@@ -1086,10 +1062,28 @@ ${windowText}
   }
 
   if (windows.length > 1 && allApps.length > 1) {
-    allApps = deduplicateLocally(allApps);
+    allApps = deduplicateLocalApps(allApps);
   }
 
   return allApps;
+}
+
+function deduplicateLocalApps(apps: SitePlanApplication[]): SitePlanApplication[] {
+  const seen = new Map<string, SitePlanApplication>();
+  for (const app of apps) {
+    const key = `${(app.entityName || "").toLowerCase().trim()}|${(app.address || "").toLowerCase().trim()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, app);
+    } else {
+      if (app.meetingReferences.length > existing.meetingReferences.length) {
+        seen.set(key, { ...app, meetingReferences: [...new Set([...existing.meetingReferences, ...app.meetingReferences])] });
+      } else {
+        seen.set(key, { ...existing, meetingReferences: [...new Set([...existing.meetingReferences, ...app.meetingReferences])] });
+      }
+    }
+  }
+  return Array.from(seen.values());
 }
 
 // ============================================================
