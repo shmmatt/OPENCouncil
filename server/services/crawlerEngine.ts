@@ -1933,6 +1933,8 @@ async function executeCrawl(
           continue;
         }
 
+        // Throttle Drive downloads to ~75/100s to stay under Google's rate limit
+        await new Promise(r => setTimeout(r, 800 + Math.random() * 400));
         const driveDoc = await downloadDriveFile(driveFileId, driveMimeType, undefined, signal);
         await uploadToS3(s3, s3Key, driveDoc.buffer, driveDoc.contentType);
         const newDriveDoc = await recordDocument({

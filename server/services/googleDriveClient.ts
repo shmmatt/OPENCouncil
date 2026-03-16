@@ -136,20 +136,51 @@ export async function downloadDriveFile(
     url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${key}`;
   }
 
-  const res = await fetchWithRetry(url, signal);
-  if (!res.ok) {
+  const MAX_DOWNLOAD_RETRIES = 5;
+  // Backoff delays for rate-limit 403s: 30s, 60s, 90s, 120s, 150s
+  const RATE_LIMIT_BACKOFFS = [30000, 60000, 90000, 120000, 150000];
+
+  for (let attempt = 0; attempt < MAX_DOWNLOAD_RETRIES; attempt++) {
+    if (signal?.aborted) throw new Error('Aborted');
+
+    const res = await fetch(url, { signal: signal || AbortSignal.timeout(60000) });
+
+    if (res.ok) {
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const contentType = GOOGLE_APPS_MIME_TYPES.has(mimeType)
+        ? 'application/pdf'
+        : (res.headers.get('content-type') || mimeType);
+      return { buffer, contentType, size: buffer.length };
+    }
+
+    if (res.status === 403 || res.status === 429) {
+      const bodyText = await res.text().catch(() => '');
+      const isRateLimit =
+        res.status === 429 ||
+        bodyText.includes('automated queries') ||
+        bodyText.includes("We're sorry") ||
+        bodyText.includes('rate limit') ||
+        bodyText.includes('rateLimitExceeded') ||
+        bodyText.includes('userRateLimitExceeded');
+
+      if (isRateLimit && attempt < MAX_DOWNLOAD_RETRIES - 1) {
+        const delay = RATE_LIMIT_BACKOFFS[attempt] ?? 150000;
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      throw new Error(`Drive download failed (${res.status}): ${bodyText.substring(0, 200)}`);
+    }
+
+    if (res.status >= 500 && attempt < MAX_DOWNLOAD_RETRIES - 1) {
+      const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+
     throw new Error(`Drive download failed (${res.status}): ${await res.text().catch(() => 'unknown')}`);
   }
 
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const contentType = GOOGLE_APPS_MIME_TYPES.has(mimeType)
-    ? 'application/pdf'
-    : (res.headers.get('content-type') || mimeType);
-
-  return {
-    buffer,
-    contentType,
-    size: buffer.length,
-  };
+  throw new Error('Drive download failed: max retries exceeded');
 }
