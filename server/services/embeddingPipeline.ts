@@ -176,6 +176,44 @@ async function fetchReadyBlobs(limit: number | null, town: string | null): Promi
   return (result.rows || result) as unknown as FileBlobRow[];
 }
 
+async function fetchBlobsByIds(blobIds: string[]): Promise<FileBlobRow[]> {
+  if (blobIds.length === 0) return [];
+  const idPlaceholders = sql.join(blobIds.map(id => sql`${id}`), sql`, `);
+  const result = await db.execute(sql`
+    SELECT 
+      fb.id,
+      fb.preview_text,
+      fb.ocr_text,
+      fb.original_filename,
+      fb.content_hash,
+      COALESCE(ld.town, ct.name) as town,
+      COALESCE(ld.board, cd.board) as board,
+      ld.category,
+      dv.year,
+      dv.document_id,
+      css.sau_id as sau,
+      CASE
+        WHEN csd.id IS NOT NULL THEN 'sau'
+        WHEN cssd.id IS NOT NULL THEN 'state'
+        WHEN cd.id IS NOT NULL THEN 'town'
+        ELSE 'unknown'
+      END as source_type
+    FROM file_blobs fb
+    LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id AND dv.is_current = true
+    LEFT JOIN logical_documents ld ON dv.document_id = ld.id
+    LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+    LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
+    LEFT JOIN crawler_sau_documents csd ON csd.file_blob_id = fb.id
+    LEFT JOIN crawler_sau_sources css ON csd.source_id = css.id
+    LEFT JOIN crawler_state_documents cssd ON cssd.file_blob_id = fb.id
+    WHERE fb.id IN (${idPlaceholders})
+      AND fb.embedding_status = 'none'
+      AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
+    ORDER BY fb.original_filename
+  `);
+  return (result.rows || result) as unknown as FileBlobRow[];
+}
+
 async function insertChunk(c: ChunkData & { embedding: number[] }): Promise<void> {
   const metadataJson = JSON.stringify({
     town: c.town || undefined,
@@ -207,7 +245,7 @@ async function updateBlobIndexed(blobId: string, chunkCount: number): Promise<vo
   `);
 }
 
-export async function startPipeline(options?: { limit?: number; town?: string }): Promise<void> {
+export async function startPipeline(options?: { limit?: number; town?: string; blobIds?: string[] }): Promise<void> {
   if (isRunning()) {
     throw new Error("Pipeline is already running");
   }
@@ -225,7 +263,12 @@ export async function startPipeline(options?: { limit?: number; town?: string })
   try {
     logInfo(`[embeddingPipeline] Starting pipeline run ${batchId}`);
 
-    const blobs = await fetchReadyBlobs(options?.limit || null, options?.town || null);
+    let blobs: FileBlobRow[];
+    if (options?.blobIds && options.blobIds.length > 0) {
+      blobs = await fetchBlobsByIds(options.blobIds);
+    } else {
+      blobs = await fetchReadyBlobs(options?.limit || null, options?.town || null);
+    }
     currentProgress.totalDocuments = blobs.length;
     logInfo(`[embeddingPipeline] Found ${blobs.length} file_blobs ready for embedding`);
 

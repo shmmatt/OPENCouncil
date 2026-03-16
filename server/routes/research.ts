@@ -420,10 +420,24 @@ router.post("/prepare-corpus", async (req, res) => {
 
     let triggerStatus: string | undefined;
     if (trigger && pendingCount > 0 && !pipelineRunning) {
-      startPipeline({ town: townName }).catch((err) => {
-        logError("Corpus embedding pipeline failed", { error: String(err) });
-      });
-      triggerStatus = "started";
+      const pendingBlobsResult = await db.execute(sql`
+        SELECT DISTINCT fb.id
+        FROM logical_documents ld
+        JOIN document_versions dv ON ld.id = dv.document_id
+        JOIN file_blobs fb ON dv.file_blob_id = fb.id
+        WHERE lower(ld.town) = ${townName.toLowerCase()}
+          AND ${sql.raw(boardFilter)}
+          AND fb.embedding_status = 'none'
+          AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
+          AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
+      `);
+      const pendingBlobIds = (pendingBlobsResult.rows as { id: string }[]).map(r => r.id);
+      if (pendingBlobIds.length > 0) {
+        startPipeline({ blobIds: pendingBlobIds }).catch((err) => {
+          logError("Corpus embedding pipeline failed", { error: String(err) });
+        });
+        triggerStatus = "started";
+      }
     } else if (trigger && pipelineRunning) {
       triggerStatus = "already_running";
     }
@@ -631,17 +645,43 @@ Return a JSON object with an "extractions" array containing one object per disti
 
   const allExtractions: Record<string, unknown>[] = [];
   const BATCH_SIZE = 5;
-  const MAX_DOC_CHARS = 900000; // Flash context limit safety margin
+  const MAX_WINDOW_CHARS = 800000;
+  const WINDOW_OVERLAP_CHARS = 2000;
 
-  for (let i = 0; i < documents.length; i += BATCH_SIZE) {
-    const batch = documents.slice(i, i + BATCH_SIZE);
-    const promises = batch.map(async (doc) => {
-      const docText = doc.fullText.length > MAX_DOC_CHARS
-        ? doc.fullText.slice(0, MAX_DOC_CHARS) + "\n[...truncated]"
-        : doc.fullText;
+  function subdivideDocument(text: string): string[] {
+    if (text.length <= MAX_WINDOW_CHARS) return [text];
+    const windows: string[] = [];
+    let offset = 0;
+    while (offset < text.length) {
+      const end = Math.min(offset + MAX_WINDOW_CHARS, text.length);
+      windows.push(text.slice(offset, end));
+      if (end >= text.length) break;
+      offset = end - WINDOW_OVERLAP_CHARS;
+    }
+    return windows;
+  }
 
-      const header = `Document: ${doc.title} | Date: ${doc.meetingDate || doc.year || "unknown"} | Board: ${doc.board || boardType}`;
-      const prompt = `${header}\n\n--- BEGIN DOCUMENT ---\n${docText}\n--- END DOCUMENT ---`;
+  interface ExtractionUnit {
+    doc: typeof documents[0];
+    windowIndex: number;
+    windowCount: number;
+    text: string;
+  }
+
+  const extractionUnits: ExtractionUnit[] = [];
+  for (const doc of documents) {
+    const windows = subdivideDocument(doc.fullText);
+    for (let wi = 0; wi < windows.length; wi++) {
+      extractionUnits.push({ doc, windowIndex: wi, windowCount: windows.length, text: windows[wi] });
+    }
+  }
+
+  for (let i = 0; i < extractionUnits.length; i += BATCH_SIZE) {
+    const batch = extractionUnits.slice(i, i + BATCH_SIZE);
+    const promises = batch.map(async (unit) => {
+      const windowLabel = unit.windowCount > 1 ? ` [Part ${unit.windowIndex + 1}/${unit.windowCount}]` : "";
+      const header = `Document: ${unit.doc.title}${windowLabel} | Date: ${unit.doc.meetingDate || unit.doc.year || "unknown"} | Board: ${unit.doc.board || boardType}`;
+      const prompt = `${header}\n\n--- BEGIN DOCUMENT ---\n${unit.text}\n--- END DOCUMENT ---`;
 
       try {
         const response = await ai.models.generateContent({
@@ -658,11 +698,11 @@ Return a JSON object with an "extractions" array containing one object per disti
         const items = parsed.extractions || [];
         return items.map((item: Record<string, unknown>) => ({
           ...item,
-          _sourceTitle: doc.title,
-          _sourceDate: doc.meetingDate || doc.year,
+          _sourceTitle: unit.doc.title,
+          _sourceDate: unit.doc.meetingDate || unit.doc.year,
         }));
       } catch (err) {
-        logError(`[DynamicPipeline] Extraction failed for ${doc.title}`, { error: String(err) });
+        logError(`[DynamicPipeline] Extraction failed for ${unit.doc.title} window ${unit.windowIndex}`, { error: String(err) });
         return [];
       }
     });
@@ -679,7 +719,7 @@ Return a JSON object with an "extractions" array containing one object per disti
     }
   }
 
-  logInfo(`[DynamicPipeline] Phase 2 complete: ${allExtractions.length} extractions from ${documents.length} documents`, { stage: "research" });
+  logInfo(`[DynamicPipeline] Phase 2 complete: ${allExtractions.length} extractions from ${extractionUnits.length} units (${documents.length} documents)`, { stage: "research" });
 
   // Phase 3: Reduce/Synthesize
   logInfo(`[DynamicPipeline] Phase 3: Synthesizing report with ${GEMINI_PRO_MODEL}`, { stage: "research" });
