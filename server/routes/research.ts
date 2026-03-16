@@ -590,12 +590,24 @@ async function runDynamicPipeline(
   updateJob(jobId, { message: "Phase 1: Generating extraction schema...", progress: 8 });
   logInfo(`[DynamicPipeline] Phase 1: Generating extraction schema for prompt`, { stage: "research" });
 
-  const schemaGenPrompt = `Given this user query about municipal ${boardType} documents: "${userPrompt}"
+  const schemaGenPrompt = `You are designing a JSON data extraction schema for municipal ${boardType} documents from ${townName}, NH.
 
-Generate a JSON extraction schema that defines what structured fields should be extracted from each document to answer this query. Return a JSON object with:
+User query: "${userPrompt}"
+
+Return a JSON object with:
 - "fields": an array of objects, each with "name" (camelCase string), "type" ("string" | "number" | "boolean" | "array"), and "description" (what to extract).
 
-Keep it focused — 4-8 fields maximum. Include a "meetingDate" and "summary" field always.`;
+STRICT SCHEMA DESIGN RULES:
+1. You MUST avoid broad, open-ended summary fields. Do NOT create a generic "summary" field.
+2. Your schema MUST include explicit fields for:
+   - "exactDate" or "year" (type: "string") — critical for timeline graphing
+   - "financialImpactDollars" (type: "number") — if money is discussed, extract the exact dollar amount
+   - "specificLocationsOrStreets" (type: "array") — named roads, parcels, addresses mentioned
+   - "namedVendorsOrPeople" (type: "array") — specific people, companies, or organizations referenced
+   - "categoricalTags" (type: "array") — classify each item (e.g., "Infrastructure", "Zoning", "Personnel", "Budget", "Public Safety")
+3. If the user asks a broad question, create 6-10 narrow, quantitative fields instead of a few vague ones. Break "summary" into concrete sub-fields like "decisionMade", "voteCount", "oppositionReason".
+4. Always include a "meetingDate" field.
+5. Prefer numeric types over string types when the data is countable or measurable.`;
 
   let extractionFields: Array<{ name: string; type: string; description: string }>;
   try {
@@ -780,11 +792,15 @@ Widget type definitions:
 - stat_card: { "type": "stat_card", "label": "string", "value": "string or number", "trend": "up" | "down" | "neutral" (optional) }
 - bar_chart: { "type": "bar_chart", "title": "string", "xAxisLabel": "string", "data": [{ "name": "string", "value": number }] }
 
-DESIGN RULES:
-1. Compare numbers/years using a bar_chart widget.
-2. Highlight 2-4 critical metrics using stat_card widgets.
-3. Use Axios Smart Brevity for summary_text (punchy, bullet points, bold text).
-4. Do not output empty charts if data is missing; explain the gap in summary_text.`;
+DESIGN RULES & ANTI-FLUFF CONSTRAINTS:
+1. ZERO FLUFF: You are banned from using vague, generalized adjectives like "various", "several", "significant", "many", or "a number of". Every claim must be backed by a specific name, date, or number from the data.
+2. PRINT RECEIPTS: If a project is mentioned, name the exact project. If money is spent, print the exact dollar amount. If a street is debated, name the exact street. If a person spoke, name them.
+3. DENSITY: Write exclusively in Axios Smart Brevity format for summary_text. Use punchy, high-information-density bullet points. **Bold** key entities, names, and numbers. No filler sentences.
+4. CONDITIONAL WIDGET SELECTION (Value is Paramount):
+   - Only use bar_chart if you have robust time-series data (multiple years/months with counts) or a clear numerical comparison (e.g., top 5 most frequent topics by count). The data array must have at least 3 items with meaningful numeric values.
+   - If the extracted data is heavily narrative or sparse on numbers, do NOT force an empty or meaningless chart. Rely entirely on dense summary_text bullet points instead.
+   - Use stat_card to highlight extreme anomalies, totals, or the single highest-value data point. Each stat_card must display a concrete number or short factual value, never a vague descriptor.
+5. EXECUTIVE SUMMARY: The executiveSummary field must be 2-3 sentences maximum, written BLUF (Bottom Line Up Front), with the single most important finding first.`;
 
   const compactedExtractions = allExtractions.map((ext) => {
     const compacted: Record<string, unknown> = {};
