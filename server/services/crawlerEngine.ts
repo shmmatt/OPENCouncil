@@ -1641,8 +1641,18 @@ async function executeCrawl(
     addLog(progress, `WordPress Media API: ${wpDocs.length} media items found, ${wpNewDocs} new docs`);
   }
 
+  {
+    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+    if (batch.length > 0) {
+      await batchRecordDocuments(batch);
+      addLog(progress, `Phase 3: Persisted ${batch.length} discovered URLs to database`);
+    }
+  }
+
+  } // end if (!isIncrementalMode) — skip Phases 2-3
+
   if (town.driveFolderId) {
-    addLog(progress, '--- Phase 3c: Google Drive Discovery ---');
+    addLog(progress, '--- Google Drive Discovery ---');
     if (isGoogleDriveConfigured()) {
       try {
         const driveFiles = await listFolderRecursive(town.driveFolderId, undefined, '', signal);
@@ -1670,17 +1680,15 @@ async function executeCrawl(
     } else {
       addLog(progress, 'GOOGLE DRIVE: Skipped — GOOGLE_DRIVE_API_KEY not configured');
     }
-  }
 
-  {
-    const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
-    if (batch.length > 0) {
-      await batchRecordDocuments(batch);
-      addLog(progress, `Phase 3: Persisted ${batch.length} discovered URLs to database`);
+    {
+      const batch = buildBatchRecords(town.id, docsSeen, alreadyPersisted, baseUrl);
+      if (batch.length > 0) {
+        await batchRecordDocuments(batch);
+        addLog(progress, `Google Drive: Persisted ${batch.length} new Drive URLs to database`);
+      }
     }
   }
-
-  } // end if (!isIncrementalMode) — skip Phases 2-3
 
   addLog(progress, `--- Phase 4: Breadth-First Crawl ${isHeavyLane(baseUrl) ? '(HEAVY LANE)' : ''} ---`);
   progress.pagesQueued = queue.length;
