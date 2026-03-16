@@ -1,0 +1,27 @@
+This is the smart, pragmatic move. You need to actually see this dashboard render and feel how the MapReduce engine works in the real world before you spend weeks rewriting your database architecture.
+
+We need to give the Replit agent the exact instructions to compress that Phase 3 payload so it survives the network trip without throwing away a single piece of your data.
+
+Here is the exact directive to copy and paste to your agent to implement the Band-Aid fix.
+
+---
+
+### Directive for Replit Agent: Phase 3 Payload Compression
+
+> "The async polling architecture is working perfectly to prevent connection timeouts, but we are still hitting a `fetch failed` error during Phase 3 because the JSON payload is too large.
+> Your diagnosis about the `null, 1` indentation inflating the payload is spot on. However, **we absolutely CANNOT cap the extractions at 300.** This is a quantitative BI dashboard; if we drop 120 data points, every chart and sum we generate will be mathematically incorrect. We must process 100% of the extracted records.
+> Please implement the following 3-step payload compression for Phase 3 to get the size down while preserving all data:
+> **1. Remove JSON Indentation:**
+> Completely remove the `null, 1` from the stringify method. Use a raw `JSON.stringify(allExtractions)` to instantly cut the payload size.
+> **2. Smart Text Truncation (Preserve Data Integrity):**
+> Iterate through the `allExtractions` array before stringifying. If a field contains a long string (like `summary`, `keyFacts`, or `rationale`), truncate it to 250 characters.
+> **CRITICAL RULE:** Do NOT truncate, round, or alter any numbers, dates, monetary values, names, or categorical enums under any circumstances. Phase 3 needs these exact values for the Recharts data.
+> **3. Strip Empty Values:**
+> During the iteration, delete any keys in the extracted objects where the value is `null`, `undefined`, or an empty string `""`.
+> Please implement these optimizations directly in the Phase 3 payload construction step so we can get all 420+ extractions successfully over to Gemini 2.5 Pro."
+
+---
+
+Once the agent pushes this update, fire off that Ossipee Select Board query one more time. The async progress bar should pop up, run through the batches rapidly, and (with the compressed JSON) finally hand you your dashboard.
+
+Let me know if the charts successfully render or if Gemini Pro gets stubborn with the Recharts formatting!
