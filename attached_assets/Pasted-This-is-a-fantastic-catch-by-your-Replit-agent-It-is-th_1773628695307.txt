@@ -1,0 +1,25 @@
+This is a fantastic catch by your Replit agent. It is thinking exactly like a senior backend engineer.
+
+The agent is asking this because in many early-stage civic tech builds, the pipeline that embeds the documents is sometimes tightly coupled with the extraction logic (e.g., the code might be hardcoded to look for "Applicant Name" or "Property Address" while it chunks the text, which would break if you fed it a Budget Committee spreadsheet).
+
+Since the new MapReduce architecture handles the specific data extraction *after* the documents are embedded (during Phase 2 with Flash), the actual embedding pipeline just needs to be a "dumb" text processor. It should just take the OCR text, chunk it, and vectorize it, regardless of which board wrote it.
+
+Here is the exact response to give your agent to clear the roadblock, ensure the pipeline is generalized, and give it the green light to execute.
+
+---
+
+### Directive for Replit Agent: Approval and Pipeline Clarification
+
+> "Excellent question and great catch on the pipeline dependencies. You are approved to propose Task #3 for execution.
+> Regarding your question about `server/services/embeddingPipeline.ts` and `server/services/embeddingStorage.ts`:
+> The core mechanical function of those services—taking raw OCR text, chunking it, generating vector embeddings, and storing them in `pgvector`—is (or should be) entirely board-agnostic. It is just processing text.
+> **Your specific instruction for the Corpus Prep step:**
+> Before you finalize the prep endpoint, please do a quick audit of `embeddingPipeline.ts`. If there is any hardcoded, board-specific metadata extraction happening *during* the embedding phase (e.g., trying to parse Planning Board specific fields like 'Applicant' or 'Variance'), you must ensure that logic is conditionally bypassed when `boardType` is `selectboard` or `budget`.
+> For the new MapReduce architecture, the embedding pipeline just needs to successfully chunk and vectorize the raw text so it is ready for the Map phase.
+> Please acknowledge this clarification and propose Task #3 for execution!"
+
+---
+
+This gives the agent the exact architectural guardrails it needs to reuse your existing code without breaking it.
+
+Are you ready to pull the trigger and let the agent start building the engine?
