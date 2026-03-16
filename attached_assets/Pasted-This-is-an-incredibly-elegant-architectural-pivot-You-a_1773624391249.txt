@@ -1,0 +1,40 @@
+This is an incredibly elegant architectural pivot. You are moving away from trying to "guess" where a town puts its documents (which breaks on custom setups like Ossipee) and instead using empirical data—where the crawler actually found documents last time—to guide the search.
+
+Reusing the battle-tested full crawler engine and simply manipulating its starting state (the queue) and ending state (the time cap) is exactly how mature scraping systems operate.
+
+However, there are two hidden traps in this plan regarding **how the database yields those seed URLs** and **how the engine handles the timeout**. If the Replit agent executes the plan exactly as written, you will run into performance bottlenecks.
+
+Here is my analysis of the missing guardrails and the exact directive to hand to your Replit agent to bulletproof this implementation.
+
+### 1. The "Stale Seed" Trap (Seed Ordering)
+
+The plan says to query the DB for "all unique `discoveredFrom` values."
+
+* **The Problem:** A standard `SELECT DISTINCT discoveredFrom` query will return URLs in an arbitrary database order. A town might have 300 unique pages where it has historically posted documents. If the 15-minute time cap hits after 100 pages, and the database happened to return URLs from 2015 first, your incremental crawl will completely miss the page where the 2026 minutes were just posted.
+* **The Fix:** The database query must order the `discoveredFrom` URLs by **recency**. The pages that yielded the most recently published documents must be injected into the queue first (Priority 0).
+
+### 2. The Hard Crash vs. Graceful Exit Trap
+
+The plan mentions enforcing a time-based abort using the existing `abortController` at 15 minutes.
+
+* **The Problem:** If the `abortController` simply throws an unhandled exception or abruptly kills the worker loop, the crawler run might not properly save its final statistics (pages visited, docs discovered, duration) to the `crawler_runs` table, leaving the run in an orphaned "in progress" state.
+* **The Fix:** The agent needs to ensure the 15-minute timeout sets a flag to stop enqueuing *new* URLs and gracefully drains the active requests, allowing the `startCrawl` function to return its standard summary object.
+
+---
+
+### Directive for the Replit Agent
+
+Copy and paste this directly to your agent to execute the plan with the necessary guardrails:
+
+> "This is a brilliant architectural simplification. Reusing the full crawler engine with smart BFS queue seeding and a time cap is exactly the right path forward.
+> Please execute the plan as written, but incorporate the following two critical engineering guardrails:
+> **1. Order Seeds by Recency (Add to the DB Query Task):**
+> When querying `server/storage/crawler.ts` for the `discoveredFrom` values, do NOT just use a basic `SELECT DISTINCT`. You must group by `discoveredFrom` and **ORDER BY the maximum document ingestion date** (or document date) descending.
+> *Goal:* The pages that yielded the most recently published documents MUST be at the absolute front of the priority array passed to the engine. If the 15-minute cap hits, we want to ensure we checked the 'hot' pages first.
+> **2. Graceful Time-Cap Exit (Add to executeCrawl Task):**
+> When implementing the 15-minute time cap in `server/services/crawlerEngine.ts` for incremental mode, ensure the timeout triggers a **graceful shutdown**. It should stop popping new URLs from the queue, wait for active HTTP requests to finish, and allow the function to return the final run statistics so the `crawler_runs` table is properly updated. Do not let the `abortController` cause a hard crash that orphans the run record.
+> Please acknowledge these additions and proceed with the tasks."
+
+---
+
+Would you like me to write out the specific raw SQL or Knex/Drizzle query logic for grabbing those `discoveredFrom` URLs sorted by document recency so the agent gets it right on the first try?
