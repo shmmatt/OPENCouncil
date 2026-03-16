@@ -10,6 +10,8 @@ import type {
   FrictionCategory,
   DynamicReportPayload,
   ResearchBoardType,
+  SummaryTextWidget,
+  BarChartWidget,
 } from "@shared/schema";
 import {
   resolveEntities,
@@ -597,6 +599,14 @@ ${fieldDescriptions}
 
 Return a JSON object with an "extractions" array containing one object per distinct topic/item found. If the document has no relevant information for the query, return an empty extractions array.`;
 
+  type SchemaFieldType = "string" | "number" | "boolean" | "array" | "object";
+  function resolveFieldType(t: string): SchemaFieldType {
+    if (t === "number") return "number";
+    if (t === "boolean") return "boolean";
+    if (t === "array") return "array";
+    return "string";
+  }
+
   const extractionResponseSchema = {
     type: "object" as const,
     properties: {
@@ -605,18 +615,21 @@ Return a JSON object with an "extractions" array containing one object per disti
         items: {
           type: "object" as const,
           properties: Object.fromEntries(
-            extractionFields.map(f => [f.name, {
-              type: (f.type === "array" ? "array" : f.type === "number" ? "number" : f.type === "boolean" ? "boolean" : "string") as any,
-              ...(f.type === "array" ? { items: { type: "string" as const } } : {}),
-            }])
+            extractionFields.map(f => {
+              const fieldType = resolveFieldType(f.type);
+              return [f.name, {
+                type: fieldType,
+                ...(fieldType === "array" ? { items: { type: "string" as const } } : {}),
+              }];
+            })
           ),
         },
       },
     },
-    required: ["extractions"],
+    required: ["extractions" as const],
   };
 
-  const allExtractions: any[] = [];
+  const allExtractions: Record<string, unknown>[] = [];
   const BATCH_SIZE = 5;
   const MAX_DOC_CHARS = 900000; // Flash context limit safety margin
 
@@ -641,9 +654,9 @@ Return a JSON object with an "extractions" array containing one object per disti
             temperature: 0.1,
           },
         });
-        const parsed = JSON.parse(response.text || "{}");
+        const parsed = JSON.parse(response.text || "{}") as { extractions?: Record<string, unknown>[] };
         const items = parsed.extractions || [];
-        return items.map((item: any) => ({
+        return items.map((item: Record<string, unknown>) => ({
           ...item,
           _sourceTitle: doc.title,
           _sourceDate: doc.meetingDate || doc.year,
@@ -748,11 +761,11 @@ ${JSON.stringify(allExtractions.slice(0, 500), null, 1)}`;
     if (!payload.executiveSummary) payload.executiveSummary = "Report generated but no summary was produced.";
     if (!Array.isArray(payload.widgets)) payload.widgets = [];
 
-    payload.widgets = payload.widgets.filter((w: any) => {
+    payload.widgets = payload.widgets.filter((w) => {
       if (!w || !w.type) return false;
-      if (w.type === "summary_text") return typeof w.content === "string";
-      if (w.type === "stat_card") return w.label && w.value !== undefined;
-      if (w.type === "bar_chart") return w.title && Array.isArray(w.data) && w.data.length > 0;
+      if (w.type === "summary_text") return "content" in w && typeof (w as SummaryTextWidget).content === "string";
+      if (w.type === "stat_card") return "label" in w && "value" in w;
+      if (w.type === "bar_chart") return "title" in w && "data" in w && Array.isArray((w as BarChartWidget).data) && (w as BarChartWidget).data.length > 0;
       return false;
     });
 
