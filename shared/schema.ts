@@ -1018,6 +1018,46 @@ export type ResearchReport = typeof researchReports.$inferSelect;
 export type InsertResearchReport = z.infer<typeof insertResearchReportSchema>;
 
 // ============================================================
+// DYNAMIC REPORT (Universal Municipal Intelligence Engine)
+// ============================================================
+
+export const RESEARCH_BOARD_TYPES = ['planning', 'zoning', 'selectboard', 'budget'] as const;
+export type ResearchBoardType = typeof RESEARCH_BOARD_TYPES[number];
+
+export type WidgetType = 'summary_text' | 'stat_card' | 'bar_chart';
+
+export interface BaseWidget {
+  type: WidgetType;
+}
+
+export interface SummaryTextWidget extends BaseWidget {
+  type: 'summary_text';
+  content: string;
+}
+
+export interface StatCardWidget extends BaseWidget {
+  type: 'stat_card';
+  label: string;
+  value: string | number;
+  trend?: 'up' | 'down' | 'neutral';
+}
+
+export interface BarChartWidget extends BaseWidget {
+  type: 'bar_chart';
+  title: string;
+  xAxisLabel: string;
+  data: Array<{ name: string; value: number }>;
+}
+
+export type DynamicWidget = SummaryTextWidget | StatCardWidget | BarChartWidget;
+
+export interface DynamicReportPayload {
+  reportTitle: string;
+  executiveSummary: string;
+  widgets: DynamicWidget[];
+}
+
+// ============================================================
 // CONTENT GENERATION & TOWN FEED
 // ============================================================
 

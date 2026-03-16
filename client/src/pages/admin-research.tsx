@@ -19,6 +19,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   FlaskConical,
@@ -45,6 +48,8 @@ import {
   Info,
   Download,
   FileSpreadsheet,
+  Database,
+  Brain,
 } from "lucide-react";
 import {
   LineChart,
@@ -59,8 +64,10 @@ import {
   Bar,
   Cell,
 } from "recharts";
-import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DaysAddedEntry, ApplicationModifiers } from "@shared/schema";
+import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DaysAddedEntry, ApplicationModifiers, DynamicReportPayload, ResearchBoardType } from "@shared/schema";
+import { RESEARCH_BOARD_TYPES } from "@shared/schema";
 import { exportFrictionReportPDF, exportFrictionReportCSV } from "@/lib/exportFrictionReport";
+import DynamicReportRenderer from "@/components/research/DynamicReportRenderer";
 
 interface TownOption {
   name: string;
@@ -70,12 +77,26 @@ interface TownOption {
   dateRange: string | null;
 }
 
+const BOARD_LABELS: Record<ResearchBoardType, string> = {
+  planning: "Planning Board",
+  zoning: "Zoning Board",
+  selectboard: "Select Board",
+  budget: "Budget Committee",
+};
+
 export default function AdminResearch() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedTown, setSelectedTown] = useState("");
   const [viewingReport, setViewingReport] = useState<ResearchReport | null>(null);
   const [expandedApps, setExpandedApps] = useState<Set<number>>(new Set());
+
+  const [selectedBoard, setSelectedBoard] = useState<ResearchBoardType>("planning");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [dynamicPrompt, setDynamicPrompt] = useState("");
+  const [dynamicReport, setDynamicReport] = useState<DynamicReportPayload | null>(null);
+  const [dynamicTown, setDynamicTown] = useState("");
 
   const { data: townsData, isLoading: townsLoading } = useQuery<{ towns: TownOption[] }>({
     queryKey: ["/api/admin/research/towns"],
@@ -90,6 +111,50 @@ export default function AdminResearch() {
         throw new Error("Unauthorized");
       }
       return res.json();
+    },
+  });
+
+  const corpusQuery = useQuery<{ totalDocuments: number; embeddedCount: number; pendingCount: number }>({
+    queryKey: ["/api/admin/research/prepare-corpus", dynamicTown, selectedBoard],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/research/prepare-corpus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ townName: dynamicTown, boardType: selectedBoard }),
+      });
+      if (!res.ok) throw new Error("Failed to check corpus");
+      return res.json();
+    },
+    enabled: !!dynamicTown && !!selectedBoard,
+    refetchInterval: 10000,
+  });
+
+  const dynamicGenerateMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/research/dynamic-generate-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          townName: dynamicTown,
+          boardType: selectedBoard,
+          dateRange: (dateStart || dateEnd) ? { start: dateStart || undefined, end: dateEnd || undefined } : undefined,
+          prompt: dynamicPrompt,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Dynamic report generation failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDynamicReport(data.payload);
+      toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
+    },
+    onError: (err) => {
+      toast({ title: "Generation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     },
   });
 
@@ -268,6 +333,142 @@ export default function AdminResearch() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <Tabs defaultValue="intelligence" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="intelligence" data-testid="tab-intelligence">
+              <Brain className="w-4 h-4 mr-2" />
+              Intelligence Engine
+            </TabsTrigger>
+            <TabsTrigger value="friction" data-testid="tab-friction">
+              <FlaskConical className="w-4 h-4 mr-2" />
+              Friction Report
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="intelligence" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle data-testid="text-intelligence-title">Municipal Intelligence Engine</CardTitle>
+                <CardDescription>
+                  Query 10-year longitudinal data across Planning Board, Zoning Board, Select Board, and Budget Committee.
+                  Ask any question and receive a dynamic dashboard with charts, stats, and narrative analysis.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block text-foreground">Town</label>
+                    <Select value={dynamicTown} onValueChange={(v) => { setDynamicTown(v); setDynamicReport(null); }}>
+                      <SelectTrigger data-testid="select-dynamic-town">
+                        <SelectValue placeholder={townsLoading ? "Loading..." : "Select town"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {towns.map((t) => (
+                          <SelectItem key={t.name} value={t.name} data-testid={`option-dyn-town-${t.name}`}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block text-foreground">Board</label>
+                    <Select value={selectedBoard} onValueChange={(v) => { setSelectedBoard(v as ResearchBoardType); setDynamicReport(null); }}>
+                      <SelectTrigger data-testid="select-board">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESEARCH_BOARD_TYPES.map((bt) => (
+                          <SelectItem key={bt} value={bt} data-testid={`option-board-${bt}`}>
+                            {BOARD_LABELS[bt]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block text-foreground">Date Start</label>
+                    <Input
+                      type="date"
+                      value={dateStart}
+                      onChange={(e) => setDateStart(e.target.value)}
+                      data-testid="input-date-start"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block text-foreground">Date End</label>
+                    <Input
+                      type="date"
+                      value={dateEnd}
+                      onChange={(e) => setDateEnd(e.target.value)}
+                      data-testid="input-date-end"
+                    />
+                  </div>
+                </div>
+
+                {dynamicTown && corpusQuery.data && (
+                  <div className="flex items-center gap-4 p-3 bg-muted rounded-md flex-wrap" data-testid="corpus-status">
+                    <Database className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <div className="text-sm">
+                      <span className="font-medium text-foreground">{corpusQuery.data.embeddedCount}</span>
+                      <span className="text-muted-foreground"> / {corpusQuery.data.totalDocuments} documents embedded</span>
+                      {corpusQuery.data.pendingCount > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400 ml-2">
+                          ({corpusQuery.data.pendingCount} pending)
+                        </span>
+                      )}
+                    </div>
+                    {corpusQuery.data.totalDocuments === 0 && (
+                      <Badge variant="outline">No documents found for this board</Badge>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block text-foreground">Analysis Prompt</label>
+                  <Textarea
+                    placeholder="e.g., What are the most contentious topics discussed by the Select Board over the last 5 years? Show trends by year."
+                    value={dynamicPrompt}
+                    onChange={(e) => setDynamicPrompt(e.target.value)}
+                    className="min-h-[80px]"
+                    disabled={!dynamicTown || (corpusQuery.data?.totalDocuments === 0)}
+                    data-testid="input-dynamic-prompt"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => dynamicGenerateMutation.mutate()}
+                  disabled={
+                    !dynamicTown ||
+                    !dynamicPrompt.trim() ||
+                    dynamicGenerateMutation.isPending ||
+                    (corpusQuery.data?.totalDocuments === 0)
+                  }
+                  data-testid="button-generate-dynamic"
+                >
+                  {dynamicGenerateMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Brain className="w-4 h-4 mr-2" />
+                  )}
+                  {dynamicGenerateMutation.isPending ? "Generating..." : "Generate Report"}
+                </Button>
+
+                {dynamicGenerateMutation.isPending && (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2" data-testid="text-generation-status">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analyzing documents and synthesizing report... This may take 1-3 minutes for large corpora.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {dynamicReport && (
+              <DynamicReportRenderer payload={dynamicReport} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="friction" className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle data-testid="text-generate-title">Development Friction Report</CardTitle>
@@ -563,6 +764,8 @@ export default function AdminResearch() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

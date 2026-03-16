@@ -30,7 +30,11 @@ The V2 ingestion pipeline manages document lifecycle, including duplicate detect
 A sophisticated crawler uses multi-strategy discovery (sitemaps, BFS, CMS-specific enhancements) and a hybrid "Fast Lane / Heavy Lane" architecture for town-level, state-level, and SAU-level document collection. An incremental crawling system efficiently discovers new documents without full re-crawls, supported by a stateless scheduler.
 
 ### OC Research Module
-This module provides analytical tools like the Development Friction Report, which uses LLM-driven pipelines to analyze meeting documents, extract structured data, perform entity resolution, and compute statistical insights.
+This module provides two analytical tools:
+1. **Universal Municipal Intelligence Engine** — A multi-board dynamic BI dashboard supporting Planning Board, Zoning Board, Select Board, and Budget Committee. Admins select a town, board type, optional date range, and enter a free-form analysis prompt. A four-phase Gemini MapReduce pipeline (Phase 0: dynamic schema generation via Flash, Phase 1: document retrieval from file_blobs, Phase 2: batched extraction with Flash, Phase 3: synthesis with Pro) generates a dynamic dashboard of stat cards, bar charts, and narrative summaries rendered by `DynamicReportRenderer`.
+2. **Development Friction Report** — Uses LLM-driven pipelines to analyze Planning Board/ZBA meeting documents, extract site plan approval data, perform entity resolution, and compute statistical insights.
+
+Key files: `server/routes/research.ts` (endpoints + pipeline), `client/src/pages/admin-research.tsx` (tab UI), `client/src/components/research/DynamicReportRenderer.tsx` (widget renderer), `shared/schema.ts` (shared types).
 
 ### Document Gaps Tracker
 The system automatically flags missing documents when retrieval failures occur in the chat pipeline, creating records for administrative management.

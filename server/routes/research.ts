@@ -8,6 +8,8 @@ import type {
   FrictionReportData,
   FunnelStage,
   FrictionCategory,
+  DynamicReportPayload,
+  ResearchBoardType,
 } from "@shared/schema";
 import {
   resolveEntities,
@@ -26,8 +28,11 @@ import { logInfo, logError } from "../utils/logger";
 const router = Router();
 router.use(authenticateAdmin);
 
+import { RESEARCH_BOARD_TYPES } from "@shared/schema";
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 
 const frictionReportBodySchema = z.object({
   townName: z.string().min(1, "townName is required"),
@@ -348,7 +353,439 @@ router.post("/friction-report/:id/reanalyze", async (req, res) => {
 });
 
 // ============================================================
-// PHASE 1: FULL DOCUMENT RETRIEVAL
+// UNIVERSAL MUNICIPAL INTELLIGENCE ENGINE - BOARD FILTER HELPER
+// ============================================================
+
+function boardFilterSql(boardType: ResearchBoardType): string {
+  switch (boardType) {
+    case "planning":
+      return `(lower(ld.board) LIKE '%planning%' OR lower(ld.canonical_title) LIKE '%planning board%')`;
+    case "zoning":
+      return `(lower(ld.board) LIKE '%zba%' OR lower(ld.board) LIKE '%zoning%' OR lower(ld.canonical_title) LIKE '%zoning board%' OR lower(ld.canonical_title) LIKE '%zba%')`;
+    case "selectboard":
+      return `(lower(ld.board) LIKE '%select%' OR lower(ld.board) LIKE '%selectmen%' OR lower(ld.canonical_title) LIKE '%select board%' OR lower(ld.canonical_title) LIKE '%board of selectmen%')`;
+    case "budget":
+      return `(lower(ld.board) LIKE '%budget%' OR lower(ld.canonical_title) LIKE '%budget committee%' OR lower(ld.canonical_title) LIKE '%budget%')`;
+    default:
+      return `1=1`;
+  }
+}
+
+// ============================================================
+// CORPUS PREP ENDPOINT
+// ============================================================
+
+const prepareCorpusSchema = z.object({
+  townName: z.string().min(1),
+  boardType: z.enum(RESEARCH_BOARD_TYPES),
+});
+
+router.post("/prepare-corpus", async (req, res) => {
+  try {
+    const parsed = prepareCorpusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+    }
+    const { townName, boardType } = parsed.data;
+    const boardFilter = boardFilterSql(boardType);
+
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(DISTINCT fb.id) as total_documents,
+        COUNT(DISTINCT CASE WHEN fb.embedding_status = 'indexed' THEN fb.id END) as embedded_count,
+        COUNT(DISTINCT CASE WHEN fb.embedding_status != 'indexed' THEN fb.id END) as pending_count
+      FROM logical_documents ld
+      JOIN document_versions dv ON ld.id = dv.document_id
+      JOIN file_blobs fb ON dv.file_blob_id = fb.id
+      WHERE lower(ld.town) = ${townName.toLowerCase()}
+        AND (
+          ld.category IN ('meeting_minutes', 'minutes')
+          OR dv.is_minutes = true
+        )
+        AND ${sql.raw(boardFilter)}
+        AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
+        AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
+    `);
+
+    const row = (result.rows as any[])[0] || {};
+    const totalDocuments = parseInt(row.total_documents || "0", 10);
+    const embeddedCount = parseInt(row.embedded_count || "0", 10);
+    const pendingCount = parseInt(row.pending_count || "0", 10);
+
+    res.json({ totalDocuments, embeddedCount, pendingCount });
+  } catch (error) {
+    logError("Failed to check corpus status", { error: String(error) });
+    res.status(500).json({ message: "Failed to check corpus status" });
+  }
+});
+
+// ============================================================
+// DYNAMIC REPORT GENERATION (MapReduce Engine)
+// ============================================================
+
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const dynamicGenerateSchema = z.object({
+  townName: z.string().min(1),
+  boardType: z.enum(RESEARCH_BOARD_TYPES),
+  dateRange: z.object({
+    start: z.string().regex(ISO_DATE_REGEX, "Date must be YYYY-MM-DD").optional(),
+    end: z.string().regex(ISO_DATE_REGEX, "Date must be YYYY-MM-DD").optional(),
+  }).optional(),
+  prompt: z.string().min(1).max(2000),
+});
+
+router.post("/dynamic-generate", async (req, res) => {
+  try {
+    const parsed = dynamicGenerateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+    }
+
+    if (!process.env.GEM_API_KEY) {
+      return res.status(500).json({ message: "GEM_API_KEY is not configured" });
+    }
+
+    const { townName, boardType, dateRange, prompt } = parsed.data;
+
+    res.json({ status: "processing" });
+
+    runDynamicPipeline(townName, boardType, dateRange, prompt).catch((err) => {
+      logError("Dynamic pipeline failed", { error: String(err) });
+    });
+  } catch (error) {
+    logError("Dynamic generate route error", { error: String(error) });
+    res.status(500).json({ message: "Failed to start dynamic report generation" });
+  }
+});
+
+router.post("/dynamic-generate-sync", async (req, res) => {
+  try {
+    const parsed = dynamicGenerateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+    }
+
+    if (!process.env.GEM_API_KEY) {
+      return res.status(500).json({ message: "GEM_API_KEY is not configured" });
+    }
+
+    const { townName, boardType, dateRange, prompt } = parsed.data;
+
+    const payload = await runDynamicPipeline(townName, boardType, dateRange, prompt);
+    res.json({ status: "completed", payload });
+  } catch (error) {
+    logError("Dynamic generate sync error", { error: String(error) });
+    res.status(500).json({ message: "Dynamic report generation failed", error: String(error) });
+  }
+});
+
+async function runDynamicPipeline(
+  townName: string,
+  boardType: ResearchBoardType,
+  dateRange: { start?: string; end?: string } | undefined,
+  userPrompt: string
+): Promise<DynamicReportPayload> {
+  const boardFilter = boardFilterSql(boardType);
+
+  // Phase 1: Fetch full document text
+  logInfo(`[DynamicPipeline] Phase 1: Fetching documents for ${townName} / ${boardType}`, { stage: "research" });
+
+  const dateConditions: ReturnType<typeof sql>[] = [];
+  if (dateRange?.start) {
+    dateConditions.push(sql`AND dv.meeting_date >= ${dateRange.start}::date`);
+  }
+  if (dateRange?.end) {
+    dateConditions.push(sql`AND dv.meeting_date <= ${dateRange.end}::date`);
+  }
+  const dateFilterSql = dateConditions.length > 0
+    ? sql.join(dateConditions, sql` `)
+    : sql``;
+
+  const docsResult = await db.execute(sql`
+    SELECT
+      fb.id as file_blob_id,
+      ld.canonical_title as title,
+      ld.board,
+      dv.meeting_date,
+      dv.year,
+      COALESCE(fb.ocr_text, fb.preview_text) as full_text
+    FROM logical_documents ld
+    JOIN document_versions dv ON ld.id = dv.document_id
+    JOIN file_blobs fb ON dv.file_blob_id = fb.id
+    WHERE lower(ld.town) = ${townName.toLowerCase()}
+      AND (
+        ld.category IN ('meeting_minutes', 'minutes')
+        OR dv.is_minutes = true
+      )
+      AND ${sql.raw(boardFilter)}
+      AND COALESCE(fb.ocr_text, fb.preview_text) IS NOT NULL
+      AND length(COALESCE(fb.ocr_text, fb.preview_text)) > 200
+      ${dateFilterSql}
+    ORDER BY dv.meeting_date ASC NULLS LAST
+  `);
+
+  const documents = (docsResult.rows as any[]).map(r => ({
+    fileBlobId: r.file_blob_id as string,
+    title: r.title as string || "Unknown",
+    board: r.board as string | null,
+    meetingDate: r.meeting_date ? new Date(r.meeting_date).toISOString().split("T")[0] : null,
+    year: r.year as string | null,
+    fullText: r.full_text as string,
+  }));
+
+  logInfo(`[DynamicPipeline] Phase 1 complete: ${documents.length} documents retrieved`, { stage: "research" });
+
+  if (documents.length === 0) {
+    return {
+      reportTitle: `${boardType.charAt(0).toUpperCase() + boardType.slice(1)} Analysis: ${townName}`,
+      executiveSummary: "No documents were found matching the selected criteria. Try adjusting the board type or date range, or ensure documents have been uploaded and processed for this town.",
+      widgets: [],
+    };
+  }
+
+  // Phase 0: Dynamic Schema Generation
+  logInfo(`[DynamicPipeline] Phase 0: Generating extraction schema for prompt`, { stage: "research" });
+
+  const schemaGenPrompt = `Given this user query about municipal ${boardType} documents: "${userPrompt}"
+
+Generate a JSON extraction schema that defines what structured fields should be extracted from each document to answer this query. Return a JSON object with:
+- "fields": an array of objects, each with "name" (camelCase string), "type" ("string" | "number" | "boolean" | "array"), and "description" (what to extract).
+
+Keep it focused — 4-8 fields maximum. Include a "meetingDate" and "summary" field always.`;
+
+  let extractionFields: Array<{ name: string; type: string; description: string }>;
+  try {
+    const schemaResponse = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: schemaGenPrompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object" as const,
+          properties: {
+            fields: {
+              type: "array" as const,
+              items: {
+                type: "object" as const,
+                properties: {
+                  name: { type: "string" as const },
+                  type: { type: "string" as const },
+                  description: { type: "string" as const },
+                },
+                required: ["name", "type", "description"],
+              },
+            },
+          },
+          required: ["fields"],
+        },
+        temperature: 0.2,
+      },
+    });
+    const schemaParsed = JSON.parse(schemaResponse.text || "{}");
+    extractionFields = schemaParsed.fields || [
+      { name: "meetingDate", type: "string", description: "Date of the meeting" },
+      { name: "summary", type: "string", description: "Key discussion points" },
+    ];
+  } catch (err) {
+    logError("[DynamicPipeline] Phase 0 schema generation failed, using defaults", { error: String(err) });
+    extractionFields = [
+      { name: "meetingDate", type: "string", description: "Date of the meeting" },
+      { name: "summary", type: "string", description: "Key relevant points from the document" },
+      { name: "keyFacts", type: "array", description: "Array of key facts or data points" },
+    ];
+  }
+
+  logInfo(`[DynamicPipeline] Phase 0 complete: ${extractionFields.length} extraction fields defined`, { stage: "research" });
+
+  // Phase 2: Map/Harvest with concurrency limiting
+  logInfo(`[DynamicPipeline] Phase 2: Extracting facts from ${documents.length} documents (concurrency: 5)`, { stage: "research" });
+
+  const fieldDescriptions = extractionFields.map(f => `- ${f.name} (${f.type}): ${f.description}`).join("\n");
+
+  const extractionSystemPrompt = `You are analyzing municipal ${boardType} meeting minutes from ${townName}, NH.
+The user wants to know: "${userPrompt}"
+
+Extract structured data from the provided document text. For each document, extract these fields:
+${fieldDescriptions}
+
+Return a JSON object with an "extractions" array containing one object per distinct topic/item found. If the document has no relevant information for the query, return an empty extractions array.`;
+
+  const extractionResponseSchema = {
+    type: "object" as const,
+    properties: {
+      extractions: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: Object.fromEntries(
+            extractionFields.map(f => [f.name, {
+              type: (f.type === "array" ? "array" : f.type === "number" ? "number" : f.type === "boolean" ? "boolean" : "string") as any,
+              ...(f.type === "array" ? { items: { type: "string" as const } } : {}),
+            }])
+          ),
+        },
+      },
+    },
+    required: ["extractions"],
+  };
+
+  const allExtractions: any[] = [];
+  const BATCH_SIZE = 5;
+  const MAX_DOC_CHARS = 900000; // Flash context limit safety margin
+
+  for (let i = 0; i < documents.length; i += BATCH_SIZE) {
+    const batch = documents.slice(i, i + BATCH_SIZE);
+    const promises = batch.map(async (doc) => {
+      const docText = doc.fullText.length > MAX_DOC_CHARS
+        ? doc.fullText.slice(0, MAX_DOC_CHARS) + "\n[...truncated]"
+        : doc.fullText;
+
+      const header = `Document: ${doc.title} | Date: ${doc.meetingDate || doc.year || "unknown"} | Board: ${doc.board || boardType}`;
+      const prompt = `${header}\n\n--- BEGIN DOCUMENT ---\n${docText}\n--- END DOCUMENT ---`;
+
+      try {
+        const response = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction: extractionSystemPrompt,
+            responseMimeType: "application/json",
+            responseSchema: extractionResponseSchema,
+            temperature: 0.1,
+          },
+        });
+        const parsed = JSON.parse(response.text || "{}");
+        const items = parsed.extractions || [];
+        return items.map((item: any) => ({
+          ...item,
+          _sourceTitle: doc.title,
+          _sourceDate: doc.meetingDate || doc.year,
+        }));
+      } catch (err) {
+        logError(`[DynamicPipeline] Extraction failed for ${doc.title}`, { error: String(err) });
+        return [];
+      }
+    });
+
+    const results = await Promise.allSettled(promises);
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        allExtractions.push(...result.value);
+      }
+    }
+
+    if (i + BATCH_SIZE < documents.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  logInfo(`[DynamicPipeline] Phase 2 complete: ${allExtractions.length} extractions from ${documents.length} documents`, { stage: "research" });
+
+  // Phase 3: Reduce/Synthesize
+  logInfo(`[DynamicPipeline] Phase 3: Synthesizing report with ${GEMINI_PRO_MODEL}`, { stage: "research" });
+
+  const synthesisSystemPrompt = `You are an elite municipal data analyst. Analyze the provided structured municipal data and answer the user's query by constructing a dynamic dashboard interface.
+You MUST respond with a strictly typed JSON object matching this schema: { "reportTitle": "string", "executiveSummary": "string (BLUF style)", "widgets": [ { "type": "summary_text" | "stat_card" | "bar_chart", ... } ] }
+
+Widget type definitions:
+- summary_text: { "type": "summary_text", "content": "string (markdown formatted)" }
+- stat_card: { "type": "stat_card", "label": "string", "value": "string or number", "trend": "up" | "down" | "neutral" (optional) }
+- bar_chart: { "type": "bar_chart", "title": "string", "xAxisLabel": "string", "data": [{ "name": "string", "value": number }] }
+
+DESIGN RULES:
+1. Compare numbers/years using a bar_chart widget.
+2. Highlight 2-4 critical metrics using stat_card widgets.
+3. Use Axios Smart Brevity for summary_text (punchy, bullet points, bold text).
+4. Do not output empty charts if data is missing; explain the gap in summary_text.`;
+
+  const synthesisPrompt = `User query: "${userPrompt}"
+Board type: ${boardType}
+Town: ${townName}
+Documents analyzed: ${documents.length}
+Date range: ${documents[0]?.meetingDate || "unknown"} to ${documents[documents.length - 1]?.meetingDate || "unknown"}
+
+Extracted data (${allExtractions.length} items):
+${JSON.stringify(allExtractions.slice(0, 500), null, 1)}`;
+
+  const reduceResponseSchema = {
+    type: "object" as const,
+    properties: {
+      reportTitle: { type: "string" as const },
+      executiveSummary: { type: "string" as const },
+      widgets: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            type: { type: "string" as const },
+            content: { type: "string" as const },
+            label: { type: "string" as const },
+            value: { type: "string" as const },
+            trend: { type: "string" as const },
+            title: { type: "string" as const },
+            xAxisLabel: { type: "string" as const },
+            data: {
+              type: "array" as const,
+              items: {
+                type: "object" as const,
+                properties: {
+                  name: { type: "string" as const },
+                  value: { type: "number" as const },
+                },
+              },
+            },
+          },
+          required: ["type"],
+        },
+      },
+    },
+    required: ["reportTitle", "executiveSummary", "widgets"],
+  };
+
+  try {
+    const synthesisResponse = await ai.models.generateContent({
+      model: GEMINI_PRO_MODEL,
+      contents: synthesisPrompt,
+      config: {
+        systemInstruction: synthesisSystemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: reduceResponseSchema,
+        temperature: 0.3,
+      },
+    });
+
+    const payload = JSON.parse(synthesisResponse.text || "{}") as DynamicReportPayload;
+    logInfo(`[DynamicPipeline] Phase 3 complete: ${payload.widgets?.length || 0} widgets generated`, { stage: "research" });
+
+    if (!payload.reportTitle) payload.reportTitle = `${boardType} Analysis: ${townName}`;
+    if (!payload.executiveSummary) payload.executiveSummary = "Report generated but no summary was produced.";
+    if (!Array.isArray(payload.widgets)) payload.widgets = [];
+
+    payload.widgets = payload.widgets.filter((w: any) => {
+      if (!w || !w.type) return false;
+      if (w.type === "summary_text") return typeof w.content === "string";
+      if (w.type === "stat_card") return w.label && w.value !== undefined;
+      if (w.type === "bar_chart") return w.title && Array.isArray(w.data) && w.data.length > 0;
+      return false;
+    });
+
+    return payload;
+  } catch (err) {
+    logError("[DynamicPipeline] Phase 3 synthesis failed", { error: String(err) });
+    return {
+      reportTitle: `${boardType.charAt(0).toUpperCase() + boardType.slice(1)} Analysis: ${townName}`,
+      executiveSummary: `Analysis failed during synthesis. ${allExtractions.length} data points were extracted from ${documents.length} documents but could not be synthesized into a report. Error: ${String(err)}`,
+      widgets: [{
+        type: "summary_text",
+        content: `**Raw extraction summary:** ${allExtractions.length} data points extracted from ${documents.length} documents covering ${boardType} board proceedings.`,
+      }],
+    };
+  }
+}
+
+// ============================================================
+// FRICTION REPORT - PHASE 1: FULL DOCUMENT RETRIEVAL
 // ============================================================
 
 async function retrieveMeetingDocuments(townName: string): Promise<MeetingDocument[]> {
