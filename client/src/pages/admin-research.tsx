@@ -133,10 +133,10 @@ export default function AdminResearch() {
   const prepareCorpusMutation = useMutation({
     mutationFn: async () => {
       const token = localStorage.getItem("adminToken");
-      const res = await fetch("/api/admin/research/prepare-corpus/trigger", {
+      const res = await fetch("/api/admin/research/prepare-corpus", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ townName: dynamicTown, boardType: selectedBoard }),
+        body: JSON.stringify({ townName: dynamicTown, boardType: selectedBoard, trigger: true }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Failed" }));
@@ -145,7 +145,12 @@ export default function AdminResearch() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Corpus Preparation", description: data.message });
+      const msg = data.triggerStatus === "started"
+        ? `Embedding pipeline started for ${dynamicTown}`
+        : data.triggerStatus === "already_running"
+        ? "Embedding pipeline is already running"
+        : "Corpus status updated";
+      toast({ title: "Corpus Preparation", description: msg });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/research/prepare-corpus"] });
     },
     onError: (err: Error) => {

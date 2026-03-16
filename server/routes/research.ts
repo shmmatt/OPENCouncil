@@ -171,16 +171,21 @@ router.get("/towns", async (_req, res) => {
       WHERE ld.town IS NOT NULL
         AND lower(ld.town) != 'statewide'
         AND (
-          ld.category IN ('meeting_minutes', 'minutes')
-          OR dv.is_minutes = true
-        )
-        AND (
           lower(ld.board) LIKE '%planning%'
           OR lower(ld.board) LIKE '%zba%'
           OR lower(ld.board) LIKE '%zoning%'
+          OR lower(ld.board) LIKE '%select%'
+          OR lower(ld.board) LIKE '%selectmen%'
+          OR lower(ld.board) LIKE '%budget%'
           OR lower(ld.canonical_title) LIKE '%planning board%'
           OR lower(ld.canonical_title) LIKE '%zoning board%'
           OR lower(ld.canonical_title) LIKE '%zba%'
+          OR lower(ld.canonical_title) LIKE '%select board%'
+          OR lower(ld.canonical_title) LIKE '%board of selectmen%'
+          OR lower(ld.canonical_title) LIKE '%budget committee%'
+          OR lower(ld.canonical_title) LIKE '%budget%'
+          OR ld.category IN ('meeting_minutes', 'minutes')
+          OR dv.is_minutes = true
         )
       GROUP BY initcap(lower(ld.town))
       ORDER BY COUNT(DISTINCT dv.id) DESC
@@ -387,7 +392,7 @@ router.post("/prepare-corpus", async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
     }
-    const { townName, boardType } = parsed.data;
+    const { townName, boardType, trigger } = { ...parsed.data, trigger: req.body.trigger === true };
     const boardFilter = boardFilterSql(boardType);
 
     const result = await db.execute(sql`
@@ -399,10 +404,6 @@ router.post("/prepare-corpus", async (req, res) => {
       JOIN document_versions dv ON ld.id = dv.document_id
       JOIN file_blobs fb ON dv.file_blob_id = fb.id
       WHERE lower(ld.town) = ${townName.toLowerCase()}
-        AND (
-          ld.category IN ('meeting_minutes', 'minutes')
-          OR dv.is_minutes = true
-        )
         AND ${sql.raw(boardFilter)}
         AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
         AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
@@ -412,42 +413,23 @@ router.post("/prepare-corpus", async (req, res) => {
     const totalDocuments = parseInt(row.total_documents || "0", 10);
     const embeddedCount = parseInt(row.embedded_count || "0", 10);
     const pendingCount = parseInt(row.pending_count || "0", 10);
-
     const ready = pendingCount === 0 && totalDocuments > 0;
     const pipelineRunning = isPipelineRunning();
-    res.json({ totalDocuments, embeddedCount, pendingCount, ready, pipelineRunning });
+
+    let triggerStatus: string | undefined;
+    if (trigger && pendingCount > 0 && !pipelineRunning) {
+      startPipeline({ town: townName }).catch((err) => {
+        logError("Corpus embedding pipeline failed", { error: String(err) });
+      });
+      triggerStatus = "started";
+    } else if (trigger && pipelineRunning) {
+      triggerStatus = "already_running";
+    }
+
+    res.json({ totalDocuments, embeddedCount, pendingCount, ready, pipelineRunning, triggerStatus });
   } catch (error) {
     logError("Failed to check corpus status", { error: String(error) });
     res.status(500).json({ message: "Failed to check corpus status" });
-  }
-});
-
-router.post("/prepare-corpus/trigger", async (req, res) => {
-  try {
-    const parsed = prepareCorpusSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
-    }
-
-    if (isPipelineRunning()) {
-      const progress = getProgress();
-      return res.json({
-        status: "already_running",
-        message: "Embedding pipeline is already running",
-        progress: { processed: progress.processedDocuments, total: progress.totalDocuments },
-      });
-    }
-
-    const { townName } = parsed.data;
-
-    startPipeline({ town: townName }).catch((err) => {
-      logError("Corpus embedding pipeline failed", { error: String(err) });
-    });
-
-    res.json({ status: "started", message: `Embedding pipeline started for ${townName}` });
-  } catch (error) {
-    logError("Failed to trigger corpus preparation", { error: String(error) });
-    res.status(500).json({ message: "Failed to trigger corpus preparation" });
   }
 });
 
@@ -520,8 +502,8 @@ async function runDynamicPipeline(
 ): Promise<DynamicReportPayload> {
   const boardFilter = boardFilterSql(boardType);
 
-  // Phase 1: Fetch full document text
-  logInfo(`[DynamicPipeline] Phase 1: Fetching documents for ${townName} / ${boardType}`, { stage: "research" });
+  // Phase 0: Fetch full document text from file_blobs + logical_documents
+  logInfo(`[DynamicPipeline] Phase 0: Fetching documents for ${townName} / ${boardType}`, { stage: "research" });
 
   const dateConditions: ReturnType<typeof sql>[] = [];
   if (dateRange?.start) {
@@ -546,10 +528,6 @@ async function runDynamicPipeline(
     JOIN document_versions dv ON ld.id = dv.document_id
     JOIN file_blobs fb ON dv.file_blob_id = fb.id
     WHERE lower(ld.town) = ${townName.toLowerCase()}
-      AND (
-        ld.category IN ('meeting_minutes', 'minutes')
-        OR dv.is_minutes = true
-      )
       AND ${sql.raw(boardFilter)}
       AND COALESCE(fb.ocr_text, fb.preview_text) IS NOT NULL
       AND length(COALESCE(fb.ocr_text, fb.preview_text)) > 200
@@ -566,7 +544,7 @@ async function runDynamicPipeline(
     fullText: r.full_text as string,
   }));
 
-  logInfo(`[DynamicPipeline] Phase 1 complete: ${documents.length} documents retrieved`, { stage: "research" });
+  logInfo(`[DynamicPipeline] Phase 0 complete: ${documents.length} documents retrieved`, { stage: "research" });
 
   if (documents.length === 0) {
     return {
@@ -576,8 +554,8 @@ async function runDynamicPipeline(
     };
   }
 
-  // Phase 0: Dynamic Schema Generation
-  logInfo(`[DynamicPipeline] Phase 0: Generating extraction schema for prompt`, { stage: "research" });
+  // Phase 1: Dynamic Schema Generation (Flash)
+  logInfo(`[DynamicPipeline] Phase 1: Generating extraction schema for prompt`, { stage: "research" });
 
   const schemaGenPrompt = `Given this user query about municipal ${boardType} documents: "${userPrompt}"
 
@@ -620,7 +598,7 @@ Keep it focused — 4-8 fields maximum. Include a "meetingDate" and "summary" fi
       { name: "summary", type: "string", description: "Key discussion points" },
     ];
   } catch (err) {
-    logError("[DynamicPipeline] Phase 0 schema generation failed, using defaults", { error: String(err) });
+    logError("[DynamicPipeline] Phase 1 schema generation failed, using defaults", { error: String(err) });
     extractionFields = [
       { name: "meetingDate", type: "string", description: "Date of the meeting" },
       { name: "summary", type: "string", description: "Key relevant points from the document" },
@@ -628,7 +606,7 @@ Keep it focused — 4-8 fields maximum. Include a "meetingDate" and "summary" fi
     ];
   }
 
-  logInfo(`[DynamicPipeline] Phase 0 complete: ${extractionFields.length} extraction fields defined`, { stage: "research" });
+  logInfo(`[DynamicPipeline] Phase 1 complete: ${extractionFields.length} extraction fields defined`, { stage: "research" });
 
   // Phase 2: Map/Harvest with concurrency limiting
   logInfo(`[DynamicPipeline] Phase 2: Extracting facts from ${documents.length} documents (concurrency: 5)`, { stage: "research" });
