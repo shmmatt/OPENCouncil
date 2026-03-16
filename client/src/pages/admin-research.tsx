@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -160,6 +160,45 @@ export default function AdminResearch() {
 
   const corpusReady = corpusQuery.data?.ready === true;
 
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+  const jobStatusQuery = useQuery<{ status: string; message: string; progress: number; result?: DynamicReportPayload; error?: string }>({
+    queryKey: ["/api/admin/research/job-status", activeJobId],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch(`/api/admin/research/job-status/${activeJobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Job not found");
+      return res.json();
+    },
+    enabled: !!activeJobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "completed" || status === "error") return false;
+      return 3000;
+    },
+  });
+
+  const jobStatus = jobStatusQuery.data?.status;
+  const jobMessage = jobStatusQuery.data?.message ?? "";
+  const jobProgress = jobStatusQuery.data?.progress ?? 0;
+
+  // Handle job completion / error in an effect so state updates don't happen during render
+  useEffect(() => {
+    if (jobStatus === "completed" && jobStatusQuery.data?.result && activeJobId) {
+      setDynamicReport(jobStatusQuery.data.result);
+      setActiveJobId(null);
+      toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
+    }
+    if (jobStatus === "error" && activeJobId) {
+      setActiveJobId(null);
+      toast({ title: "Generation failed", description: jobStatusQuery.data?.error ?? "Unknown error", variant: "destructive" });
+    }
+  }, [jobStatus, activeJobId]);
+
+  const isJobRunning = !!activeJobId && jobStatus !== "completed" && jobStatus !== "error";
+
   const dynamicGenerateMutation = useMutation({
     mutationFn: async () => {
       const token = localStorage.getItem("adminToken");
@@ -177,11 +216,11 @@ export default function AdminResearch() {
         const err = await res.json().catch(() => ({ message: "Failed" }));
         throw new Error(err.message || "Dynamic report generation failed");
       }
-      return res.json();
+      return res.json() as Promise<{ jobId: string }>;
     },
     onSuccess: (data) => {
-      setDynamicReport(data.payload);
-      toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
+      setDynamicReport(null);
+      setActiveJobId(data.jobId);
     },
     onError: (err) => {
       toast({ title: "Generation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
@@ -505,22 +544,33 @@ export default function AdminResearch() {
                     !dynamicTown ||
                     !dynamicPrompt.trim() ||
                     dynamicGenerateMutation.isPending ||
+                    isJobRunning ||
                     !corpusReady
                   }
                   data-testid="button-generate-dynamic"
                 >
-                  {dynamicGenerateMutation.isPending ? (
+                  {(dynamicGenerateMutation.isPending || isJobRunning) ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
                     <Brain className="w-4 h-4 mr-2" />
                   )}
-                  {dynamicGenerateMutation.isPending ? "Generating..." : "Generate Report"}
+                  {dynamicGenerateMutation.isPending ? "Starting..." : isJobRunning ? "Analyzing..." : "Generate Report"}
                 </Button>
 
-                {dynamicGenerateMutation.isPending && (
-                  <div className="text-sm text-muted-foreground flex items-center gap-2" data-testid="text-generation-status">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Analyzing documents and synthesizing report... This may take 1-3 minutes for large corpora.
+                {isJobRunning && (
+                  <div className="space-y-2" data-testid="text-generation-status">
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                      <span>{jobMessage || "Processing..."}</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${jobProgress}%` }}
+                        data-testid="progress-bar-generate"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground text-right">{jobProgress}%</div>
                   </div>
                 )}
               </CardContent>

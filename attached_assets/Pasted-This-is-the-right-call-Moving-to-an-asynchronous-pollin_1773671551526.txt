@@ -1,0 +1,73 @@
+This is the right call. Moving to an asynchronous polling architecture separates the "computation" from the "connection." It completely bulletproofs the system against browser, Cloudflare, and Node.js timeouts.
+
+By combining the async architecture ("The Cure") with a higher concurrency limit ("The Band-Aid"), you will give the admin a beautiful, live-updating progress bar that finishes in a fraction of the time, without ever dropping the connection.
+
+Here is the comprehensive directive to hand over to your Replit agent. Copy and paste this directly:
+
+---
+
+### Directive for Replit Agent: Implement Async Polling for MapReduce Pipeline
+
+**Overall Vision & Objective**
+The `POST /api/admin/research/dynamic-generate` endpoint is failing with a `fetch failed` network timeout because the 4-phase MapReduce pipeline takes too long for a synchronous HTTP request. We are fundamentally changing the architecture to an **Asynchronous Job Polling** model. The frontend will request a generation, instantly receive a `jobId`, and then poll a new status endpoint every 3 seconds to update a live progress UI until the final JSON payload is ready.
+
+Additionally, we must increase the Phase 2 extraction concurrency to compress the overall runtime.
+
+#### T001: Implement the In-Memory Job Store & Status Endpoint
+
+**Blocked By:** []
+**Details:** We need a way to track background jobs and serve their status to the frontend.
+**Action:**
+
+1. In `server/routes/research.ts` (or a dedicated `server/services/jobStore.ts`), create a simple in-memory map to track job state: `const reportJobs = new Map<string, any>();`
+2. Define the Job interface: `{ status: 'pending' | 'processing' | 'completed' | 'error', message: string, progress: number, result?: DynamicReportPayload, error?: string }`.
+3. Create a new endpoint: `GET /api/admin/research/job-status/:jobId`. It looks up the job in the Map and returns it. If status is `completed` or `error`, optionally delete it from the Map after a short delay to prevent memory leaks.
+
+#### T002: Refactor the Generate Route to be Asynchronous
+
+**Blocked By:** [T001]
+**Details:** The generation route must return immediately while the pipeline runs in the background.
+**Action:**
+
+1. Update `POST /api/admin/research/dynamic-generate`.
+2. Generate a unique `jobId` (e.g., using `crypto.randomUUID()`).
+3. Initialize the job in the `reportJobs` Map with status `pending`.
+4. **CRITICAL:** Kick off the MapReduce pipeline function without `await`ing it. Attach a `.catch()` to this background promise so it logs errors and updates the job status to `error`, preventing an unhandled promise rejection from crashing the Node server.
+5. Immediately return `res.json({ jobId })` to the client.
+
+#### T003: Instrument the MapReduce Pipeline with Progress Updates & Speed Boost
+
+**Blocked By:** [T002]
+**Details:** The pipeline needs to update the job store as it moves through the phases, and Phase 2 needs a massive speed upgrade.
+**Action:**
+
+1. Pass the `jobId` into the MapReduce orchestrator function.
+2. Update the `reportJobs` Map at key milestones. Example:
+* Start of Phase 0: `message: "Phase 0: Generating extraction schema..."`
+* Start of Phase 1: `message: "Phase 1: Fetching X documents..."`
+* During Phase 2: Update the `progress` percentage and `message` as batches complete (e.g., `"Phase 2: Extracted data from 45/237 documents"`).
+* Start of Phase 3: `message: "Phase 3: Synthesizing final report with Gemini Pro..."`
+* End of Phase 3: Update status to `completed` and attach the generated `result`.
+
+
+3. **Speed Boost:** In Phase 2, increase the concurrency limit (`p-limit` or batch size) from 5 to **30 or 50**. `gemini-2.5-flash` can easily handle this throughput, and it will drastically reduce the wait time.
+4. **Guardrail:** Do NOT implement a text-based mid-tier reduce. Phase 3 must receive the exact JSON objects to ensure Recharts has accurate mathematical data.
+
+#### T004: Update the Frontend to Poll and Show Progress
+
+**Blocked By:** [T001, T002, T003]
+**Details:** The React frontend must handle the `jobId` and poll for updates.
+**Action:**
+
+1. In `client/src/pages/admin-research.tsx`, update the "Generate Report" submit handler.
+2. Instead of waiting for the full response, capture the returned `jobId`.
+3. Set up a polling interval (using `setInterval` or React Query's `refetchInterval`) that hits `GET /api/admin/research/job-status/:jobId` every 3 seconds.
+4. Render a robust Loading UI: Display the live `message` string and a visual progress bar based on the `progress` number returned from the server.
+5. When the poll returns `status: 'completed'`, clear the interval, save the `result` payload to state, and render the `<DynamicReportRenderer />`.
+6. Handle `status: 'error'` by clearing the interval and displaying the error message in a Toast or alert box.
+
+---
+
+This will completely transform the feel of the tool. Instead of staring at a frozen screen wondering if the server crashed, you will get a smooth, hacker-style terminal readout of exactly what the AI is doing.
+
+Would you like me to map out how to wrap the frontend polling logic in a clean React custom hook (e.g., `useReportPolling`) so it keeps your UI component file from getting cluttered?

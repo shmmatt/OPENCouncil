@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { authenticateAdmin } from "../middleware/auth";
@@ -36,6 +37,34 @@ import { startPipeline, isRunning as isPipelineRunning, getProgress } from "../s
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_PRO_MODEL = "gemini-2.5-pro";
+
+// ============================================================
+// IN-MEMORY JOB STORE
+// ============================================================
+interface ReportJob {
+  status: "pending" | "processing" | "completed" | "error";
+  message: string;
+  progress: number;
+  result?: DynamicReportPayload;
+  error?: string;
+}
+
+const reportJobs = new Map<string, ReportJob>();
+
+function updateJob(jobId: string, patch: Partial<ReportJob>) {
+  const existing = reportJobs.get(jobId);
+  if (existing) reportJobs.set(jobId, { ...existing, ...patch });
+}
+
+function scheduleJobCleanup(jobId: string) {
+  setTimeout(() => reportJobs.delete(jobId), 10 * 60 * 1000);
+}
+
+router.get("/job-status/:jobId", (req, res) => {
+  const job = reportJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: "Job not found" });
+  return res.json(job);
+});
 
 const frictionReportBodySchema = z.object({
   townName: z.string().min(1, "townName is required"),
@@ -466,27 +495,36 @@ const dynamicGenerateSchema = z.object({
 });
 
 router.post("/dynamic-generate", async (req, res) => {
-  try {
-    const parsed = dynamicGenerateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
-    }
-
-    if (!process.env.GEM_API_KEY) {
-      return res.status(500).json({ message: "GEM_API_KEY is not configured" });
-    }
-
-    const { townName, boardType, dateRange, prompt } = parsed.data;
-
-    const payload = await runDynamicPipeline(townName, boardType, dateRange, prompt);
-    res.json({ status: "completed", payload });
-  } catch (error) {
-    logError("Dynamic generate sync error", { error: String(error) });
-    res.status(500).json({ message: "Dynamic report generation failed", error: String(error) });
+  const parsed = dynamicGenerateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
   }
+
+  if (!process.env.GEM_API_KEY) {
+    return res.status(500).json({ message: "GEM_API_KEY is not configured" });
+  }
+
+  const { townName, boardType, dateRange, prompt } = parsed.data;
+  const jobId = randomUUID();
+
+  reportJobs.set(jobId, { status: "pending", message: "Starting pipeline...", progress: 0 });
+
+  runDynamicPipeline(jobId, townName, boardType, dateRange, prompt)
+    .then((result) => {
+      updateJob(jobId, { status: "completed", message: "Report ready.", progress: 100, result });
+      scheduleJobCleanup(jobId);
+    })
+    .catch((err) => {
+      logError("Dynamic pipeline background error", { error: String(err) });
+      updateJob(jobId, { status: "error", message: String(err), progress: 0, error: String(err) });
+      scheduleJobCleanup(jobId);
+    });
+
+  return res.json({ jobId });
 });
 
 async function runDynamicPipeline(
+  jobId: string,
   townName: string,
   boardType: ResearchBoardType,
   dateRange: { start?: string; end?: string } | undefined,
@@ -495,6 +533,7 @@ async function runDynamicPipeline(
   const boardFilter = boardFilterSql(boardType);
 
   // Phase 0: Fetch full document text from file_blobs + logical_documents
+  updateJob(jobId, { status: "processing", message: "Phase 0: Fetching documents...", progress: 2 });
   logInfo(`[DynamicPipeline] Phase 0: Fetching documents for ${townName} / ${boardType}`, { stage: "research" });
 
   const dateConditions: ReturnType<typeof sql>[] = [];
@@ -537,6 +576,7 @@ async function runDynamicPipeline(
   }));
 
   logInfo(`[DynamicPipeline] Phase 0 complete: ${documents.length} documents retrieved`, { stage: "research" });
+  updateJob(jobId, { message: `Phase 0 complete: ${documents.length} documents retrieved.`, progress: 5 });
 
   if (documents.length === 0) {
     return {
@@ -547,6 +587,7 @@ async function runDynamicPipeline(
   }
 
   // Phase 1: Dynamic Schema Generation (Flash)
+  updateJob(jobId, { message: "Phase 1: Generating extraction schema...", progress: 8 });
   logInfo(`[DynamicPipeline] Phase 1: Generating extraction schema for prompt`, { stage: "research" });
 
   const schemaGenPrompt = `Given this user query about municipal ${boardType} documents: "${userPrompt}"
@@ -599,9 +640,11 @@ Keep it focused — 4-8 fields maximum. Include a "meetingDate" and "summary" fi
   }
 
   logInfo(`[DynamicPipeline] Phase 1 complete: ${extractionFields.length} extraction fields defined`, { stage: "research" });
+  updateJob(jobId, { message: `Phase 1 complete: ${extractionFields.length} extraction fields defined.`, progress: 12 });
 
   // Phase 2: Map/Harvest with concurrency limiting
-  logInfo(`[DynamicPipeline] Phase 2: Extracting facts from ${documents.length} documents (concurrency: 5)`, { stage: "research" });
+  updateJob(jobId, { message: `Phase 2: Starting extraction from ${documents.length} documents...`, progress: 15 });
+  logInfo(`[DynamicPipeline] Phase 2: Extracting facts from ${documents.length} documents (concurrency: 30)`, { stage: "research" });
 
   const fieldDescriptions = extractionFields.map(f => `- ${f.name} (${f.type}): ${f.description}`).join("\n");
 
@@ -644,7 +687,7 @@ Return a JSON object with an "extractions" array containing one object per disti
   };
 
   const allExtractions: Record<string, unknown>[] = [];
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 30;
   const MAX_WINDOW_CHARS = 800000;
   const WINDOW_OVERLAP_CHARS = 2000;
 
@@ -714,14 +757,19 @@ Return a JSON object with an "extractions" array containing one object per disti
       }
     }
 
-    if (i + BATCH_SIZE < extractionUnits.length) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+    const unitsProcessed = Math.min(i + BATCH_SIZE, extractionUnits.length);
+    const phase2Progress = 15 + Math.round((unitsProcessed / extractionUnits.length) * 70);
+    updateJob(jobId, {
+      message: `Phase 2: Extracted from ${unitsProcessed}/${extractionUnits.length} documents...`,
+      progress: phase2Progress,
+    });
   }
 
   logInfo(`[DynamicPipeline] Phase 2 complete: ${allExtractions.length} extractions from ${extractionUnits.length} units (${documents.length} documents)`, { stage: "research" });
+  updateJob(jobId, { message: `Phase 2 complete: ${allExtractions.length} data points extracted. Synthesizing report...`, progress: 86 });
 
   // Phase 3: Reduce/Synthesize
+  updateJob(jobId, { message: `Phase 3: Synthesizing final report with Gemini Pro (${allExtractions.length} data points)...`, progress: 88 });
   logInfo(`[DynamicPipeline] Phase 3: Synthesizing report with ${GEMINI_PRO_MODEL}`, { stage: "research" });
 
   const synthesisSystemPrompt = `You are an elite municipal data analyst. Analyze the provided structured municipal data and answer the user's query by constructing a dynamic dashboard interface.
