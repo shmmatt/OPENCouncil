@@ -114,7 +114,7 @@ export default function AdminResearch() {
     },
   });
 
-  const corpusQuery = useQuery<{ totalDocuments: number; embeddedCount: number; pendingCount: number }>({
+  const corpusQuery = useQuery<{ totalDocuments: number; embeddedCount: number; pendingCount: number; ready: boolean; pipelineRunning: boolean }>({
     queryKey: ["/api/admin/research/prepare-corpus", dynamicTown, selectedBoard],
     queryFn: async () => {
       const token = localStorage.getItem("adminToken");
@@ -129,6 +129,31 @@ export default function AdminResearch() {
     enabled: !!dynamicTown && !!selectedBoard,
     refetchInterval: 10000,
   });
+
+  const prepareCorpusMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/research/prepare-corpus/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ townName: dynamicTown, boardType: selectedBoard }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message);
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Corpus Preparation", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/prepare-corpus"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const corpusReady = corpusQuery.data?.ready === true;
 
   const dynamicGenerateMutation = useMutation({
     mutationFn: async () => {
@@ -407,19 +432,52 @@ export default function AdminResearch() {
                 </div>
 
                 {dynamicTown && corpusQuery.data && (
-                  <div className="flex items-center gap-4 p-3 bg-muted rounded-md flex-wrap" data-testid="corpus-status">
-                    <Database className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <div className="text-sm">
-                      <span className="font-medium text-foreground">{corpusQuery.data.embeddedCount}</span>
-                      <span className="text-muted-foreground"> / {corpusQuery.data.totalDocuments} documents embedded</span>
-                      {corpusQuery.data.pendingCount > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400 ml-2">
-                          ({corpusQuery.data.pendingCount} pending)
-                        </span>
+                  <div className="p-3 bg-muted rounded-md space-y-2" data-testid="corpus-status">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <Database className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <div className="text-sm flex-1">
+                        <span className="font-medium text-foreground">{corpusQuery.data.embeddedCount}</span>
+                        <span className="text-muted-foreground"> / {corpusQuery.data.totalDocuments} documents embedded</span>
+                        {corpusQuery.data.pendingCount > 0 && (
+                          <span className="text-amber-600 dark:text-amber-400 ml-2">
+                            ({corpusQuery.data.pendingCount} pending)
+                          </span>
+                        )}
+                        {corpusQuery.data.pipelineRunning && (
+                          <span className="text-blue-600 dark:text-blue-400 ml-2 inline-flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Pipeline running...
+                          </span>
+                        )}
+                      </div>
+                      {corpusQuery.data.pendingCount > 0 && !corpusQuery.data.pipelineRunning && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => prepareCorpusMutation.mutate()}
+                          disabled={prepareCorpusMutation.isPending}
+                          data-testid="button-prepare-corpus"
+                        >
+                          {prepareCorpusMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Database className="w-4 h-4 mr-2" />
+                          )}
+                          Prepare Corpus
+                        </Button>
                       )}
                     </div>
                     {corpusQuery.data.totalDocuments === 0 && (
                       <Badge variant="outline">No documents found for this board</Badge>
+                    )}
+                    {corpusReady && (
+                      <div className="text-sm text-green-600 dark:text-green-400" data-testid="text-corpus-ready">
+                        Corpus ready for analysis
+                      </div>
+                    )}
+                    {!corpusReady && corpusQuery.data.totalDocuments > 0 && (
+                      <div className="text-sm text-amber-600 dark:text-amber-400" data-testid="text-corpus-not-ready">
+                        Corpus not fully embedded. Prepare corpus before generating a report.
+                      </div>
                     )}
                   </div>
                 )}
@@ -431,7 +489,7 @@ export default function AdminResearch() {
                     value={dynamicPrompt}
                     onChange={(e) => setDynamicPrompt(e.target.value)}
                     className="min-h-[80px]"
-                    disabled={!dynamicTown || (corpusQuery.data?.totalDocuments === 0)}
+                    disabled={!dynamicTown || !corpusReady}
                     data-testid="input-dynamic-prompt"
                   />
                 </div>
@@ -442,7 +500,7 @@ export default function AdminResearch() {
                     !dynamicTown ||
                     !dynamicPrompt.trim() ||
                     dynamicGenerateMutation.isPending ||
-                    (corpusQuery.data?.totalDocuments === 0)
+                    !corpusReady
                   }
                   data-testid="button-generate-dynamic"
                 >

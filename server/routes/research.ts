@@ -29,6 +29,7 @@ const router = Router();
 router.use(authenticateAdmin);
 
 import { RESEARCH_BOARD_TYPES } from "@shared/schema";
+import { startPipeline, isRunning as isPipelineRunning, getProgress } from "../services/embeddingPipeline";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 const GEMINI_MODEL = "gemini-2.5-flash";
@@ -412,10 +413,41 @@ router.post("/prepare-corpus", async (req, res) => {
     const embeddedCount = parseInt(row.embedded_count || "0", 10);
     const pendingCount = parseInt(row.pending_count || "0", 10);
 
-    res.json({ totalDocuments, embeddedCount, pendingCount });
+    const ready = pendingCount === 0 && totalDocuments > 0;
+    const pipelineRunning = isPipelineRunning();
+    res.json({ totalDocuments, embeddedCount, pendingCount, ready, pipelineRunning });
   } catch (error) {
     logError("Failed to check corpus status", { error: String(error) });
     res.status(500).json({ message: "Failed to check corpus status" });
+  }
+});
+
+router.post("/prepare-corpus/trigger", async (req, res) => {
+  try {
+    const parsed = prepareCorpusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+    }
+
+    if (isPipelineRunning()) {
+      const progress = getProgress();
+      return res.json({
+        status: "already_running",
+        message: "Embedding pipeline is already running",
+        progress: { processed: progress.processedDocuments, total: progress.totalDocuments },
+      });
+    }
+
+    const { townName } = parsed.data;
+
+    startPipeline({ town: townName }).catch((err) => {
+      logError("Corpus embedding pipeline failed", { error: String(err) });
+    });
+
+    res.json({ status: "started", message: `Embedding pipeline started for ${townName}` });
+  } catch (error) {
+    logError("Failed to trigger corpus preparation", { error: String(error) });
+    res.status(500).json({ message: "Failed to trigger corpus preparation" });
   }
 });
 
