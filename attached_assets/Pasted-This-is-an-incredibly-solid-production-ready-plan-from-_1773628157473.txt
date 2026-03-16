@@ -1,0 +1,36 @@
+This is an incredibly solid, production-ready plan from the agent. It perfectly isolates the new feature so it doesn't break your existing, working Planning Board friction report. It also correctly identified the need to use your existing `shadcn` and `Recharts` libraries, which will save a ton of frontend dev time.
+
+However, there are three critical backend execution details the agent glossed over in **Task 3 (The MapReduce Endpoint)**. If executed exactly as written, the pipeline will either hallucinate, miss data, or crash your server with API rate limits.
+
+Here is the engineering breakdown of the flaws and the exact feedback to give the agent to bulletproof the build.
+
+### The Three Guardrails Needed for Task 3
+
+**1. The Missing Dynamic Schema:**
+The agent says it will *"call gemini-2.5-flash with a structured output schema to harvest raw facts."* But it forgot where that schema comes from! If the user asks about "Severance Packages," the schema needs to be about money and personnel. If they ask about "Snowplows," it needs to be about equipment and weather. The pipeline must use a quick LLM call to *generate* that extraction schema before the Map phase begins.
+
+**2. The Vector Chunking Trap:**
+The agent plans to fetch *"embedded chunks from `document_chunks`."* This is a mistake. `document_chunks` are optimized for semantic vector search, meaning they are sliced up arbitrarily (e.g., every 500 words). If a Select Board vote starts in Chunk A and the dollar amount is in Chunk B, the Flash model will fail to extract it. For a longitudinal data harvest, the pipeline must pull the full `ocr_text` from the source documents and process them whole (or logically chunked by agenda item).
+
+**3. The API Rate Limit Crash:**
+If a user selects a 10-year date range, that could be 240+ Select Board meetings. If the Map phase fires a `Promise.all` for 240 simultaneous Gemini Flash requests, Google's API will instantly block you with a `429 Too Many Requests` error. The agent must implement a concurrency limit (batching).
+
+---
+
+### Directive for the Replit Agent
+
+Copy and paste this directly to your agent to patch these holes before it writes the code:
+
+> "This is an excellent plan. The separation of the new dynamic dashboard from the existing friction report is exactly what we need, and leveraging our existing shadcn/Recharts libraries is perfect.
+> Before executing, please update **Task 3 (The MapReduce Endpoint)** with the following three architectural guardrails:
+> **1. Add the Dynamic Schema Generation Step:**
+> Before the 'Map' phase begins, you must execute a preliminary LLM call to `gemini-2.5-flash`. Pass it the user's prompt and ask it to output a JSON schema (as a string or structured object) tailored specifically to extract the data requested. Pass this generated schema into the structured output configuration of the Map phase.
+> **2. Fetch Full Text, Not Vector Chunks:**
+> Do not fetch from `document_chunks` for the Map phase. Vector chunks arbitrarily split context. Instead, query the `file_blobs` or `logical_documents` for the full OCR text of the documents matching the town, board, and date range. If a document exceeds the context window (unlikely for Flash, but possible), chunk it logically, but default to passing the full document text to the Map phase to preserve context.
+> **3. Enforce Concurrency Limits (Batching):**
+> Do not use a raw `Promise.all` for the Map phase if processing dozens or hundreds of documents. Implement a concurrency limiter (e.g., using `p-limit` or chunking the array into batches of 5-10) to prevent hitting Gemini API `429 Too Many Requests` rate limits.
+> Please acknowledge these updates and proceed with T001."
+
+---
+
+Would you like me to outline the specific `p-limit` or batching utility function you can drop into your `server/utils` folder if the agent struggles to write a clean concurrency limiter?
