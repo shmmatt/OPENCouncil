@@ -207,7 +207,7 @@ async function fetchBlobsByIds(blobIds: string[]): Promise<FileBlobRow[]> {
     LEFT JOIN crawler_sau_sources css ON csd.source_id = css.id
     LEFT JOIN crawler_state_documents cssd ON cssd.file_blob_id = fb.id
     WHERE fb.id IN (${idPlaceholders})
-      AND fb.embedding_status = 'none'
+      AND fb.embedding_status != 'indexed'
       AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
     ORDER BY fb.original_filename
   `);

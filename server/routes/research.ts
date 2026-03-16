@@ -427,7 +427,7 @@ router.post("/prepare-corpus", async (req, res) => {
         JOIN file_blobs fb ON dv.file_blob_id = fb.id
         WHERE lower(ld.town) = ${townName.toLowerCase()}
           AND ${sql.raw(boardFilter)}
-          AND fb.embedding_status = 'none'
+          AND fb.embedding_status != 'indexed'
           AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
           AND (COALESCE(char_length(fb.ocr_text), 0) + COALESCE(char_length(fb.preview_text), 0)) > 100
       `);
@@ -714,7 +714,7 @@ Return a JSON object with an "extractions" array containing one object per disti
       }
     }
 
-    if (i + BATCH_SIZE < documents.length) {
+    if (i + BATCH_SIZE < extractionUnits.length) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
