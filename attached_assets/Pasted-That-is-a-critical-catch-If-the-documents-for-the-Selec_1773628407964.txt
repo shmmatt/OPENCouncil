@@ -1,0 +1,113 @@
+That is a critical catch. If the documents for the Select Board, Zoning Board, or Budget Committee haven't been processed and embedded for this specific type of analytical querying, the MapReduce pipeline will just hit a wall of raw, unoptimized text—or fail entirely.
+
+Integrating this directly into the existing OC Research tab, using the Planning Board tool as the foundation, is exactly the right move to keep the admin interface clean and cohesive.
+
+Here is the revised, comprehensive directive for your Replit agent. It now includes the "Data Preparation" prerequisite, the expanded board scope, and specific instructions to build this within the existing OC Research architecture.
+
+---
+
+### Directive for Replit Agent: Upgrade OC Research to Dynamic BI Dashboard
+
+**Overall Vision & Objective**
+We are upgrading the existing "OC Research" tab from a static Planning Board tool into a **Universal Municipal Intelligence Engine**. This tool will allow admins to query 10-year longitudinal data across four major bodies: the Planning Board, Zoning Board, Select Board, and Budget Committee.
+
+To achieve this, the architecture will use the existing Planning Board feature as a UX template but replace the hardcoded outputs with a **Generative UI MapReduce Pipeline**. The system will first allow admins to "Prepare/Embed" a town's corpus for a specific board. Then, it will use `gemini-2.5-flash` to harvest the data and `gemini-2.5-pro` to synthesize a strictly typed JSON UI payload (text, stats, charts) that the React frontend will render dynamically.
+
+#### T001: Build the Data Preparation & Embedding Pipeline
+
+**Blocked By:** []
+**Details:** Before querying, the admin must ensure the target documents are embedded and ready. We need a route to trigger this prep phase.
+**Action:** 1. **Backend:** Create `POST /api/admin/research/prepare-corpus`. Accept `{ townId, boardType }` (where `boardType` is `planning`, `zoning`, `selectboard`, or `budget`).
+2. Query the database for all processed minutes matching that town and board.
+3. Check their `embedding_status`. For any documents not fully embedded, trigger the existing embedding worker/pipeline to chunk and vectorize them.
+4. Return a status payload (e.g., `totalDocuments`, `embeddedCount`, `pendingCount`).
+
+#### T002: Define the Generative UI TypeScript Schemas
+
+**Blocked By:** []
+**Details:** Define the strict JSON schema the LLM will use to construct the dynamic dashboard UI. Add to shared types.
+**Action:** Create the following types:
+
+```typescript
+export type WidgetType = 'summary_text' | 'stat_card' | 'bar_chart';
+
+export interface BaseWidget { type: WidgetType; }
+
+export interface SummaryTextWidget extends BaseWidget {
+  type: 'summary_text';
+  content: string; // Markdown formatted, Axios Smart Brevity style
+}
+
+export interface StatCardWidget extends BaseWidget {
+  type: 'stat_card';
+  label: string;
+  value: string | number;
+  trend?: 'up' | 'down' | 'neutral';
+}
+
+export interface BarChartWidget extends BaseWidget {
+  type: 'bar_chart';
+  title: string;
+  xAxisLabel: string;
+  data: Array<{ name: string; value: number }>;
+}
+
+export interface DynamicReportPayload {
+  reportTitle: string;
+  executiveSummary: string;
+  widgets: Array<SummaryTextWidget | StatCardWidget | BarChartWidget>;
+}
+
+```
+
+#### T003: Build the MapReduce Backend Engine
+
+**Blocked By:** [T002]
+**Details:** Create `POST /api/admin/research/dynamic-generate`. This orchestrates the analysis.
+**Action:**
+
+1. **Phase 1 (Fetch):** Accept `{ townId, boardType, dateRange, prompt }`. Query the vector database for the relevant embedded chunks for that specific board and timeframe.
+2. **Phase 2 (Map/Harvest):** Use `gemini-2.5-flash` with structured output to extract raw data relevant to the user's prompt into a flat JSON array.
+3. **Phase 3 (Reduce/Generate):** Pass the aggregated data array and the user's prompt to `gemini-2.5-pro`, enforcing the `DynamicReportPayload` JSON schema.
+
+#### T004: The "Generative UI" Synthesis Prompt (Phase 3)
+
+**Blocked By:** [T003]
+**Details:** Inject this strict system prompt into the Phase 3 `gemini-2.5-pro` call.
+**Action:** Use this exact instruction:
+
+> You are an elite municipal data analyst. Analyze the provided structured municipal data and answer the user's query by constructing a dynamic dashboard interface.
+> You MUST respond with a strictly typed JSON object matching this schema: `{ "reportTitle": "string", "executiveSummary": "string (BLUF style)", "widgets": [ { "type": "summary_text" | "stat_card" | "bar_chart", ... } ] }`
+> DESIGN RULES:
+> 1. Compare numbers/years using a `bar_chart` widget.
+> 2. Highlight 2-4 critical metrics using `stat_card` widgets.
+> 3. Use Axios Smart Brevity for `summary_text` (punchy, bullet points, bold text).
+> 4. Do not output empty charts if data is missing; explain the gap in `summary_text`.
+> 
+> 
+
+#### T005: Build the Universal React Renderer (`<DynamicReportRenderer />`)
+
+**Blocked By:** [T002]
+**Details:** Create a "dumb" component that loops through the LLM's JSON and paints the UI.
+**Action:** 1. Ensure `recharts` is installed.
+2. Create `client/src/components/research/DynamicReportRenderer.tsx` accepting `payload: DynamicReportPayload`.
+3. Render `reportTitle` and `executiveSummary`.
+4. Map over `payload.widgets`. Render `<ReactMarkdown>` for `summary_text`, a Tailwind Card for `stat_card`, and a Recharts `<BarChart>` for `bar_chart`.
+
+#### T006: Integrate into the OC Research Tab
+
+**Blocked By:** [T001, T005]
+**Details:** Refactor `client/src/pages/admin-research.tsx` using the current Planning Board layout as the baseline.
+**Action:**
+
+1. **Top Section (Configuration & Prep):** Add a Town Selector, a Board Selector (`Planning`, `Zoning`, `Selectboard`, `Budget`), and a Date Range picker.
+2. **Prep State:** Show the corpus status (e.g., "450/450 Documents Ready"). Add a "Prepare/Embed Corpus" button that calls the T001 endpoint if documents are pending.
+3. **Query Section:** Disable the custom Prompt `<textarea>` and "Generate Report" button until the corpus is fully prepared.
+4. **Output Section:** On successful generation, pass the returned JSON into `<DynamicReportRenderer payload={data} />` below the fold.
+
+---
+
+This ensures your agent knows exactly where to put it, how to reuse the UI patterns you already like, and how to guarantee the data is primed before the LLM tries to analyze a decade of history.
+
+Are there any specific metrics or default charts you'd want the system to *always* attempt to generate for a Select Board query, or do you want to keep it 100% prompt-driven?
