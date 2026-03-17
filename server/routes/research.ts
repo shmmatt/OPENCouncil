@@ -47,9 +47,11 @@ interface ReportJob {
   progress: number;
   result?: DynamicReportPayload;
   error?: string;
+  reportId?: string;
 }
 
 const reportJobs = new Map<string, ReportJob>();
+const jobToReportId = new Map<string, string>();
 
 function updateJob(jobId: string, patch: Partial<ReportJob>) {
   const existing = reportJobs.get(jobId);
@@ -60,6 +62,8 @@ router.get("/job-status/:jobId", async (req, res) => {
   const job = reportJobs.get(req.params.jobId);
   if (job) return res.json(job);
 
+  // DB fallback: resolve the reportId (may differ from jobId for historic or in-flight jobs)
+  const reportId = jobToReportId.get(req.params.jobId) ?? req.params.jobId;
   try {
     const [row] = await db
       .select({
@@ -68,7 +72,7 @@ router.get("/job-status/:jobId", async (req, res) => {
         reportData: schema.researchReports.reportData,
       })
       .from(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.jobId));
+      .where(eq(schema.researchReports.id, reportId));
 
     if (row) {
       const isComplete = row.status === "completed" || row.status === "error";
@@ -611,6 +615,8 @@ router.post("/dynamic-generate", async (req, res) => {
 
   const { townName, boardType, dateRange, prompt } = parsed.data;
 
+  const jobId = randomUUID();
+
   let reportId: string;
   try {
     const [row] = await db
@@ -633,11 +639,12 @@ router.post("/dynamic-generate", async (req, res) => {
     return res.status(500).json({ message: "Failed to initialize report" });
   }
 
-  reportJobs.set(reportId, { status: "pending", message: "Starting pipeline...", progress: 0 });
+  reportJobs.set(jobId, { status: "pending", message: "Starting pipeline...", progress: 0, reportId });
+  jobToReportId.set(jobId, reportId);
 
-  runDynamicPipeline(reportId, townName, boardType, dateRange, prompt, reportId)
+  runDynamicPipeline(jobId, townName, boardType, dateRange, prompt, reportId)
     .then(async (result) => {
-      updateJob(reportId, { status: "completed", message: "Report ready.", progress: 100, result });
+      updateJob(jobId, { status: "completed", message: "Report ready.", progress: 100, result });
       try {
         await db
           .update(schema.researchReports)
@@ -650,11 +657,11 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (err) {
         logError("Failed to persist dynamic report result", { error: String(err), reportId });
       }
-      setTimeout(() => reportJobs.delete(reportId), 10 * 60 * 1000);
+      setTimeout(() => { reportJobs.delete(jobId); jobToReportId.delete(jobId); }, 10 * 60 * 1000);
     })
     .catch(async (err) => {
       logError("Dynamic pipeline background error", { error: String(err) });
-      updateJob(reportId, { status: "error", message: String(err), progress: 0, error: String(err) });
+      updateJob(jobId, { status: "error", message: String(err), progress: 0, error: String(err) });
       try {
         await db
           .update(schema.researchReports)
@@ -667,10 +674,10 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (dbErr) {
         logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
       }
-      setTimeout(() => reportJobs.delete(reportId), 10 * 60 * 1000);
+      setTimeout(() => { reportJobs.delete(jobId); jobToReportId.delete(jobId); }, 10 * 60 * 1000);
     });
 
-  return res.json({ jobId: reportId });
+  return res.json({ jobId });
 });
 
 async function runDynamicPipeline(
@@ -932,8 +939,11 @@ Return a JSON object with an "extractions" array containing one object per disti
 
     const unitsProcessed = Math.min(i + BATCH_SIZE, extractionUnits.length);
     const phase2Progress = 15 + Math.round((unitsProcessed / extractionUnits.length) * 70);
+    const docsNote = extractionUnits.length > documents.length
+      ? ` (${documents.length} docs, ${extractionUnits.length} windows)`
+      : ` (${documents.length} documents)`;
     updateJob(jobId, {
-      message: `Phase 2: Extracted from ${unitsProcessed}/${extractionUnits.length} documents...`,
+      message: `Phase 2: Extracted from ${unitsProcessed}/${extractionUnits.length}${docsNote}...`,
       progress: phase2Progress,
     });
   }
@@ -1050,14 +1060,7 @@ ${JSON.stringify(compactedExtractions)}`;
     return payload;
   } catch (err) {
     logError("[DynamicPipeline] Phase 3 synthesis failed", { error: String(err) });
-    return {
-      reportTitle: `${boardType.charAt(0).toUpperCase() + boardType.slice(1)} Analysis: ${townName}`,
-      executiveSummary: `Analysis failed during synthesis. ${allExtractions.length} data points were extracted from ${documents.length} documents but could not be synthesized into a report. Error: ${String(err)}`,
-      widgets: [{
-        type: "summary_text",
-        content: `**Raw extraction summary:** ${allExtractions.length} data points extracted from ${documents.length} documents covering ${boardType} board proceedings.`,
-      }],
-    };
+    throw new Error(`Phase 3 synthesis failed: ${String(err)}`);
   }
 }
 
