@@ -217,12 +217,12 @@ export default function AdminResearch() {
     if (jobStatus === "completed" && jobStatusQuery.data?.result && activeJobId) {
       setDynamicReport(jobStatusQuery.data.result);
       setActiveJobId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
       toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
     }
     if (jobStatus === "error" && activeJobId) {
       setActiveJobId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
       toast({ title: "Generation failed", description: jobStatusQuery.data?.error ?? "Unknown error", variant: "destructive" });
     }
   }, [jobStatus, activeJobId]);
@@ -251,7 +251,7 @@ export default function AdminResearch() {
     onSuccess: (data) => {
       setDynamicReport(null);
       setActiveJobId(data.jobId);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
     },
     onError: (err) => {
       toast({ title: "Generation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
@@ -284,7 +284,7 @@ export default function AdminResearch() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
       toast({ title: "Report deleted" });
     },
   });
