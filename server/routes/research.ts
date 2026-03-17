@@ -56,14 +56,35 @@ function updateJob(jobId: string, patch: Partial<ReportJob>) {
   if (existing) reportJobs.set(jobId, { ...existing, ...patch });
 }
 
-function scheduleJobCleanup(jobId: string) {
-  setTimeout(() => reportJobs.delete(jobId), 2 * 60 * 1000);
-}
-
-router.get("/job-status/:jobId", (req, res) => {
+router.get("/job-status/:jobId", async (req, res) => {
   const job = reportJobs.get(req.params.jobId);
-  if (!job) return res.status(404).json({ message: "Job not found" });
-  return res.json(job);
+  if (job) return res.json(job);
+
+  try {
+    const [row] = await db
+      .select({
+        status: schema.researchReports.status,
+        error: schema.researchReports.error,
+        reportData: schema.researchReports.reportData,
+      })
+      .from(schema.researchReports)
+      .where(eq(schema.researchReports.id, req.params.jobId));
+
+    if (row) {
+      const isComplete = row.status === "completed" || row.status === "error";
+      return res.json({
+        status: isComplete ? row.status : "processing",
+        message: row.status === "completed" ? "Report ready." : row.status === "error" ? (row.error || "Pipeline failed") : "Processing...",
+        progress: row.status === "completed" ? 100 : row.status === "error" ? 0 : 50,
+        result: row.status === "completed" ? row.reportData as DynamicReportPayload : undefined,
+        error: row.status === "error" ? row.error || "Unknown error" : undefined,
+      });
+    }
+  } catch (err) {
+    logError("Failed to check job status in DB", { error: String(err) });
+  }
+
+  return res.status(404).json({ message: "Job not found" });
 });
 
 const frictionReportBodySchema = z.object({
@@ -359,7 +380,10 @@ router.get("/dynamic-report/:id", async (req, res) => {
     const [report] = await db
       .select()
       .from(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.id));
+      .where(and(
+        eq(schema.researchReports.id, req.params.id),
+        eq(schema.researchReports.reportType, "dynamic")
+      ));
 
     if (!report) {
       return res.status(404).json({ message: "Report not found" });
@@ -376,7 +400,10 @@ router.delete("/dynamic-report/:id", async (req, res) => {
   try {
     await db
       .delete(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.id));
+      .where(and(
+        eq(schema.researchReports.id, req.params.id),
+        eq(schema.researchReports.reportType, "dynamic")
+      ));
 
     res.json({ success: true });
   } catch (error) {
@@ -573,7 +600,6 @@ router.post("/dynamic-generate", async (req, res) => {
   }
 
   const { townName, boardType, dateRange, prompt } = parsed.data;
-  const jobId = randomUUID();
 
   let reportId: string;
   try {
@@ -597,11 +623,11 @@ router.post("/dynamic-generate", async (req, res) => {
     return res.status(500).json({ message: "Failed to initialize report" });
   }
 
-  reportJobs.set(jobId, { status: "pending", message: "Starting pipeline...", progress: 0 });
+  reportJobs.set(reportId, { status: "pending", message: "Starting pipeline...", progress: 0 });
 
-  runDynamicPipeline(jobId, townName, boardType, dateRange, prompt, reportId)
+  runDynamicPipeline(reportId, townName, boardType, dateRange, prompt, reportId)
     .then(async (result) => {
-      updateJob(jobId, { status: "completed", message: "Report ready.", progress: 100, result });
+      updateJob(reportId, { status: "completed", message: "Report ready.", progress: 100, result });
       try {
         await db
           .update(schema.researchReports)
@@ -614,11 +640,11 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (err) {
         logError("Failed to persist dynamic report result", { error: String(err), reportId });
       }
-      scheduleJobCleanup(jobId);
+      reportJobs.delete(reportId);
     })
     .catch(async (err) => {
       logError("Dynamic pipeline background error", { error: String(err) });
-      updateJob(jobId, { status: "error", message: String(err), progress: 0, error: String(err) });
+      updateJob(reportId, { status: "error", message: String(err), progress: 0, error: String(err) });
       try {
         await db
           .update(schema.researchReports)
@@ -631,10 +657,10 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (dbErr) {
         logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
       }
-      scheduleJobCleanup(jobId);
+      reportJobs.delete(reportId);
     });
 
-  return res.json({ jobId });
+  return res.json({ jobId: reportId });
 });
 
 async function runDynamicPipeline(
