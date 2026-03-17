@@ -214,18 +214,26 @@ export default function AdminResearch() {
 
   // Handle job completion / error in an effect so state updates don't happen during render
   useEffect(() => {
-    if (jobStatus === "completed" && jobStatusQuery.data?.result && activeJobId) {
+    if (!activeJobId) return;
+    if (jobStatus === "completed" && jobStatusQuery.data?.result) {
       setDynamicReport(jobStatusQuery.data.result);
       setActiveJobId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
       toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
-    }
-    if (jobStatus === "error" && activeJobId) {
+    } else if (jobStatus === "error") {
       setActiveJobId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports", dynamicTown] });
       toast({ title: "Generation failed", description: jobStatusQuery.data?.error ?? "Unknown error", variant: "destructive" });
     }
-  }, [jobStatus, activeJobId]);
+  }, [jobStatus, activeJobId, jobStatusQuery.data, dynamicTown, toast]);
+
+  // Handle polling hard-failure (job not found / 404)
+  useEffect(() => {
+    if (activeJobId && jobStatusQuery.isError) {
+      setActiveJobId(null);
+      toast({ title: "Job status unavailable", description: "The report job could not be found. It may have expired.", variant: "destructive" });
+    }
+  }, [activeJobId, jobStatusQuery.isError, toast]);
 
   const isJobRunning = !!activeJobId && jobStatus !== "completed" && jobStatus !== "error";
 
