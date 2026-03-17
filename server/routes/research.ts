@@ -298,7 +298,10 @@ router.get("/friction-report/:id", async (req, res) => {
     const [report] = await db
       .select()
       .from(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.id));
+      .where(and(
+        eq(schema.researchReports.id, req.params.id),
+        eq(schema.researchReports.reportType, "friction")
+      ));
 
     if (!report) {
       return res.status(404).json({ message: "Report not found" });
@@ -316,6 +319,7 @@ router.get("/friction-reports", async (_req, res) => {
     const reports = await db
       .select()
       .from(schema.researchReports)
+      .where(eq(schema.researchReports.reportType, "friction"))
       .orderBy(desc(schema.researchReports.createdAt));
 
     res.json({ reports });
@@ -329,7 +333,10 @@ router.delete("/friction-report/:id", async (req, res) => {
   try {
     await db
       .delete(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.id));
+      .where(and(
+        eq(schema.researchReports.id, req.params.id),
+        eq(schema.researchReports.reportType, "friction")
+      ));
 
     res.json({ success: true });
   } catch (error) {
@@ -417,7 +424,10 @@ router.post("/friction-report/:id/reanalyze", async (req, res) => {
     const report = await db
       .select()
       .from(schema.researchReports)
-      .where(eq(schema.researchReports.id, req.params.id))
+      .where(and(
+        eq(schema.researchReports.id, req.params.id),
+        eq(schema.researchReports.reportType, "friction")
+      ))
       .limit(1);
 
     if (report.length === 0) {
