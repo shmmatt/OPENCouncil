@@ -98,6 +98,20 @@ const BOARD_LABELS: Record<ResearchBoardType, string> = {
   budget: "Budget Committee",
 };
 
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function AdminResearch() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -670,7 +684,12 @@ export default function AdminResearch() {
                       </TableHeader>
                       <TableBody>
                         {dynamicReportsData?.reports.map((r) => (
-                          <TableRow key={r.id} data-testid={`row-dynamic-report-${r.id}`}>
+                          <TableRow
+                            key={r.id}
+                            data-testid={`row-dynamic-report-${r.id}`}
+                            className={r.status === "completed" ? "cursor-pointer hover-elevate" : ""}
+                            onClick={() => r.status === "completed" && loadSavedReport(r.id)}
+                          >
                             <TableCell className="max-w-[250px]">
                               <span className="line-clamp-2 text-sm" title={r.prompt || ""}>
                                 {r.prompt ? (r.prompt.length > 80 ? r.prompt.slice(0, 80) + "..." : r.prompt) : "—"}
@@ -693,8 +712,11 @@ export default function AdminResearch() {
                                 {r.status}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                              {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                            <TableCell
+                              className="text-sm text-muted-foreground whitespace-nowrap"
+                              title={new Date(r.createdAt).toLocaleString()}
+                            >
+                              {formatRelativeTime(r.createdAt)}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -702,7 +724,7 @@ export default function AdminResearch() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => loadSavedReport(r.id)}
+                                    onClick={(e) => { e.stopPropagation(); loadSavedReport(r.id); }}
                                     data-testid={`button-view-report-${r.id}`}
                                     title="View report"
                                   >
@@ -712,7 +734,7 @@ export default function AdminResearch() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => deleteDynamicReportMutation.mutate(r.id)}
+                                  onClick={(e) => { e.stopPropagation(); deleteDynamicReportMutation.mutate(r.id); }}
                                   data-testid={`button-delete-report-${r.id}`}
                                   title="Delete report"
                                 >
