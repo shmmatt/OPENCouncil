@@ -229,18 +229,22 @@ export function detectMinutesHeuristics(
 
   // Extract possible date from text (check header area more closely)
   const datePatterns = [
-    // Full date patterns: March 5, 2024 or March 5th, 2024
+    // Weekday-prefixed: "Monday, March 5, 2024" or "Monday March 5, 2024"
+    /(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}/i,
+    // Full month name: March 5, 2024 or March 5th, 2024
     /(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}/i,
+    // Short month format: Mar 5, 2024
+    /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}/i,
+    // European: 5 March 2024 or 5th March, 2024
+    /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December),?\s+\d{4}\b/i,
     // MM/DD/YYYY or MM-DD-YYYY
     /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/,
     // YYYY-MM-DD (ISO format)
-    /\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/,
-    // Short month format: Mar 5, 2024
-    /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2},?\s+\d{4}/i,
+    /\b\d{4}-\d{2}-\d{2}\b/,
   ];
 
-  // Search in first ~1500 chars (usually header area)
-  const headerText = previewText.slice(0, 1500);
+  // Search in first ~3000 chars (town clerks often bury dates under lengthy headers)
+  const headerText = previewText.slice(0, 3000);
   for (const pattern of datePatterns) {
     const match = headerText.match(pattern);
     if (match) {
@@ -277,7 +281,11 @@ export function parseDateToISO(dateText: string): string | null {
     december: "12", dec: "12",
   };
 
-  const cleanedText = dateText.trim().replace(/\./g, "");
+  // Strip leading weekday prefix: "Monday, " or "Monday " before the month
+  const weekdayStripped = dateText.trim().replace(
+    /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+/i, ""
+  );
+  const cleanedText = weekdayStripped.replace(/\./g, "");
 
   // Try YYYY-MM-DD format first
   const isoMatch = cleanedText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -300,10 +308,20 @@ export function parseDateToISO(dateText: string): string | null {
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
-  // Try Month DD, YYYY format
+  // Try "Month DD, YYYY" or "Month DD YYYY" format (with optional ordinal suffix)
   const monthNameMatch = cleanedText.match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/i);
   if (monthNameMatch) {
     const [, monthName, day, year] = monthNameMatch;
+    const month = monthMap[monthName.toLowerCase()];
+    if (month) {
+      return `${year}-${month}-${day.padStart(2, "0")}`;
+    }
+  }
+
+  // Try European "DD Month YYYY" or "DDth Month, YYYY" format
+  const europeanMatch = cleanedText.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+),?\s+(\d{4})$/i);
+  if (europeanMatch) {
+    const [, day, monthName, year] = europeanMatch;
     const month = monthMap[monthName.toLowerCase()];
     if (month) {
       return `${year}-${month}-${day.padStart(2, "0")}`;

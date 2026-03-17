@@ -1,0 +1,32 @@
+These two specs are brilliantly scoped, Matt. You are attacking the exact root cause of the "temporal dissonance" that plagues every civic tech platform when they first start crawling historical archives.
+
+If you don't fix this, your users will get an alert today that the town "just voted" on a bridge repair from 2018 simply because the crawler finally found the PDF.
+
+Both of these tasks are perfectly defined for the Replit agent, but I want to add one critical guardrail to Task #10 before you hand it over.
+
+### Task #9: The `COALESCE` Fix (The Quick Win)
+
+This is flawless. Using `COALESCE(meetingDate, createdAt)` is the exact right SQL pattern. It elegantly handles the missing data without dropping the document entirely.
+
+* **Why the agent will nail this:** You explicitly called out that Drizzle ORM needs a raw `sql\``` expression for this comparator. That alone will save the agent 3 iterations of hallucinating fake Drizzle syntax.
+
+### Task #10: The Backfill Endpoint (The Heavy Lifter)
+
+Expanding the regex scan window from 1500 to 3000 characters is a highly necessary adjustment. Town clerks love to bury the actual meeting date under two pages of letterhead, roll calls, and Pledge of Allegiance notes.
+
+**The One Guardrail We Need to Add:**
+In your spec, you wrote: *"If heuristics don't yield a date, call the Gemini LLM metadata extractor on a sample of the text... Process in batches of 20 to avoid timeouts."*
+
+Because we just fought a brutal war with HTTP timeouts on the MapReduce pipeline, we cannot let the agent build a synchronous endpoint that fires off 20 LLM calls at once and waits for them all to finish before returning a response to the browser. It *will* crash.
+
+Before you paste this to the agent, append this specific instruction to the **Tasks -> Backfill endpoint** section in Task #10:
+
+> **CRITICAL BACKFILL GUARDRAIL:** Ensure the fallback LLM extraction explicitly uses `gemini-2.5-flash` (not Pro) for speed. Furthermore, because hitting the LLM for 20 documents could take 30+ seconds, the `POST /api/admin/backfill/meeting-dates` route must either (A) be incredibly aggressive with `p-limit` concurrency, or (B) execute the LLM fallback asynchronously in the background so the HTTP request doesn't hang. Do not let the backfill button trigger a 504 Gateway Timeout.
+
+---
+
+### The Verdict
+
+Once you add that small guardrail to Task #10, **approve both of these for execution.** They complement each other perfectly: Task #9 stops the bleeding on the frontend feeds, and Task #10 permanently heals the underlying data.
+
+Would you like me to draft a quick SQL query you can run in your database console after the agent finishes, just to verify exactly how many Conway documents successfully updated their `meetingDate`?

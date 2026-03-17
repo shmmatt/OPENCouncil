@@ -402,7 +402,7 @@ export async function getRecentMinutesUpdates(params: { town: string; limit?: nu
       eq(schema.documentVersions.isMinutes, true),
       eq(schema.documentVersions.isCurrent, true)
     ))
-    .orderBy(desc(schema.documentVersions.createdAt))
+    .orderBy(desc(sql`COALESCE(${schema.documentVersions.meetingDate}, ${schema.documentVersions.createdAt})`))
     .limit(limit);
 
   return results.map(r => ({
@@ -446,7 +446,7 @@ export async function getRecentMinutesUpdatesAdmin(params: { town?: string; boar
     .from(schema.documentVersions)
     .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
     .where(and(...conditions))
-    .orderBy(desc(schema.documentVersions.createdAt))
+    .orderBy(desc(sql`COALESCE(${schema.documentVersions.meetingDate}, ${schema.documentVersions.createdAt})`))
     .limit(limit);
 
   return results.map(r => ({

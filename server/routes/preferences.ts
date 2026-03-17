@@ -1,8 +1,21 @@
 import { Router } from "express";
+import { randomUUID } from "crypto";
 import { storage } from "../storage";
 import { requireRole } from "../auth/middleware";
 import type { IdentityRequest } from "../auth/types";
 import type { ActorIdentifier } from "@shared/schema";
+import { db, schema, eq, and, sql } from "../storage/db";
+import { detectMinutesHeuristics, parseDateToISO, suggestMetadataFromPreview } from "../services/metadataExtraction";
+
+interface BackfillJob {
+  status: "running" | "completed" | "error";
+  total: number;
+  processed: number;
+  updated: number;
+  error?: string;
+}
+
+const backfillJobs = new Map<string, BackfillJob>();
 
 const router = Router();
 
@@ -123,5 +136,116 @@ router.get(
     }
   }
 );
+
+router.get(
+  "/admin/backfill/meeting-dates/:jobId",
+  requireRole("admin", "municipal_admin"),
+  (req, res) => {
+    const job = backfillJobs.get(req.params.jobId);
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    return res.json(job);
+  }
+);
+
+router.post(
+  "/admin/backfill/meeting-dates",
+  requireRole("admin", "municipal_admin"),
+  async (req: IdentityRequest, res) => {
+    const townFilter = (req.query.town as string) || "";
+    const jobId = randomUUID();
+
+    backfillJobs.set(jobId, { status: "running", total: 0, processed: 0, updated: 0 });
+
+    res.json({ jobId });
+
+    runBackfill(jobId, townFilter).catch((err) => {
+      const job = backfillJobs.get(jobId);
+      if (job) backfillJobs.set(jobId, { ...job, status: "error", error: String(err) });
+    });
+  }
+);
+
+async function runBackfill(jobId: string, townFilter: string): Promise<void> {
+  const job = backfillJobs.get(jobId)!;
+
+  try {
+    const conditions: ReturnType<typeof eq>[] = [
+      eq(schema.documentVersions.isMinutes, true),
+      eq(schema.documentVersions.isCurrent, true),
+      sql`${schema.documentVersions.meetingDate} IS NULL`,
+      sql`${schema.fileBlobs.previewText} IS NOT NULL`,
+    ] as any[];
+
+    if (townFilter) {
+      conditions.push(eq(schema.logicalDocuments.town, townFilter) as any);
+    }
+
+    const candidates = await db
+      .select({
+        versionId: schema.documentVersions.id,
+        filename: schema.fileBlobs.originalFilename,
+        previewText: schema.fileBlobs.previewText,
+      })
+      .from(schema.documentVersions)
+      .innerJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+      .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
+      .where(and(...conditions))
+      .limit(500);
+
+    backfillJobs.set(jobId, { ...job, total: candidates.length });
+
+    const needsLlm: typeof candidates = [];
+    let updated = 0;
+    let processed = 0;
+
+    for (const row of candidates) {
+      const text = row.previewText || "";
+      const hints = detectMinutesHeuristics(row.filename, text);
+      const isoDate = hints.possibleDateText ? parseDateToISO(hints.possibleDateText) : null;
+
+      if (isoDate) {
+        await db
+          .update(schema.documentVersions)
+          .set({ meetingDate: new Date(isoDate) })
+          .where(eq(schema.documentVersions.id, row.versionId));
+        updated++;
+      } else {
+        needsLlm.push(row);
+      }
+
+      processed++;
+      backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, processed, updated });
+    }
+
+    const CONCURRENCY = 3;
+    for (let i = 0; i < needsLlm.length; i += CONCURRENCY) {
+      const batch = needsLlm.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (row) => {
+          try {
+            const suggested = await suggestMetadataFromPreview(row.filename, row.previewText || "", undefined);
+            if (suggested.meetingDate) {
+              await db
+                .update(schema.documentVersions)
+                .set({ meetingDate: new Date(suggested.meetingDate) })
+                .where(eq(schema.documentVersions.id, row.versionId));
+              const cur = backfillJobs.get(jobId)!;
+              backfillJobs.set(jobId, { ...cur, updated: cur.updated + 1 });
+            }
+          } catch {
+          }
+          const cur = backfillJobs.get(jobId)!;
+          backfillJobs.set(jobId, { ...cur, processed: cur.processed + 1 });
+        })
+      );
+    }
+
+    const final = backfillJobs.get(jobId)!;
+    backfillJobs.set(jobId, { ...final, status: "completed" });
+  } catch (err) {
+    const cur = backfillJobs.get(jobId);
+    if (cur) backfillJobs.set(jobId, { ...cur, status: "error", error: String(err) });
+  }
+}
 
 export default router;

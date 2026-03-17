@@ -36,9 +36,9 @@ export async function extractTopicsFromMinutes(town: string): Promise<{ topics: 
       eq(schema.logicalDocuments.town, town),
       eq(schema.documentVersions.isMinutes, true),
       eq(schema.documentVersions.isCurrent, true),
-      gte(schema.documentVersions.createdAt, thirtyDaysAgo),
+      sql`COALESCE(${schema.documentVersions.meetingDate}, ${schema.documentVersions.createdAt}) >= ${thirtyDaysAgo}`,
     ))
-    .orderBy(desc(schema.documentVersions.createdAt))
+    .orderBy(desc(sql`COALESCE(${schema.documentVersions.meetingDate}, ${schema.documentVersions.createdAt})`))
     .limit(20);
 
   if (recentMinutes.length === 0) {

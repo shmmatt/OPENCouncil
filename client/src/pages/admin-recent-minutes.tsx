@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, FileText, ExternalLink, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, FileText, ExternalLink, RefreshCw, CalendarSearch, Loader2 } from "lucide-react";
 import type { MinutesUpdateItem } from "@shared/schema";
+
+interface BackfillStatus {
+  status: "running" | "completed" | "error";
+  total: number;
+  processed: number;
+  updated: number;
+  error?: string;
+}
 
 export default function AdminRecentMinutes() {
   const [townFilter, setTownFilter] = useState<string>("");
   const [boardFilter, setBoardFilter] = useState<string>("");
   const [limit, setLimit] = useState<number>(50);
+  const [backfillJobId, setBackfillJobId] = useState<string | null>(null);
+  const [backfillStatus, setBackfillStatus] = useState<BackfillStatus | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { toast } = useToast();
 
   const { data: townsData } = useQuery<{ towns: string[] }>({
     queryKey: ["/api/meta/towns"],
@@ -41,13 +55,60 @@ export default function AdminRecentMinutes() {
   const items = data?.items || [];
   const towns = townsData?.towns || [];
 
+  useEffect(() => {
+    if (!backfillJobId) return;
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/backfill/meeting-dates/${backfillJobId}`);
+        if (!res.ok) return;
+        const status: BackfillStatus = await res.json();
+        setBackfillStatus(status);
+        if (status.status === "completed") {
+          clearInterval(pollIntervalRef.current!);
+          setBackfillJobId(null);
+          toast({
+            title: "Backfill complete",
+            description: `Updated ${status.updated} of ${status.processed} records with meeting dates.`,
+          });
+          refetch();
+        } else if (status.status === "error") {
+          clearInterval(pollIntervalRef.current!);
+          setBackfillJobId(null);
+          toast({ title: "Backfill failed", description: status.error || "Unknown error", variant: "destructive" });
+        }
+      } catch {}
+    }, 2000);
+
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [backfillJobId]);
+
+  const startBackfill = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (townFilter) params.set("town", townFilter);
+      const res = await fetch(`/api/admin/backfill/meeting-dates?${params.toString()}`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to start backfill");
+      const { jobId } = await res.json();
+      setBackfillJobId(jobId);
+      setBackfillStatus({ status: "running", total: 0, processed: 0, updated: 0 });
+      toast({ title: "Backfill started", description: "Re-extracting meeting dates in the background..." });
+    } catch (err) {
+      toast({ title: "Failed to start backfill", description: String(err), variant: "destructive" });
+    }
+  };
+
+  const isBackfillRunning = backfillJobId !== null;
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "—";
     try {
-      return new Date(dateStr).toLocaleDateString("en-US", { 
-        month: "short", 
-        day: "numeric", 
-        year: "numeric" 
+      return new Date(dateStr).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
       });
     } catch {
       return "—";
@@ -57,9 +118,9 @@ export default function AdminRecentMinutes() {
   const formatDateTime = (dateStr: string | null) => {
     if (!dateStr) return "—";
     try {
-      return new Date(dateStr).toLocaleString("en-US", { 
-        month: "short", 
-        day: "numeric", 
+      return new Date(dateStr).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
         year: "numeric",
         hour: "numeric",
         minute: "2-digit"
@@ -92,26 +153,46 @@ export default function AdminRecentMinutes() {
               <div>
                 <CardTitle>Minutes Updates</CardTitle>
                 <CardDescription>
-                  Showing {items.length} most recently ingested meeting minutes
+                  Sorted by meeting date — showing {items.length} most recent meetings
                 </CardDescription>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => refetch()}
-                disabled={isRefetching}
-                data-testid="button-refresh"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {isBackfillRunning && backfillStatus && (
+                  <span className="text-sm text-muted-foreground" data-testid="text-backfill-progress">
+                    {backfillStatus.processed}/{backfillStatus.total} processed, {backfillStatus.updated} updated
+                  </span>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={startBackfill}
+                  disabled={isBackfillRunning}
+                  data-testid="button-backfill-dates"
+                  title={townFilter ? `Re-extract meeting dates for ${townFilter}` : "Re-extract meeting dates for all towns"}
+                >
+                  {isBackfillRunning
+                    ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    : <CalendarSearch className="w-4 h-4 mr-2" />}
+                  Backfill Dates
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  disabled={isRefetching}
+                  data-testid="button-refresh"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4 mb-4">
               <div className="w-48">
-                <Select 
-                  value={townFilter || "__all__"} 
+                <Select
+                  value={townFilter || "__all__"}
                   onValueChange={(v) => setTownFilter(v === "__all__" ? "" : v)}
                 >
                   <SelectTrigger data-testid="select-town-filter">
@@ -166,10 +247,10 @@ export default function AdminRecentMinutes() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ingested At</TableHead>
+                      <TableHead>Meeting Date</TableHead>
                       <TableHead>Town</TableHead>
                       <TableHead>Board</TableHead>
-                      <TableHead>Meeting Date</TableHead>
+                      <TableHead>Ingested At</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -178,13 +259,21 @@ export default function AdminRecentMinutes() {
                     {items.map((item) => (
                       <TableRow key={item.documentVersionId} data-testid={`row-minutes-${item.documentVersionId}`}>
                         <TableCell className="font-medium">
-                          {formatDateTime(item.ingestedAt)}
+                          {item.meetingDate ? (
+                            formatDate(item.meetingDate)
+                          ) : (
+                            <span className="text-muted-foreground text-sm italic">unknown</span>
+                          )}
                         </TableCell>
                         <TableCell>{item.town}</TableCell>
                         <TableCell>{item.board || "—"}</TableCell>
-                        <TableCell>{formatDate(item.meetingDate)}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {item.category}
+                          {formatDateTime(item.ingestedAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">
+                            {item.category}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
