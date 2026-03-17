@@ -650,7 +650,7 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (err) {
         logError("Failed to persist dynamic report result", { error: String(err), reportId });
       }
-      reportJobs.delete(reportId);
+      setTimeout(() => reportJobs.delete(reportId), 10 * 60 * 1000);
     })
     .catch(async (err) => {
       logError("Dynamic pipeline background error", { error: String(err) });
@@ -667,7 +667,7 @@ router.post("/dynamic-generate", async (req, res) => {
       } catch (dbErr) {
         logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
       }
-      reportJobs.delete(reportId);
+      setTimeout(() => reportJobs.delete(reportId), 10 * 60 * 1000);
     });
 
   return res.json({ jobId: reportId });

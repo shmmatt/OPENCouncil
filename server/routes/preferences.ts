@@ -138,6 +138,25 @@ router.get(
 );
 
 router.get(
+  "/admin/minutes/missing-date-count",
+  requireRole("admin", "municipal_admin"),
+  async (_req, res) => {
+    try {
+      const [row] = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE is_minutes = true AND is_current = true) AS total_minutes,
+          COUNT(*) FILTER (WHERE is_minutes = true AND is_current = true AND meeting_date IS NOT NULL) AS has_date,
+          COUNT(*) FILTER (WHERE is_minutes = true AND is_current = true AND meeting_date IS NULL) AS missing_date
+        FROM document_versions
+      `);
+      return res.json(row);
+    } catch (err) {
+      return res.status(500).json({ message: String(err) });
+    }
+  }
+);
+
+router.get(
   "/admin/backfill/meeting-dates/:jobId",
   requireRole("admin", "municipal_admin"),
   (req, res) => {

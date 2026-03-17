@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
@@ -46,7 +46,9 @@ import {
   BarChart3,
   ScanLine,
   Search,
-  Cloud
+  Cloud,
+  CalendarSearch,
+  CalendarCheck2,
 } from "lucide-react";
 import type { IngestionJobWithBlob, LogicalDocument } from "@shared/schema";
 import { NH_TOWNS } from "@shared/schema";
@@ -270,6 +272,11 @@ export default function AdminIngestion() {
     processing: false,
   });
 
+  // Backfill meeting dates state
+  const [backfillJobId, setBackfillJobId] = useState<string | null>(null);
+  const [backfillStatus, setBackfillStatus] = useState<{ status: string; total: number; processed: number; updated: number; error?: string } | null>(null);
+  const backfillPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const { data: jobs, isLoading: jobsLoading, refetch: refetchJobs } = useQuery<IngestionJobWithBlob[]>({
     queryKey: ["/api/admin/ingestion/jobs", activeTab],
     queryFn: async () => {
@@ -480,6 +487,62 @@ export default function AdminIngestion() {
       });
     },
   });
+
+  const { data: missingDateStats, refetch: refetchMissingDateStats } = useQuery<{ total_minutes: string; has_date: string; missing_date: string }>({
+    queryKey: ["/api/admin/minutes/missing-date-count"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/minutes/missing-date-count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return { total_minutes: "0", has_date: "0", missing_date: "0" };
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  useEffect(() => {
+    if (!backfillJobId) return;
+    const token = localStorage.getItem("adminToken");
+    backfillPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/backfill/meeting-dates/${backfillJobId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const status = await res.json();
+        setBackfillStatus(status);
+        if (status.status === "completed") {
+          clearInterval(backfillPollRef.current!);
+          setBackfillJobId(null);
+          refetchMissingDateStats();
+          toast({ title: "Backfill complete", description: `Updated ${status.updated} of ${status.processed} records with meeting dates.` });
+        } else if (status.status === "error") {
+          clearInterval(backfillPollRef.current!);
+          setBackfillJobId(null);
+          toast({ title: "Backfill failed", description: status.error || "Unknown error", variant: "destructive" });
+        }
+      } catch {}
+    }, 2000);
+    return () => { if (backfillPollRef.current) clearInterval(backfillPollRef.current); };
+  }, [backfillJobId]);
+
+  const startBackfill = async () => {
+    try {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/backfill/meeting-dates", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to start backfill");
+      const { jobId } = await res.json();
+      setBackfillJobId(jobId);
+      setBackfillStatus({ status: "running", total: 0, processed: 0, updated: 0 });
+      toast({ title: "Backfill started", description: "Re-extracting meeting dates from up to 500 minutes records..." });
+    } catch (err) {
+      toast({ title: "Failed to start backfill", description: String(err), variant: "destructive" });
+    }
+  };
 
   const getJobMetadata = useCallback((job: IngestionJobWithBlob): JobMetadataEdits => {
     if (jobEdits[job.id]) {
@@ -1137,6 +1200,68 @@ export default function AdminIngestion() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {missingDateStats && parseInt(missingDateStats.missing_date) > 0 && (
+          <Card data-testid="card-missing-dates">
+            <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10">
+                  <CalendarSearch className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Meeting Dates Missing</CardTitle>
+                  <CardDescription>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400" data-testid="text-missing-count">
+                      {parseInt(missingDateStats.missing_date).toLocaleString()}
+                    </span>
+                    {" "}of{" "}
+                    <span className="font-semibold">{parseInt(missingDateStats.total_minutes).toLocaleString()}</span>
+                    {" "}minutes records are missing a meeting date.
+                    {" "}
+                    <span className="text-muted-foreground">
+                      <CalendarCheck2 className="inline w-3.5 h-3.5 mr-0.5 text-green-600 dark:text-green-400" />
+                      {parseInt(missingDateStats.has_date).toLocaleString()} have dates.
+                    </span>
+                  </CardDescription>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {backfillJobId && backfillStatus && (
+                  <div className="text-right">
+                    <div className="text-sm font-medium" data-testid="text-backfill-progress-ingestion">
+                      {backfillStatus.processed}/{backfillStatus.total > 0 ? backfillStatus.total : "?"} scanned
+                    </div>
+                    <div className="text-xs text-muted-foreground">{backfillStatus.updated} dates found</div>
+                  </div>
+                )}
+                <Button
+                  onClick={startBackfill}
+                  disabled={!!backfillJobId}
+                  data-testid="button-backfill-dates-main"
+                >
+                  {backfillJobId
+                    ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    : <CalendarSearch className="w-4 h-4 mr-2" />}
+                  {backfillJobId ? "Backfilling..." : "Backfill Meeting Dates"}
+                </Button>
+              </div>
+            </CardHeader>
+            {backfillJobId && backfillStatus && backfillStatus.total > 0 && (
+              <CardContent className="pt-0 pb-4">
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((backfillStatus.processed / backfillStatus.total) * 100)}%` }}
+                    data-testid="progress-bar-backfill"
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 text-right">
+                  {Math.round((backfillStatus.processed / backfillStatus.total) * 100)}%
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Upload New Documents</CardTitle>
