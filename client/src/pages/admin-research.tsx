@@ -65,6 +65,20 @@ import {
   Cell,
 } from "recharts";
 import type { ResearchReport, FrictionReportData, SitePlanApplication, FunnelStage, FrictionCategory, TimeToDecisionData, OrdinanceHitListData, TemporalTrendsData, YoYDeltas, RepresentationGapData, ProjectTypeComparisonData, ProjectTypeGroupStats, AttritionCurveEntry, DaysAddedEntry, ApplicationModifiers, DynamicReportPayload, ResearchBoardType } from "@shared/schema";
+
+interface DynamicReportListItem {
+  id: string;
+  townName: string;
+  status: string;
+  boardType: string | null;
+  dateRangeStart: string | null;
+  dateRangeEnd: string | null;
+  prompt: string | null;
+  documentCount: number | null;
+  error: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
 import { RESEARCH_BOARD_TYPES } from "@shared/schema";
 import { exportFrictionReportPDF, exportFrictionReportCSV } from "@/lib/exportFrictionReport";
 import DynamicReportRenderer from "@/components/research/DynamicReportRenderer";
@@ -189,10 +203,12 @@ export default function AdminResearch() {
     if (jobStatus === "completed" && jobStatusQuery.data?.result && activeJobId) {
       setDynamicReport(jobStatusQuery.data.result);
       setActiveJobId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
       toast({ title: "Report generated", description: "Your dynamic intelligence report is ready." });
     }
     if (jobStatus === "error" && activeJobId) {
       setActiveJobId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
       toast({ title: "Generation failed", description: jobStatusQuery.data?.error ?? "Unknown error", variant: "destructive" });
     }
   }, [jobStatus, activeJobId]);
@@ -221,11 +237,60 @@ export default function AdminResearch() {
     onSuccess: (data) => {
       setDynamicReport(null);
       setActiveJobId(data.jobId);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
     },
     onError: (err) => {
       toast({ title: "Generation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     },
   });
+
+  const [showHistory, setShowHistory] = useState(true);
+
+  const { data: dynamicReportsData } = useQuery<{ reports: DynamicReportListItem[] }>({
+    queryKey: ["/api/admin/research/dynamic-reports", dynamicTown],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const url = dynamicTown
+        ? `/api/admin/research/dynamic-reports?townName=${encodeURIComponent(dynamicTown)}`
+        : `/api/admin/research/dynamic-reports`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.json();
+    },
+    refetchInterval: 15000,
+  });
+
+  const deleteDynamicReportMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = localStorage.getItem("adminToken");
+      await fetch(`/api/admin/research/dynamic-report/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/research/dynamic-reports"] });
+      toast({ title: "Report deleted" });
+    },
+  });
+
+  const loadSavedReport = async (id: string) => {
+    const token = localStorage.getItem("adminToken");
+    const res = await fetch(`/api/admin/research/dynamic-report/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      toast({ title: "Error", description: "Failed to load report", variant: "destructive" });
+      return;
+    }
+    const report = await res.json();
+    if (report.reportData) {
+      setDynamicReport(report.reportData as DynamicReportPayload);
+    } else {
+      toast({ title: "No data", description: "This report has no saved data to display", variant: "destructive" });
+    }
+  };
 
   const { data: reportsData, isLoading: reportsLoading } = useQuery<{ reports: ResearchReport[] }>({
     queryKey: ["/api/admin/research/friction-reports"],
@@ -575,6 +640,94 @@ export default function AdminResearch() {
                 )}
               </CardContent>
             </Card>
+
+            {(dynamicReportsData?.reports?.length ?? 0) > 0 && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+                  <CardTitle className="text-base" data-testid="text-past-reports-title">Past Reports</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowHistory(!showHistory)}
+                    data-testid="button-toggle-history"
+                  >
+                    {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </Button>
+                </CardHeader>
+                {showHistory && (
+                  <CardContent className="pt-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Prompt</TableHead>
+                          <TableHead>Board</TableHead>
+                          <TableHead>Date Range</TableHead>
+                          <TableHead>Docs</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dynamicReportsData?.reports.map((r) => (
+                          <TableRow key={r.id} data-testid={`row-dynamic-report-${r.id}`}>
+                            <TableCell className="max-w-[250px]">
+                              <span className="line-clamp-2 text-sm" title={r.prompt || ""}>
+                                {r.prompt ? (r.prompt.length > 80 ? r.prompt.slice(0, 80) + "..." : r.prompt) : "—"}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {r.boardType ? BOARD_LABELS[r.boardType as ResearchBoardType] || r.boardType : "—"}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {r.dateRangeStart || r.dateRangeEnd
+                                ? `${r.dateRangeStart || "..."} to ${r.dateRangeEnd || "..."}`
+                                : "All dates"}
+                            </TableCell>
+                            <TableCell className="text-sm">{r.documentCount ?? "—"}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={r.status === "completed" ? "default" : r.status === "error" ? "destructive" : "secondary"}
+                                data-testid={`badge-status-${r.id}`}
+                              >
+                                {r.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {r.status === "completed" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => loadSavedReport(r.id)}
+                                    data-testid={`button-view-report-${r.id}`}
+                                    title="View report"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => deleteDynamicReportMutation.mutate(r.id)}
+                                  data-testid={`button-delete-report-${r.id}`}
+                                  title="Delete report"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                )}
+              </Card>
+            )}
 
             {dynamicReport && (
               <DynamicReportRenderer payload={dynamicReport} />

@@ -1002,11 +1002,16 @@ export const researchReports = pgTable("research_reports", {
   townName: text("town_name").notNull(),
   reportType: text("report_type").notNull().default("friction"),
   status: text("status").notNull().default("pending"),
-  reportData: jsonb("report_data").$type<FrictionReportData>(),
+  reportData: jsonb("report_data").$type<FrictionReportData | DynamicReportPayload>(),
   error: text("error"),
   chunksAnalyzed: integer("chunks_analyzed").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
+  boardType: text("board_type"),
+  dateRangeStart: text("date_range_start"),
+  dateRangeEnd: text("date_range_end"),
+  prompt: text("prompt"),
+  documentCount: integer("document_count").default(0),
 });
 
 export const insertResearchReportSchema = createInsertSchema(researchReports).omit({

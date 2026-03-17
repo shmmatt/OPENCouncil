@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { authenticateAdmin } from "../middleware/auth";
-import { db, schema, eq, desc, sql } from "../storage/db";
+import { db, schema, eq, desc, sql, and } from "../storage/db";
 import type {
   SitePlanApplication,
   FrictionReportData,
@@ -57,7 +57,7 @@ function updateJob(jobId: string, patch: Partial<ReportJob>) {
 }
 
 function scheduleJobCleanup(jobId: string) {
-  setTimeout(() => reportJobs.delete(jobId), 10 * 60 * 1000);
+  setTimeout(() => reportJobs.delete(jobId), 2 * 60 * 1000);
 }
 
 router.get("/job-status/:jobId", (req, res) => {
@@ -317,6 +317,74 @@ router.delete("/friction-report/:id", async (req, res) => {
   }
 });
 
+// ============================================================
+// DYNAMIC REPORT HISTORY ENDPOINTS
+// ============================================================
+
+router.get("/dynamic-reports", async (req, res) => {
+  try {
+    const townName = (req.query.townName as string) || "";
+    const whereClause = townName
+      ? and(eq(schema.researchReports.reportType, "dynamic"), eq(schema.researchReports.townName, townName))
+      : eq(schema.researchReports.reportType, "dynamic");
+
+    const reports = await db
+      .select({
+        id: schema.researchReports.id,
+        townName: schema.researchReports.townName,
+        status: schema.researchReports.status,
+        boardType: schema.researchReports.boardType,
+        dateRangeStart: schema.researchReports.dateRangeStart,
+        dateRangeEnd: schema.researchReports.dateRangeEnd,
+        prompt: schema.researchReports.prompt,
+        documentCount: schema.researchReports.documentCount,
+        error: schema.researchReports.error,
+        createdAt: schema.researchReports.createdAt,
+        completedAt: schema.researchReports.completedAt,
+      })
+      .from(schema.researchReports)
+      .where(whereClause)
+      .orderBy(desc(schema.researchReports.createdAt))
+      .limit(20);
+
+    res.json({ reports });
+  } catch (error) {
+    logError("Failed to fetch dynamic reports", { error: String(error) });
+    res.status(500).json({ message: "Failed to fetch dynamic reports" });
+  }
+});
+
+router.get("/dynamic-report/:id", async (req, res) => {
+  try {
+    const [report] = await db
+      .select()
+      .from(schema.researchReports)
+      .where(eq(schema.researchReports.id, req.params.id));
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    res.json(report);
+  } catch (error) {
+    logError("Failed to fetch dynamic report", { error: String(error) });
+    res.status(500).json({ message: "Failed to fetch dynamic report" });
+  }
+});
+
+router.delete("/dynamic-report/:id", async (req, res) => {
+  try {
+    await db
+      .delete(schema.researchReports)
+      .where(eq(schema.researchReports.id, req.params.id));
+
+    res.json({ success: true });
+  } catch (error) {
+    logError("Failed to delete dynamic report", { error: String(error) });
+    res.status(500).json({ message: "Failed to delete dynamic report" });
+  }
+});
+
 router.post("/friction-report/:id/reanalyze", async (req, res) => {
   try {
     const report = await db
@@ -507,17 +575,66 @@ router.post("/dynamic-generate", async (req, res) => {
   const { townName, boardType, dateRange, prompt } = parsed.data;
   const jobId = randomUUID();
 
+  let reportId: string | null = null;
+  try {
+    const [row] = await db
+      .insert(schema.researchReports)
+      .values({
+        townName,
+        reportType: "dynamic",
+        status: "pending",
+        chunksAnalyzed: 0,
+        boardType,
+        dateRangeStart: dateRange?.start || null,
+        dateRangeEnd: dateRange?.end || null,
+        prompt,
+        documentCount: 0,
+      })
+      .returning();
+    reportId = row.id;
+  } catch (err) {
+    logError("Failed to create dynamic report DB row", { error: String(err) });
+  }
+
   reportJobs.set(jobId, { status: "pending", message: "Starting pipeline...", progress: 0 });
 
-  runDynamicPipeline(jobId, townName, boardType, dateRange, prompt)
-    .then((result) => {
+  runDynamicPipeline(jobId, townName, boardType, dateRange, prompt, reportId)
+    .then(async (result) => {
       updateJob(jobId, { status: "completed", message: "Report ready.", progress: 100, result });
       scheduleJobCleanup(jobId);
+      if (reportId) {
+        try {
+          await db
+            .update(schema.researchReports)
+            .set({
+              status: "completed",
+              reportData: result,
+              completedAt: new Date(),
+            })
+            .where(eq(schema.researchReports.id, reportId));
+        } catch (err) {
+          logError("Failed to persist dynamic report result", { error: String(err), reportId });
+        }
+      }
     })
-    .catch((err) => {
+    .catch(async (err) => {
       logError("Dynamic pipeline background error", { error: String(err) });
       updateJob(jobId, { status: "error", message: String(err), progress: 0, error: String(err) });
       scheduleJobCleanup(jobId);
+      if (reportId) {
+        try {
+          await db
+            .update(schema.researchReports)
+            .set({
+              status: "error",
+              error: String(err),
+              completedAt: new Date(),
+            })
+            .where(eq(schema.researchReports.id, reportId));
+        } catch (dbErr) {
+          logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
+        }
+      }
     });
 
   return res.json({ jobId });
@@ -528,7 +645,8 @@ async function runDynamicPipeline(
   townName: string,
   boardType: ResearchBoardType,
   dateRange: { start?: string; end?: string } | undefined,
-  userPrompt: string
+  userPrompt: string,
+  reportId?: string | null
 ): Promise<DynamicReportPayload> {
   const boardFilter = boardFilterSql(boardType);
 
@@ -589,6 +707,13 @@ async function runDynamicPipeline(
 
   logInfo(`[DynamicPipeline] Phase 0 complete: ${documents.length} documents retrieved`, { stage: "research" });
   updateJob(jobId, { message: `Phase 0 complete: ${documents.length} documents retrieved.`, progress: 5 });
+
+  if (reportId) {
+    db.update(schema.researchReports)
+      .set({ documentCount: documents.length, status: "processing" })
+      .where(eq(schema.researchReports.id, reportId))
+      .catch(err => logError("Failed to update documentCount", { error: String(err) }));
+  }
 
   if (documents.length === 0) {
     return {
