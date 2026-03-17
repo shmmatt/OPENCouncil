@@ -575,7 +575,7 @@ router.post("/dynamic-generate", async (req, res) => {
   const { townName, boardType, dateRange, prompt } = parsed.data;
   const jobId = randomUUID();
 
-  let reportId: string | null = null;
+  let reportId: string;
   try {
     const [row] = await db
       .insert(schema.researchReports)
@@ -594,6 +594,7 @@ router.post("/dynamic-generate", async (req, res) => {
     reportId = row.id;
   } catch (err) {
     logError("Failed to create dynamic report DB row", { error: String(err) });
+    return res.status(500).json({ message: "Failed to initialize report" });
   }
 
   reportJobs.set(jobId, { status: "pending", message: "Starting pipeline...", progress: 0 });
@@ -601,40 +602,36 @@ router.post("/dynamic-generate", async (req, res) => {
   runDynamicPipeline(jobId, townName, boardType, dateRange, prompt, reportId)
     .then(async (result) => {
       updateJob(jobId, { status: "completed", message: "Report ready.", progress: 100, result });
-      scheduleJobCleanup(jobId);
-      if (reportId) {
-        try {
-          await db
-            .update(schema.researchReports)
-            .set({
-              status: "completed",
-              reportData: result,
-              completedAt: new Date(),
-            })
-            .where(eq(schema.researchReports.id, reportId));
-        } catch (err) {
-          logError("Failed to persist dynamic report result", { error: String(err), reportId });
-        }
+      try {
+        await db
+          .update(schema.researchReports)
+          .set({
+            status: "completed",
+            reportData: result,
+            completedAt: new Date(),
+          })
+          .where(eq(schema.researchReports.id, reportId));
+      } catch (err) {
+        logError("Failed to persist dynamic report result", { error: String(err), reportId });
       }
+      scheduleJobCleanup(jobId);
     })
     .catch(async (err) => {
       logError("Dynamic pipeline background error", { error: String(err) });
       updateJob(jobId, { status: "error", message: String(err), progress: 0, error: String(err) });
-      scheduleJobCleanup(jobId);
-      if (reportId) {
-        try {
-          await db
-            .update(schema.researchReports)
-            .set({
-              status: "error",
-              error: String(err),
-              completedAt: new Date(),
-            })
-            .where(eq(schema.researchReports.id, reportId));
-        } catch (dbErr) {
-          logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
-        }
+      try {
+        await db
+          .update(schema.researchReports)
+          .set({
+            status: "error",
+            error: String(err),
+            completedAt: new Date(),
+          })
+          .where(eq(schema.researchReports.id, reportId));
+      } catch (dbErr) {
+        logError("Failed to persist dynamic report error", { error: String(dbErr), reportId });
       }
+      scheduleJobCleanup(jobId);
     });
 
   return res.json({ jobId });
@@ -646,7 +643,7 @@ async function runDynamicPipeline(
   boardType: ResearchBoardType,
   dateRange: { start?: string; end?: string } | undefined,
   userPrompt: string,
-  reportId?: string | null
+  reportId: string
 ): Promise<DynamicReportPayload> {
   const boardFilter = boardFilterSql(boardType);
 
@@ -708,12 +705,10 @@ async function runDynamicPipeline(
   logInfo(`[DynamicPipeline] Phase 0 complete: ${documents.length} documents retrieved`, { stage: "research" });
   updateJob(jobId, { message: `Phase 0 complete: ${documents.length} documents retrieved.`, progress: 5 });
 
-  if (reportId) {
-    db.update(schema.researchReports)
-      .set({ documentCount: documents.length, status: "processing" })
-      .where(eq(schema.researchReports.id, reportId))
-      .catch(err => logError("Failed to update documentCount", { error: String(err) }));
-  }
+  db.update(schema.researchReports)
+    .set({ documentCount: documents.length, status: "processing" })
+    .where(eq(schema.researchReports.id, reportId))
+    .catch(err => logError("Failed to update documentCount", { error: String(err) }));
 
   if (documents.length === 0) {
     return {
