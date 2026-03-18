@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { requireRole } from "../auth/middleware";
 import type { IdentityRequest } from "../auth/types";
 import type { ActorIdentifier } from "@shared/schema";
+import type { SQL } from "drizzle-orm";
 import { db, schema, eq, and, sql } from "../storage/db";
 import { detectMinutesHeuristics, parseDateToISO, suggestMetadataFromPreview } from "../services/metadataExtraction";
 
@@ -185,20 +186,19 @@ router.post(
 );
 
 async function runBackfill(jobId: string, townFilter: string): Promise<void> {
-  const job = backfillJobs.get(jobId)!;
-
   try {
-    const conditions: ReturnType<typeof eq>[] = [
+    const conditions: SQL<unknown>[] = [
       eq(schema.documentVersions.isMinutes, true),
       eq(schema.documentVersions.isCurrent, true),
       sql`${schema.documentVersions.meetingDate} IS NULL`,
       sql`${schema.fileBlobs.previewText} IS NOT NULL`,
-    ] as any[];
+    ];
 
     if (townFilter) {
-      conditions.push(eq(schema.logicalDocuments.town, townFilter) as any);
+      conditions.push(eq(schema.logicalDocuments.town, townFilter));
     }
 
+    // Fetch all eligible records — no cap so every NULL meetingDate gets a chance
     const candidates = await db
       .select({
         versionId: schema.documentVersions.id,
@@ -208,15 +208,15 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
       .from(schema.documentVersions)
       .innerJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
       .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
-      .where(and(...conditions))
-      .limit(500);
+      .where(and(...conditions));
 
-    backfillJobs.set(jobId, { ...job, total: candidates.length });
+    backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, total: candidates.length });
 
     const needsLlm: typeof candidates = [];
     let updated = 0;
     let processed = 0;
 
+    // Heuristic pass — only count `processed` here for records fully resolved
     for (const row of candidates) {
       const text = row.previewText || "";
       const hints = detectMinutesHeuristics(row.filename, text);
@@ -228,18 +228,19 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
           .set({ meetingDate: new Date(isoDate) })
           .where(eq(schema.documentVersions.id, row.versionId));
         updated++;
+        processed++;
+        backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, processed, updated });
       } else {
+        // Defer to LLM — processed will be incremented in the LLM pass
         needsLlm.push(row);
       }
-
-      processed++;
-      backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, processed, updated });
     }
 
+    // LLM pass — each item counted exactly once when its LLM call finishes
     const CONCURRENCY = 3;
     for (let i = 0; i < needsLlm.length; i += CONCURRENCY) {
       const batch = needsLlm.slice(i, i + CONCURRENCY);
-      await Promise.all(
+      const results = await Promise.all(
         batch.map(async (row) => {
           try {
             const suggested = await suggestMetadataFromPreview(row.filename, row.previewText || "", undefined);
@@ -248,19 +249,23 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
                 .update(schema.documentVersions)
                 .set({ meetingDate: new Date(suggested.meetingDate) })
                 .where(eq(schema.documentVersions.id, row.versionId));
-              const cur = backfillJobs.get(jobId)!;
-              backfillJobs.set(jobId, { ...cur, updated: cur.updated + 1 });
+              return true;
             }
           } catch {
+            // swallow per-record LLM errors
           }
-          const cur = backfillJobs.get(jobId)!;
-          backfillJobs.set(jobId, { ...cur, processed: cur.processed + 1 });
+          return false;
         })
       );
+
+      // Update counts once per batch to avoid concurrent read/write races
+      const batchUpdated = results.filter(Boolean).length;
+      processed += batch.length;
+      updated += batchUpdated;
+      backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, processed, updated });
     }
 
-    const final = backfillJobs.get(jobId)!;
-    backfillJobs.set(jobId, { ...final, status: "completed" });
+    backfillJobs.set(jobId, { ...backfillJobs.get(jobId)!, status: "completed" });
   } catch (err) {
     const cur = backfillJobs.get(jobId);
     if (cur) backfillJobs.set(jobId, { ...cur, status: "error", error: String(err) });
