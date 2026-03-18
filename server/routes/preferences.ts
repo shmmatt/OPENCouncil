@@ -243,7 +243,9 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
       const results = await Promise.all(
         batch.map(async (row) => {
           try {
-            const suggested = await suggestMetadataFromPreview(row.filename, row.rawText || "", undefined);
+            // Cap text at 4000 chars for LLM — date headers appear near the top
+            const llmText = (row.rawText || "").slice(0, 4000);
+            const suggested = await suggestMetadataFromPreview(row.filename, llmText, undefined);
             if (suggested.meetingDate) {
               await db
                 .update(schema.documentVersions)
@@ -269,6 +271,9 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
   } catch (err) {
     const cur = backfillJobs.get(jobId);
     if (cur) backfillJobs.set(jobId, { ...cur, status: "error", error: String(err) });
+  } finally {
+    // Clean up in-memory job state after 10 minutes to prevent unbounded growth
+    setTimeout(() => backfillJobs.delete(jobId), 10 * 60 * 1000);
   }
 }
 
