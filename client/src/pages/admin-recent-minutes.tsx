@@ -173,7 +173,7 @@ export default function AdminRecentMinutes() {
                   {isBackfillRunning
                     ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     : <CalendarSearch className="w-4 h-4 mr-2" />}
-                  Backfill Dates
+                  Backfill Meeting Dates
                 </Button>
                 <Button
                   variant="outline"

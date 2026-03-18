@@ -189,21 +189,21 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
   try {
     const conditions: SQL<unknown>[] = [
       eq(schema.documentVersions.isMinutes, true),
-      eq(schema.documentVersions.isCurrent, true),
       sql`${schema.documentVersions.meetingDate} IS NULL`,
-      sql`${schema.fileBlobs.previewText} IS NOT NULL`,
+      sql`(${schema.fileBlobs.ocrText} IS NOT NULL OR ${schema.fileBlobs.previewText} IS NOT NULL)`,
     ];
 
     if (townFilter) {
       conditions.push(eq(schema.logicalDocuments.town, townFilter));
     }
 
-    // Fetch all eligible records — no cap so every NULL meetingDate gets a chance
+    // Fetch all eligible records — no isCurrent filter, no row cap
+    // Use ocrText (full raw OCR output) with previewText as fallback for richer extraction
     const candidates = await db
       .select({
         versionId: schema.documentVersions.id,
         filename: schema.fileBlobs.originalFilename,
-        previewText: schema.fileBlobs.previewText,
+        rawText: sql<string | null>`COALESCE(${schema.fileBlobs.ocrText}, ${schema.fileBlobs.previewText})`,
       })
       .from(schema.documentVersions)
       .innerJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
@@ -218,7 +218,7 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
 
     // Heuristic pass — only count `processed` here for records fully resolved
     for (const row of candidates) {
-      const text = row.previewText || "";
+      const text = row.rawText || "";
       const hints = detectMinutesHeuristics(row.filename, text);
       const isoDate = hints.possibleDateText ? parseDateToISO(hints.possibleDateText) : null;
 
@@ -243,7 +243,7 @@ async function runBackfill(jobId: string, townFilter: string): Promise<void> {
       const results = await Promise.all(
         batch.map(async (row) => {
           try {
-            const suggested = await suggestMetadataFromPreview(row.filename, row.previewText || "", undefined);
+            const suggested = await suggestMetadataFromPreview(row.filename, row.rawText || "", undefined);
             if (suggested.meetingDate) {
               await db
                 .update(schema.documentVersions)
