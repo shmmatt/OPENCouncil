@@ -439,7 +439,7 @@ export async function getMinutesEngagementMetrics(days: number = 7): Promise<Min
     AND board IS NOT NULL
     AND created_at >= ${range.startDate}
     GROUP BY board
-    ORDER BY (ask_clicks + view_clicks) DESC
+    ORDER BY (COUNT(CASE WHEN event_type = 'recent_minutes_ask_clicked' THEN 1 END) + COUNT(CASE WHEN event_type = 'recent_minutes_view_clicked' THEN 1 END)) DESC
     LIMIT 10
   `);
   const engagementByBoard = engagementByBoardResult.rows.map(row => ({
