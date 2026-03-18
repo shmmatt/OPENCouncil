@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { db, schema, eq, and, desc, sql, gte } from "../storage/db";
+import { db, schema, eq, and, desc, sql, gte, inArray } from "../storage/db";
 import { generateQueryEmbedding } from "./embeddingService";
 import { semanticSearch } from "./embeddingStorage";
 import { logInfo, logError, logDebug } from "../utils/logger";
@@ -48,16 +48,15 @@ export async function extractTopicsFromMinutes(town: string): Promise<{ topics: 
 
   const sourceMinutesIds = recentMinutes.map(m => m.documentId);
 
+  // Only fetch chunks for the date-filtered minutes — prevents recently-crawled
+  // old documents (e.g., 2023 minutes ingested today) from leaking into the feed.
   const chunks = await db
     .select({
       content: schema.documentChunks.content,
       metadata: schema.documentChunks.metadata,
     })
     .from(schema.documentChunks)
-    .where(and(
-      sql`lower(metadata->>'town') = ${town.toLowerCase()}`,
-      sql`metadata->>'documentType' = 'meeting_minutes'`,
-    ))
+    .where(inArray(schema.documentChunks.documentId, sourceMinutesIds))
     .orderBy(desc(schema.documentChunks.createdAt))
     .limit(50);
 
