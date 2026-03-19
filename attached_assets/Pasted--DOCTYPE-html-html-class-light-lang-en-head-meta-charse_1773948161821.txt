@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Civic Ledger | OPENCouncil Town News Feed</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-primary": "#f3f8ff",
+              "on-secondary": "#f5f9ff",
+              "on-surface": "#2c3338",
+              "surface-container-low": "#f2f4f7",
+              "on-secondary-container": "#415462",
+              "inverse-surface": "#0c0e10",
+              "surface-container-lowest": "#ffffff",
+              "surface": "#f9f9fb",
+              "on-surface-variant": "#586065",
+              "on-tertiary-fixed-variant": "#3c6462",
+              "on-primary-fixed-variant": "#31607f",
+              "secondary-container": "#d1e5f6",
+              "secondary-fixed": "#d1e5f6",
+              "tertiary-dim": "#325a58",
+              "surface-container-highest": "#dce3ea",
+              "on-background": "#2c3338",
+              "tertiary": "#3e6664",
+              "secondary": "#4e616f",
+              "surface-container-high": "#e3e9ee",
+              "on-tertiary-fixed": "#1e4746",
+              "on-error-container": "#752121",
+              "tertiary-container": "#c3eeeb",
+              "on-tertiary": "#e1fffc",
+              "background": "#f9f9fb",
+              "on-secondary-fixed-variant": "#4b5e6c",
+              "error": "#9f403d",
+              "tertiary-fixed": "#c3eeeb",
+              "surface-container": "#eaeef2",
+              "surface-dim": "#d2dbe2",
+              "error-container": "#fe8983",
+              "surface-bright": "#f9f9fb",
+              "primary-dim": "#275775",
+              "on-error": "#fff7f6",
+              "primary-fixed": "#c9e6ff",
+              "outline-variant": "#abb3b9",
+              "tertiary-fixed-dim": "#b5dfdd",
+              "primary-fixed-dim": "#acdafe",
+              "primary-container": "#c9e6ff",
+              "on-primary-fixed": "#0c4361",
+              "inverse-on-surface": "#9b9d9f",
+              "on-tertiary-container": "#325a58",
+              "surface-tint": "#356382",
+              "inverse-primary": "#acdafe",
+              "surface-variant": "#dce3ea",
+              "on-primary-container": "#265674",
+              "secondary-fixed-dim": "#c3d7e8",
+              "primary": "#356382",
+              "outline": "#747c81",
+              "on-secondary-fixed": "#2f424f",
+              "secondary-dim": "#435563",
+              "error-dim": "#4e0309"
+            },
+            fontFamily: {
+              "headline": ["Public Sans"],
+              "body": ["Inter"],
+              "label": ["Public Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .civic-gradient {
+            background: linear-gradient(155deg, #356382 0%, #275775 100%);
+        }
+        .ghost-border {
+            outline: 1px solid rgba(171, 179, 185, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md">
+<div class="flex justify-between items-center px-8 h-16 w-full max-w-none">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black text-sky-900 dark:text-sky-100 uppercase tracking-widest font-headline">OPENCouncil</span>
+<nav class="hidden md:flex gap-6 items-center">
+<a class="font-headline font-bold tracking-tight text-sky-900 dark:text-sky-100 border-b-2 border-sky-800 dark:border-sky-400 pb-1" href="#">News</a>
+<a class="font-headline font-bold tracking-tight text-slate-500 dark:text-slate-400 hover:text-sky-800 dark:hover:text-sky-200 transition-colors" href="#">Documents</a>
+<a class="font-headline font-bold tracking-tight text-slate-500 dark:text-slate-400 hover:text-sky-800 dark:hover:text-sky-200 transition-colors" href="#">Chat</a>
+<a class="font-headline font-bold tracking-tight text-slate-500 dark:text-slate-400 hover:text-sky-800 dark:hover:text-sky-200 transition-colors" href="#">Dashboard</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<input class="bg-surface-container-high border-none rounded-lg py-2 pl-4 pr-10 text-sm focus:ring-2 focus:ring-primary w-64" placeholder="Search records..." type="text"/>
+<span class="material-symbols-outlined absolute right-3 top-2 text-on-surface-variant">search</span>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</div>
+<div class="bg-slate-200/50 dark:bg-slate-800/50 h-[1px]"></div>
+</header>
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 pt-20 hidden md:flex flex-col gap-2 px-4 py-6 bg-slate-100 dark:bg-slate-950">
+<div class="px-4 mb-6">
+<h2 class="text-lg font-bold text-sky-900 dark:text-sky-100 font-headline">Civic Portal</h2>
+<p class="text-xs text-on-surface-variant font-medium">Official Ledger</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900 text-sky-900 dark:text-sky-100 font-bold shadow-sm rounded-lg transition-transform hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="newspaper">newspaper</span>
+<span class="text-sm font-medium font-body">News</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-lg transition-transform hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="text-sm font-medium font-body">Documents</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-lg transition-transform hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="forum">forum</span>
+<span class="text-sm font-medium font-body">Chat</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-lg transition-transform hover:translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-sm font-medium font-body">Dashboard</span>
+</a>
+</nav>
+<div class="mt-auto px-4">
+<button class="w-full bg-primary text-on-primary font-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                Post Update
+            </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-64 pt-24 pb-12 px-8 min-h-screen">
+<div class="max-w-6xl mx-auto">
+<!-- Hero Header Section -->
+<header class="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+<div class="max-w-2xl">
+<span class="text-xs font-bold tracking-widest text-primary uppercase font-label">Official Publication</span>
+<h1 class="text-5xl font-black text-on-surface font-headline mt-2 leading-tight">The Civic Ledger</h1>
+<p class="text-lg text-on-surface-variant mt-4 font-body leading-relaxed">Verified municipal activities and legislative updates for the community of OPENCouncil.</p>
+</div>
+<div class="flex items-center gap-3 bg-surface-container rounded-full px-4 py-2 ghost-border">
+<span class="material-symbols-outlined text-primary" data-icon="calendar_today">calendar_today</span>
+<span class="text-sm font-bold font-label">OCTOBER 14, 2024</span>
+</div>
+</header>
+<!-- News Bento Grid -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Primary News Feature -->
+<article class="lg:col-span-8 group">
+<div class="relative overflow-hidden rounded-xl h-[440px] civic-gradient p-8 flex flex-col justify-end shadow-lg transition-transform hover:scale-[1.01] duration-300">
+<img class="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay" data-alt="Aerial view of a modern public park design" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnmNVJkzQ_trFZaP7twwfYnZw1st70dDGGB_NfcdnPIT0wkS1QhrrF9h_ePlhB__rq6pkZsuFkMEM37Sxe6wyw1b1vKTptH9j1UZ6vCI3LkMOwH7MWqrqDsjqJZKyakN8N6nLTwA3C1ONWp5VHYNkWo2ytHJga7FHON-007AZAHVUEnwqv4F4osJ0MzQhiyQRMHHI-fZWH_IDnumUl7FItve6aQGj0efEV2DK8-asUgLBeBZWD--GQbwnOuVYeZuS5gGhHJGMxI2o"/>
+<div class="relative z-10">
+<span class="inline-block bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest mb-4">Infrastructure</span>
+<h2 class="text-4xl font-black text-white font-headline leading-tight">New Park Project Approved for North District</h2>
+<p class="text-blue-50 mt-4 text-lg font-body max-w-xl opacity-90 leading-relaxed">The City Council has greenlit the $4.2M Riverside Commons project, integrating sustainable irrigation and accessible play areas.</p>
+<div class="mt-8 flex items-center gap-4">
+<button class="bg-white text-primary font-bold px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-primary-fixed transition-colors">
+                                    Read Full Directive
+                                    <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<span class="text-white/70 text-sm font-label font-bold">OCT 14, 2024</span>
+</div>
+</div>
+</div>
+</article>
+<!-- Side Feed Item 1 -->
+<article class="lg:col-span-4 bg-surface-container-lowest p-6 rounded-xl ghost-border flex flex-col justify-between hover:bg-surface transition-colors">
+<div>
+<span class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant font-label mb-2 block">Governance</span>
+<h3 class="text-xl font-bold font-headline leading-snug mb-3">City Council Meeting Summary: Oct 12</h3>
+<p class="text-sm text-on-surface-variant font-body leading-relaxed">Summary of discussions regarding the 2025 Budget Draft and public safety initiatives.</p>
+</div>
+<div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+<a class="text-primary font-bold text-sm flex items-center gap-1 hover:underline" href="#">
+                            View Minutes
+                            <span class="material-symbols-outlined text-[16px]" data-icon="description">description</span>
+</a>
+<span class="text-xs text-on-surface-variant">2d ago</span>
+</div>
+</article>
+<!-- Side Feed Item 2 -->
+<article class="lg:col-span-4 bg-surface-container-lowest p-6 rounded-xl ghost-border flex flex-col justify-between hover:bg-surface transition-colors">
+<div>
+<span class="text-[10px] font-black uppercase tracking-widest text-error font-label mb-2 block">Traffic Alert</span>
+<h3 class="text-xl font-bold font-headline leading-snug mb-3">Traffic Rerouting for Holiday Parade</h3>
+<p class="text-sm text-on-surface-variant font-body leading-relaxed">Detailed closure map and alternative routes for the upcoming downtown festivities on Nov 1st.</p>
+</div>
+<div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+<a class="text-primary font-bold text-sm flex items-center gap-1 hover:underline" href="#">
+                            Map Details
+                            <span class="material-symbols-outlined text-[16px]" data-icon="map">map</span>
+</a>
+<span class="text-xs text-on-surface-variant">3d ago</span>
+</div>
+</article>
+<!-- Feed Item 3 (Spans more space) -->
+<article class="lg:col-span-4 bg-surface-container p-6 rounded-xl flex flex-col justify-between">
+<div>
+<span class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant font-label mb-2 block">Community</span>
+<h3 class="text-xl font-bold font-headline leading-snug mb-3">Public Hearing: Housing Density</h3>
+<p class="text-sm text-on-surface-variant font-body leading-relaxed">Invitation for citizens to voice concerns regarding the proposed rezoning of Sector 4B.</p>
+</div>
+<div class="mt-6 pt-6 border-t border-white/50 flex justify-between items-center">
+<button class="bg-primary-container text-on-primary-container px-4 py-2 rounded font-bold text-xs uppercase tracking-wider">Join Register</button>
+<span class="text-xs text-on-surface-variant">Oct 10</span>
+</div>
+</article>
+<!-- Feed Item 4 -->
+<article class="lg:col-span-4 bg-surface-container-lowest p-6 rounded-xl ghost-border flex flex-col justify-between hover:bg-surface transition-colors">
+<div>
+<span class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant font-label mb-2 block">Transparency</span>
+<h3 class="text-xl font-bold font-headline leading-snug mb-3">Quarterly Fiscal Report Published</h3>
+<p class="text-sm text-on-surface-variant font-body leading-relaxed">Comprehensive breakdown of municipal spending and revenue for Q3 2024.</p>
+</div>
+<div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+<a class="text-primary font-bold text-sm flex items-center gap-1 hover:underline" href="#">
+                            Download PDF
+                            <span class="material-symbols-outlined text-[16px]" data-icon="download">download</span>
+</a>
+<span class="text-xs text-on-surface-variant">Oct 08</span>
+</div>
+</article>
+</section>
+<!-- Load More Anchor -->
+<div class="mt-16 text-center">
+<button class="px-8 py-4 bg-surface-container-high hover:bg-surface-container-highest transition-colors rounded-lg font-bold text-on-surface-variant flex items-center gap-3 mx-auto">
+                    Access Archive
+                    <span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full py-12 mt-auto border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+<div class="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="flex flex-col gap-2">
+<span class="font-bold text-slate-900 dark:text-slate-100 font-headline">OPENCouncil</span>
+<span class="font-['Inter'] text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">© 2024 OPENCouncil Municipal Services</span>
+</div>
+<nav class="flex flex-wrap justify-center gap-8">
+<a class="font-['Inter'] text-xs uppercase tracking-wider text-slate-500 hover:text-sky-900 transition-opacity opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+<a class="font-['Inter'] text-xs uppercase tracking-wider text-slate-500 hover:text-sky-900 transition-opacity opacity-80 hover:opacity-100" href="#">Accessibility</a>
+<a class="font-['Inter'] text-xs uppercase tracking-wider text-slate-500 hover:text-sky-900 transition-opacity opacity-80 hover:opacity-100" href="#">Contact Registry</a>
+<a class="font-['Inter'] text-xs uppercase tracking-wider text-slate-500 hover:text-sky-900 transition-opacity opacity-80 hover:opacity-100" href="#">Terms of Record</a>
+</nav>
+</div>
+</footer>
+<!-- Mobile Navigation Shell -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-slate-50/90 backdrop-blur-lg border-t border-slate-200 h-16 flex justify-around items-center z-50">
+<button class="flex flex-col items-center gap-1 text-sky-900">
+<span class="material-symbols-outlined" data-icon="newspaper">newspaper</span>
+<span class="text-[10px] font-bold">News</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="text-[10px] font-medium">Docs</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined" data-icon="forum">forum</span>
+<span class="text-[10px] font-medium">Chat</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-[10px] font-medium">Dash</span>
+</button>
+</nav>
+</body></html>
