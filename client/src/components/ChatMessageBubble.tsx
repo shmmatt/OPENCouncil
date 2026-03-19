@@ -92,7 +92,7 @@ export function ChatMessageBubble({ message, onFollowUpClick, onFeedbackSubmit, 
         <div
           className={`rounded-lg px-4 py-3 ${
             isUser
-              ? "bg-primary text-primary-foreground"
+              ? "bg-sky-50 dark:bg-sky-950 border border-sky-200 dark:border-sky-800"
               : "bg-card border border-card-border"
           }`}
           data-testid={`message-${message.id}`}
@@ -213,8 +213,10 @@ export function ChatMessageBubble({ message, onFollowUpClick, onFeedbackSubmit, 
         )}
 
         <div className="flex items-center gap-2 flex-wrap px-1">
-          <p className="text-xs text-muted-foreground">
-            {new Date(message.createdAt).toLocaleTimeString()}
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground font-headline">
+            {isUser ? "RESIDENT" : isDeepDiveMessage ? "DEEP DIVE" : "CIVIC LEDGER"}
+            {" \u2022 "}
+            {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </p>
           {!isUser && onFeedbackSubmit && (
             <div className="flex items-center gap-1">

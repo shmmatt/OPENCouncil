@@ -54,6 +54,16 @@ An outbound growth engine generates omni-channel social media content, email cop
 ### Document Viewer & Citation Linking
 A document viewer provides pre-signed URLs for internal documents, with intelligent citation linking and title formatting.
 
+### UI Design System — Civic Ledger Redesign
+The public-facing UI uses a "Civic Ledger" visual identity:
+- **Color palette**: Deep Navy primary (`hsl 205 61% 26%`), soft slate background (`hsl 210 33% 97%`), pure white cards.
+- **Typography**: Public Sans (headlines — `font-headline` class) + Inter (body — `font-body` class) loaded from Google Fonts.
+- **Layout shell**: `CivicLayout` component (`client/src/components/CivicLayout.tsx`) wraps all public routes using Shadcn Sidebar primitives. It renders a left sidebar with nav items, plus a top bar with "OPENCOUNCIL" branding and global search. Admin routes bypass this shell entirely.
+- **Feed page** (`/feed`): "The Civic Ledger" masthead header with "Official Publication" badge and date pill above the TownFeedComponent.
+- **Chat page** (`/chat`): Secondary session-list panel inside the main content area, "Civic Ledger Assistant" header, floating centered pill input with gradient fade and action links beneath it.
+- **Message bubbles**: User messages use sky-tinted background (`bg-sky-50`); assistant messages use `bg-card`. Timestamps show role labels: "RESIDENT • HH:MM" / "CIVIC LEDGER • HH:MM".
+- **Admin pages**: Completely unmodified — no Civic Ledger shell or color tokens applied.
+
 ## External Dependencies
 
 *   **Google Gemini API**: For core AI functionalities.

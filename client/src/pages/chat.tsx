@@ -5,7 +5,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageCircle, Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, Rss, User, FileText, Link2 } from "lucide-react";
+import { MessageCircle, Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, Rss, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
@@ -20,16 +20,16 @@ import { parseSSEStream } from "@/lib/sseParser";
 import { ChatMessageBubble } from "@/components/ChatMessageBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
 
-function ChatSidebar({ 
-  sessions, 
-  activeSessionId, 
-  onSessionSelect, 
+function ChatSidebar({
+  sessions,
+  activeSessionId,
+  onSessionSelect,
   onNewChat,
   selectedTown,
   onTownChange,
   towns,
-}: { 
-  sessions?: ChatSession[]; 
+}: {
+  sessions?: ChatSession[];
   activeSessionId: string | null;
   onSessionSelect: (id: string) => void;
   onNewChat: () => void;
@@ -44,9 +44,9 @@ function ChatSidebar({
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       <div className="p-4 space-y-2 border-b border-sidebar-border">
-        <Button 
-          onClick={onNewChat} 
-          className="w-full"
+        <Button
+          onClick={onNewChat}
+          className="w-full font-headline font-semibold"
           variant={isChatActive ? "default" : "outline"}
           data-testid="button-new-chat"
         >
@@ -55,7 +55,7 @@ function ChatSidebar({
         </Button>
         <Button
           asChild
-          className="w-full"
+          className="w-full font-headline"
           variant={isFeedActive ? "default" : "outline"}
           data-testid="link-town-feed"
         >
@@ -66,16 +66,12 @@ function ChatSidebar({
         </Button>
       </div>
 
-      {/* Town selector */}
       <div className="p-3 border-b border-sidebar-border">
-        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">
           Town
         </label>
         <Select value={selectedTown} onValueChange={onTownChange}>
-          <SelectTrigger 
-            className="w-full" 
-            data-testid="select-town"
-          >
+          <SelectTrigger className="w-full" data-testid="select-town">
             <SelectValue placeholder="Select a town" />
           </SelectTrigger>
           <SelectContent>
@@ -90,14 +86,13 @@ function ChatSidebar({
 
       <Separator />
 
-      {/* Sessions list */}
       <div className="p-3 pb-1">
-        <h3 className="text-xs font-medium text-muted-foreground mb-2">
+        <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
           Conversations
         </h3>
       </div>
       <ScrollArea className="flex-1">
-        <div className="px-2 pb-2 space-y-1">
+        <div className="px-2 pb-2 space-y-0.5">
           {sessions?.map((session) => (
             <button
               key={session.id}
@@ -110,10 +105,10 @@ function ChatSidebar({
               data-testid={`button-session-${session.id}`}
             >
               <div className="flex items-start gap-2">
-                <MessageCircle className="w-4 h-4 mt-1 flex-shrink-0" />
+                <MessageCircle className="w-3.5 h-3.5 mt-1 flex-shrink-0 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{session.title}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {new Date(session.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
@@ -139,13 +134,12 @@ export default function Chat() {
   const [deepDiveIteration, setDeepDiveIteration] = useState(0);
   const [deepDiveMaxIterations, setDeepDiveMaxIterations] = useState(3);
   const [isStreaming, setIsStreaming] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
 
-  // Detect ?session= URL parameter for template-launched sessions
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const sessionParam = urlParams.get("session");
@@ -158,20 +152,18 @@ export default function Chat() {
     }
   }, []);
 
-  // Detect ?q= URL parameter for shareable links
   useEffect(() => {
     if (sharedLinkProcessedRef.current) return;
-    
+
     const urlParams = new URLSearchParams(window.location.search);
     const questionParam = urlParams.get("q");
-    
+
     if (questionParam) {
       const decodedQuestion = questionParam;
       setSharedLinkQuestion(decodedQuestion);
       setIsProcessingSharedLink(true);
       sharedLinkProcessedRef.current = true;
-      
-      // Remove only the 'q' parameter, preserve other params (like utm_source, etc.)
+
       urlParams.delete("q");
       const remainingParams = urlParams.toString();
       const newUrl = window.location.pathname + (remainingParams ? `?${remainingParams}` : "");
@@ -199,9 +191,9 @@ export default function Chat() {
 
   const setTownMutation = useMutation({
     mutationFn: async (town: string) => {
-      await apiRequest("POST", "/api/preferences/town", { 
+      await apiRequest("POST", "/api/preferences/town", {
         town,
-        sessionId: activeSessionId 
+        sessionId: activeSessionId,
       });
     },
     onSuccess: () => {
@@ -237,7 +229,6 @@ export default function Chat() {
     },
   });
 
-  // Send message to a specific session (used for shared links)
   const sendToSession = useCallback(async (sessionId: string, content: string) => {
     setPendingMessage(content);
     try {
@@ -333,29 +324,25 @@ export default function Chat() {
     processDeepLink();
   }, [sendToSession, toast]);
 
-  // Auto-create session and send message when shared link question is detected
   useEffect(() => {
     if (!sharedLinkQuestion || !isProcessingSharedLink) return;
-    
+
     const processSharedLink = async () => {
       const questionToSend = sharedLinkQuestion;
       try {
-        // Create a new session for the shared link
-        const res = await apiRequest("POST", "/api/chat/sessions", { 
-          title: questionToSend.slice(0, 50) + (questionToSend.length > 50 ? "..." : "")
+        const res = await apiRequest("POST", "/api/chat/sessions", {
+          title: questionToSend.slice(0, 50) + (questionToSend.length > 50 ? "..." : ""),
         });
         const newSession: ChatSession = await res.json();
         queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
         setActiveSessionId(newSession.id);
-        
-        // Send the question
+
         await sendToSession(newSession.id, questionToSend);
         setSharedLinkQuestion(null);
       } catch (error) {
         console.error("Failed to process shared link:", error);
         setIsProcessingSharedLink(false);
         setSharedLinkQuestion(null);
-        // Put the question in the input field so user can retry
         setInputValue(questionToSend);
         toast({
           title: "Could not process shared link",
@@ -364,7 +351,7 @@ export default function Chat() {
         });
       }
     };
-    
+
     processSharedLink();
   }, [sharedLinkQuestion, isProcessingSharedLink, sendToSession, toast]);
 
@@ -439,24 +426,24 @@ export default function Chat() {
       if (!activeSessionId) {
         throw new Error("No active chat session. Please start a new chat first.");
       }
-      
+
       if (file) {
         const formData = new FormData();
         formData.append("content", content);
         formData.append("file", file);
-        
+
         try {
           const response = await fetch(`/api/chat/v2/sessions/${activeSessionId}/messages/upload`, {
             method: "POST",
             body: formData,
             credentials: "include",
           });
-          
+
           if (!response.ok) {
             const error = await response.json().catch(() => ({ message: "Upload failed" }));
             throw new Error(error.message || "Upload failed");
           }
-          
+
           return response;
         } catch (error) {
           if (error instanceof TypeError && error.message === "Failed to fetch") {
@@ -500,7 +487,7 @@ export default function Chat() {
       ];
       const allowedExtensions = [".pdf", ".docx", ".txt"];
       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-      
+
       if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(ext)) {
         toast({
           title: "Invalid file type",
@@ -509,7 +496,7 @@ export default function Chat() {
         });
         return;
       }
-      
+
       if (file.size > 25 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -518,7 +505,7 @@ export default function Chat() {
         });
         return;
       }
-      
+
       setSelectedFile(file);
     }
   };
@@ -611,7 +598,7 @@ export default function Chat() {
     if ((!inputValue.trim() && !selectedFile) || !activeSessionId) return;
 
     const messageContent = inputValue.trim();
-    const displayMessage = selectedFile 
+    const displayMessage = selectedFile
       ? `${messageContent}\n\n[Attached: ${selectedFile.name}]`
       : messageContent;
     setPendingMessage(displayMessage);
@@ -638,42 +625,61 @@ export default function Chat() {
     />
   );
 
+  const sessionLabel = activeSession
+    ? `ACTIVE SESSION: ${activeSession.title?.slice(0, 36).toUpperCase()}${(activeSession.title?.length ?? 0) > 36 ? "..." : ""}`
+    : "CIVIC LEDGER ASSISTANT";
+
   return (
-    <div className="flex h-screen bg-background">
-      <div className="hidden md:block w-72 h-full">
+    <div className="flex h-full bg-background">
+      <div className="hidden md:block w-64 h-full flex-shrink-0">
         {sidebarContent}
       </div>
 
-      <div className="flex-1 flex flex-col h-full">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         <TemplateBanner onLaunch={handleTemplateLaunch} isLoading={createSessionMutation.isPending} selectedTown={selectedTown} />
-        <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Sheet>
-              <SheetTrigger asChild className="md:hidden">
-                <Button variant="ghost" size="icon" data-testid="button-menu">
-                  <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-72">
-                {sidebarContent}
-              </SheetContent>
-            </Sheet>
-            <div>
-              <h1 className="text-lg font-semibold">OPENCouncil Assistant</h1>
-              <p className="text-xs text-muted-foreground">Ask questions about your municipal documents</p>
+
+        <div className="border-b bg-card px-5 md:px-8 py-5 flex-shrink-0">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Sheet>
+                <SheetTrigger asChild className="md:hidden">
+                  <Button variant="ghost" size="icon" data-testid="button-menu">
+                    <Menu className="w-5 h-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="p-0 w-72">
+                  {sidebarContent}
+                </SheetContent>
+              </Sheet>
+              <div>
+                <span
+                  className="inline-block text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-muted border border-border rounded-md px-2 py-0.5 mb-2"
+                  data-testid="badge-active-session"
+                >
+                  {sessionLabel}
+                </span>
+                <h1 className="text-2xl md:text-3xl font-black font-headline text-foreground leading-tight">
+                  Civic Ledger Assistant
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1 max-w-xl leading-relaxed">
+                  Access real-time information from official town records, meeting minutes, and municipal bylaws. Every response is cited directly from the archive.
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:block">
+              <UserStatusBar />
             </div>
           </div>
-          <UserStatusBar />
-        </header>
+        </div>
 
-        <ScrollArea className="flex-1 p-4">
-          <div className="max-w-4xl mx-auto space-y-6">
+        <ScrollArea className="flex-1 px-4 md:px-6 lg:px-8" style={{ paddingBottom: "8rem" }}>
+          <div className="max-w-3xl mx-auto py-6 space-y-6">
             {isProcessingSharedLink && sharedLinkQuestion ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <Link2 className="w-8 h-8 text-primary animate-pulse" />
                 </div>
-                <h2 className="text-xl font-semibold mb-2" data-testid="text-shared-link-loading">Processing Your Question</h2>
+                <h2 className="text-xl font-semibold font-headline mb-2" data-testid="text-shared-link-loading">Processing Your Question</h2>
                 <p className="text-muted-foreground mb-4 max-w-md">
                   Starting a new conversation from your shared link...
                 </p>
@@ -682,10 +688,12 @@ export default function Chat() {
                 </div>
               </div>
             ) : !activeSessionId ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <MessageCircle className="w-16 h-16 text-muted-foreground mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Start a New Conversation</h2>
-                <p className="text-muted-foreground mb-6">Ask questions about your municipal documents</p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Landmark className="w-8 h-8 text-primary" />
+                </div>
+                <h2 className="text-xl font-semibold font-headline mb-2">Start a New Conversation</h2>
+                <p className="text-muted-foreground mb-6 max-w-sm">Ask questions about town bylaws, meeting minutes, or local updates.</p>
                 <Button onClick={handleNewChat} data-testid="button-start-chat">
                   <Plus className="w-4 h-4 mr-2" />
                   New Chat
@@ -717,9 +725,9 @@ export default function Chat() {
                   />
                 )}
                 {messages?.map((message) => (
-                  <ChatMessageBubble 
-                    key={message.id} 
-                    message={message} 
+                  <ChatMessageBubble
+                    key={message.id}
+                    message={message}
                     onFollowUpClick={handleFollowUpClick}
                     onFeedbackSubmit={(type) => {
                       const current = message.feedback;
@@ -734,20 +742,20 @@ export default function Chat() {
                 {pendingMessage && (
                   <div className="flex gap-4 justify-end">
                     <div className="flex flex-col gap-2 max-w-3xl items-end">
-                      <div className="rounded-lg px-4 py-3 bg-primary text-primary-foreground">
-                        <p className="text-base whitespace-pre-wrap">{pendingMessage}</p>
+                      <div className="rounded-lg px-4 py-3 bg-sky-50 dark:bg-sky-950 border border-sky-200 dark:border-sky-800">
+                        <p className="text-sm whitespace-pre-wrap text-foreground">{pendingMessage}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground px-1">
-                        {new Date().toLocaleTimeString()}
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                        RESIDENT &bull; {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center border border-border">
                       <User className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>
                 )}
                 {(sendMessageMutation.isPending || isStreaming) && (
-                  <TypingIndicator 
+                  <TypingIndicator
                     pipelineStage={pipelineStage}
                     isDeepDive={isDeepDiveMode}
                     deepDiveIteration={deepDiveIteration}
@@ -760,98 +768,116 @@ export default function Chat() {
           </div>
         </ScrollArea>
 
-        <div className="border-t bg-card p-4">
-          <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
-            {selectedFile && (
-              <div className="mb-2 flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
-                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-sm truncate flex-1" data-testid="text-attached-file">
-                  {selectedFile.name}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  ({(selectedFile.size / 1024).toFixed(1)} KB)
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={handleRemoveFile}
-                  data-testid="button-remove-file"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-            {isDeepDiveMode && (
-              <div className="mb-2 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
-                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
-                <span className="text-sm text-primary">Deep Dive mode — comprehensive multi-pass analysis</span>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.docx,.txt"
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-file"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-[60px] w-[60px] flex-shrink-0"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
-                data-testid="button-attach-file"
-              >
-                <Paperclip className="w-5 h-5" />
-              </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
+        <div className="absolute bottom-0 left-0 right-0 px-4 md:px-8 pb-6 pt-3 bg-gradient-to-t from-background via-background to-transparent pointer-events-none">
+          <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto pointer-events-auto">
+            <div className="bg-card border border-border rounded-2xl shadow-md overflow-hidden">
+              {selectedFile && (
+                <div className="flex items-center gap-2 bg-muted/50 px-4 pt-3 pb-1">
+                  <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate flex-1" data-testid="text-attached-file">
+                    {selectedFile.name}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(selectedFile.size / 1024).toFixed(1)} KB)
+                  </span>
                   <Button
                     type="button"
-                    variant={isDeepDiveMode ? "default" : "outline"}
-                    className={`h-[60px] px-4 flex-shrink-0 toggle-elevate ${isDeepDiveMode ? "toggle-elevated" : ""}`}
-                    onClick={() => setIsDeepDiveMode(!isDeepDiveMode)}
-                    disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
-                    data-testid="button-deep-dive-toggle"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={handleRemoveFile}
+                    data-testid="button-remove-file"
                   >
-                    <Sparkles className="w-5 h-5" />
+                    <X className="w-3 h-3" />
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isDeepDiveMode ? "Switch to quick answer" : "Deep Dive: comprehensive analysis"}</p>
-                </TooltipContent>
-              </Tooltip>
-              <Textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={isDeepDiveMode ? "Ask a question for deep analysis..." : selectedFile ? "Ask a question about this document..." : "Ask about your municipal documents..."}
-                className="min-h-[60px] resize-none"
-                disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
-                data-testid="input-message"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!activeSessionId || (!inputValue.trim() && !selectedFile) || sendMessageMutation.isPending || isStreaming}
-                className="h-[60px] w-[60px]"
-                data-testid="button-send"
-              >
-                {(sendMessageMutation.isPending || isStreaming) ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </Button>
+                </div>
+              )}
+              {isDeepDiveMode && (
+                <div className="flex items-center gap-2 bg-primary/5 border-b border-primary/10 px-4 pt-3 pb-2">
+                  <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                  <span className="text-sm text-primary font-medium">Deep Dive — comprehensive multi-pass analysis</span>
+                </div>
+              )}
+              <div className="flex items-end gap-2 px-3 py-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  data-testid="input-file"
+                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant={isDeepDiveMode ? "default" : "ghost"}
+                      size="icon"
+                      className={`flex-shrink-0 toggle-elevate ${isDeepDiveMode ? "toggle-elevated" : ""}`}
+                      onClick={() => setIsDeepDiveMode(!isDeepDiveMode)}
+                      disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
+                      data-testid="button-deep-dive-toggle"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isDeepDiveMode ? "Switch to quick answer" : "Deep Dive: comprehensive analysis"}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    isDeepDiveMode
+                      ? "Ask a question for deep analysis..."
+                      : selectedFile
+                      ? "Ask a question about this document..."
+                      : "Ask about town bylaws, meeting minutes, or local updates..."
+                  }
+                  className="min-h-[44px] max-h-32 resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent p-1 flex-1"
+                  disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
+                  data-testid="input-message"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={!activeSessionId || (!inputValue.trim() && !selectedFile) || sendMessageMutation.isPending || isStreaming}
+                  className="flex-shrink-0"
+                  data-testid="button-send"
+                >
+                  {sendMessageMutation.isPending || isStreaming ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              <div className="flex items-center gap-4 px-4 pb-3">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground flex items-center gap-1.5 hover:text-foreground transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!activeSessionId || sendMessageMutation.isPending || isStreaming}
+                  data-testid="button-attach-file"
+                >
+                  <Paperclip className="w-3 h-3" />
+                  Add Document
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground flex items-center gap-1.5 hover:text-foreground transition-colors"
+                  data-testid="button-view-archive"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  View Archive
+                </button>
+                <span className="text-xs text-muted-foreground/60 ml-auto hidden sm:block">
+                  Enter to send &bull; Shift+Enter for new line
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Press Enter to send, Shift+Enter for new line{isDeepDiveMode ? " | Deep Dive active" : ""}
-            </p>
           </form>
         </div>
       </div>

@@ -97,7 +97,7 @@ const trustPillars = [
 export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col">
-      <section className="relative flex items-center justify-center px-6 py-32 md:py-44 bg-[hsl(212,60%,25%)]">
+      <section className="relative flex items-center justify-center px-6 py-32 md:py-44 bg-primary">
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-black/30" />
         <div className="relative z-10 max-w-3xl mx-auto text-center">
           <p
@@ -107,7 +107,7 @@ export default function Landing() {
             OPENCouncil
           </p>
           <h1
-            className="text-4xl md:text-5xl font-bold text-white tracking-tight"
+            className="text-4xl md:text-5xl font-black font-headline text-white tracking-tight"
             data-testid="text-hero-title"
           >
             Clear Answers for Your Community.
@@ -326,7 +326,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="bg-[hsl(212,60%,25%)] px-6 py-14 md:py-16" data-testid="section-cta-bottom">
+      <section className="bg-primary px-6 py-14 md:py-16" data-testid="section-cta-bottom">
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/20" />
           <div className="relative z-10 max-w-2xl mx-auto text-center">

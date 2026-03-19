@@ -83,7 +83,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["Inter", "var(--font-sans)"],
+        sans: ["Public Sans", "Inter", "var(--font-sans)"],
+        headline: ["Public Sans", "sans-serif"],
+        body: ["Inter", "Public Sans", "sans-serif"],
         serif: ["var(--font-serif)"],
         mono: ["JetBrains Mono", "var(--font-mono)"],
       },

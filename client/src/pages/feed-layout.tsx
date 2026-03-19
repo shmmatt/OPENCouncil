@@ -2,14 +2,11 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { parseSSEStream } from "@/lib/sseParser";
-import { Link } from "wouter";
 import TownFeedComponent from "@/components/TownFeed";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { UserStatusBar } from "@/components/user-status-bar";
-import { X, Loader2, MessageSquare, ArrowRight, Menu, MessageCircle, Rss } from "lucide-react";
-import type { ChatSession, ChatMessage, TownFeedPayload } from "@shared/schema";
+import { X, Loader2, MessageSquare, ArrowRight, Calendar } from "lucide-react";
+import type { ChatSession, ChatMessage } from "@shared/schema";
 import { ChatMessageBubble } from "@/components/ChatMessageBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
 
@@ -165,11 +162,11 @@ function ChatDrawer({
         className="relative w-full max-w-xl bg-background border-l shadow-lg flex flex-col animate-in slide-in-from-right duration-300"
         data-testid="chat-drawer"
       >
-        <div className="flex items-center justify-between gap-2 p-4 border-b flex-wrap">
+        <div className="flex items-center justify-between gap-2 px-5 py-4 border-b flex-wrap bg-card">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-primary" />
-            <span className="font-medium text-sm" data-testid="text-drawer-title">
-              Chat
+            <span className="font-semibold font-headline text-sm" data-testid="text-drawer-title">
+              Civic Ledger Assistant
             </span>
           </div>
           <Button
@@ -182,7 +179,7 @@ function ChatDrawer({
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {isCreating && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-creating-session">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -227,7 +224,7 @@ function ChatDrawer({
         </div>
 
         {sessionId && (
-          <div className="border-t p-4">
+          <div className="border-t p-4 bg-card">
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -235,7 +232,7 @@ function ChatDrawer({
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a follow-up question..."
-                className="flex-1 bg-muted rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="flex-1 bg-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary border border-border"
                 disabled={isStreaming}
                 data-testid="input-followup"
               />
@@ -250,40 +247,6 @@ function ChatDrawer({
             </div>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function FeedNav() {
-  return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      <div className="p-4 space-y-2 border-b border-sidebar-border">
-        <Button
-          asChild
-          className="w-full"
-          variant="outline"
-          data-testid="link-nav-chat"
-        >
-          <Link href="/chat">
-            <MessageCircle className="w-4 h-4 mr-2" />
-            Go to Chat
-          </Link>
-        </Button>
-        <Button
-          className="w-full"
-          variant="default"
-          disabled
-          data-testid="link-nav-feed-active"
-        >
-          <Rss className="w-4 h-4 mr-2" />
-          Town Feed
-        </Button>
-      </div>
-      <div className="p-4 flex-1">
-        <p className="text-xs text-muted-foreground">
-          Browse the latest updates from your selected towns. Click a suggested question to start a chat.
-        </p>
       </div>
     </div>
   );
@@ -339,34 +302,38 @@ export default function FeedLayout() {
     };
   }, [drawer.isOpen]);
 
+  const today = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).toUpperCase();
+
   return (
-    <div className="flex h-screen bg-background" data-testid="feed-layout">
-      <div className="hidden md:block w-72 h-full">
-        <FeedNav />
+    <div className="flex flex-col h-full" data-testid="feed-layout">
+      <div className="border-b bg-card px-6 md:px-8 py-6 flex-shrink-0">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black tracking-widest text-primary uppercase font-headline mb-1">
+              Official Publication
+            </p>
+            <h1 className="text-3xl md:text-4xl font-black font-headline text-foreground leading-tight" data-testid="text-feed-title">
+              The Civic Ledger
+            </h1>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed max-w-xl">
+              Verified municipal activities and legislative updates for the community of OPENCouncil.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-muted border border-border rounded-full px-4 py-2 flex-shrink-0 self-start sm:self-auto">
+            <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <span className="text-[10px] font-black font-headline tracking-widest whitespace-nowrap" data-testid="text-feed-date">
+              {today}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-full min-w-0">
-        <header className="border-b bg-card px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-[999]">
-          <div className="flex items-center gap-3">
-            <Sheet>
-              <SheetTrigger asChild className="md:hidden">
-                <Button variant="ghost" size="icon" data-testid="button-feed-menu">
-                  <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="p-0 w-72">
-                <FeedNav />
-              </SheetContent>
-            </Sheet>
-            <div>
-              <h1 className="text-lg font-semibold">Town Feed</h1>
-              <p className="text-xs text-muted-foreground">Latest updates from your communities</p>
-            </div>
-          </div>
-          <UserStatusBar />
-        </header>
-
-        <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-8 py-6">
           <TownFeedComponent onQuestionClick={handleQuestionClick} />
         </div>
       </div>

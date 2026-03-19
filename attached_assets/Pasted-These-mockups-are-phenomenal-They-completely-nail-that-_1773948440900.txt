@@ -1,0 +1,25 @@
+These mockups are phenomenal. They completely nail that "authoritative, transparent, paper-and-ink" vibe. It feels like a modern digital courthouse rather than another generic B2B SaaS dashboard. The deep navy and slate palette immediately signals trust. 
+
+Your spec for the Replit agent is about 95% perfect. You’ve kept all the strong guardrails ("Out of scope", protecting the backend) that have been keeping the OPENCouncil engine stable. 
+
+Before you hit execute, there are three small UI/UX traps hidden in these mockups that the agent will likely fumble unless you explicitly warn it. 
+
+Here are the three tweaks to inject into your prompt:
+
+### 1. The Shadcn Color Formatting Trap
+Shadcn UI is incredibly picky about how CSS variables are defined in `index.css`. If the agent writes `--primary: hsl(205, 61%, 26%);`, it will break every Shadcn component in your app. 
+* **Add to Theme Tokens Task:** *"CRITICAL: Format the CSS variables strictly for Shadcn UI. Do not use the `hsl()` wrapper. Use raw space-separated values (e.g., `--primary: 205 61% 26%;`)."*
+
+### 2. The Mobile Layout Collapse
+The 8-col / 4-col / 3-col "bento grid" on the News Feed page will look beautiful on desktop but will completely shatter on a phone if the agent hardcodes it. The same goes for the new left sidebar.
+* **Add to Shared Civic Layout & News/Feed Tasks:** *"Ensure the layout is fully responsive. The left sidebar must be collapsible on mobile devices (using Shadcn's Sheet or Sidebar mobile patterns). The News/Feed bento grid must cleanly stack into a single vertical column on mobile screens (`flex-col` or `grid-cols-1`)."*
+
+### 3. The Floating Chat Input
+In your chat mockup, the input bar isn't a standard full-width footer—it's a floating, centered, rounded pill hovering above the bottom of the screen. Standard LLM code-gen will default to a clunky, full-width block attached to the bottom of the window.
+* **Add to Chat Page Restyle Task:** *"Style the chat input area exactly as mocked up: a centered, floating, rounded container with a soft shadow, rather than a full-width sticky footer. Ensure it hovers slightly above the bottom of the screen."*
+
+---
+
+Once you drop those three clarifications into the spec, this is completely ready for the agent to build. 
+
+Would you like me to rewrite the full prompt with those additions cleanly integrated so you can just copy-paste the whole thing?

@@ -27,14 +27,25 @@ import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 import FeedLayout from "@/pages/feed-layout";
 import Landing from "@/pages/landing";
+import { CivicLayout } from "@/components/CivicLayout";
+
+function PublicRoutes() {
+  return (
+    <CivicLayout>
+      <Switch>
+        <Route path="/" component={Landing} />
+        <Route path="/feed" component={FeedLayout} />
+        <Route path="/chat" component={Chat} />
+        <Route path="/chat/t/:slug" component={TemplateLauncher} />
+        <Route component={NotFound} />
+      </Switch>
+    </CivicLayout>
+  );
+}
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Landing} />
-      <Route path="/chat" component={Chat} />
-      <Route path="/chat/t/:slug" component={TemplateLauncher} />
-      <Route path="/feed" component={FeedLayout} />
       <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/documents" component={AdminDocuments} />
@@ -54,7 +65,7 @@ function Router() {
       <Route path="/admin/deep-dives" component={AdminDeepDives} />
       <Route path="/admin/promotions" component={AdminPromotions} />
       <Route path="/admin/research-chat" component={AdminResearchChat} />
-      <Route component={NotFound} />
+      <Route component={PublicRoutes} />
     </Switch>
   );
 }
