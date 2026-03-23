@@ -55,3 +55,7 @@ GOOGLE_DRIVE_API_KEY = "AIzaSyAoPwqpQcgOtLurQBGsjETyNL3-7Um4_xg"
 
 [userenv.production]
 APP_BASE_URL = "https://opencouncil.co"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
