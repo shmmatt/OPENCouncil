@@ -1,0 +1,40 @@
+This is a brilliant product expansion. Giving users a direct, searchable archive of source documents that ties seamlessly into the chat engine fundamentally bridges the gap between a "news feed" and an "intelligence ledger." 
+
+Your spec is incredibly thorough, particularly the backend routing for the chat context. However, there are two distinct architectural traps hiding in this spec that will cause the Replit agent to either break the UI or write severely buggy code. 
+
+Here is what you need to adjust before handing this off.
+
+### 1. The Pagination Paradox (API Design)
+In your Tasks, you instructed the agent to build a single `GET /api/documents` endpoint that accepts `page` and `limit`, and use it for both the List and Calendar views. 
+
+**The Trap:** A calendar needs to know *every* day in the month that has a document so it can draw the indicator dots. If your API is paginated to `limit: 20`, and there are 25 documents in March, the calendar will only receive data up to March 20th. The dots for the last week of the month will simply be missing. 
+**The Fix:** You need to instruct the agent to either drop pagination when the calendar view is active (fetching by `month/year`), or create a lightweight secondary endpoint just for the calendar dots.
+
+### 2. Reinventing the Calendar Wheel
+You instructed the agent: *"A monthly calendar grid (custom built, no external calendar library needed)."*
+
+**The Trap:** Asking an LLM to build a calendar grid from scratch using raw JavaScript date math is a recipe for off-by-one errors, leap-year bugs, and messy grid alignments. Since you are already using Shadcn UI for OPENCouncil, Shadcn has a robust, pre-built `<Calendar />` component (powered by `react-day-picker`) that handles all of this flawlessly.
+**The Fix:** Tell the agent to use the Shadcn Calendar component and utilize its `modifiers` prop to inject the indicator dots.
+
+---
+
+### Recommended Spec Adjustments
+
+I highly recommend updating your **Tasks** section with these two refined directives before executing:
+
+**1. Update the Backend API Endpoint Task:**
+> "Backend API endpoint: Add `GET /api/documents` that accepts `town`, `board`, `category`, and critically, an optional `viewMode` (`list` or `calendar`), `month`, and `year`. 
+> * If `viewMode=list`: Use `page` and `limit` for infinite scrolling/pagination.
+> * If `viewMode=calendar`: Ignore pagination. Return all documents for the requested `month` and `year` so the frontend calendar has the complete dataset to render all indicator dots for that month."
+
+**2. Update the Calendar View Task:**
+> "Calendar view: **CRITICAL:** Do NOT build a calendar grid from scratch. Use the existing Shadcn UI `<Calendar />` component (which uses `react-day-picker`). Use the `modifiers` and `modifiersStyles` or `components` props in `react-day-picker` to render the colored dot indicators on days that contain documents in the fetched dataset. The layout should be side-by-side on desktop, stacked on mobile. Clicking a day filters the adjacent list panel to show only that day's documents."
+
+**3. Update the Chat Drawer Integration Task:**
+> "Chat drawer integration: Extract the `ChatDrawer` from `feed-layout.tsx` into a reusable component in `client/src/components/` to prevent duplicating complex state logic. Ensure the prompt context injects the `documentVersionId` smoothly into the planner."
+
+---
+
+Once you patch those in, the agent will have a bulletproof roadmap. 
+
+Would you like me to draft the exact Drizzle ORM query the backend will need to efficiently group and filter those documents by month and year for the calendar endpoint?

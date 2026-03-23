@@ -1,0 +1,35 @@
+This is a fantastic product spec. The decision to render the actual dashboard behind a blur for anonymous users—rather than just showing a generic "Sign Up" landing page—is a textbook growth hack. It shows the user exactly what value they are missing.
+
+However, from an engineering perspective, this spec has two hidden traps that will cause the agent to either fragment your database or accidentally recreate the exact timeout issues we just spent two days fixing. 
+
+Here are the two architectural corrections to inject into your spec before you pass it to the agent.
+
+### 1. The Preference Duplication Trap
+In Task #12 (Feed Town Filter), you already had the agent build a `preferredTowns` array saved to the user's preferences (`/api/feed/user/preferences`). 
+
+If you tell the agent to create a brand new `user_interests` table for "followed towns" in this spec, you will split your source of truth. A user will select "Conway" on the feed page, go to the dashboard, and wonder why Conway isn't showing up in their New Docs widget.
+* **The Fix:** Tell the agent to reuse the existing `user_preferences` schema for the town filtering, rather than inventing a new database table.
+
+### 2. The Keyword Search "Death Spiral"
+You instructed the agent: *"Show a list of recent documents whose title or content matches any saved keyword."*
+
+If the agent takes this literally, it will write a PostgreSQL query that joins the `user_keywords` to the `documents` table and runs a raw `ILIKE '%keyword%'` across the `raw_text` column of every single 100-page PDF in your database. This will lock up your database and instantly crash the server, bringing back the `504 Gateway Timeout` nightmares.
+* **The Fix:** For this MVP dashboard, strictly limit the keyword matching to the indexed columns (`canonicalTitle`, `previewText`, and `category`). Do not let it search the full document body yet.
+
+---
+
+### Recommended Spec Adjustments
+
+I recommend replacing the **DB schema & storage** and **Keywords widget** tasks in your spec with these adjusted versions:
+
+**1. Update DB schema & storage:**
+> "DB schema & storage — Add tables for `user_keywords` (user → keyword strings), `feature_requests` (user, text, timestamp), and `missing_doc_suggestions` (user, text, timestamp). **CRITICAL:** Do NOT create a new table for followed towns. Reuse the existing `preferredTowns` data structure from the user's preferences for the New Docs widget. Add storage interface methods for the three new tables."
+
+**2. Update Keywords widget:**
+> "Keywords widget — Allow the user to add free-text keywords. Show a list of recent documents whose title, category, or preview text matches any saved keyword. **CRITICAL GUARDRAIL:** Do NOT run SQL `ILIKE` queries against the full OCR `raw_text` of the documents, as this will cause severe database performance issues. Only match keywords against the `canonicalTitle`, `previewText`, or `category` columns."
+
+---
+
+With those two guardrails in place, the agent will build a fast, unified dashboard that perfectly leverages your existing data models. 
+
+Would you like me to map out how to set up the CSS `backdrop-filter: blur()` effect in React/Tailwind so the agent nails the freemium teaser UI on the first try?

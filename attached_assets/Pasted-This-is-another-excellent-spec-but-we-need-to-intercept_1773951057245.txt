@@ -1,0 +1,33 @@
+This is another excellent spec, but we need to intercept a very specific React anti-pattern before the agent writes the code. 
+
+Your logic for unifying the sidebars and adding the feed filter is spot on. However, the architectural method you proposed for the sidebar swapping (Task 1 & 2) is going to create a frustrating visual bug.
+
+Here is why you should adjust the React architecture before handing this to the agent, and how to fix it.
+
+### The Trap: The `useEffect` UI Flicker
+In the "Tasks" section, you instructed the agent to create a React Context and use `useEffect` inside the `Chat` component to inject the `ChatSidebar` JSX into that context on mount. 
+
+If you do this, you are forcing a **double-render cycle**:
+1. **Render 1:** The user clicks the Chat page. `CivicLayout` mounts and immediately renders the *default* navigation sidebar because the context is empty.
+2. **The Effect:** A fraction of a second later, the `useEffect` in the Chat component fires, passing the new `ChatSidebar` JSX into the context.
+3. **Render 2:** The state updates, and the sidebar snaps from the default nav to the chat nav.
+
+Every time the user navigates to the chat page, the sidebar will visibly flicker and jump. Additionally, storing raw React JSX components inside React State/Context is generally considered an anti-pattern (state should be data, not UI).
+
+### The Fix: Layout Props or Route Checking
+To eliminate the flicker, the rendering decision needs to happen synchronously during the first render. 
+
+You should update the **Sidebar slot context** and **Chat page integration** tasks in your spec to use one of these two standard React layout patterns instead:
+
+**Option A: The Layout Prop (Cleanest)**
+Instead of a complex Context provider, simply update `CivicLayout` to accept an optional `sidebarContent` prop.
+* **The Directive:** *"Update `CivicLayout` to accept an optional `sidebarContent?: React.ReactNode` prop. If provided, render it in the sidebar slot; otherwise, render the default nav. In `chat.tsx`, simply wrap the page in `<CivicLayout sidebarContent={<ChatSidebar {...props} />}>`."*
+
+**Option B: Route-Based Rendering (Centralized)**
+Let the layout component itself figure out what to render based on the URL.
+* **The Directive:** *"Inside `CivicLayout`, use the router's `useLocation` hook. If the current path is `/chat`, render the `ChatSidebar` component directly. For all other routes, render the default nav."*
+
+### The Feed Selector
+Your approach for the **Feed town selector** is flawless. Hooking it directly into `PUT /api/feed/user/preferences` and invalidating the React Query cache will instantly snap the feed to the correct town without a page reload. It is exactly the right way to handle mutations in a modern React app.
+
+Would you like me to rewrite the Tasks section of your spec utilizing the "Layout Prop" method so you can copy and paste the final, flicker-free version to your agent?
