@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { UserStatusBar } from "@/components/user-status-bar";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { ChatSession, ChatMessage, TemplatePayload } from "@shared/schema";
 import { TemplateBanner } from "@/components/TemplateBanner";
@@ -518,9 +517,6 @@ export default function Chat() {
                   Access real-time information from official town records, meeting minutes, and municipal bylaws. Every response is cited directly from the archive.
                 </p>
               </div>
-            </div>
-            <div className="hidden sm:block">
-              <UserStatusBar />
             </div>
           </div>
         </div>
