@@ -8,6 +8,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { ChatDrawer } from "@/components/ChatDrawer";
 import type { ChatDrawerState } from "@/components/ChatDrawer";
 import { useAuth } from "@/hooks/use-auth";
+import { useSignInDialog } from "@/contexts/auth-dialog-context";
 import {
   FileText,
   Calendar as CalendarIcon,
@@ -467,6 +468,7 @@ function DocumentCalendarView({ town, onAskAbout }: CalendarViewProps) {
 }
 
 function AuthGate() {
+  const { openSignIn } = useSignInDialog();
   return (
     <div className="relative h-full min-h-[70vh] overflow-hidden" data-testid="auth-gate">
       <div className="absolute inset-0 pointer-events-none select-none opacity-30 blur-sm p-8">
@@ -505,11 +507,11 @@ function AuthGate() {
             </p>
           </CardHeader>
           <CardFooter className="flex-col gap-2">
-            <Button className="w-full font-headline font-semibold" asChild data-testid="button-signin-auth-gate">
-              <a href="/chat">Sign in</a>
+            <Button className="w-full font-headline font-semibold" onClick={openSignIn} data-testid="button-signin-auth-gate">
+              Sign in
             </Button>
-            <Button variant="ghost" className="w-full" asChild data-testid="button-create-account-auth-gate">
-              <a href="/chat">Create an account</a>
+            <Button variant="ghost" className="w-full" onClick={openSignIn} data-testid="button-create-account-auth-gate">
+              Create an account
             </Button>
           </CardFooter>
         </Card>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -88,10 +88,27 @@ function MagicLinkForm({ returnTo, onSuccess }: { returnTo: string; onSuccess: (
   );
 }
 
-export function UserStatusBar() {
+interface UserStatusBarProps {
+  signInOpen?: boolean;
+  onSignInOpenChange?: (open: boolean) => void;
+}
+
+export function UserStatusBar({ signInOpen, onSignInOpenChange }: UserStatusBarProps = {}) {
   const { usage, user, isLoading, logout, isLoggingOut } = useAuth();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [returnTo, setReturnTo] = useState("/");
+
+  const dialogOpen = signInOpen !== undefined ? signInOpen : internalOpen;
+  const setDialogOpen = (open: boolean) => {
+    if (onSignInOpenChange) onSignInOpenChange(open);
+    setInternalOpen(open);
+  };
+
+  useEffect(() => {
+    if (signInOpen === true) {
+      setReturnTo(window.location.pathname + window.location.search);
+    }
+  }, [signInOpen]);
 
   if (isLoading) {
     return (
