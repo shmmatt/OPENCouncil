@@ -36,7 +36,7 @@ function MagicLinkForm() {
     e.preventDefault();
     if (!email.trim()) return;
     try {
-      await requestMagicLink(email);
+      await requestMagicLink({ email, returnTo: window.location.pathname + window.location.search });
     } catch {}
   };
 
