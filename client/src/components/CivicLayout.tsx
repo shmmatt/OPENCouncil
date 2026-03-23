@@ -11,8 +11,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Bell, Search, Plus, Newspaper, FileText, MessageSquare, LayoutDashboard, User } from "lucide-react";
+import { Bell, Search, Plus, Newspaper, FileText, MessageSquare, LayoutDashboard } from "lucide-react";
 import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
+import { UserStatusBar } from "@/components/user-status-bar";
 
 const navItems = [
   { title: "News", url: "/feed", icon: Newspaper },
@@ -35,7 +36,7 @@ function CivicAppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border">
-        <h2 className="text-sm font-bold font-headline text-primary tracking-tight">Civic Portal</h2>
+        <h2 className="text-sm font-bold font-headline text-primary tracking-tight">OPENCouncil</h2>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mt-0.5">Official Ledger</p>
       </SidebarHeader>
       <SidebarContent className="pt-2">
@@ -86,9 +87,9 @@ export function CivicLayout({ children }: { children: React.ReactNode }) {
           <header className="flex items-center justify-between gap-2 px-4 h-14 border-b bg-card sticky top-0 z-[999] flex-wrap">
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-trigger" />
-              <span className="text-base font-black font-headline uppercase tracking-widest text-primary hidden sm:block select-none">
+              <Link href="/" className="text-base font-black font-headline uppercase tracking-widest text-primary hidden sm:block select-none hover:opacity-80 transition-opacity">
                 OPENCOUNCIL
-              </span>
+              </Link>
               <nav className="hidden lg:flex items-center gap-0.5 ml-2">
                 {topNavItems.map((item) => {
                   const isActive = location.startsWith(item.href);
@@ -125,9 +126,7 @@ export function CivicLayout({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" size="icon" data-testid="button-notifications">
                 <Bell className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="icon" data-testid="button-user-menu">
-                <User className="w-4 h-4" />
-              </Button>
+              <UserStatusBar />
             </div>
           </header>
           <main className="flex-1 overflow-hidden min-h-0">

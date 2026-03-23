@@ -30,8 +30,8 @@ export function useAuth() {
   });
 
   const requestMagicLinkMutation = useMutation({
-    mutationFn: async (email: string) => {
-      const res = await apiRequest("POST", "/api/auth/magic-link", { email });
+    mutationFn: async ({ email, returnTo }: { email: string; returnTo?: string }) => {
+      const res = await apiRequest("POST", "/api/auth/magic-link", { email, returnTo });
       return res.json();
     },
   });

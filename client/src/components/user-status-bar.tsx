@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User, LogOut, Loader2, Mail, CheckCircle, Sparkles } from "lucide-react";
 
-function MagicLinkForm({ onSuccess }: { onSuccess: () => void }) {
+function MagicLinkForm({ returnTo, onSuccess }: { returnTo: string; onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const { requestMagicLink, isSendingMagicLink, magicLinkSuccess, magicLinkError, resetMagicLink } = useAuth();
 
@@ -16,7 +16,7 @@ function MagicLinkForm({ onSuccess }: { onSuccess: () => void }) {
     if (!email.trim()) return;
     
     try {
-      await requestMagicLink(email);
+      await requestMagicLink({ email, returnTo });
     } catch (err) {
     }
   };
@@ -91,6 +91,7 @@ function MagicLinkForm({ onSuccess }: { onSuccess: () => void }) {
 export function UserStatusBar() {
   const { usage, user, isLoading, logout, isLoggingOut } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [returnTo, setReturnTo] = useState("/");
 
   if (isLoading) {
     return (
@@ -128,7 +129,10 @@ export function UserStatusBar() {
       </div>
 
       {!isAuthenticated ? (
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => {
+          if (open) setReturnTo(window.location.pathname + window.location.search);
+          setDialogOpen(open);
+        }}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" data-testid="button-sign-in">
               <User className="w-4 h-4 mr-1" />
@@ -142,7 +146,7 @@ export function UserStatusBar() {
                 Get more daily usage and save your conversation history.
               </DialogDescription>
             </DialogHeader>
-            <MagicLinkForm onSuccess={() => setDialogOpen(false)} />
+            <MagicLinkForm returnTo={returnTo} onSuccess={() => setDialogOpen(false)} />
           </DialogContent>
         </Dialog>
       ) : tier !== "paying" ? (

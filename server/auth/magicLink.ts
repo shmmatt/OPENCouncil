@@ -14,7 +14,16 @@ if (process.env.SENDGRID_API_KEY) {
 
 const sendMagicLinkSchema = z.object({
   email: z.string().email(),
+  returnTo: z.string().optional(),
 });
+
+function sanitizeReturnTo(returnTo: string | undefined): string {
+  if (!returnTo) return "/";
+  const trimmed = returnTo.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return "/";
+  if (/[<>"'`]/.test(trimmed)) return "/";
+  return trimmed;
+}
 
 async function sendMagicLinkEmail(to: string, magicLink: string): Promise<boolean> {
   if (!process.env.SENDGRID_API_KEY) {
@@ -58,11 +67,13 @@ async function sendMagicLinkEmail(to: string, magicLink: string): Promise<boolea
 
 router.post("/magic-link", async (req: IdentityRequest, res: Response) => {
   try {
-    const { email } = sendMagicLinkSchema.parse(req.body);
+    const { email, returnTo } = sendMagicLinkSchema.parse(req.body);
     
     const token = generateMagicLinkToken(email);
     const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const magicLink = `${baseUrl}/api/auth/verify?token=${token}`;
+    const safeReturnTo = sanitizeReturnTo(returnTo);
+    const returnParam = safeReturnTo !== "/" ? `&returnTo=${encodeURIComponent(safeReturnTo)}` : "";
+    const magicLink = `${baseUrl}/api/auth/verify?token=${token}${returnParam}`;
     
     console.log(`[MagicLink] Generated for ${email}: ${magicLink}`);
     
@@ -100,6 +111,8 @@ router.get("/verify", async (req: IdentityRequest, res: Response) => {
   
   try {
     const token = req.query.token as string;
+    const returnTo = sanitizeReturnTo(req.query.returnTo as string | undefined);
+
     if (!token) {
       return res.redirect(`${baseUrl}/?error=no_token`);
     }
@@ -145,7 +158,7 @@ router.get("/verify", async (req: IdentityRequest, res: Response) => {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
     
-    res.redirect(`${baseUrl}/`);
+    res.redirect(`${baseUrl}${returnTo}`);
   } catch (error) {
     console.error("Error verifying magic link:", error);
     const errorBaseUrl = process.env.APP_BASE_URL || "";
