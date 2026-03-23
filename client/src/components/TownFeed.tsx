@@ -275,6 +275,195 @@ function PostCard({
   );
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/^#+\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+function getTopicLabel(item: FeedItemWithUpvote): string {
+  const topics = (item.topics || []) as Array<{ topic: string; score: number }>;
+  if (!topics.length) return "Municipal";
+  const top = topics.reduce((a, b) => (b.score > a.score ? b : a));
+  return top.topic || "Municipal";
+}
+
+function HeroFeedCard({
+  item,
+  onQuestionClick,
+}: {
+  item: FeedItemWithUpvote;
+  onQuestionClick: (question: string, feedItemId: string) => void;
+}) {
+  const payload = item.generatedPayload as TownFeedPayload | undefined;
+  const firstQuestion = payload?.highLevelQuestions?.[0] ?? `Tell me about: ${item.title}`;
+  const topicLabel = getTopicLabel(item);
+  const plainSummary = stripMarkdown(item.summary || "");
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-md col-span-12 md:col-span-8"
+      data-testid={`hero-card-${item.id}`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary to-primary/80" />
+      <div className="relative p-6 md:p-8 flex flex-col h-full min-h-[280px] justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Badge
+              className="bg-white/20 text-white border-white/30 no-default-hover-elevate no-default-active-elevate text-xs"
+              data-testid={`hero-badge-${item.id}`}
+            >
+              {topicLabel}
+            </Badge>
+            <span className="text-white/50 text-xs flex items-center gap-1">
+              <MapPin className="w-3 h-3" />{item.town}
+            </span>
+          </div>
+          <h2
+            className="text-white font-black font-headline text-2xl md:text-3xl leading-tight mb-3 line-clamp-3"
+            data-testid={`hero-title-${item.id}`}
+          >
+            {item.title}
+          </h2>
+          <p className="text-white/75 text-sm leading-relaxed line-clamp-3 max-w-2xl">
+            {plainSummary}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 mt-6 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-white/40 text-white bg-white/10 font-headline font-semibold"
+            onClick={() => onQuestionClick(firstQuestion, item.id)}
+            data-testid={`hero-cta-${item.id}`}
+          >
+            Explore in Chat
+          </Button>
+          <span className="text-white/50 text-xs flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {formatRelativeTime(item.publishedAt)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BentoSideCard({
+  item,
+  onQuestionClick,
+}: {
+  item: FeedItemWithUpvote;
+  onQuestionClick: (question: string, feedItemId: string) => void;
+}) {
+  const payload = item.generatedPayload as TownFeedPayload | undefined;
+  const firstQuestion = payload?.highLevelQuestions?.[0] ?? `Tell me about: ${item.title}`;
+  const topicLabel = getTopicLabel(item);
+  const plainSummary = stripMarkdown(item.summary || "");
+
+  return (
+    <Card
+      className="overflow-visible col-span-12 md:col-span-4 flex flex-col"
+      data-testid={`bento-side-card-${item.id}`}
+    >
+      <CardHeader className="pb-3 flex-wrap gap-1">
+        <Badge
+          variant="outline"
+          className="text-primary border-primary/30 text-xs w-fit no-default-hover-elevate no-default-active-elevate"
+        >
+          {topicLabel}
+        </Badge>
+        <h3
+          className="text-base font-bold font-headline leading-snug mt-1"
+          data-testid={`bento-side-title-${item.id}`}
+        >
+          {item.title}
+        </h3>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+          <MapPin className="w-3 h-3" />
+          <span>{item.town}</span>
+          <span className="mx-1">·</span>
+          <Clock className="w-3 h-3" />
+          <span>{formatRelativeTime(item.publishedAt)}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 pb-3">
+        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-5">
+          {plainSummary}
+        </p>
+      </CardContent>
+      <CardFooter className="flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="font-headline font-semibold text-xs"
+          onClick={() => onQuestionClick(firstQuestion, item.id)}
+          data-testid={`bento-side-cta-${item.id}`}
+        >
+          Ask a Question
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function SmallNewsCard({
+  item,
+  onQuestionClick,
+}: {
+  item: FeedItemWithUpvote;
+  onQuestionClick: (question: string, feedItemId: string) => void;
+}) {
+  const payload = item.generatedPayload as TownFeedPayload | undefined;
+  const firstQuestion = payload?.highLevelQuestions?.[0] ?? `Tell me about: ${item.title}`;
+  const topicLabel = getTopicLabel(item);
+  const plainSummary = stripMarkdown(item.summary || "");
+
+  return (
+    <Card
+      className="overflow-visible flex flex-col"
+      data-testid={`small-news-card-${item.id}`}
+    >
+      <CardHeader className="pb-2 flex-wrap gap-1">
+        <Badge
+          variant="secondary"
+          className="text-xs w-fit no-default-hover-elevate no-default-active-elevate"
+        >
+          {topicLabel}
+        </Badge>
+        <h4
+          className="text-sm font-bold font-headline leading-snug mt-1 line-clamp-2"
+          data-testid={`small-card-title-${item.id}`}
+        >
+          {item.title}
+        </h4>
+      </CardHeader>
+      <CardContent className="flex-1 pb-2">
+        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+          {plainSummary}
+        </p>
+      </CardContent>
+      <CardFooter className="pt-1 flex-wrap gap-2">
+        <button
+          className="text-xs text-primary font-semibold font-headline hover:underline"
+          onClick={() => onQuestionClick(firstQuestion, item.id)}
+          data-testid={`small-card-link-${item.id}`}
+        >
+          Ask about this
+        </button>
+        <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          {formatRelativeTime(item.publishedAt)}
+        </span>
+      </CardFooter>
+    </Card>
+  );
+}
+
 function TownPreferencePicker({
   onSave,
   initialTowns,
@@ -489,12 +678,19 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
     );
   }
 
+  const bentoItems = allItems.slice(0, 5);
+  const bentoItemIds = new Set(bentoItems.map((i) => i.id));
+  const remainingEntries = entries.filter(
+    (e) => e.type === "template" || !bentoItemIds.has(e.item.id)
+  );
+
+  const heroItem = bentoItems[0];
+  const sideItem = bentoItems[1];
+  const gridItems = bentoItems.slice(2);
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-4" data-testid="town-feed">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-xl font-bold" data-testid="text-feed-heading">
-          Town Feed
-        </h1>
+    <div className="space-y-6 pb-8" data-testid="town-feed">
+      <div className="flex items-center justify-end gap-2 flex-wrap">
         {user && (
           <Button
             variant="ghost"
@@ -516,7 +712,7 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
         </div>
       )}
 
-      {!isLoading && entries.length === 0 && (
+      {!isLoading && allItems.length === 0 && (
         <Card className="overflow-visible" data-testid="feed-empty">
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">
@@ -526,22 +722,64 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
         </Card>
       )}
 
-      {entries.map((entry, idx) =>
-        entry.type === "post" ? (
-          <PostCard
-            key={entry.item.id}
-            item={entry.item}
-            onQuestionClick={(q, fid) => onQuestionClick(q, fid)}
-            onUpvote={(fid) => upvoteMutation.mutate(fid)}
-            isUpvoting={upvoteMutation.isPending}
-          />
-        ) : (
-          <TemplatePromoCard
-            key={`tpl-${idx}`}
-            template={entry.template}
-            onQuestionClick={(q, tid) => onQuestionClick(q, undefined, tid)}
-          />
-        )
+      {!isLoading && heroItem && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-12 gap-4">
+            <HeroFeedCard
+              item={heroItem}
+              onQuestionClick={(q, fid) => onQuestionClick(q, fid)}
+            />
+            {sideItem && (
+              <BentoSideCard
+                item={sideItem}
+                onQuestionClick={(q, fid) => onQuestionClick(q, fid)}
+              />
+            )}
+          </div>
+
+          {gridItems.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {gridItems.map((item) => (
+                <SmallNewsCard
+                  key={item.id}
+                  item={item}
+                  onQuestionClick={(q, fid) => onQuestionClick(q, fid)}
+                />
+              ))}
+            </div>
+          )}
+
+          {remainingEntries.length > 0 && (
+            <div className="pt-2">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold font-headline uppercase tracking-widest text-muted-foreground">
+                  More Updates
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <div className="space-y-4">
+                {remainingEntries.map((entry, idx) =>
+                  entry.type === "post" ? (
+                    <PostCard
+                      key={entry.item.id}
+                      item={entry.item}
+                      onQuestionClick={(q, fid) => onQuestionClick(q, fid)}
+                      onUpvote={(fid) => upvoteMutation.mutate(fid)}
+                      isUpvoting={upvoteMutation.isPending}
+                    />
+                  ) : (
+                    <TemplatePromoCard
+                      key={`tpl-${idx}`}
+                      template={entry.template}
+                      onQuestionClick={(q, tid) => onQuestionClick(q, undefined, tid)}
+                    />
+                  )
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       <div ref={observerRef} className="h-4" />
@@ -554,7 +792,7 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
 
       {!hasNextPage && allItems.length > 0 && (
         <p className="text-center text-sm text-muted-foreground py-4" data-testid="text-feed-end">
-          You're all caught up.
+          You&apos;re all caught up.
         </p>
       )}
     </div>
