@@ -341,7 +341,7 @@ function HeroFeedCard({
             onClick={() => onQuestionClick(firstQuestion, item.id)}
             data-testid={`hero-cta-${item.id}`}
           >
-            Explore in Chat
+            Read Full Directive
           </Button>
           <span className="text-white/50 text-xs flex items-center gap-1">
             <Clock className="w-3 h-3" />
