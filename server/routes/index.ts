@@ -21,6 +21,7 @@ import documentGapsRouter from "./adminDocumentGapsRoutes";
 import documentViewerRouter from "./documentViewer";
 import deepDiveRouter from "./adminDeepDiveRoutes";
 import promotionsRouter from "./promotions";
+import documentsRouter from "./documents";
 
 export {
   adminRouter,
@@ -55,6 +56,7 @@ export function registerAllRoutes(app: Express): void {
   app.use("/api/admin/document-gaps", documentGapsRouter);
 
   app.use("/api/documents/view", documentViewerRouter);
+  app.use("/api/documents", documentsRouter);
 
   app.use("/api/admin/deep-dives", deepDiveRouter);
 

@@ -253,6 +253,7 @@ export const chatSessions = pgTable("chat_sessions", {
   anonId: varchar("anon_id").references(() => anonymousUsers.id),
   templateId: varchar("template_id").references(() => chatTemplates.id),
   feedItemId: varchar("feed_item_id"),
+  documentVersionId: varchar("document_version_id"),
   townPreference: text("town_preference"),
   situationContext: jsonb("situation_context").$type<SituationContext>(),
   sessionSources: jsonb("session_sources").$type<SessionSource[]>(),
@@ -728,6 +729,24 @@ export interface MinutesUpdateItem {
   meetingDate: string | null; // ISO date string
   ingestedAt: string; // ISO date string from dv.createdAt
   fileSearchDocumentName: string | null;
+}
+
+// Document Browse API Types
+export interface DocumentBrowseItem {
+  id: string;            // documentVersionId
+  canonicalTitle: string;
+  board: string | null;
+  category: string;
+  meetingDate: string | null; // ISO date string
+  previewText: string | null;
+  fileBlobId: string;
+  town: string;
+}
+
+export interface DocumentBrowseResponse {
+  items: DocumentBrowseItem[];
+  hasMore: boolean;
+  nextCursor: string | null;
 }
 
 export interface ActorIdentifier {

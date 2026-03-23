@@ -7,6 +7,7 @@ import { chatMessageLimiter, sessionCreationLimiter } from "../middleware/rateLi
 import { getChatTemplateById } from "../storage/chatTemplates";
 import { getTownFeedItemById } from "../storage/townFeed";
 import { createDocumentGap, findSimilarOpenGap, incrementGapHitCount } from "../storage/documentGaps";
+import { getDocumentVersionContext } from "../storage/documents";
 
 const sanitizeOptions: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -32,7 +33,7 @@ router.get("/sessions", async (req, res) => {
 
 router.post("/sessions", sessionCreationLimiter, async (req, res) => {
   try {
-    const { title, templateId, feedItemId } = req.body;
+    const { title, templateId, feedItemId, documentVersionId } = req.body;
     const actor = req.actor;
     
     if (!actor || (!actor.userId && !actor.anonId)) {
@@ -45,7 +46,9 @@ router.post("/sessions", sessionCreationLimiter, async (req, res) => {
       anonId: actor.anonId,
       templateId: templateId || undefined,
       feedItemId: feedItemId || undefined,
+      documentVersionId: documentVersionId || undefined,
     });
+
     res.json(session);
   } catch (error) {
     console.error("Error creating session:", error);

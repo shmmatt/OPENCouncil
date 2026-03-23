@@ -378,8 +378,193 @@ export async function getFileBlobIdByFilenameAndTown(filename: string, town: str
 }
 
 // ============================================================
-// RECENT MINUTES UPDATES
+// DOCUMENT BROWSE API
 // ============================================================
+
+export interface BrowseDocumentsParams {
+  town: string;
+  board?: string;
+  category?: string;
+  viewMode: "list" | "calendar";
+  // List mode pagination
+  page?: number;
+  limit?: number;
+  cursor?: string;
+  // Calendar mode month filter
+  month?: number; // 1–12
+  year?: number;
+}
+
+export interface BrowseDocumentRow {
+  id: string;
+  canonicalTitle: string;
+  board: string | null;
+  category: string;
+  meetingDate: string | null;
+  previewText: string | null;
+  fileBlobId: string;
+  town: string;
+}
+
+export async function browseDocuments(params: BrowseDocumentsParams): Promise<{
+  items: BrowseDocumentRow[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}> {
+  const { town, board, category, viewMode } = params;
+
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(schema.documentVersions.isCurrent, true),
+    eq(schema.logicalDocuments.town, town),
+  ];
+
+  if (board) {
+    conditions.push(eq(schema.logicalDocuments.board, board));
+  }
+  if (category) {
+    conditions.push(eq(schema.logicalDocuments.category, category));
+  }
+
+  if (viewMode === "calendar" && params.month && params.year) {
+    const monthStr = String(params.month).padStart(2, "0");
+    const yearStr = String(params.year);
+    const startDate = new Date(`${yearStr}-${monthStr}-01T00:00:00.000Z`);
+    const endDate = new Date(startDate);
+    endDate.setUTCMonth(endDate.getUTCMonth() + 1);
+
+    conditions.push(sql`${schema.documentVersions.meetingDate} IS NOT NULL`);
+    conditions.push(sql`${schema.documentVersions.meetingDate} >= ${startDate.toISOString()}`);
+    conditions.push(sql`${schema.documentVersions.meetingDate} < ${endDate.toISOString()}`);
+
+    const results = await db
+      .select({
+        id: schema.documentVersions.id,
+        canonicalTitle: schema.logicalDocuments.canonicalTitle,
+        board: schema.logicalDocuments.board,
+        category: schema.logicalDocuments.category,
+        meetingDate: schema.documentVersions.meetingDate,
+        previewText: schema.fileBlobs.previewText,
+        fileBlobId: schema.documentVersions.fileBlobId,
+        town: schema.logicalDocuments.town,
+      })
+      .from(schema.documentVersions)
+      .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
+      .innerJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+      .where(and(...conditions))
+      .orderBy(desc(schema.documentVersions.meetingDate));
+
+    return {
+      items: results.map(r => ({
+        id: r.id,
+        canonicalTitle: r.canonicalTitle,
+        board: r.board,
+        category: r.category,
+        meetingDate: r.meetingDate ? r.meetingDate.toISOString().split("T")[0] : null,
+        previewText: r.previewText,
+        fileBlobId: r.fileBlobId,
+        town: r.town,
+      })),
+      hasMore: false,
+      nextCursor: null,
+    };
+  }
+
+  // List mode — paginated
+  const limit = Math.min(params.limit || 20, 50);
+  let cursorDate: Date | null = null;
+  let cursorId: string | null = null;
+  if (params.cursor) {
+    try {
+      const [dateStr, id] = params.cursor.split("|");
+      cursorDate = new Date(dateStr);
+      cursorId = id;
+    } catch {
+      // ignore bad cursor
+    }
+  }
+
+  if (cursorDate && cursorId) {
+    conditions.push(
+      sql`(
+        ${schema.documentVersions.meetingDate} < ${cursorDate.toISOString()}
+        OR (${schema.documentVersions.meetingDate} = ${cursorDate.toISOString()} AND ${schema.documentVersions.id} < ${cursorId})
+        OR (${schema.documentVersions.meetingDate} IS NULL AND ${schema.documentVersions.id} < ${cursorId})
+      )`
+    );
+  }
+
+  const results = await db
+    .select({
+      id: schema.documentVersions.id,
+      canonicalTitle: schema.logicalDocuments.canonicalTitle,
+      board: schema.logicalDocuments.board,
+      category: schema.logicalDocuments.category,
+      meetingDate: schema.documentVersions.meetingDate,
+      previewText: schema.fileBlobs.previewText,
+      fileBlobId: schema.documentVersions.fileBlobId,
+      town: schema.logicalDocuments.town,
+    })
+    .from(schema.documentVersions)
+    .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
+    .innerJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+    .where(and(...conditions))
+    .orderBy(
+      desc(sql`COALESCE(${schema.documentVersions.meetingDate}, '1970-01-01'::timestamp)`),
+      desc(schema.documentVersions.id)
+    )
+    .limit(limit + 1);
+
+  const hasMore = results.length > limit;
+  const items = hasMore ? results.slice(0, limit) : results;
+
+  const lastItem = items[items.length - 1];
+  const nextCursor = hasMore && lastItem
+    ? `${lastItem.meetingDate ? lastItem.meetingDate.toISOString() : "1970-01-01T00:00:00.000Z"}|${lastItem.id}`
+    : null;
+
+  return {
+    items: items.map(r => ({
+      id: r.id,
+      canonicalTitle: r.canonicalTitle,
+      board: r.board,
+      category: r.category,
+      meetingDate: r.meetingDate ? r.meetingDate.toISOString().split("T")[0] : null,
+      previewText: r.previewText,
+      fileBlobId: r.fileBlobId,
+      town: r.town,
+    })),
+    hasMore,
+    nextCursor,
+  };
+}
+
+export async function getDocumentVersionContext(versionId: string): Promise<{
+  canonicalTitle: string;
+  board: string | null;
+  town: string;
+  meetingDate: string | null;
+} | null> {
+  const [result] = await db
+    .select({
+      canonicalTitle: schema.logicalDocuments.canonicalTitle,
+      board: schema.logicalDocuments.board,
+      town: schema.logicalDocuments.town,
+      meetingDate: schema.documentVersions.meetingDate,
+    })
+    .from(schema.documentVersions)
+    .innerJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
+    .where(eq(schema.documentVersions.id, versionId))
+    .limit(1);
+
+  if (!result) return null;
+
+  return {
+    canonicalTitle: result.canonicalTitle,
+    board: result.board,
+    town: result.town,
+    meetingDate: result.meetingDate ? result.meetingDate.toISOString().split("T")[0] : null,
+  };
+}
 
 export async function getRecentMinutesUpdates(params: { town: string; limit?: number }): Promise<MinutesUpdateItem[]> {
   const { town, limit = 5 } = params;

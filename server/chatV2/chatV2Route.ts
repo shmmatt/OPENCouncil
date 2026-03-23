@@ -666,7 +666,20 @@ export function registerChatV2Routes(app: Express): void {
       const trimmedHistory = buildTrimmedHistoryForAnswer(chatHistory);
 
       let templateContext: string | null = null;
-      if ((session as any).templateId) {
+      if ((session as any).feedItemId) {
+        try {
+          const { getTownFeedItemById } = await import("../storage/townFeed");
+          const feedItem = await getTownFeedItemById((session as any).feedItemId);
+          if (feedItem?.status === "published" && feedItem?.generatedPayload) {
+            const payload = typeof feedItem.generatedPayload === "string"
+              ? JSON.parse(feedItem.generatedPayload as string)
+              : feedItem.generatedPayload;
+            templateContext = `This chat was launched from a town feed summary for ${feedItem.town}: "${feedItem.title}".\n\nSummary:\n${(payload as any).summary || feedItem.summary}\n\nTopics covered:\n${((payload as any).sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+          }
+        } catch (err) {
+          logDebug("feed_context_error", { ...logCtx, stage: "feed_lookup", error: String(err) });
+        }
+      } else if ((session as any).templateId) {
         try {
           const template = await getChatTemplateById((session as any).templateId);
           if (template?.generatedPayload) {
@@ -677,6 +690,23 @@ export function registerChatV2Routes(app: Express): void {
           }
         } catch (err) {
           logDebug("template_context_error", { ...logCtx, stage: "template_lookup", error: String(err) });
+        }
+      }
+
+      // Check for documentVersionId stored in session (or fallback to request metadata)
+      const docVersionId = (session as any).documentVersionId || metadata?.documentVersionId;
+      if (!templateContext && docVersionId) {
+        try {
+          const { getDocumentVersionContext } = await import("../storage/documents");
+          const docCtx = await getDocumentVersionContext(docVersionId as string);
+          if (docCtx) {
+            const dateStr = docCtx.meetingDate
+              ? new Date(docCtx.meetingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+              : "unknown date";
+            templateContext = `This chat was opened from a document: ${docCtx.board || "Town"} meeting for ${docCtx.town} on ${dateStr}: ${docCtx.canonicalTitle}`;
+          }
+        } catch (err) {
+          logDebug("document_context_error", { ...logCtx, stage: "document_lookup", error: String(err) });
         }
       }
 

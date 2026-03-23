@@ -116,6 +116,7 @@ export interface ChatV2Request {
   metadata?: {
     town?: string;
     board?: string;
+    documentVersionId?: string;
   };
   attachment?: {
     filename: string;

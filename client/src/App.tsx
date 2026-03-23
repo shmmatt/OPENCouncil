@@ -27,6 +27,7 @@ import TemplateLauncher from "@/pages/template-launcher";
 import Chat from "@/pages/chat";
 import FeedLayout from "@/pages/feed-layout";
 import Landing from "@/pages/landing";
+import DocumentsPage from "@/pages/documents";
 import { CivicLayout } from "@/components/CivicLayout";
 
 function PublicRoutes() {
@@ -35,6 +36,7 @@ function PublicRoutes() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/feed" component={FeedLayout} />
+        <Route path="/documents" component={DocumentsPage} />
         <Route path="/chat" component={Chat} />
         <Route path="/chat/t/:slug" component={TemplateLauncher} />
         <Route component={NotFound} />
