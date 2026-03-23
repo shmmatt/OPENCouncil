@@ -28,6 +28,8 @@ import Chat from "@/pages/chat";
 import FeedLayout from "@/pages/feed-layout";
 import Landing from "@/pages/landing";
 import DocumentsPage from "@/pages/documents";
+import Dashboard from "@/pages/dashboard";
+import AdminFeedback from "@/pages/admin-feedback";
 import { CivicLayout } from "@/components/CivicLayout";
 
 function PublicRoutes() {
@@ -39,6 +41,7 @@ function PublicRoutes() {
         <Route path="/documents" component={DocumentsPage} />
         <Route path="/chat" component={Chat} />
         <Route path="/chat/t/:slug" component={TemplateLauncher} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route component={NotFound} />
       </Switch>
     </CivicLayout>
@@ -67,6 +70,7 @@ function Router() {
       <Route path="/admin/deep-dives" component={AdminDeepDives} />
       <Route path="/admin/promotions" component={AdminPromotions} />
       <Route path="/admin/research-chat" component={AdminResearchChat} />
+      <Route path="/admin/feedback" component={AdminFeedback} />
       <Route component={PublicRoutes} />
     </Switch>
   );

@@ -1243,6 +1243,55 @@ export type DocumentGap = typeof documentGaps.$inferSelect;
 export type InsertDocumentGap = z.infer<typeof insertDocumentGapSchema>;
 
 // ============================================================
+// USER DASHBOARD TABLES
+// ============================================================
+
+// User Keywords: Keywords a user wants to watch for in documents
+export const userKeywords = pgTable("user_keywords", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  keyword: text("keyword").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserKeywordSchema = createInsertSchema(userKeywords).omit({
+  id: true,
+  createdAt: true,
+});
+export type UserKeyword = typeof userKeywords.$inferSelect;
+export type InsertUserKeyword = z.infer<typeof insertUserKeywordSchema>;
+
+// Feature Requests: User-submitted feature requests
+export const featureRequests = pgTable("feature_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFeatureRequestSchema = createInsertSchema(featureRequests).omit({
+  id: true,
+  createdAt: true,
+});
+export type FeatureRequest = typeof featureRequests.$inferSelect;
+export type InsertFeatureRequest = z.infer<typeof insertFeatureRequestSchema>;
+
+// Missing Doc Suggestions: User-submitted suggestions for missing documents
+export const missingDocSuggestions = pgTable("missing_doc_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertMissingDocSuggestionSchema = createInsertSchema(missingDocSuggestions).omit({
+  id: true,
+  createdAt: true,
+});
+export type MissingDocSuggestion = typeof missingDocSuggestions.$inferSelect;
+export type InsertMissingDocSuggestion = z.infer<typeof insertMissingDocSuggestionSchema>;
+
+// ============================================================
 // CRAWLER STATE TABLES (Re-export from crawler-schema.ts)
 // ============================================================
 export * from './crawler-schema';
