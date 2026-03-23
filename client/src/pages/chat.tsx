@@ -5,12 +5,10 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageCircle, Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, Rss, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
+import { useLocation, useSearch } from "wouter";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserStatusBar } from "@/components/user-status-bar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { ChatSession, ChatMessage, TemplatePayload } from "@shared/schema";
 import { TemplateBanner } from "@/components/TemplateBanner";
@@ -19,116 +17,16 @@ import { useToast } from "@/hooks/use-toast";
 import { parseSSEStream } from "@/lib/sseParser";
 import { ChatMessageBubble } from "@/components/ChatMessageBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
-
-function ChatSidebar({
-  sessions,
-  activeSessionId,
-  onSessionSelect,
-  onNewChat,
-  selectedTown,
-  onTownChange,
-  towns,
-}: {
-  sessions?: ChatSession[];
-  activeSessionId: string | null;
-  onSessionSelect: (id: string) => void;
-  onNewChat: () => void;
-  selectedTown: string;
-  onTownChange: (town: string) => void;
-  towns: string[];
-}) {
-  const [location] = useLocation();
-  const isFeedActive = location.startsWith("/feed");
-  const isChatActive = location.startsWith("/chat");
-
-  return (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      <div className="p-4 space-y-2 border-b border-sidebar-border">
-        <Button
-          onClick={onNewChat}
-          className="w-full font-headline font-semibold"
-          variant={isChatActive ? "default" : "outline"}
-          data-testid="button-new-chat"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Chat
-        </Button>
-        <Button
-          asChild
-          className="w-full font-headline"
-          variant={isFeedActive ? "default" : "outline"}
-          data-testid="link-town-feed"
-        >
-          <Link href="/feed">
-            <Rss className="w-4 h-4 mr-2" />
-            Town Feed
-          </Link>
-        </Button>
-      </div>
-
-      <div className="p-3 border-b border-sidebar-border">
-        <label className="text-xs font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">
-          Town
-        </label>
-        <Select value={selectedTown} onValueChange={onTownChange}>
-          <SelectTrigger className="w-full" data-testid="select-town">
-            <SelectValue placeholder="Select a town" />
-          </SelectTrigger>
-          <SelectContent>
-            {towns.map((town) => (
-              <SelectItem key={town} value={town} data-testid={`town-option-${town}`}>
-                {town}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Separator />
-
-      <div className="p-3 pb-1">
-        <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-          Conversations
-        </h3>
-      </div>
-      <ScrollArea className="flex-1">
-        <div className="px-2 pb-2 space-y-0.5">
-          {sessions?.map((session) => (
-            <button
-              key={session.id}
-              onClick={() => onSessionSelect(session.id)}
-              className={`w-full text-left p-3 rounded-md hover-elevate active-elevate-2 transition-colors ${
-                activeSessionId === session.id
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground"
-              }`}
-              data-testid={`button-session-${session.id}`}
-            >
-              <div className="flex items-start gap-2">
-                <MessageCircle className="w-3.5 h-3.5 mt-1 flex-shrink-0 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{session.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(session.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
+import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
 
 export default function Chat() {
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
   const [inputValue, setInputValue] = useState("");
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sharedLinkQuestion, setSharedLinkQuestion] = useState<string | null>(null);
   const [isProcessingSharedLink, setIsProcessingSharedLink] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedTown, setSelectedTown] = useState<string>("Ossipee");
   const [pipelineStage, setPipelineStage] = useState<string | null>(null);
   const [isDeepDiveMode, setIsDeepDiveMode] = useState(false);
   const [deepDiveIteration, setDeepDiveIteration] = useState(0);
@@ -140,17 +38,15 @@ export default function Chat() {
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionParam = urlParams.get("session");
-    if (sessionParam) {
-      setActiveSessionId(sessionParam);
-      urlParams.delete("session");
-      const remainingParams = urlParams.toString();
-      const newUrl = window.location.pathname + (remainingParams ? `?${remainingParams}` : "");
-      window.history.replaceState({}, document.title, newUrl);
+  const activeSessionId = new URLSearchParams(searchString).get("session");
+
+  const setActiveSessionId = useCallback((id: string | null) => {
+    if (id) {
+      navigate(`/chat?session=${id}`);
+    } else {
+      navigate("/chat");
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     if (sharedLinkProcessedRef.current) return;
@@ -171,43 +67,14 @@ export default function Chat() {
     }
   }, []);
 
-  const { data: townsData } = useQuery<{ towns: string[] }>({
-    queryKey: ["/api/meta/towns"],
-  });
-
   const { data: prefData } = useQuery<{ town: string }>({
     queryKey: ["/api/preferences/town"],
   });
-
-  useEffect(() => {
-    if (prefData?.town) {
-      setSelectedTown(prefData.town);
-    }
-  }, [prefData?.town]);
+  const selectedTown = prefData?.town || "Ossipee";
 
   const { data: sessions } = useQuery<ChatSession[]>({
     queryKey: ["/api/chat/sessions"],
   });
-
-  const setTownMutation = useMutation({
-    mutationFn: async (town: string) => {
-      await apiRequest("POST", "/api/preferences/town", {
-        town,
-        sessionId: activeSessionId,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preferences/town"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/updates/minutes"] });
-    },
-  });
-
-  const handleTownChange = (town: string) => {
-    setSelectedTown(town);
-    setTownMutation.mutate(town);
-  };
-
-  const towns = townsData?.towns || ["Ossipee"];
 
   const { data: messages, isLoading: messagesLoading } = useQuery<ChatMessage[]>({
     queryKey: ["/api/chat/sessions", activeSessionId],
@@ -529,9 +396,9 @@ export default function Chat() {
 
   useEffect(() => {
     if (sessions && sessions.length > 0 && !activeSessionId) {
-      setActiveSessionId(sessions[0].id);
+      navigate(`/chat?session=${sessions[0].id}`);
     }
-  }, [sessions, activeSessionId]);
+  }, [sessions, activeSessionId, navigate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -613,17 +480,7 @@ export default function Chat() {
     }
   };
 
-  const sidebarContent = (
-    <ChatSidebar
-      sessions={sessions}
-      activeSessionId={activeSessionId}
-      onSessionSelect={setActiveSessionId}
-      onNewChat={handleNewChat}
-      selectedTown={selectedTown}
-      onTownChange={handleTownChange}
-      towns={towns}
-    />
-  );
+  const mobileSidebarContent = <ChatSidebarPanel />;
 
   const sessionLabel = activeSession
     ? `ACTIVE SESSION: ${activeSession.title?.slice(0, 36).toUpperCase()}${(activeSession.title?.length ?? 0) > 36 ? "..." : ""}`
@@ -631,10 +488,6 @@ export default function Chat() {
 
   return (
     <div className="flex h-full bg-background">
-      <div className="hidden md:block w-64 h-full flex-shrink-0">
-        {sidebarContent}
-      </div>
-
       <div className="flex-1 flex flex-col min-w-0 relative">
         <TemplateBanner onLaunch={handleTemplateLaunch} isLoading={createSessionMutation.isPending} selectedTown={selectedTown} />
 
@@ -648,7 +501,7 @@ export default function Chat() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-72">
-                  {sidebarContent}
+                  {mobileSidebarContent}
                 </SheetContent>
               </Sheet>
               <div>

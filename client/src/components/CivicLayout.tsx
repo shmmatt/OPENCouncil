@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Bell, Search, Plus, Newspaper, FileText, MessageSquare, LayoutDashboard, User } from "lucide-react";
+import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
 
 const navItems = [
   { title: "News", url: "/feed", icon: Newspaper },
@@ -29,6 +30,8 @@ const topNavItems = [
 
 function CivicAppSidebar() {
   const [location] = useLocation();
+  const isChatPage = location.startsWith("/chat");
+
   return (
     <Sidebar>
       <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border">
@@ -36,28 +39,34 @@ function CivicAppSidebar() {
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mt-0.5">Official Ledger</p>
       </SidebarHeader>
       <SidebarContent className="pt-2">
-        <SidebarMenu>
-          {navItems.map((item) => {
-            const isActive = location.startsWith(item.url);
-            return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild isActive={isActive} data-testid={`sidenav-${item.title.toLowerCase()}`}>
-                  <Link href={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
+        {isChatPage ? (
+          <ChatSidebarPanel />
+        ) : (
+          <SidebarMenu>
+            {navItems.map((item) => {
+              const isActive = location.startsWith(item.url);
+              return (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive} data-testid={`sidenav-${item.title.toLowerCase()}`}>
+                    <Link href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        )}
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <Button className="w-full font-headline font-semibold" data-testid="button-post-update">
-          <Plus className="w-4 h-4 mr-2" />
-          Post Update
-        </Button>
-      </SidebarFooter>
+      {!isChatPage && (
+        <SidebarFooter className="p-4 border-t border-sidebar-border">
+          <Button className="w-full font-headline font-semibold" data-testid="button-post-update">
+            <Plus className="w-4 h-4 mr-2" />
+            Post Update
+          </Button>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

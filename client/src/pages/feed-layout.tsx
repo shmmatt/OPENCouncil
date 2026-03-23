@@ -1,11 +1,41 @@
 import { useState, useCallback, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import TownFeedComponent from "@/components/TownFeed";
-import { Calendar } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar, MapPin } from "lucide-react";
 import { ChatDrawer } from "@/components/ChatDrawer";
 import type { ChatDrawerState } from "@/components/ChatDrawer";
 
 export default function FeedLayout() {
   const [drawer, setDrawer] = useState<ChatDrawerState>({ isOpen: false });
+
+  const { data: townsData } = useQuery<{ towns: string[] }>({
+    queryKey: ["/api/meta/towns"],
+  });
+
+  const { data: prefData } = useQuery<{ preferredTowns: string[] }>({
+    queryKey: ["/api/feed/user/preferences"],
+  });
+
+  const towns = townsData?.towns || ["Ossipee"];
+  const selectedTown = prefData?.preferredTowns?.[0] || "";
+
+  const setTownMutation = useMutation({
+    mutationFn: async (town: string) => {
+      await apiRequest("PUT", "/api/feed/user/preferences", {
+        preferredTowns: [town],
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/feed/user/preferences"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed/user"] });
+    },
+  });
+
+  const handleTownChange = (town: string) => {
+    setTownMutation.mutate(town);
+  };
 
   const handleQuestionClick = useCallback(
     (question: string, feedItemId?: string, templateId?: string) => {
@@ -74,6 +104,21 @@ export default function FeedLayout() {
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed max-w-xl">
               Verified municipal activities and legislative updates for the community of OPENCouncil.
             </p>
+            <div className="mt-3 flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              <Select value={selectedTown || towns[0]} onValueChange={handleTownChange}>
+                <SelectTrigger className="w-44 h-8 text-sm" data-testid="select-feed-town">
+                  <SelectValue placeholder="Select a town" />
+                </SelectTrigger>
+                <SelectContent>
+                  {towns.map((town) => (
+                    <SelectItem key={town} value={town} data-testid={`feed-town-option-${town}`}>
+                      {town}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex items-center gap-2 bg-muted border border-border rounded-full px-4 py-2 flex-shrink-0 self-start sm:self-auto">
             <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
