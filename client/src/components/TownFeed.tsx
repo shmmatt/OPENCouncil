@@ -306,7 +306,7 @@ function HeroFeedCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-md col-span-12 md:col-span-8"
+      className="relative overflow-hidden rounded-md col-span-12 lg:col-span-8"
       data-testid={`hero-card-${item.id}`}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary to-primary/80" />
@@ -367,7 +367,7 @@ function BentoSideCard({
 
   return (
     <Card
-      className="overflow-visible col-span-12 md:col-span-4 flex flex-col"
+      className="overflow-visible col-span-12 lg:col-span-4 flex flex-col"
       data-testid={`bento-side-card-${item.id}`}
     >
       <CardHeader className="pb-3 flex-wrap gap-1">
@@ -738,7 +738,7 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
           </div>
 
           {gridItems.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {gridItems.map((item) => (
                 <SmallNewsCard
                   key={item.id}
