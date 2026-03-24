@@ -1,0 +1,51 @@
+This is exactly how you build a high-converting PLG motion. If your primary goal right now is capturing emails with zero friction, you have to treat the email address as the "currency" for their first upgrade, and actual dollars as the currency for their second.
+
+Here is how the ideal frictionless signup flow should work for OPENCouncil:
+
+### The Frictionless "Flow-Preserving" Signup
+1. **The Hook:** A guest lands on the site and immediately asks the Civic Ledger a question. No login walls. Instant value.
+2. **The Tease:** On their 3rd or 4th query, they hit the guest limit. The UI processes their question, shows the first sentence of the answer, and blurs the rest out (The Ghost Data Tease).
+3. **The Zero-Friction Ask:** The CTA over the blurred text doesn't say "Create an Account." It says: *"Enter your email to unlock this answer and get 10 more free queries."* 4. **The Magic:** They type their email and hit enter. **The blur lifts instantly.** They don't have to leave the app to go click a magic link in their inbox right now—that kills momentum. The system sends the magic link to their inbox for *future* logins, but immediately upgrades their current session to "Free Tier" so they can finish their workflow. 
+
+This captures the email while they are highly motivated, without breaking their concentration. 
+
+Here is the exact spec to hand your Replit agent. It builds this PLG UI funnel, sets up the frictionless email capture, and lays the initial backend scaffolding for Stripe so you are ready to flip the switch on paid subscriptions.
+
+***
+
+### #16 - PLG Funnel, Ghost Data UI & Stripe Scaffolding
+
+**What & Why**
+We need to transition the app from a fully open tool to a Product-Led Growth (PLG) funnel. The goal is to maximize email capture with zero friction, while laying the backend groundwork for actual paid subscriptions. We will implement an "80% soft warning" on the usage meter, a "Ghost Data" blur effect for users who hit their limit, and an instant email-capture bridge that upgrades them to the Free Tier without forcing them to check their inbox immediately. We also need the foundational Stripe integration built into the backend.
+
+**Done looks like**
+* **80% Soft Warning:** When any user hits >= 80% of their query quota, the header usage bar turns amber/orange.
+* **Ghost Data Tease:** When a user is at 100% usage and submits a chat prompt, the AI generates the response, but the frontend only shows the first 100 characters clearly. The rest of the message has a CSS `backdrop-filter: blur()` applied.
+* **Zero-Friction Email Capture:** Centered over the blurred text is an input field asking for their email. Submitting this email fires the magic link to their inbox, registers them as a user, and *immediately* upgrades their current session UI to "Free Tier" (lifting the blur) without requiring an immediate email click.
+* **Stripe Scaffolding:** The `stripe` npm package is installed. The `users` database schema is updated to include `stripeCustomerId` and `stripeSubscriptionStatus`. A basic `/api/stripe/checkout` route and a `/api/stripe/webhook` route are created.
+* **Contextual Upsell:** For users who are already signed in but hit the Free Tier limit, the blur CTA says "Upgrade to OPENCouncil Pro for unlimited civic intelligence," which triggers the Stripe checkout route.
+
+**Out of scope**
+* fully activating hard Stripe paywalls that block all app usage (keep it soft for testing).
+* Building a complex subscription management portal (just basic checkout and webhook listening for now).
+
+**Tasks**
+* **Task 1: The Usage Meter Warning** — Update the usage meter component. Add a conditional Tailwind class: if `(usage / limit) >= 0.8`, change the progress bar color to `bg-amber-500`. 
+* **Task 2: Ghost Data Chat UI** — In `ChatMessageBubble.tsx`, accept a new prop `isBlurred`. If true, render the first ~100 characters normally, then apply a fading gradient blur to the rest of the text. Render a PLG CTA overlay centered on top of the blurred section.
+* **Task 3: Frictionless Signup Bridge** — If the user is unauthenticated, the Ghost Data overlay should contain a simple email input. On submit, hit the existing magic-link generation endpoint, but *also* update the local React state/session to temporarily treat them as an authenticated "Free" user so the blur lifts instantly. 
+* **Task 4: Stripe DB Schema** — In `shared/schema.ts`, add `stripeCustomerId` (text) and `stripeSubscriptionStatus` (text) to the `users` table. Update Drizzle schema and push to the DB.
+* **Task 5: Stripe API Scaffolding** — Install `stripe`. Create `server/routes/stripe.ts`. Build a `POST /api/stripe/checkout` endpoint that creates a Stripe Checkout session for a dummy "Pro" price ID and returns the URL. Build a `POST /api/stripe/webhook` endpoint to listen for `checkout.session.completed` and update the user's `stripeSubscriptionStatus` in the DB. 
+* **Task 6: The Pro Upsell** — If the user is already authenticated but out of free queries, the Ghost Data overlay should show a button calling the `/api/stripe/checkout` endpoint.
+
+**Relevant files**
+* `client/src/components/user-status-bar.tsx`
+* `client/src/components/ChatMessageBubble.tsx`
+* `client/src/pages/chat.tsx`
+* `shared/schema.ts`
+* `server/routes/index.ts`
+
+***
+
+This will immediately turn OPENCouncil into a lead generation machine. 
+
+Once the agent finishes this, you'll need to grab your Stripe secret keys and a test Price ID from your Stripe dashboard and drop them into Replit's environment variables. Would you like a quick checklist on exactly where to find those specific keys in Stripe to test the checkout flow?

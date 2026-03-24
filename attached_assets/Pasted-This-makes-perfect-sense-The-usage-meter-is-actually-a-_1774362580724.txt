@@ -1,0 +1,40 @@
+This makes perfect sense. The usage meter is actually a great product feature—it introduces natural friction that drives conversions. It just needs a tiny bit of UI polish so the user instantly understands *what* that bar is measuring.
+
+Here is the complete, consolidated Replit agent prompt. It covers the layout deduplication, the layout grid fix, the data formatting, and the usage meter polish. 
+
+Copy and paste this directly to your agent:
+
+***
+
+### #15 - Civic Ledger UI Polish & Document Browser Refinements
+
+**What & Why**
+The new Documents browser and Civic Ledger shell are structurally sound, but the UI has several rough edges that make it feel like an internal tool rather than a consumer product. There is a redundant "double masthead" (logo in both the sidebar and header). The desktop calendar view stacks awkwardly instead of sitting side-by-side. Document cards expose internal backend state (e.g., "Needs Review" badges, raw `.pdf` filenames, unformatted OCR text walls). Finally, the API usage meter in the header lacks context, looking like a broken loading bar rather than a usage quota. 
+
+**Done looks like**
+* **Single Masthead:** The OPENCouncil logo only appears in the sidebar on desktop, and only in the top header on mobile. The desktop header space is used for contextual page titles/breadcrumbs (e.g., "Documents").
+* **Usage Meter Polish:** The progress bar is clearly labeled to indicate quota (e.g., "Guest Usage", "Free Tier") alongside the percentage, so it is immediately understood as an API/query limit.
+* **Desktop Calendar Layout:** The calendar and the filtered document list sit side-by-side on desktop displays (e.g., a 4-col / 8-col split), and stack cleanly on mobile.
+* **Document Card Polish:** Raw filenames are hidden. The UI displays the `canonicalTitle` (stripping `.pdf` and formatting cleanly if a fallback is needed). The internal "Needs Review" badge is removed and replaced by the actual Board Name. Preview text is strictly truncated to 3 lines for uniform card heights.
+
+**Out of scope**
+* Backend changes to extraction, parsing, or PDF OCR logic.
+* Changing the underlying Shadcn Calendar component logic or API fetching.
+* Implementing the actual Stripe/billing upgrade flow (UI polish only).
+
+**Tasks**
+* **Task 1: De-duplicate the Masthead** — In `CivicLayout.tsx` (or the header component), add Tailwind classes to the header logo so it only shows on mobile (`block md:hidden`). Ensure the sidebar logo only shows on desktop (`hidden md:block`). In the header's left side (where the logo used to be on desktop), dynamically render the current page title (e.g., "Documents", "News Feed").
+* **Task 2: Polish the Usage Meter** — Update the usage progress bar in the header. Add a clear, small text label above or beside the bar based on the user's authentication state. If anonymous: "Guest Usage". If authenticated but not paid: "Free Tier". Ensure the layout feels like a quota tracker.
+* **Task 3: Refine Document Cards** — In the Document List/Card components, remove the internal "Needs Review" badge entirely and render the `board` name in that slot. Swap the display title to use `canonicalTitle`. If `canonicalTitle` is null/empty, use the raw filename but build a quick utility to `.replace('.pdf', '')` and replace underscores with spaces. Add Tailwind `line-clamp-3` to the `previewText` container so long OCR blocks don't break the card height.
+* **Task 4: Fix Calendar Desktop Layout** — In `documents.tsx`, update the layout wrapper containing the Calendar and the List views. Use a CSS grid (`grid grid-cols-1 md:grid-cols-12 gap-6`). Assign the Calendar wrapper `md:col-span-4` (or `md:col-span-3`) and the List wrapper `md:col-span-8` (or `md:col-span-9`) so they render side-by-side on desktop monitors.
+
+**Relevant files**
+* `client/src/components/CivicLayout.tsx` (or wherever the Top Header is defined)
+* `client/src/pages/documents.tsx`
+* `client/src/components/user-status-bar.tsx` (or the header component containing the usage meter)
+
+***
+
+Once the agent runs this, the app is going to look incredibly sharp and ready for public eyes. 
+
+Would you like me to start brainstorming the onboarding copy for the "Upgrade" modal for when a user actually hits that 100% usage limit?
