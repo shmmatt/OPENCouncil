@@ -11,6 +11,7 @@ import { processFile, formatDuplicateWarning } from "../services/fileProcessing"
 import { suggestMetadataFromPreview, validateMetadata, isValidNHTown } from "../services/metadataExtraction";
 import { blobStorage } from "../services/blobStorage";
 import { parallelUpload, type UploadJob } from "../services/parallelUpload";
+import { processDocumentForFeed } from "../services/feedAutomation";
 import type { DocumentMetadata, IngestionJobStatus } from "@shared/schema";
 
 const router = Router();
@@ -435,6 +436,11 @@ router.post("/jobs/:jobId/index", authenticateAdmin, async (req, res) => {
 
     await storage.setCurrentVersion(job.documentId, version.id);
 
+    // Fire-and-forget: feed automation pipeline (Tier 1 digest + Tier 2 feature article)
+    Promise.resolve().then(() => processDocumentForFeed(version.id)).catch((err: Error) => {
+      logError("[feedAutomation] processDocumentForFeed failed (single-index hook)", { error: String(err), versionId: version.id });
+    });
+
     await storage.updateIngestionJob(jobId, {
       status: "indexed",
       documentVersionId: version.id,
@@ -590,6 +596,11 @@ router.post("/jobs/batch-index", authenticateAdmin, async (req, res) => {
         });
         
         await storage.setCurrentVersion(job!.documentId!, version.id);
+
+        // Fire-and-forget: feed automation pipeline (Tier 1 digest + Tier 2 feature article)
+        Promise.resolve().then(() => processDocumentForFeed(version.id)).catch((err: Error) => {
+          logError("[feedAutomation] processDocumentForFeed failed (batch-index hook)", { error: String(err), versionId: version.id });
+        });
         
         await storage.updateIngestionJob(job!.id, {
           status: "indexed",

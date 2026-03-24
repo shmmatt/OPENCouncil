@@ -45,6 +45,30 @@ Utilizes Gemini 3.1 Pro for deep, architecture-aware analysis of chat sessions t
 ### Content Generation & Town Feed
 A content generation pipeline extracts engaging topics from meeting minutes, enriches them with historical context, and generates polished summaries for a central, infinite-scroll Town Feed. This includes a workflow for admins to generate and publish feed items from documents and chat conversations, with features like cursor-based pagination, user-preferred town filtering, atomic upvote toggling, and suggested question chips.
 
+### Feed Automation Pipeline (Task #19)
+A two-tier automated feed pipeline fires fire-and-forget after every document version is indexed (`isCurrent=true`):
+
+**Tier 1 — Automated Digest** (`feedType='automated_digest'`, status=`published`):
+- Generates a 150-250 word factual wire-service digest from any minutes document.
+- Auto-published immediately — no admin action required.
+
+**Tier 2 — Feature Article Draft** (`feedType='automated_feature'`, status=`pending_review`):
+- Only triggered when extracted topics include at least one scoring ≥ 8/10.
+- Generates a full 400-800 word journalistic article.
+- Draft row is **written to DB immediately** before image generation (image failure never loses the draft).
+- Attempts AI header image generation via Gemini Imagen; patches `headerImageUrl` if successful.
+- Admin reviews via the Publishing Inbox (`GET /api/admin/content/inbox`) and approves (`POST /api/admin/content/feed-items/:id/approve`) or rejects (`POST /api/admin/content/feed-items/:id/reject`).
+
+**Schema additions** (`town_feed_items`): `feed_type`, `header_image_url`, `automation_source_version_id`.
+
+**New endpoints**:
+- `GET /api/admin/content/inbox` — list pending_review items
+- `POST /api/admin/content/feed-items/:id/approve` — approve draft → published
+- `POST /api/admin/content/feed-items/:id/reject` — reject draft
+- `GET /api/content/feed-images/:filename` — serve AI-generated header images
+
+Key files: `server/services/feedAutomation.ts`, `server/routes/ingestion.ts` (hook points), `server/routes/contentGeneration.ts` (inbox endpoints), `migrations/0007_feed_automation.sql`.
+
 ### Deep Dive Mode
 A semi-agentic research feature that chains multiple reasoning loops to produce comprehensive analyses. It uses an orchestrator to plan research, execute tools (RAG, web search with a two-phase Google Search Grounding approach), synthesize findings, and self-score for quality, iterating as needed. This mode focuses on narrative-focused prompts to produce cohesive, thematic research reports.
 

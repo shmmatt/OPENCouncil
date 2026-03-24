@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
+import * as fs from "fs/promises";
+import * as path from "path";
 import { authenticateAdmin } from "../middleware/auth";
 import {
   createTownFeedItem,
@@ -370,6 +372,118 @@ adminRouter.get("/news-sources", async (_req, res) => {
   res.json(getConfiguredNewsSources());
 });
 
+// ============================================================
+// PUBLISHING INBOX — Automated feature articles awaiting review
+// ============================================================
+
+adminRouter.get("/inbox", async (req, res) => {
+  try {
+    const town = req.query.town as string | undefined;
+    const items = await getTownFeedItems(town, { status: "pending_review" });
+    res.json(items);
+  } catch (error) {
+    console.error("Error fetching publishing inbox:", error);
+    res.status(500).json({ message: "Failed to fetch inbox" });
+  }
+});
+
+adminRouter.post("/feed-items/:id/approve", async (req, res) => {
+  try {
+    const item = await getTownFeedItemById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: "Feed item not found" });
+    }
+    if (item.status !== "pending_review") {
+      return res.status(400).json({ message: `Item is not pending review (status: ${item.status})` });
+    }
+
+    const highScoringTopics = (item.topics || []).filter((t: any) => t.score >= 8) as ScoredTopic[];
+    let payload = item.generatedPayload as TownFeedPayload | undefined;
+
+    if (!payload) {
+      const curiosityQuestions = await generateCuriosityQuestions(item.summary, highScoringTopics, item.town);
+      payload = {
+        summary: item.summary,
+        sections: highScoringTopics.map((t: any) => {
+          const matchingSection = curiosityQuestions.sections.find(
+            (s) => s.topic.toLowerCase() === t.topic.toLowerCase()
+          );
+          return {
+            title: t.topic,
+            description: t.historicalContext || t.keyPoints?.join(". ") || "",
+            suggestedQuestions: matchingSection?.questions?.length
+              ? matchingSection.questions
+              : [`What led to the decision on ${t.topic}?`, `What happens next with ${t.topic}?`],
+          };
+        }),
+        highLevelQuestions: curiosityQuestions.highLevelQuestions.length
+          ? curiosityQuestions.highLevelQuestions
+          : [`What should ${item.town} residents watch for in the coming months?`],
+      };
+    }
+
+    const updated = await updateTownFeedItem(req.params.id, {
+      status: "published",
+      publishedAt: new Date(),
+      generatedPayload: payload,
+    } as any);
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Error approving feed item:", error);
+    res.status(500).json({ message: "Failed to approve feed item" });
+  }
+});
+
+adminRouter.post("/feed-items/:id/reject", async (req, res) => {
+  try {
+    const item = await getTownFeedItemById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: "Feed item not found" });
+    }
+    if (item.status !== "pending_review") {
+      return res.status(400).json({ message: `Item is not pending review (status: ${item.status})` });
+    }
+
+    const updated = await updateTownFeedItem(req.params.id, {
+      status: "rejected",
+    } as any);
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Error rejecting feed item:", error);
+    res.status(500).json({ message: "Failed to reject feed item" });
+  }
+});
+
+// ============================================================
+// FEED IMAGES — Serve AI-generated header images
+// ============================================================
+
+const imagesRouter = Router();
+
+imagesRouter.get("/:filename", async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename.match(/^[a-zA-Z0-9_-]+\.png$/)) {
+      return res.status(400).json({ message: "Invalid filename" });
+    }
+    const filePath = path.join("uploads/feed-images", filename);
+    try {
+      await fs.access(filePath);
+    } catch {
+      return res.status(404).json({ message: "Image not found" });
+    }
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const buffer = await fs.readFile(filePath);
+    res.send(buffer);
+  } catch (error) {
+    console.error("Error serving feed image:", error);
+    res.status(500).json({ message: "Failed to serve image" });
+  }
+});
+
 const publicRouter = Router();
 
 publicRouter.get("/items/:id", async (req, res) => {
@@ -395,4 +509,4 @@ publicRouter.get("/town/:town", async (req, res) => {
   }
 });
 
-export { adminRouter as contentAdminRouter, publicRouter as contentPublicRouter };
+export { adminRouter as contentAdminRouter, publicRouter as contentPublicRouter, imagesRouter as feedImagesRouter };
