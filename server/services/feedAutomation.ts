@@ -3,22 +3,22 @@
  *
  * Triggered fire-and-forget after each document version is indexed (isCurrent=true).
  *
- * Tier 1 — Automated Digest (always):
- *   - Generate a concise 150-250 word factual digest of the document.
+ * Tier 1 — Automated Digest (always, for minutes documents):
+ *   - Generate JSON { title, bullets: string[3] }.
+ *   - Title pattern: "Board Type + Doc Type + Published" (e.g. "Planning Board Minutes Published").
  *   - Auto-publish immediately (status = 'published', feedType = 'automated_digest').
  *
- * Tier 2 — Feature Article Draft (only when high-impact topics found, score >= 8):
- *   - Generate a full 400-800 word journalistic article.
- *   - INSERT the draft row IMMEDIATELY (status = 'pending_review', feedType = 'automated_feature').
- *   - THEN attempt header image generation in a separate try/catch; patch the row if successful.
- *   - Admin approves/rejects via the Publishing Inbox (Task #20).
+ * Tier 2 — Feature Article Draft (when publicFriction > 6 OR financialImpact > 6):
+ *   - LLM returns: Smart Brevity article text + headerImagePrompt.
+ *   - INSERT the draft row IMMEDIATELY (status = 'draft', feedType = 'automated_feature').
+ *   - THEN attempt header image generation using the LLM-provided headerImagePrompt.
+ *   - If image generation fails or times out, the draft is left intact — failure is only logged.
  *
- * Safety invariant: image generation failures NEVER prevent the draft from being saved.
+ * Safety invariant: errors in automation NEVER block the ingestion pipeline.
  */
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { db, schema, eq } from "../storage/db";
 import { createTownFeedItem, updateTownFeedItem } from "../storage/townFeed";
@@ -54,7 +54,7 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
     return;
   }
 
-  // 2. Fetch logical document (for town + canonical title)
+  // 2. Fetch logical document (for town + canonical title + board)
   const [logDoc] = await db
     .select()
     .from(schema.logicalDocuments)
@@ -86,17 +86,21 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
   const meetingDateStr = version.meetingDate
     ? new Date(version.meetingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     : null;
+
+  // Board label for title pattern — e.g. "Planning Board", "Select Board", "Budget Committee"
   const boardLabel = logDoc.board || "Board";
+  // Doc type label — always "Minutes" since we only process isMinutes=true
+  const docTypeLabel = "Minutes";
 
   // 4. Tier 1 — Generate and auto-publish factual digest
   try {
-    await generateAndPublishDigest(versionId, town, boardLabel, meetingDateStr, truncatedText);
+    await generateAndPublishDigest(versionId, town, boardLabel, docTypeLabel, meetingDateStr, truncatedText);
   } catch (err) {
     logError(`[feedAutomation] Tier 1 digest failed for version ${versionId}`, { error: String(err) });
     // Do not rethrow — Tier 2 should still be attempted independently
   }
 
-  // 5. Tier 2 — Score topics; create pending_review feature article if high-impact
+  // 5. Tier 2 — Score topics; create feature article draft if high-impact
   try {
     await evaluateAndCreateFeatureArticle(versionId, town, boardLabel, meetingDateStr, truncatedText);
   } catch (err) {
@@ -106,54 +110,61 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Tier 1 — Automated digest (auto-published)
+// JSON: { title, bullets: string[3] }
+// Title pattern: "Board Type + Doc Type + Published" e.g. "Planning Board Minutes Published"
 // ---------------------------------------------------------------------------
 
 async function generateAndPublishDigest(
   versionId: string,
   town: string,
   board: string,
+  docType: string,
   meetingDate: string | null,
   text: string
 ): Promise<void> {
   const dateLabel = meetingDate ? ` — ${meetingDate}` : "";
+  // Canonical title pattern as required by spec
+  const canonicalTitle = `${board} ${docType} Published`;
 
-  const prompt = `You are a wire-service reporter for ${town}, New Hampshire. Read the following meeting minutes and write a concise factual digest for the general public.
+  const prompt = `You are a wire-service reporter for ${town}, New Hampshire. Read the following meeting minutes and produce a factual digest for the general public.
 
-STRICT RULES:
-- Length: 150-250 words only
-- Tone: dry, neutral, factual — like a wire service report
-- First sentence must be a newspaper-style lede with Who, What, When, Where
-- No exclamation marks, no rhetorical questions
-- No subjective adjectives: exciting, important, significant, concerning
-- Bold key names, dollar figures, vote counts, and dates using Markdown **bold**
-- No editorial commentary
+RULES:
+- Return exactly 3 bullets summarizing the most important decisions, votes, or announcements
+- Each bullet must be factual, dry, and neutral — no editorial commentary
+- Each bullet: 1-2 sentences maximum, starts with a capital letter, ends with a period
+- Use **bold** for key names, dollar amounts, vote counts, and dates
+- Skip purely procedural items (roll call, approval of prior minutes, adjournment)
+- The title must exactly match this pattern: "${canonicalTitle}"
 
 MEETING MINUTES (${board}${dateLabel}):
 ${text}
 
-Respond with JSON:
-{ "title": "Headline (newspaper style, factual, no hype)", "digest": "Digest text here" }`;
+Respond with JSON matching this schema exactly:
+{ "title": "${canonicalTitle}", "bullets": ["bullet 1", "bullet 2", "bullet 3"] }`;
 
   const response = await ai.models.generateContent({
     model: FAST_MODEL,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       temperature: 0.1,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 512,
       responseMimeType: "application/json",
       responseSchema: {
         type: "object" as const,
         properties: {
           title: { type: "string" as const },
-          digest: { type: "string" as const },
+          bullets: {
+            type: "array" as const,
+            items: { type: "string" as const },
+          },
         },
-        required: ["title", "digest"],
+        required: ["title", "bullets"],
       },
     },
   });
 
   const raw = response.text || "{}";
-  let parsed: { title?: string; digest?: string } = {};
+  let parsed: { title?: string; bullets?: string[] } = {};
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -161,17 +172,19 @@ Respond with JSON:
     if (m) parsed = JSON.parse(m[0]);
   }
 
-  const title = parsed.title || `${town} ${board} Meeting Update`;
-  const digest = parsed.digest || "";
+  // Enforce the required title pattern regardless of what LLM returned
+  const title = canonicalTitle;
+  const bullets: string[] = Array.isArray(parsed.bullets) && parsed.bullets.length >= 1
+    ? parsed.bullets.slice(0, 3)
+    : ["Meeting minutes published."];
 
-  if (!digest || digest.length < 50) {
-    throw new Error("LLM returned empty digest");
-  }
+  // Format summary as a bullet list for the feed
+  const summary = bullets.map(b => `• ${b}`).join("\n");
 
   const feedItem = await createTownFeedItem({
     town,
     title,
-    summary: digest,
+    summary,
     topics: [],
     routineTopics: [],
     sourceMinutesIds: [],
@@ -187,6 +200,7 @@ Respond with JSON:
 
 // ---------------------------------------------------------------------------
 // Tier 2 — Evaluate impact and create feature article draft
+// Gate: publicFriction > 6 OR financialImpact > 6 on any topic
 // ---------------------------------------------------------------------------
 
 async function evaluateAndCreateFeatureArticle(
@@ -199,19 +213,26 @@ async function evaluateAndCreateFeatureArticle(
   // 5a. Extract and score topics
   const scoredTopics = await extractAndScoreTopics(text, town, board);
 
-  const highImpactTopics = scoredTopics.filter(t => t.score >= 8);
+  // Gate: publicFriction > 6 OR financialImpact > 6 (per spec)
+  const highImpactTopics = scoredTopics.filter(
+    t => t.publicFriction > 6 || t.financialImpact > 6
+  );
 
   if (highImpactTopics.length === 0) {
-    logInfo(`[feedAutomation] Tier 2 skipped for version ${versionId}: no high-impact topics (max score: ${Math.max(0, ...scoredTopics.map(t => t.score))})`);
+    const maxFriction = Math.max(0, ...scoredTopics.map(t => t.publicFriction));
+    const maxImpact = Math.max(0, ...scoredTopics.map(t => t.financialImpact));
+    logInfo(
+      `[feedAutomation] Tier 2 skipped for version ${versionId}: no topic exceeds threshold ` +
+      `(maxFriction=${maxFriction}, maxImpact=${maxImpact})`
+    );
     return;
   }
 
   logInfo(`[feedAutomation] Tier 2 triggered: ${highImpactTopics.length} high-impact topics for ${town}`);
 
-  // 5b. Generate full journalistic article
-  const { title, summary, topics, routineTopics, payload } = await generateFeatureArticle(
-    text, town, board, meetingDate, highImpactTopics, scoredTopics
-  );
+  // 5b. Generate full Smart Brevity article + headerImagePrompt from LLM
+  const { title, summary, topics, routineTopics, payload, headerImagePrompt } =
+    await generateFeatureArticle(text, town, board, meetingDate, highImpactTopics, scoredTopics);
 
   // 5c. INSERT the draft row IMMEDIATELY — image failure must never block this
   const feedItem = await createTownFeedItem({
@@ -222,25 +243,26 @@ async function evaluateAndCreateFeatureArticle(
     routineTopics,
     sourceMinutesIds: [],
     newsArticles: [],
-    status: "pending_review",
+    status: "draft",
     generatedPayload: payload,
     feedType: "automated_feature",
     automationSourceVersionId: versionId,
   } as any);
 
-  logInfo(`[feedAutomation] Tier 2 draft created: ${feedItem.id} — "${title}" (pending_review)`);
+  logInfo(`[feedAutomation] Tier 2 draft created: ${feedItem.id} — "${title}" (draft)`);
 
-  // 5d. Attempt header image generation — separate try/catch, never blocks
+  // 5d. Attempt header image generation using LLM-provided headerImagePrompt
   try {
-    const imageUrl = await generateHeaderImage(feedItem.id, town, highImpactTopics[0].topic, title);
+    const imageUrl = await generateHeaderImage(feedItem.id, headerImagePrompt);
     if (imageUrl) {
       await updateTownFeedItem(feedItem.id, { headerImageUrl: imageUrl } as any);
       logInfo(`[feedAutomation] Header image saved for ${feedItem.id}: ${imageUrl}`);
     }
   } catch (imgErr) {
-    logError(`[feedAutomation] Header image generation failed for ${feedItem.id} — draft saved without image`, {
-      error: String(imgErr),
-    });
+    logError(
+      `[feedAutomation] Header image generation failed for ${feedItem.id} — draft saved without image`,
+      { error: String(imgErr) }
+    );
   }
 }
 
@@ -255,7 +277,6 @@ Extract 3-10 distinct topics and score each on:
 - financialImpact (1-10): financial impact on residents (tax changes, large expenditures = high)
 - publicFriction (1-10): public controversy or debate (contested votes, legal disputes = high)
 - qualityOfLife (1-10): effect on residents' daily lives (zoning, infrastructure, safety = high)
-- score (1-10): overall newsworthiness, weighted average of the above
 
 Also provide:
 - topic: clear concise name
@@ -282,14 +303,13 @@ ${text}`;
               type: "object" as const,
               properties: {
                 topic: { type: "string" as const },
-                score: { type: "number" as const },
                 financialImpact: { type: "number" as const },
                 publicFriction: { type: "number" as const },
                 qualityOfLife: { type: "number" as const },
                 board: { type: "string" as const, nullable: true },
                 keyPoints: { type: "array" as const, items: { type: "string" as const } },
               },
-              required: ["topic", "score", "financialImpact", "publicFriction", "qualityOfLife", "keyPoints"],
+              required: ["topic", "financialImpact", "publicFriction", "qualityOfLife", "keyPoints"],
             },
           },
         },
@@ -307,23 +327,30 @@ ${text}`;
     if (m) parsed = JSON.parse(m[0]);
   }
 
-  const topics: ScoredTopic[] = (parsed.topics || []).map((t: any) => ({
-    topic: t.topic || "Unknown Topic",
-    score: Math.min(10, Math.max(1, Math.round(t.score || 5))),
-    relevance: Math.min(10, Math.max(1, Math.round(t.score || 5))),
-    financialImpact: Math.min(10, Math.max(1, Math.round(t.financialImpact || 1))),
-    publicFriction: Math.min(10, Math.max(1, Math.round(t.publicFriction || 1))),
-    qualityOfLife: Math.min(10, Math.max(1, Math.round(t.qualityOfLife || 1))),
-    board: t.board || null,
-    meetingDate: null,
-    keyPoints: Array.isArray(t.keyPoints) ? t.keyPoints : [],
-  }));
+  const topics: ScoredTopic[] = (parsed.topics || []).map((t: any) => {
+    const financialImpact = Math.min(10, Math.max(1, Math.round(t.financialImpact || 1)));
+    const publicFriction = Math.min(10, Math.max(1, Math.round(t.publicFriction || 1)));
+    const qualityOfLife = Math.min(10, Math.max(1, Math.round(t.qualityOfLife || 1)));
+    // Composite score for display purposes
+    const score = Math.round((financialImpact + publicFriction + qualityOfLife) / 3);
+    return {
+      topic: t.topic || "Unknown Topic",
+      score,
+      relevance: score,
+      financialImpact,
+      publicFriction,
+      qualityOfLife,
+      board: t.board || null,
+      meetingDate: null,
+      keyPoints: Array.isArray(t.keyPoints) ? t.keyPoints : [],
+    } as ScoredTopic;
+  });
 
   return topics;
 }
 
 // ---------------------------------------------------------------------------
-// Feature article generation
+// Feature article generation — returns Smart Brevity text + headerImagePrompt
 // ---------------------------------------------------------------------------
 
 async function generateFeatureArticle(
@@ -339,20 +366,21 @@ async function generateFeatureArticle(
   topics: ScoredTopic[];
   routineTopics: RoutineTopic[];
   payload: TownFeedPayload;
+  headerImagePrompt: string;
 }> {
   const dateLabel = meetingDate ? ` at its ${meetingDate} meeting` : "";
   const topicList = highImpactTopics
-    .map((t, i) => `${i + 1}. "${t.topic}" — ${t.keyPoints.join("; ")}`)
+    .map((t, i) => `${i + 1}. "${t.topic}" (friction=${t.publicFriction}/10, impact=${t.financialImpact}/10) — ${t.keyPoints.join("; ")}`)
     .join("\n");
 
-  const prompt = `You are a municipal affairs reporter covering ${town}, New Hampshire. Write a full journalistic feature article based on the meeting minutes below.
+  const prompt = `You are a municipal affairs reporter covering ${town}, New Hampshire. Write a full journalistic Smart Brevity article based on the meeting minutes below.
 
 HIGH-IMPACT TOPICS TO FEATURE:
 ${topicList}
 
 STRICT TONE RULES:
 - Never use exclamation marks
-- Never use rhetorical questions  
+- Never use rhetorical questions
 - Never use: "Let's dive in," "Here's what you need to know," "Big news," "Stay tuned"
 - Never use subjective adjectives: exciting, impressive, concerning, remarkable
 - First sentence MUST be a newspaper-style lede with Who, What, When, Where
@@ -360,13 +388,16 @@ STRICT TONE RULES:
 - Bold key names, dollar amounts, vote counts, and dates
 - 400-800 words total
 
+Additionally, provide a headerImagePrompt: a photorealistic image generation prompt (2-3 sentences) depicting the setting or subject of the most significant topic, suitable for a New Hampshire town governance news article header. Must be a real-world scene, no people, no text or signs.
+
 MEETING MINUTES (${board}${dateLabel}):
 ${text}
 
 Respond with JSON:
 {
   "title": "Newspaper-style headline — factual, no hype",
-  "summary": "Full 400-800 word journalistic article",
+  "summary": "Full 400-800 word Smart Brevity article",
+  "headerImagePrompt": "Photorealistic image generation prompt for the header image",
   "sections": [
     { "title": "Topic title", "description": "1-2 sentence summary", "suggestedQuestions": ["Q1", "Q2"] }
   ],
@@ -394,9 +425,11 @@ Respond with JSON:
 
   const title = parsed.title || `${town}: ${highImpactTopics[0].topic}`;
   const summary = parsed.summary || "";
+  const headerImagePrompt = parsed.headerImagePrompt ||
+    `A photorealistic wide landscape photograph of a New Hampshire town hall or selectboard meeting room. Neutral, journalistic aesthetic. No people, no text, no signs.`;
 
   const routineTopics: RoutineTopic[] = allTopics
-    .filter(t => t.score < 8)
+    .filter(t => t.publicFriction <= 6 && t.financialImpact <= 6)
     .map(t => ({
       topic: t.topic,
       score: t.score,
@@ -409,7 +442,10 @@ Respond with JSON:
     sections: (parsed.sections || highImpactTopics.map(t => ({
       title: t.topic,
       description: t.keyPoints.join(". "),
-      suggestedQuestions: [`What led to the decision on ${t.topic}?`, `What happens next with ${t.topic}?`],
+      suggestedQuestions: [
+        `What led to the decision on ${t.topic}?`,
+        `What happens next with ${t.topic}?`,
+      ],
     }))).map((s: any) => ({
       title: s.title || "",
       description: s.description || "",
@@ -420,23 +456,18 @@ Respond with JSON:
       : [`What should ${town} residents watch for in the coming months?`],
   };
 
-  return { title, summary, topics: highImpactTopics, routineTopics, payload };
+  return { title, summary, topics: highImpactTopics, routineTopics, payload, headerImagePrompt };
 }
 
 // ---------------------------------------------------------------------------
-// Header image generation (Tier 2 only)
+// Header image generation — uses LLM-provided headerImagePrompt
 // ---------------------------------------------------------------------------
 
 async function generateHeaderImage(
   feedItemId: string,
-  town: string,
-  topTopic: string,
-  title: string
+  imagePrompt: string
 ): Promise<string | null> {
   await fs.mkdir(FEED_IMAGES_DIR, { recursive: true });
-
-  const safeTitle = title.slice(0, 100);
-  const imagePrompt = `A photorealistic landscape photograph representing local New Hampshire town governance. Scene: ${topTopic} in a small New England town. Show a town hall building, selectboard meeting room, or relevant municipal setting. No people, no text, no signs. Neutral, journalistic aesthetic. Wide aspect ratio (16:9). Golden hour lighting, high quality.`;
 
   const result = await ai.models.generateImages({
     model: "imagen-3.0-generate-001",
