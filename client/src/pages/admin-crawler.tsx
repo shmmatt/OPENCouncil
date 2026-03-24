@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft,
   Loader2,
   RefreshCw,
   CheckCircle2,
@@ -42,22 +41,19 @@ import {
   Plus,
   Square,
   GraduationCap,
+  GitBranch,
+  FolderUp,
+  ScanLine,
+  FlaskConical,
+  Megaphone,
+  Newspaper,
+  Inbox,
+  LogOut,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
 import type { StateDocCategory, UpdateCadence } from "@shared/crawler-schema";
-
-function adminFetch(url: string, options?: RequestInit) {
-  const token = localStorage.getItem("adminToken");
-  return fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
+import { adminFetch } from "@/lib/adminFetch";
 
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "-";
@@ -3866,6 +3862,24 @@ export default function AdminCrawler() {
 
   const batchCounties = Array.from(new Set((towns || []).map(t => t.county).filter(Boolean))).sort() as string[];
 
+  const token = localStorage.getItem("adminToken");
+  const { data: draftItems } = useQuery<unknown[]>({
+    queryKey: ["/api/admin/content/feed-items", "draft"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/feed-items?status=draft");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token,
+    staleTime: 30000,
+  });
+  const draftCount = draftItems?.length ?? 0;
+
+  const handleLogout = () => {
+    localStorage.removeItem("adminToken");
+    setLocation("/admin/login");
+  };
+
   const { data: queueStatus } = useQuery<{ queuedCount: number; activeCrawls: number }>({
     queryKey: ["/api/admin/crawler/queue"],
     queryFn: async () => {
@@ -3955,121 +3969,190 @@ export default function AdminCrawler() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b">
+      <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-3">
-              <Link href="/admin/documents" data-testid="link-back-admin">
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="w-4 h-4 mr-1" />Admin
-                </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" asChild data-testid="link-documents">
+              <Link href="/admin/documents">
+                <FileText className="w-4 h-4 mr-2" />
+                Documents
               </Link>
-              <h1 className="text-xl font-bold">Crawler Management</h1>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {scheduleStatus?.scheduler && (
-                <Badge
-                  variant="outline"
-                  className={scheduleStatus.scheduler.running ? "text-green-600 border-green-600" : "text-muted-foreground"}
-                  data-testid="badge-scheduler-status"
-                >
-                  {scheduleStatus.scheduler.running ? (
-                    <><CheckCircle2 className="w-3 h-3 mr-1" />Scheduler On</>
-                  ) : (
-                    <><Clock className="w-3 h-3 mr-1" />Scheduler Off</>
-                  )}
-                </Badge>
-              )}
-              {scheduleStatus?.scheduler.currentlyCrawling && (
-                <Badge variant="outline" className="text-blue-600 border-blue-600">
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  Crawling: {scheduleStatus.scheduler.currentlyCrawling}
-                </Badge>
-              )}
-              <Button
-                variant={scheduleStatus?.scheduler.running ? "destructive" : "default"}
-                size="sm"
-                onClick={() => toggleScheduler.mutate(scheduleStatus?.scheduler.running ? "stop" : "start")}
-                disabled={toggleScheduler.isPending}
-                data-testid="button-toggle-scheduler"
-              >
-                {scheduleStatus?.scheduler.running ? "Stop Scheduler" : "Start Scheduler"}
-              </Button>
-              {(stats?.activeRuns || 0) > 0 && (
-                <Badge variant="outline" className="text-blue-600 border-blue-600">
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  {stats?.activeRuns} active
-                </Badge>
-              )}
-              {(queueStatus?.queuedCount || 0) > 0 && (
-                <Badge variant="outline" className="text-amber-600 border-amber-600" data-testid="badge-queue-status">
-                  {queueStatus?.queuedCount} queued
-                </Badge>
-              )}
-              {(queueStatus?.queuedCount || 0) > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => clearQueue.mutate()}
-                  disabled={clearQueue.isPending}
-                  data-testid="button-clear-queue"
-                >
-                  <XCircle className="w-3 h-3 mr-1" />
-                  Clear Queue
-                </Button>
-              )}
-              <Select value={batchCounty || "all"} onValueChange={(v) => setBatchCounty(v === "all" ? "" : v)} data-testid="select-batch-county">
-                <SelectTrigger className="w-[160px]" data-testid="select-batch-county">
-                  <SelectValue placeholder="All Counties" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Counties</SelectItem>
-                  {batchCounties.map((county) => (
-                    <SelectItem key={county} value={county}>{county}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => triggerAllCrawls.mutate()}
-                disabled={triggerAllCrawls.isPending || (queueStatus?.activeCrawls ?? stats?.activeRuns ?? 0) >= 3}
-                data-testid="button-crawl-all-towns"
-              >
-                {triggerAllCrawls.isPending ? (
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                ) : (
-                  <Play className="w-3 h-3 mr-1" />
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-ingestion">
+              <Link href="/admin/ingestion">
+                <GitBranch className="w-4 h-4 mr-2" />
+                v2 Pipeline
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-bulk-upload">
+              <Link href="/admin/bulk-upload">
+                <FolderUp className="w-4 h-4 mr-2" />
+                Bulk Upload
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-usage">
+              <Link href="/admin/usage">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Analytics
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-ocr-pipeline">
+              <Link href="/admin/ocr-pipeline">
+                <ScanLine className="w-4 h-4 mr-2" />
+                Textract Pipeline
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-crawler">
+              <Link href="/admin/crawler">
+                <Globe className="w-4 h-4 mr-2" />
+                Crawler
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-templates">
+              <Link href="/admin/templates">
+                <Settings className="w-4 h-4 mr-2" />
+                Templates
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-research">
+              <Link href="/admin/query">
+                <FlaskConical className="w-4 h-4 mr-2" />
+                OC Research
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-promotions">
+              <Link href="/admin/promotions">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Promotions
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-content">
+              <Link href="/admin/content">
+                <Newspaper className="w-4 h-4 mr-2" />
+                Content
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-publishing">
+              <Link href="/admin/publishing">
+                <Inbox className="w-4 h-4 mr-2" />
+                Publishing Inbox
+                {draftCount > 0 && (
+                  <Badge variant="destructive" className="ml-1 text-xs px-1 py-0">
+                    {draftCount}
+                  </Badge>
                 )}
-                {batchCounty ? `Crawl ${batchCounty} County` : "Crawl All Towns"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => resetOrphaned.mutate()}
-                disabled={resetOrphaned.isPending}
-                data-testid="button-reset-orphaned"
-              >
-                <RotateCcw className="w-3 h-3 mr-1" />
-                Reset Orphaned
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
-                }}
-                data-testid="button-refresh"
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Refresh
-              </Button>
-            </div>
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="container mx-auto px-4 py-6 space-y-6">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <h1 className="text-xl font-bold mr-2">Crawler Management</h1>
+          {scheduleStatus?.scheduler && (
+            <Badge
+              variant="outline"
+              className={scheduleStatus.scheduler.running ? "text-green-600 border-green-600" : "text-muted-foreground"}
+              data-testid="badge-scheduler-status"
+            >
+              {scheduleStatus.scheduler.running ? (
+                <><CheckCircle2 className="w-3 h-3 mr-1" />Scheduler On</>
+              ) : (
+                <><Clock className="w-3 h-3 mr-1" />Scheduler Off</>
+              )}
+            </Badge>
+          )}
+          {scheduleStatus?.scheduler.currentlyCrawling && (
+            <Badge variant="outline" className="text-blue-600 border-blue-600">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              Crawling: {scheduleStatus.scheduler.currentlyCrawling}
+            </Badge>
+          )}
+          <Button
+            variant={scheduleStatus?.scheduler.running ? "destructive" : "default"}
+            size="sm"
+            onClick={() => toggleScheduler.mutate(scheduleStatus?.scheduler.running ? "stop" : "start")}
+            disabled={toggleScheduler.isPending}
+            data-testid="button-toggle-scheduler"
+          >
+            {scheduleStatus?.scheduler.running ? "Stop Scheduler" : "Start Scheduler"}
+          </Button>
+          {(stats?.activeRuns || 0) > 0 && (
+            <Badge variant="outline" className="text-blue-600 border-blue-600">
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              {stats?.activeRuns} active
+            </Badge>
+          )}
+          {(queueStatus?.queuedCount || 0) > 0 && (
+            <Badge variant="outline" className="text-amber-600 border-amber-600" data-testid="badge-queue-status">
+              {queueStatus?.queuedCount} queued
+            </Badge>
+          )}
+          {(queueStatus?.queuedCount || 0) > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => clearQueue.mutate()}
+              disabled={clearQueue.isPending}
+              data-testid="button-clear-queue"
+            >
+              <XCircle className="w-3 h-3 mr-1" />
+              Clear Queue
+            </Button>
+          )}
+          <Select value={batchCounty || "all"} onValueChange={(v) => setBatchCounty(v === "all" ? "" : v)} data-testid="select-batch-county">
+            <SelectTrigger className="w-[160px]" data-testid="select-batch-county">
+              <SelectValue placeholder="All Counties" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Counties</SelectItem>
+              {batchCounties.map((county) => (
+                <SelectItem key={county} value={county}>{county}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => triggerAllCrawls.mutate()}
+            disabled={triggerAllCrawls.isPending || (queueStatus?.activeCrawls ?? stats?.activeRuns ?? 0) >= 3}
+            data-testid="button-crawl-all-towns"
+          >
+            {triggerAllCrawls.isPending ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Play className="w-3 h-3 mr-1" />
+            )}
+            {batchCounty ? `Crawl ${batchCounty} County` : "Crawl All Towns"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => resetOrphaned.mutate()}
+            disabled={resetOrphaned.isPending}
+            data-testid="button-reset-orphaned"
+          >
+            <RotateCcw className="w-3 h-3 mr-1" />
+            Reset Orphaned
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/crawler"] });
+            }}
+            data-testid="button-refresh"
+          >
+            <RefreshCw className="w-3 h-3 mr-1" />
+            Refresh
+          </Button>
+        </div>
+
         <StatsOverview stats={stats} />
 
         {selectedTown ? (
