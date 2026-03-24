@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/error-boundary";
 import AdminLogin from "@/pages/admin-login";
-import AdminDocuments from "@/pages/admin-documents";
 import AdminBulkUpload from "@/pages/admin-bulk-upload";
 import AdminIngestion from "@/pages/admin-ingestion";
 import AdminDocumentsV2 from "@/pages/admin-documents-v2";
@@ -54,7 +53,7 @@ function Router() {
     <Switch>
       <Route path="/admin" component={() => <Redirect to="/admin/login" />} />
       <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin/documents" component={AdminDocuments} />
+      <Route path="/admin/documents" component={() => <Redirect to="/admin/documents-v2" />} />
       <Route path="/admin/bulk-upload" component={AdminBulkUpload} />
       <Route path="/admin/ingestion" component={AdminIngestion} />
       <Route path="/admin/documents-v2" component={AdminDocumentsV2} />
@@ -65,7 +64,9 @@ function Router() {
       <Route path="/admin/ocr-pipeline" component={AdminOcrPipeline} />
       <Route path="/admin/crawler" component={AdminCrawler} />
       <Route path="/admin/templates" component={AdminTemplates} />
-      <Route path="/admin/research" component={AdminResearch} />
+      <Route path="/admin/research" component={() => <Redirect to="/admin/query" />} />
+      <Route path="/admin/query" component={AdminResearch} />
+      <Route path="/admin/reports" component={AdminResearch} />
       <Route path="/admin/content" component={AdminContent} />
       <Route path="/admin/publishing" component={AdminPublishing} />
       <Route path="/admin/document-gaps" component={AdminDocumentGaps} />

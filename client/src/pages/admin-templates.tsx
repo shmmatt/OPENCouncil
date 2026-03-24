@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { adminFetch } from "@/lib/adminFetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,18 +63,6 @@ type UnifiedDocument = {
   town: string;
   source: "logical" | "crawler";
 };
-
-function adminFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("adminToken");
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 function PayloadPreview({ payload }: { payload: TemplatePayload }) {
   return (

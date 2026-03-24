@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
+import { adminFetch } from "@/lib/adminFetch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,18 +45,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { TownFeedItem } from "@shared/schema";
-
-function adminFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("adminToken");
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 function DraftItemCard({ item, onRemove }: { item: TownFeedItem; onRemove: (id: string) => void }) {
   const { toast } = useToast();
@@ -360,7 +349,7 @@ export default function AdminPublishing() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" asChild data-testid="link-documents">
-              <Link href="/admin/documents">
+              <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
                 Documents
               </Link>
@@ -402,7 +391,7 @@ export default function AdminPublishing() {
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-research">
-              <Link href="/admin/research">
+              <Link href="/admin/query">
                 <FlaskConical className="w-4 h-4 mr-2" />
                 OC Research
               </Link>

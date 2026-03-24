@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
+import { adminFetch } from "@/lib/adminFetch";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,17 +47,6 @@ type SelectedSource = {
   town: string;
   updatedAt: string;
 };
-
-function adminFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("adminToken");
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
 
 const CONTENT_FIELDS: { key: keyof PromotionContentMatrix; label: string; category: string }[] = [
   { key: "facebookPost", label: "Facebook Post", category: "Social Media" },
@@ -224,7 +214,7 @@ export default function AdminPromotions() {
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-documents">
-              <Link href="/admin/documents">
+              <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
                 Documents
               </Link>

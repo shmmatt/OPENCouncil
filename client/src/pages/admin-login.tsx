@@ -26,7 +26,7 @@ export default function AdminLogin() {
         title: "Login successful",
         description: "Welcome to OPENCouncil admin panel",
       });
-      setLocation("/admin/documents");
+      setLocation("/admin/documents-v2");
     },
     onError: () => {
       toast({

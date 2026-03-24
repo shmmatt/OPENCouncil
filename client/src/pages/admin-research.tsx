@@ -114,7 +114,7 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export default function AdminResearch() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedTown, setSelectedTown] = useState("");
   const [viewingReport, setViewingReport] = useState<ResearchReport | null>(null);
@@ -443,7 +443,7 @@ export default function AdminResearch() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" asChild data-testid="link-documents">
-              <Link href="/admin/documents">
+              <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
                 Documents
               </Link>
@@ -515,7 +515,11 @@ export default function AdminResearch() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        <Tabs defaultValue="intelligence" className="space-y-6">
+        <Tabs
+          value={location === "/admin/reports" ? "friction" : "intelligence"}
+          onValueChange={(val) => setLocation(val === "friction" ? "/admin/reports" : "/admin/query")}
+          className="space-y-6"
+        >
           <TabsList className="grid w-full grid-cols-2 max-w-md">
             <TabsTrigger value="intelligence" data-testid="tab-intelligence">
               <Brain className="w-4 h-4 mr-2" />

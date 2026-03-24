@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { adminFetch } from "@/lib/adminFetch";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -43,18 +44,6 @@ import {
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { ChatSession, ChatMessage } from "@shared/schema";
-
-function adminFetch(url: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("adminToken");
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 export default function AdminResearchChat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -557,13 +546,13 @@ export default function AdminResearchChat() {
                 </Link>
               </Button>
               <Button variant="outline" size="sm" asChild data-testid="link-research">
-                <Link href="/admin/research">
+                <Link href="/admin/query">
                   <FlaskConical className="w-4 h-4 mr-2" />
                   OC Research
                 </Link>
               </Button>
               <Button variant="outline" size="sm" asChild data-testid="link-documents">
-                <Link href="/admin/documents">
+                <Link href="/admin/documents-v2">
                   <FileText className="w-4 h-4 mr-2" />
                   Documents
                 </Link>

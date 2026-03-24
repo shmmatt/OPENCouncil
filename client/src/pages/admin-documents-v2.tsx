@@ -113,12 +113,6 @@ export default function AdminDocumentsV2() {
                 Ingestion Pipeline
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" asChild data-testid="link-back-documents">
-              <Link href="/admin/documents">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Legacy Documents
-              </Link>
-            </Button>
           </div>
         </div>
       </header>
