@@ -123,7 +123,7 @@ export function UserStatusBar({ signInOpen, onSignInOpenChange }: UserStatusBarP
   const isAuthenticated = usage?.isAuthenticated || false;
 
   const tierLabel = tier === "paying" ? "Pro" : tier === "free" ? "Free" : "Guest";
-  const progressColor = usagePercent >= 90 ? "bg-destructive" : usagePercent >= 70 ? "bg-yellow-500" : "bg-primary";
+  const progressColor = usagePercent >= 90 ? "bg-destructive" : usagePercent >= 80 ? "bg-amber-500" : "bg-primary";
 
   return (
     <div className="flex items-center gap-3">

@@ -17,6 +17,7 @@ import { parseSSEStream } from "@/lib/sseParser";
 import { ChatMessageBubble } from "@/components/ChatMessageBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
 import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Chat() {
   const [, navigate] = useLocation();
@@ -31,11 +32,13 @@ export default function Chat() {
   const [deepDiveIteration, setDeepDiveIteration] = useState(0);
   const [deepDiveMaxIterations, setDeepDiveMaxIterations] = useState(3);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [blurredMessageId, setBlurredMessageId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sharedLinkProcessedRef = useRef(false);
   const { toast } = useToast();
+  const { usage } = useAuth();
 
   const activeSessionId = new URLSearchParams(searchString).get("session");
 
@@ -256,12 +259,15 @@ export default function Chat() {
           setDeepDiveIteration(iteration);
           setDeepDiveMaxIterations(maxIterations);
         },
-        onAnswer: () => {
+        onAnswer: (data) => {
           setPendingMessage(null);
           setPipelineStage(null);
           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
           queryClient.invalidateQueries({ queryKey: ["/api/auth/usage"] });
+          if (data?.limitReached && data?.message?.id) {
+            setBlurredMessageId(data.message.id);
+          }
         },
         onFollowups: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
@@ -586,6 +592,9 @@ export default function Chat() {
                           queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId] });
                         });
                     }}
+                    isBlurred={message.id === blurredMessageId}
+                    isAuthenticated={usage?.isAuthenticated ?? false}
+                    onBlurLifted={() => setBlurredMessageId(null)}
                   />
                 ))}
                 {pendingMessage && (

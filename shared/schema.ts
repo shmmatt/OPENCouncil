@@ -172,6 +172,7 @@ export const users = pgTable("users", {
   isMunicipalStaff: boolean("is_municipal_staff").default(false).notNull(),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionStatus: text("stripe_subscription_status"), // 'active' | 'canceled' | 'past_due' | etc.
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastLoginAt: timestamp("last_login_at"),
 });

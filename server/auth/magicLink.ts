@@ -204,15 +204,62 @@ router.get("/usage", async (req: IdentityRequest, res: Response) => {
     }
   }
   
-  const usagePercent = limit > 0 
+  let usagePercent = limit > 0 
     ? Math.min(100, Math.round((dailyCost / limit) * 100))
     : 100;
+
+  // If bypass credits are active, cap usagePercent at 80 so the bar doesn't show 100%
+  const bypassCredits = parseInt(req.cookies?.["oc_bypass_credits"] || "0", 10);
+  if (bypassCredits > 0 && usagePercent >= 100) {
+    usagePercent = 80;
+  }
   
   res.json({
     tier,
     usagePercent,
     isAuthenticated: !!req.user,
   });
+});
+
+router.post("/email-unlock", async (req: IdentityRequest, res: Response) => {
+  try {
+    const { email, returnTo } = sendMagicLinkSchema.parse(req.body);
+
+    const token = generateMagicLinkToken(email);
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const safeReturnTo = sanitizeReturnTo(returnTo);
+    const returnParam = safeReturnTo !== "/" ? `&returnTo=${encodeURIComponent(safeReturnTo)}` : "";
+    const magicLink = `${baseUrl}/api/auth/verify?token=${token}${returnParam}`;
+
+    const isDev = process.env.NODE_ENV !== "production";
+    const emailSent = await sendMagicLinkEmail(email, magicLink);
+
+    if (!emailSent && !isDev) {
+      return res.status(500).json({ error: "Failed to send magic link email. Please try again." });
+    }
+
+    // Grant bypass credits for the current session so the user can continue immediately
+    const BYPASS_CREDITS = 10;
+    res.cookie("oc_bypass_credits", String(BYPASS_CREDITS), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+      success: true,
+      message: "Check your email for the sign-in link",
+      bypassGranted: true,
+      ...(isDev && { magicLink }),
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+    console.error("Error in email-unlock:", error);
+    res.status(500).json({ error: "Failed to process request" });
+  }
 });
 
 router.post("/logout", async (req: IdentityRequest, res: Response) => {

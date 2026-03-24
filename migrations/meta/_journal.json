@@ -15,6 +15,13 @@
       "when": 1771893651726,
       "tag": "0001_amazing_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774363762557,
+      "tag": "0002_late_doctor_strange",
+      "breakpoints": true
     }
   ]
 }

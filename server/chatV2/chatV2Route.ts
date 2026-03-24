@@ -623,6 +623,37 @@ export function registerChatV2Routes(app: Express): void {
         return;
       }
 
+      // Soft usage limit check — generate response but flag it as blurred for the client
+      let limitReached = false;
+      if (req.actor) {
+        const { getDailyCost } = await import("../llm/callLLMWithLogging");
+        const { getUsageLimits } = await import("../middleware/usageLimits");
+        const limits = getUsageLimits();
+        const dailyCost = await getDailyCost(req.actor);
+        let limit: number;
+        if (req.actor.actorType === "user" && req.actor.user) {
+          limit = req.actor.user.isPaying ? limits.paying : limits.free;
+        } else {
+          limit = limits.anonymous;
+        }
+        if (dailyCost >= limit) {
+          // Check bypass cookie — granted after email unlock
+          const bypassCredits = parseInt(req.cookies?.["oc_bypass_credits"] || "0", 10);
+          if (bypassCredits > 0) {
+            // Consume one bypass credit for this query
+            const newCredits = bypassCredits - 1;
+            res.cookie("oc_bypass_credits", String(newCredits), {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === "production",
+              sameSite: "lax",
+              maxAge: 24 * 60 * 60 * 1000,
+            });
+          } else {
+            limitReached = true;
+          }
+        }
+      }
+
       const userMessage = await storage.createChatMessage({
         sessionId,
         role: "user",
@@ -796,6 +827,7 @@ export function registerChatV2Routes(app: Express): void {
         answerMeta,
         sources,
         suggestedFollowUps: [],
+        limitReached,
       });
 
       const duration = Date.now() - startTime;
@@ -808,6 +840,7 @@ export function registerChatV2Routes(app: Express): void {
         docSourceType,
         docSourceTown,
         retrievedChunkCount,
+        limitReached,
       });
 
       // Fire follow-ups asynchronously, stream to client when ready

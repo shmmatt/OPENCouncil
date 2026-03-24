@@ -23,6 +23,7 @@ import deepDiveRouter from "./adminDeepDiveRoutes";
 import promotionsRouter from "./promotions";
 import documentsRouter from "./documents";
 import dashboardRouter from "./dashboard";
+import stripeRouter from "./stripe";
 
 export {
   adminRouter,
@@ -64,6 +65,8 @@ export function registerAllRoutes(app: Express): void {
   app.use("/api/admin/promotions", promotionsRouter);
 
   app.use("/api/dashboard", dashboardRouter);
+
+  app.use("/api/stripe", stripeRouter);
 
   app.use("/api/chat", chatRouter);
   app.use("/api", preferencesRouter);
