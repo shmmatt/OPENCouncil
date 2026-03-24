@@ -50,6 +50,7 @@ import {
   FileSpreadsheet,
   Database,
   Brain,
+  Inbox,
 } from "lucide-react";
 import {
   LineChart,
@@ -478,6 +479,12 @@ export default function AdminResearch() {
               <Link href="/admin/content">
                 <FlaskConical className="w-4 h-4 mr-2" />
                 Content
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-publishing-inbox">
+              <Link href="/admin/publishing">
+                <Inbox className="w-4 h-4 mr-2" />
+                Publishing Inbox
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">

@@ -77,6 +77,7 @@ import {
   Newspaper,
   Megaphone,
   Microscope,
+  Inbox,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedPayload, MinutesUpdateItem } from "@shared/schema";
@@ -1363,6 +1364,12 @@ export default function AdminContent() {
                 Promotions
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-publishing-inbox">
+              <Link href="/admin/publishing">
+                <Inbox className="w-4 h-4 mr-2" />
+                Publishing Inbox
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-research-chat">
               <Link href="/admin/research-chat">
                 <Microscope className="w-4 h-4 mr-2" />
@@ -1378,6 +1385,18 @@ export default function AdminContent() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <div className="flex items-center gap-3 p-4 border rounded-md bg-muted/40" data-testid="banner-publishing-inbox">
+          <Inbox className="w-5 h-5 text-muted-foreground shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">New: Publishing Inbox</p>
+            <p className="text-xs text-muted-foreground">Review and approve AI-generated draft articles in one click.</p>
+          </div>
+          <Button size="sm" variant="outline" asChild data-testid="button-go-publishing-inbox">
+            <Link href="/admin/publishing">
+              Open Inbox
+            </Link>
+          </Button>
+        </div>
         <Tabs defaultValue="feed-items" className="space-y-6">
           <TabsList data-testid="tabs-content-management">
             <TabsTrigger value="feed-items" data-testid="tab-feed-items">

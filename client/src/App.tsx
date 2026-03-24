@@ -19,6 +19,7 @@ import AdminCrawler from "@/pages/admin-crawler";
 import AdminTemplates from "@/pages/admin-templates";
 import AdminResearch from "@/pages/admin-research";
 import AdminContent from "@/pages/admin-content";
+import AdminPublishing from "@/pages/admin-publishing";
 import AdminDocumentGaps from "@/pages/admin-document-gaps";
 import AdminDeepDives from "@/pages/admin-deep-dives";
 import AdminPromotions from "@/pages/admin-promotions";
@@ -66,6 +67,7 @@ function Router() {
       <Route path="/admin/templates" component={AdminTemplates} />
       <Route path="/admin/research" component={AdminResearch} />
       <Route path="/admin/content" component={AdminContent} />
+      <Route path="/admin/publishing" component={AdminPublishing} />
       <Route path="/admin/document-gaps" component={AdminDocumentGaps} />
       <Route path="/admin/deep-dives" component={AdminDeepDives} />
       <Route path="/admin/promotions" component={AdminPromotions} />
