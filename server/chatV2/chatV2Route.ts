@@ -624,16 +624,16 @@ export function registerChatV2Routes(app: Express): void {
       }
 
       // Soft usage limit check — generate response but flag it as blurred for the client
-      const QUERY_LIMITS_CHAT = { anonymous: 3, free: 25, paying: 500 };
       let limitReached = false;
       if (req.actor) {
         const { getDailyQueryCount } = await import("../llm/callLLMWithLogging");
+        const { DAILY_QUERY_LIMITS } = await import("../middleware/usageLimits");
         const queriesUsed = await getDailyQueryCount(req.actor);
         let queryMax: number;
         if (req.actor.actorType === "user" && req.actor.user) {
-          queryMax = req.actor.user.isPaying ? QUERY_LIMITS_CHAT.paying : QUERY_LIMITS_CHAT.free;
+          queryMax = req.actor.user.isPaying ? DAILY_QUERY_LIMITS.paying : DAILY_QUERY_LIMITS.free;
         } else {
-          queryMax = QUERY_LIMITS_CHAT.anonymous;
+          queryMax = DAILY_QUERY_LIMITS.anonymous;
         }
         if (queriesUsed >= queryMax) {
           // Check bypass cookie — granted after email unlock

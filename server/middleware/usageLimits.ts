@@ -6,6 +6,13 @@ const DAILY_LIMIT_ANON = 0.10; // $0.10 per day for anonymous users
 const DAILY_LIMIT_FREE_USER = 0.50; // $0.50 per day for free users
 const DAILY_LIMIT_PAYING_USER = 10.00; // $10.00 per day for paying users
 
+// Integer query limits per tier — used by usage endpoint and chat enforcement
+export const DAILY_QUERY_LIMITS = {
+  anonymous: 3,
+  free: 25,
+  paying: 500, // effectively high; paying users are functionally unlimited within reason
+} as const;
+
 export async function checkUsageLimits(
   req: IdentityRequest,
   res: Response,

@@ -180,14 +180,9 @@ router.get("/me", async (req: IdentityRequest, res: Response) => {
   });
 });
 
-const QUERY_LIMITS = {
-  anonymous: 3,
-  free: 25,
-  paying: 500,
-};
-
 router.get("/usage", async (req: IdentityRequest, res: Response) => {
   const { getDailyQueryCount } = await import("../llm/callLLMWithLogging");
+  const { DAILY_QUERY_LIMITS } = await import("../middleware/usageLimits");
 
   let tier: "anonymous" | "free" | "paying";
   let max: number;
@@ -195,13 +190,13 @@ router.get("/usage", async (req: IdentityRequest, res: Response) => {
 
   if (req.user) {
     tier = req.user.isPaying ? "paying" : "free";
-    max = QUERY_LIMITS[tier];
+    max = DAILY_QUERY_LIMITS[tier];
     if (req.actor) {
       used = await getDailyQueryCount(req.actor);
     }
   } else {
     tier = "anonymous";
-    max = QUERY_LIMITS.anonymous;
+    max = DAILY_QUERY_LIMITS.anonymous;
     if (req.actor) {
       used = await getDailyQueryCount(req.actor);
     }
