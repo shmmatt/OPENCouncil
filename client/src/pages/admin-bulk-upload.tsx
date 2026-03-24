@@ -267,6 +267,12 @@ export default function AdminBulkUpload() {
                 v2 Pipeline
               </Link>
             </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-bulk-upload">
+              <Link href="/admin/bulk-upload">
+                <FolderUp className="w-4 h-4 mr-2" />
+                Bulk Upload
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-usage">
               <Link href="/admin/usage">
                 <BarChart3 className="w-4 h-4 mr-2" />
