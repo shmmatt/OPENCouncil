@@ -3973,7 +3973,7 @@ export default function AdminCrawler() {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" asChild data-testid="link-documents">
-              <Link href="/admin/documents">
+              <Link href="/admin/documents-v2">
                 <FileText className="w-4 h-4 mr-2" />
                 Documents
               </Link>
