@@ -122,7 +122,7 @@ export function UserStatusBar({ signInOpen, onSignInOpenChange }: UserStatusBarP
   const usagePercent = usage?.usagePercent || 0;
   const isAuthenticated = usage?.isAuthenticated || false;
 
-  const tierLabel = tier === "paying" ? "Pro" : tier === "free" ? "Free" : "Guest";
+  const tierLabel = !isAuthenticated ? "Guest Usage" : tier === "paying" ? "Pro" : "Free Tier";
   const progressColor = usagePercent >= 90 ? "bg-destructive" : usagePercent >= 80 ? "bg-amber-500" : "bg-primary";
 
   return (

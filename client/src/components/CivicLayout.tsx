@@ -18,7 +18,7 @@ import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
 import { UserStatusBar } from "@/components/user-status-bar";
 
 const navItems = [
-  { title: "News", url: "/feed", icon: Newspaper },
+  { title: "News Feed", url: "/feed", icon: Newspaper },
   { title: "Documents", url: "/documents", icon: FileText },
   { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -31,13 +31,21 @@ const topNavItems = [
   { label: "Dashboard", href: "/dashboard" },
 ];
 
+function getPageTitle(location: string): string {
+  if (location.startsWith("/feed")) return "News Feed";
+  if (location.startsWith("/documents")) return "Documents";
+  if (location.startsWith("/chat")) return "Chat";
+  if (location.startsWith("/dashboard")) return "Dashboard";
+  return "OPENCouncil";
+}
+
 function CivicAppSidebar() {
   const [location] = useLocation();
   const isChatPage = location.startsWith("/chat");
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border">
+      <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border md:flex hidden">
         <h2 className="text-sm font-bold font-headline text-primary tracking-tight">OPENCouncil</h2>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mt-0.5">Official Ledger</p>
       </SidebarHeader>
@@ -77,6 +85,7 @@ function CivicAppSidebar() {
 export function CivicLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [signInOpen, setSignInOpen] = useState(false);
+  const pageTitle = getPageTitle(location);
 
   const sidebarStyle = {
     "--sidebar-width": "15rem",
@@ -92,9 +101,12 @@ export function CivicLayout({ children }: { children: React.ReactNode }) {
             <header className="flex items-center justify-between gap-2 px-4 h-14 border-b bg-card sticky top-0 z-[999] flex-wrap">
               <div className="flex items-center gap-3">
                 <SidebarTrigger data-testid="button-sidebar-trigger" />
-                <Link href="/" className="text-base font-black font-headline uppercase tracking-widest text-primary hidden sm:block select-none hover:opacity-80 transition-opacity">
+                <Link href="/" className="text-base font-black font-headline uppercase tracking-widest text-primary block sm:hidden select-none hover:opacity-80 transition-opacity">
                   OPENCOUNCIL
                 </Link>
+                <span className="text-base font-bold font-headline text-foreground hidden sm:block" data-testid="text-page-title">
+                  {pageTitle}
+                </span>
                 <nav className="hidden lg:flex items-center gap-0.5 ml-2">
                   {topNavItems.map((item) => {
                     const isActive = location.startsWith(item.href);

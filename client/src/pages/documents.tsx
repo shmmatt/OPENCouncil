@@ -114,9 +114,18 @@ function DocumentCard({
 
   const categoryLabel = CATEGORY_LABELS[item.category] || item.category;
   const categoryColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.misc_other;
-  const previewLines = item.previewText
-    ? item.previewText.slice(0, 220) + (item.previewText.length > 220 ? "..." : "")
+
+  function cleanFilename(raw: string): string {
+    return raw
+      .replace(/\.pdf$/i, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
+  }
+
+  const rawTitle = item.canonicalTitle && item.canonicalTitle.trim()
+    ? item.canonicalTitle
     : null;
+  const displayTitle = rawTitle || cleanFilename(item.fileBlobId) || "Untitled Document";
 
   return (
     <Card className="overflow-visible" data-testid={`doc-card-${item.id}`}>
@@ -143,16 +152,16 @@ function DocumentCard({
           </Badge>
         </div>
         <h3 className="text-sm font-semibold leading-snug" data-testid={`text-title-${item.id}`}>
-          {item.canonicalTitle}
+          {displayTitle}
         </h3>
         <p className="text-xs text-muted-foreground" data-testid={`text-date-${item.id}`}>
           {formatMeetingDate(item.meetingDate)}
         </p>
       </CardHeader>
-      {previewLines && (
+      {item.previewText && (
         <CardContent className="pb-2">
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2" data-testid={`text-preview-${item.id}`}>
-            {previewLines}
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3" data-testid={`text-preview-${item.id}`}>
+            {item.previewText}
           </p>
         </CardContent>
       )}
@@ -397,8 +406,8 @@ function DocumentCalendarView({ town, onAskAbout }: CalendarViewProps) {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6" data-testid="document-calendar-view">
-      <div className="flex-shrink-0">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-6" data-testid="document-calendar-view">
+      <div className="md:col-span-4">
         <Card className="overflow-visible">
           <CardContent className="p-3">
             {isLoading ? (
@@ -435,7 +444,7 @@ function DocumentCalendarView({ town, onAskAbout }: CalendarViewProps) {
         </Card>
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="md:col-span-8 min-w-0">
         {selectedDay && (
           <p className="text-xs font-semibold text-muted-foreground mb-3" data-testid="text-day-filter-label">
             Showing documents for {formatMeetingDate(selectedDay.toISOString().split("T")[0])}
