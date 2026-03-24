@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
+import { adminFetch } from "@/lib/adminFetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  ArrowLeft, 
   Users, 
   MessageSquare, 
   DollarSign, 
@@ -18,7 +18,16 @@ import {
   FileText,
   Target,
   Shield,
-  Zap
+  Zap,
+  GitBranch,
+  FolderUp,
+  ScanLine,
+  Globe,
+  FlaskConical,
+  Megaphone,
+  Newspaper,
+  Inbox,
+  LogOut,
 } from "lucide-react";
 
 interface OverviewMetrics {
@@ -591,6 +600,23 @@ export default function AdminUsageDashboard() {
   const [, setLocation] = useLocation();
   const token = localStorage.getItem("adminToken");
 
+  const handleLogout = () => {
+    localStorage.removeItem("adminToken");
+    setLocation("/admin/login");
+  };
+
+  const { data: draftItems } = useQuery<unknown[]>({
+    queryKey: ["/api/admin/content/feed-items", "status=draft"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/feed-items?status=draft");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token,
+    staleTime: 30000,
+  });
+  const draftCount = draftItems?.length ?? 0;
+
   const fetchWithAuth = useCallback(async (url: string) => {
     const currentToken = localStorage.getItem("adminToken");
     if (!currentToken) {
@@ -676,20 +702,94 @@ export default function AdminUsageDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-6 px-4 max-w-7xl">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <Link href="/admin/documents">
-              <Button variant="ghost" size="icon" data-testid="button-back">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
+      <header className="border-b bg-card">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+              <BarChart3 className="w-5 h-5 text-primary" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">Usage & Analytics Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Internal metrics for Town Meeting decision-making</p>
+              <h1 className="text-xl font-semibold" data-testid="text-page-title">Analytics</h1>
+              <p className="text-sm text-muted-foreground">Usage & Analytics Dashboard</p>
             </div>
           </div>
-          
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" asChild data-testid="link-documents">
+              <Link href="/admin/documents-v2">
+                <FileText className="w-4 h-4 mr-2" />
+                Documents
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-ingestion">
+              <Link href="/admin/ingestion">
+                <GitBranch className="w-4 h-4 mr-2" />
+                v2 Pipeline
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-bulk-upload">
+              <Link href="/admin/bulk-upload">
+                <FolderUp className="w-4 h-4 mr-2" />
+                Bulk Upload
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-ocr-pipeline">
+              <Link href="/admin/ocr-pipeline">
+                <ScanLine className="w-4 h-4 mr-2" />
+                Textract Pipeline
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-crawler">
+              <Link href="/admin/crawler">
+                <Globe className="w-4 h-4 mr-2" />
+                Crawler
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-templates">
+              <Link href="/admin/templates">
+                <FileText className="w-4 h-4 mr-2" />
+                Templates
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-research">
+              <Link href="/admin/query">
+                <FlaskConical className="w-4 h-4 mr-2" />
+                OC Research
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-promotions">
+              <Link href="/admin/promotions">
+                <Megaphone className="w-4 h-4 mr-2" />
+                Promotions
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-content">
+              <Link href="/admin/content">
+                <Newspaper className="w-4 h-4 mr-2" />
+                Content
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-publishing-inbox">
+              <Link href="/admin/publishing">
+                <Inbox className="w-4 h-4 mr-2" />
+                Publishing Inbox
+                {draftCount > 0 && (
+                  <Badge variant="default" className="ml-2 text-xs" data-testid="badge-inbox-count">
+                    {draftCount}
+                  </Badge>
+                )}
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+          <h2 className="text-lg font-semibold">Dashboard</h2>
           <Select value={days} onValueChange={setDays}>
             <SelectTrigger className="w-32" data-testid="select-date-range">
               <SelectValue placeholder="Date range" />
