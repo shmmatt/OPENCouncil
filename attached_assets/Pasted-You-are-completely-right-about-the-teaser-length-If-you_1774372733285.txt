@@ -1,0 +1,42 @@
+You are completely right about the teaser length. If you cut them off at 100 characters, you are basically cutting them off at "The Ossipee Selectboard met on..." which provides zero actual value. 
+
+You need to give them just enough of the actual substance—the *what*—so they desperately want to read the *why*. Bumping that clear text limit up to about 250-300 characters (roughly 2 to 3 sentences) is the sweet spot for a PLG hook.
+
+Here is the complete, refined prompt for the Replit agent. It covers the pivot to integer-based query tracking, the warning thresholds, the form styling, and the extended "Ghost Data" teaser length.
+
+Copy and paste this directly to your Replit agent:
+
+***
+
+### #18 - Integer-Based Usage Tracking & Ghost Data Refinements
+
+**What & Why**
+The current usage accounting relies on a percentage metric that fails to trigger the 80% soft warning for users with small limits (e.g., 3 guest queries). We need to pivot strictly to predictable integer-based tracking ("Number of Queries"). Additionally, the "Ghost Data" blur cuts off the text too early (~100 chars), failing to provide enough context to hook the reader. Finally, the email input and submit button in the unlock overlay have mismatched widths.
+
+**Done looks like**
+* **Predictable Metrics:** Usage endpoints and tracking logic evaluate raw query counts (e.g., `used` and `max`) rather than calculating API weights or arbitrary percentages.
+* **UI Status Bar:** The Usage Bar in the header drops the `%` sign. It displays raw integers (e.g., `2 / 3` or `10 / 10`). The visual progress bar width still calculates dynamically via `(used / max) * 100`.
+* **Warning States:** The amber soft-warning (`bg-amber-500`) triggers exactly when `max - used === 1` (1 query remaining). The red paywall (`bg-red-500`) triggers when `used >= max`.
+* **Extended Teaser:** The `ChatMessageBubble` allows roughly 250 to 300 characters of clear text (about 2-3 lines of context) before applying the CSS blur gradient, giving the user a better hook.
+* **Form Polish:** The email `<input>` and "Unlock answer" `<button>` inside the overlay are perfectly aligned to the exact same width (e.g., using `w-full max-w-sm`).
+
+**Out of scope**
+* Changing the underlying MapReduce execution limits or backend AI generation.
+* Changing the `oc_bypass_credits` cookie logic (keep granting 10 bypass credits on email unlock).
+* Modifying the Stripe checkout logic.
+
+**Tasks**
+* **Task 1: Backend Accounting:** Update the usage tracking endpoint (`/api/auth/usage` or equivalent) to return discrete `used` and `max` integers based on prompt counts. Ensure the `chatV2Route.ts` enforces limits based on these raw integers rather than a percentage.
+* **Task 2: Update Status Bar Component:** In `user-status-bar.tsx`, update the text rendering to show `[used] / [max]`. Change the threshold logic: use `bg-amber-500` if `max - used === 1`, and `bg-red-500` if `used >= max`.
+* **Task 3: Extend Blur Threshold:** In `ChatMessageBubble.tsx`, find the logic that splits or slices the text for the `isBlurred` state. Increase the clear-text threshold from ~100 characters to ~250 characters so the user reads a solid 2-3 sentences before the blur effect takes over.
+* **Task 4: Align Unlock Form:** In the `EmailUnlockOverlay` component inside `ChatMessageBubble.tsx`, apply consistent width and flex classes (like `w-full max-w-sm flex-col items-center`) to both the email input and the submit button so their left and right edges are perfectly flush.
+
+**Relevant files**
+* `client/src/components/user-status-bar.tsx`
+* `client/src/components/ChatMessageBubble.tsx`
+* `server/routes/chatV2Route.ts`
+* `server/auth/magicLink.ts` (if usage payload is generated here)
+
+***
+
+This will make the user experience feel significantly fairer and more predictable, while giving them a much juicier preview of the data they are about to unlock. Let me know how the UI looks after the agent compiles this!
