@@ -52,17 +52,17 @@ A two-tier automated feed pipeline fires fire-and-forget after every document ve
 - Generates a 150-250 word factual wire-service digest from any minutes document.
 - Auto-published immediately — no admin action required.
 
-**Tier 2 — Feature Article Draft** (`feedType='automated_feature'`, status=`pending_review`):
-- Only triggered when extracted topics include at least one scoring ≥ 8/10.
-- Generates a full 400-800 word journalistic article.
+**Tier 2 — Feature Article Draft** (`feedType='automated_feature'`, status=`draft`):
+- Only triggered when any topic scores `publicFriction > 6 OR financialImpact > 6`.
+- LLM returns Smart Brevity article text + `headerImagePrompt` (strict JSON schema enforced on both Tier 1 and Tier 2 calls).
 - Draft row is **written to DB immediately** before image generation (image failure never loses the draft).
-- Attempts AI header image generation via Gemini Imagen; patches `headerImageUrl` if successful.
+- Attempts AI header image generation using the LLM-provided `headerImagePrompt`; patches `headerImageUrl` if successful.
 - Admin reviews via the Publishing Inbox (`GET /api/admin/content/inbox`) and approves (`POST /api/admin/content/feed-items/:id/approve`) or rejects (`POST /api/admin/content/feed-items/:id/reject`).
 
 **Schema additions** (`town_feed_items`): `feed_type`, `header_image_url`, `automation_source_version_id`.
 
 **New endpoints**:
-- `GET /api/admin/content/inbox` — list pending_review items
+- `GET /api/admin/content/inbox` — list draft automated_feature items awaiting review
 - `POST /api/admin/content/feed-items/:id/approve` — approve draft → published
 - `POST /api/admin/content/feed-items/:id/reject` — reject draft
 - `GET /api/content/feed-images/:filename` — serve AI-generated header images

@@ -411,6 +411,34 @@ Respond with JSON:
       temperature: 0.2,
       maxOutputTokens: 4096,
       responseMimeType: "application/json",
+      responseSchema: {
+        type: "object" as const,
+        properties: {
+          title: { type: "string" as const },
+          summary: { type: "string" as const },
+          headerImagePrompt: { type: "string" as const },
+          sections: {
+            type: "array" as const,
+            items: {
+              type: "object" as const,
+              properties: {
+                title: { type: "string" as const },
+                description: { type: "string" as const },
+                suggestedQuestions: {
+                  type: "array" as const,
+                  items: { type: "string" as const },
+                },
+              },
+              required: ["title", "description", "suggestedQuestions"],
+            },
+          },
+          highLevelQuestions: {
+            type: "array" as const,
+            items: { type: "string" as const },
+          },
+        },
+        required: ["title", "summary", "headerImagePrompt", "sections", "highLevelQuestions"],
+      },
     },
   });
 

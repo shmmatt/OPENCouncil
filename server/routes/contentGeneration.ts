@@ -379,7 +379,7 @@ adminRouter.get("/news-sources", async (_req, res) => {
 adminRouter.get("/inbox", async (req, res) => {
   try {
     const town = req.query.town as string | undefined;
-    const items = await getTownFeedItems(town, { status: "pending_review" });
+    const items = await getTownFeedItems(town, { status: "draft" });
     res.json(items);
   } catch (error) {
     console.error("Error fetching publishing inbox:", error);
@@ -393,11 +393,11 @@ adminRouter.post("/feed-items/:id/approve", async (req, res) => {
     if (!item) {
       return res.status(404).json({ message: "Feed item not found" });
     }
-    if (item.status !== "pending_review") {
-      return res.status(400).json({ message: `Item is not pending review (status: ${item.status})` });
+    if (item.status !== "draft") {
+      return res.status(400).json({ message: `Item is not a draft awaiting review (status: ${item.status})` });
     }
 
-    const highScoringTopics = (item.topics || []).filter((t: any) => t.score >= 8) as ScoredTopic[];
+    const highScoringTopics = (item.topics || []).filter((t: any) => t.publicFriction > 6 || t.financialImpact > 6) as ScoredTopic[];
     let payload = item.generatedPayload as TownFeedPayload | undefined;
 
     if (!payload) {
@@ -441,8 +441,8 @@ adminRouter.post("/feed-items/:id/reject", async (req, res) => {
     if (!item) {
       return res.status(404).json({ message: "Feed item not found" });
     }
-    if (item.status !== "pending_review") {
-      return res.status(400).json({ message: `Item is not pending review (status: ${item.status})` });
+    if (item.status !== "draft") {
+      return res.status(400).json({ message: `Item is not a draft awaiting review (status: ${item.status})` });
     }
 
     const updated = await updateTownFeedItem(req.params.id, {
