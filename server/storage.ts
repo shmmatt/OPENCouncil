@@ -177,6 +177,8 @@ export interface IStorage {
   createLlmCostLog(log: InsertLlmCostLog): Promise<LlmCostLog>;
   getDailyCostByUser(userId: string): Promise<number>;
   getDailyCostByAnon(anonId: string): Promise<number>;
+  getDailyQueryCountByUser(userId: string): Promise<number>;
+  getDailyQueryCountByAnon(anonId: string): Promise<number>;
 
   // Events
   createEvent(event: InsertEvent): Promise<Event>;
@@ -346,6 +348,8 @@ export class DatabaseStorage implements IStorage {
   createLlmCostLog = analytics.createLlmCostLog;
   getDailyCostByUser = analytics.getDailyCostByUser;
   getDailyCostByAnon = analytics.getDailyCostByAnon;
+  getDailyQueryCountByUser = analytics.getDailyQueryCountByUser;
+  getDailyQueryCountByAnon = analytics.getDailyQueryCountByAnon;
 
   // Events
   createEvent = analytics.createEvent;

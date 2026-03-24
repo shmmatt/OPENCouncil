@@ -180,43 +180,44 @@ router.get("/me", async (req: IdentityRequest, res: Response) => {
   });
 });
 
+const QUERY_LIMITS = {
+  anonymous: 3,
+  free: 25,
+  paying: 500,
+};
+
 router.get("/usage", async (req: IdentityRequest, res: Response) => {
-  const { getDailyCost } = await import("../llm/callLLMWithLogging");
-  const { getUsageLimits } = await import("../middleware/usageLimits");
-  
-  const limits = getUsageLimits();
-  
+  const { getDailyQueryCount } = await import("../llm/callLLMWithLogging");
+
   let tier: "anonymous" | "free" | "paying";
-  let limit: number;
-  let dailyCost = 0;
-  
+  let max: number;
+  let used = 0;
+
   if (req.user) {
     tier = req.user.isPaying ? "paying" : "free";
-    limit = req.user.isPaying ? limits.paying : limits.free;
+    max = QUERY_LIMITS[tier];
     if (req.actor) {
-      dailyCost = await getDailyCost(req.actor);
+      used = await getDailyQueryCount(req.actor);
     }
   } else {
     tier = "anonymous";
-    limit = limits.anonymous;
+    max = QUERY_LIMITS.anonymous;
     if (req.actor) {
-      dailyCost = await getDailyCost(req.actor);
+      used = await getDailyQueryCount(req.actor);
     }
   }
-  
-  let usagePercent = limit > 0 
-    ? Math.min(100, Math.round((dailyCost / limit) * 100))
-    : 100;
 
-  // If bypass credits are active, cap usagePercent at 80 so the bar doesn't show 100%
+  // If bypass credits are active and user is at or over limit, reduce apparent used count
+  // so the bar shows "1 remaining" rather than "0 remaining"
   const bypassCredits = parseInt(req.cookies?.["oc_bypass_credits"] || "0", 10);
-  if (bypassCredits > 0 && usagePercent >= 100) {
-    usagePercent = 80;
+  if (bypassCredits > 0 && used >= max) {
+    used = Math.max(0, max - 1);
   }
-  
+
   res.json({
     tier,
-    usagePercent,
+    used,
+    max,
     isAuthenticated: !!req.user,
   });
 });

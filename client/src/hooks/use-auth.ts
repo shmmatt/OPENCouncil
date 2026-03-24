@@ -3,7 +3,8 @@ import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 
 export interface UsageData {
   tier: "anonymous" | "free" | "paying";
-  usagePercent: number;
+  used: number;
+  max: number;
   isAuthenticated: boolean;
 }
 

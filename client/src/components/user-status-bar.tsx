@@ -119,26 +119,32 @@ export function UserStatusBar({ signInOpen, onSignInOpenChange }: UserStatusBarP
   }
 
   const tier = usage?.tier || "anonymous";
-  const usagePercent = usage?.usagePercent || 0;
+  const used = usage?.used ?? 0;
+  const max = usage?.max ?? 0;
   const isAuthenticated = usage?.isAuthenticated || false;
 
+  const remaining = max - used;
+  const progressWidth = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0;
+  const isAtLimit = used >= max;
+  const isNearLimit = remaining === 1 && !isAtLimit;
+
   const tierLabel = !isAuthenticated ? "Guest Usage" : tier === "paying" ? "Pro" : "Free Tier";
-  const progressColor = usagePercent >= 90 ? "bg-destructive" : usagePercent >= 80 ? "bg-amber-500" : "bg-primary";
+  const progressColor = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-amber-500" : "bg-primary";
 
   return (
     <div className="flex items-center gap-3">
       <div className="flex flex-col gap-1 min-w-[120px]">
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-xs gap-2">
           <span className="text-muted-foreground">{tierLabel}</span>
-          <span className="text-muted-foreground">{usagePercent}%</span>
+          <span className="text-muted-foreground tabular-nums">{used} / {max}</span>
         </div>
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <div 
             className={`h-full ${progressColor} transition-all duration-300`}
-            style={{ width: `${usagePercent}%` }}
+            style={{ width: `${progressWidth}%` }}
           />
         </div>
-        {usagePercent >= 80 && (
+        {(isAtLimit || isNearLimit) && (
           <p className="text-[10px] text-muted-foreground">
             {!isAuthenticated ? "Sign in for more" : tier !== "paying" ? "Upgrade for more" : "Resets tomorrow"}
           </p>

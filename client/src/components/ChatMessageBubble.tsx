@@ -58,7 +58,7 @@ interface ChatMessageBubbleProps {
   onBlurLifted?: () => void;
 }
 
-const PREVIEW_CHARS = 100;
+const PREVIEW_CHARS = 250;
 
 function EmailUnlockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
   const [email, setEmail] = useState("");
@@ -107,20 +107,21 @@ function EmailUnlockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
       <div>
         <p className="text-sm font-semibold">Enter your email to unlock this answer and get 10 more free queries.</p>
       </div>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2 w-full max-w-xs">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2 w-full max-w-sm">
         <Input
           type="email"
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={isSubmitting}
-          className="text-sm"
+          className="text-sm w-full"
           data-testid="input-unlock-email"
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
         <Button
           type="submit"
           size="sm"
+          className="w-full"
           disabled={!email.trim() || isSubmitting}
           data-testid="button-unlock-submit"
         >

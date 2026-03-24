@@ -70,3 +70,12 @@ export async function getDailyCost(actor: ActorContext): Promise<number> {
   }
   return 0;
 }
+
+export async function getDailyQueryCount(actor: ActorContext): Promise<number> {
+  if (actor.actorType === "user" && actor.userId) {
+    return storage.getDailyQueryCountByUser(actor.userId);
+  } else if (actor.anonId) {
+    return storage.getDailyQueryCountByAnon(actor.anonId);
+  }
+  return 0;
+}

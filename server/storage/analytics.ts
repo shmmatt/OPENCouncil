@@ -53,6 +53,38 @@ export async function getDailyCostByAnon(anonId: string): Promise<number> {
   return parseFloat(result[0]?.total || '0');
 }
 
+export async function getDailyQueryCountByUser(userId: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const result = await db
+    .select({ count: sql<string>`COUNT(DISTINCT request_id)` })
+    .from(schema.llmCostLogs)
+    .where(and(
+      eq(schema.llmCostLogs.userId, userId),
+      gte(schema.llmCostLogs.createdAt, today),
+      sql`request_id IS NOT NULL`
+    ));
+
+  return parseInt(result[0]?.count || '0', 10);
+}
+
+export async function getDailyQueryCountByAnon(anonId: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const result = await db
+    .select({ count: sql<string>`COUNT(DISTINCT request_id)` })
+    .from(schema.llmCostLogs)
+    .where(and(
+      eq(schema.llmCostLogs.anonId, anonId),
+      gte(schema.llmCostLogs.createdAt, today),
+      sql`request_id IS NOT NULL`
+    ));
+
+  return parseInt(result[0]?.count || '0', 10);
+}
+
 // ============================================================
 // EVENTS
 // ============================================================
