@@ -122,17 +122,15 @@ function DraftItemCard({ item, onRemove }: { item: TownFeedItem; onRemove: (id: 
     },
   });
 
-  const feedType = (item as any).feedType as string | undefined;
-  const headerImageUrl = (item as any).headerImageUrl as string | undefined;
-  const isAutomated = feedType === "automated_feature" || feedType === "automated_digest";
+  const isAutomated = item.feedType === "automated_feature" || item.feedType === "automated_digest";
 
   return (
     <>
       <Card data-testid={`card-draft-${item.id}`}>
-        {headerImageUrl && (
+        {item.headerImageUrl && (
           <div className="w-full h-48 overflow-hidden rounded-t-md">
             <img
-              src={headerImageUrl}
+              src={item.headerImageUrl}
               alt="AI-generated header"
               className="w-full h-full object-cover"
               data-testid={`img-header-${item.id}`}

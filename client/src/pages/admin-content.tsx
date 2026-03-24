@@ -1029,6 +1029,18 @@ export default function AdminContent() {
     enabled: !!token,
   });
 
+  const { data: draftItems } = useQuery<TownFeedItem[]>({
+    queryKey: ["/api/admin/content/feed-items", "status=draft"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/feed-items?status=draft");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token,
+    staleTime: 30000,
+  });
+  const draftCount = draftItems?.length ?? 0;
+
   const generateMutation = useMutation({
     mutationFn: async (town: string) => {
       const res = await adminFetch("/api/admin/content/generate", {
@@ -1368,6 +1380,11 @@ export default function AdminContent() {
               <Link href="/admin/publishing">
                 <Inbox className="w-4 h-4 mr-2" />
                 Publishing Inbox
+                {draftCount > 0 && (
+                  <Badge variant="default" className="ml-2 text-xs" data-testid="badge-inbox-count">
+                    {draftCount}
+                  </Badge>
+                )}
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-research-chat">

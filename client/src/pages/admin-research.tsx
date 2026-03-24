@@ -143,6 +143,20 @@ export default function AdminResearch() {
     },
   });
 
+  const { data: draftFeedItems } = useQuery<unknown[]>({
+    queryKey: ["/api/admin/content/feed-items", "status=draft"],
+    queryFn: async () => {
+      const token = localStorage.getItem("adminToken");
+      const res = await fetch("/api/admin/content/feed-items?status=draft", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+  const draftCount = Array.isArray(draftFeedItems) ? draftFeedItems.length : 0;
+
   const corpusQuery = useQuery<{ totalDocuments: number; embeddedCount: number; pendingCount: number; ready: boolean; pipelineRunning: boolean }>({
     queryKey: ["/api/admin/research/prepare-corpus", dynamicTown, selectedBoard],
     queryFn: async () => {
@@ -485,6 +499,11 @@ export default function AdminResearch() {
               <Link href="/admin/publishing">
                 <Inbox className="w-4 h-4 mr-2" />
                 Publishing Inbox
+                {draftCount > 0 && (
+                  <Badge variant="default" className="ml-2 text-xs" data-testid="badge-inbox-count">
+                    {draftCount}
+                  </Badge>
+                )}
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
