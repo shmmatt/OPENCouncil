@@ -1526,7 +1526,7 @@ export default function AdminContent() {
                   disabled={catchupMutation.isPending}
                   data-testid="button-catchup-feed"
                 >
-                  {catchupMutation.isPending ? "Queuing..." : "Catch Up Feed"}
+                  {catchupMutation.isPending ? "Queuing..." : "Catch Up Feed (max 200)"}
                 </Button>
                 <Button
                   variant="outline"
