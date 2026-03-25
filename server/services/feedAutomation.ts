@@ -37,7 +37,8 @@ const FEED_IMAGES_DIR = "uploads/feed-images";
 function cleanBoard(raw: string | null | undefined): string {
   if (!raw) return "Municipal";
   const trimmed = raw.trim();
-  if (!trimmed || trimmed === "Needs Review" || trimmed === "Unknown") return "Municipal";
+  const lower = trimmed.toLowerCase();
+  if (!trimmed || lower === "needs review" || lower === "unknown") return "Municipal";
   return trimmed;
 }
 
