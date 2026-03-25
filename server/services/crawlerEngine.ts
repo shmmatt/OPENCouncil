@@ -4534,3 +4534,7 @@ async function executeSauCrawl(
   }, 300000);
 }
 
+
+export function crawlerExtractDateFromFilenameExport(filename: string): Date | null {
+  return crawlerExtractDateFromFilename(filename);
+}

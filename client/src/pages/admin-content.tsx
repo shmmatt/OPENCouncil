@@ -773,6 +773,203 @@ function EditPayloadDialog({
   );
 }
 
+const NH_BOARD_CHIPS = [
+  "Select Board",
+  "Board of Selectmen",
+  "Planning Board",
+  "Zoning Board of Adjustment",
+  "Conservation Commission",
+  "Budget Committee",
+  "School Board",
+  "Water & Sewer Commission",
+  "Historic District Commission",
+  "Recreation Commission",
+];
+
+interface NeedsReviewDoc {
+  versionId: string;
+  logicalDocId: string;
+  filename: string;
+  town: string;
+  board: string | null;
+  storedMeetingDate: string | null;
+  suggestedDate: string | null;
+  previewText: string;
+}
+
+function NeedsReviewCard({
+  doc,
+  onSave,
+  onSkip,
+  isSaving,
+}: {
+  doc: NeedsReviewDoc;
+  onSave: (versionId: string, board: string, meetingDate: string | null) => void;
+  onSkip: (versionId: string) => void;
+  isSaving: boolean;
+}) {
+  const [selectedBoard, setSelectedBoard] = useState<string>(
+    doc.board && !["Needs Review", "Unknown"].includes(doc.board) ? doc.board : ""
+  );
+  const [meetingDate, setMeetingDate] = useState<string>(
+    doc.suggestedDate ?? doc.storedMeetingDate ?? ""
+  );
+
+  return (
+    <Card className="mb-4" data-testid={`card-review-${doc.versionId}`}>
+      <CardContent className="pt-4 space-y-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate" data-testid={`text-filename-${doc.versionId}`}>{doc.filename}</p>
+            <Badge variant="outline" className="mt-1 text-xs" data-testid={`badge-town-${doc.versionId}`}>{doc.town}</Badge>
+          </div>
+        </div>
+
+        {doc.previewText && (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3" data-testid={`text-preview-${doc.versionId}`}>
+            {doc.previewText}
+          </p>
+        )}
+
+        <div>
+          <p className="text-xs font-medium mb-2 text-muted-foreground">Select Board</p>
+          <div className="flex flex-wrap gap-2">
+            {NH_BOARD_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => setSelectedBoard(chip)}
+                className={`text-xs px-2 py-1 rounded-md border transition-colors ${
+                  selectedBoard === chip
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-foreground border-border hover-elevate"
+                }`}
+                data-testid={`chip-board-${chip.replace(/\s+/g, "-").toLowerCase()}-${doc.versionId}`}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[180px]">
+            <Label className="text-xs mb-1 block">Meeting Date</Label>
+            <Input
+              type="date"
+              value={meetingDate}
+              onChange={(e) => setMeetingDate(e.target.value)}
+              data-testid={`input-date-${doc.versionId}`}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onSkip(doc.versionId)}
+              disabled={isSaving}
+              data-testid={`button-skip-${doc.versionId}`}
+            >
+              Skip
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => onSave(doc.versionId, selectedBoard, meetingDate || null)}
+              disabled={isSaving || !selectedBoard || !meetingDate}
+              data-testid={`button-save-${doc.versionId}`}
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Save
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NeedsReviewPanel() {
+  const { toast } = useToast();
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const { data, isLoading, refetch } = useQuery<{ items: NeedsReviewDoc[]; count: number }>({
+    queryKey: ["/api/admin/content/needs-review"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/needs-review");
+      if (!res.ok) throw new Error("Failed to fetch needs-review documents");
+      return res.json();
+    },
+  });
+
+  const visibleDocs = (data?.items || []).filter((d) => !skippedIds.has(d.versionId));
+
+  const handleSave = async (versionId: string, board: string, meetingDate: string | null) => {
+    setSavingId(versionId);
+    try {
+      const res = await adminFetch(`/api/admin/content/document-review/${versionId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ board, meetingDate }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Save failed" }));
+        throw new Error(err.message || "Save failed");
+      }
+      setSkippedIds((prev) => new Set([...prev, versionId]));
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/needs-review"] });
+      toast({ description: "Document saved and queued for feed generation." });
+    } catch (err: any) {
+      toast({ variant: "destructive", description: err.message || "Failed to save document." });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleSkip = (versionId: string) => {
+    setSkippedIds((prev) => new Set([...prev, versionId]));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-48 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (visibleDocs.length === 0) {
+    return (
+      <div className="text-center py-16" data-testid="text-empty-review">
+        <ScanLine className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-40" />
+        <p className="text-muted-foreground font-medium">All documents reviewed</p>
+        <p className="text-sm text-muted-foreground mt-1">No documents are waiting for triage.</p>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSkippedIds(new Set()); refetch(); }} data-testid="button-refresh-review">
+          Refresh
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground" data-testid="text-review-count">
+        {visibleDocs.length} document{visibleDocs.length !== 1 ? "s" : ""} awaiting triage
+      </p>
+      {visibleDocs.map((doc) => (
+        <NeedsReviewCard
+          key={doc.versionId}
+          doc={doc}
+          onSave={handleSave}
+          onSkip={handleSkip}
+          isSaving={savingId === doc.versionId}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface EnrichedMinutesItem extends MinutesUpdateItem {
   canonicalTitle: string | null;
 }
@@ -1029,6 +1226,18 @@ export default function AdminContent() {
     staleTime: 30000,
   });
   const draftCount = draftItems?.length ?? 0;
+
+  const { data: needsReviewData } = useQuery<{ items: NeedsReviewDoc[]; count: number }>({
+    queryKey: ["/api/admin/content/needs-review"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/content/needs-review");
+      if (!res.ok) return { items: [], count: 0 };
+      return res.json();
+    },
+    enabled: !!token,
+    staleTime: 60000,
+  });
+  const needsReviewCount = needsReviewData?.count ?? 0;
 
   const generateMutation = useMutation({
     mutationFn: async (town: string) => {
@@ -1456,10 +1665,23 @@ export default function AdminContent() {
               <CalendarDays className="w-4 h-4 mr-2" />
               Recent Minutes
             </TabsTrigger>
+            <TabsTrigger value="needs-review" data-testid="tab-needs-review">
+              <ScanLine className="w-4 h-4 mr-2" />
+              Needs Review
+              {needsReviewCount > 0 && (
+                <Badge variant="default" className="ml-2 text-xs" data-testid="badge-needs-review-count">
+                  {needsReviewCount}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="recent-minutes" className="space-y-6">
             <RecentMinutesPanel onGenerateSuccess={(itemId) => setViewingItemId(itemId)} />
+          </TabsContent>
+
+          <TabsContent value="needs-review" className="space-y-6">
+            <NeedsReviewPanel />
           </TabsContent>
 
           <TabsContent value="feed-items" className="space-y-6">

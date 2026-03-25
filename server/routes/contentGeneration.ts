@@ -15,7 +15,7 @@ import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryW
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
 import { getChatTemplateById, updateChatTemplate } from "../storage/chatTemplates";
 import { processDocumentForFeed } from "../services/feedAutomation";
-import { db, schema, sql } from "../storage/db";
+import { db, schema, sql, eq } from "../storage/db";
 import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
 const adminRouter = Router();
@@ -500,6 +500,124 @@ adminRouter.post("/catchup-feed", async (req, res) => {
   } catch (error: any) {
     console.error("Error in catchup-feed:", error);
     res.status(500).json({ message: "Catch-up failed: " + error.message });
+  }
+});
+
+// GET /api/admin/content/needs-review
+adminRouter.get("/needs-review", async (req, res) => {
+  try {
+    const rows = await db.execute(sql`
+      SELECT
+        dv.id AS "versionId",
+        ld.id AS "logicalDocId",
+        fb.original_filename AS filename,
+        ld.town,
+        ld.board,
+        dv.meeting_date AS "storedMeetingDate",
+        SUBSTRING(COALESCE(fb.ocr_text, fb.preview_text, ''), 1, 350) AS "previewText"
+      FROM document_versions dv
+      JOIN logical_documents ld ON ld.id = dv.document_id
+      JOIN file_blobs fb ON fb.id = dv.file_blob_id
+      WHERE (
+        ld.board IN ('Needs Review', 'Unknown')
+        OR ld.board IS NULL
+        OR dv.meeting_date IS NULL
+      )
+      ORDER BY fb.created_at DESC
+      LIMIT 50
+    `);
+
+    const { crawlerExtractDateFromFilenameExport } = await import("../services/crawlerEngine");
+
+    const items = rows.rows.map((row: any) => {
+      const suggestedDate = crawlerExtractDateFromFilenameExport(row.filename || "");
+      return {
+        versionId: row.versionId,
+        logicalDocId: row.logicalDocId,
+        filename: row.filename || "",
+        town: row.town || "",
+        board: row.board || null,
+        storedMeetingDate: row.storedMeetingDate ? new Date(row.storedMeetingDate).toISOString().split("T")[0] : null,
+        suggestedDate: suggestedDate ? suggestedDate.toISOString().split("T")[0] : null,
+        previewText: row.previewText || "",
+      };
+    });
+
+    res.json({ items, count: items.length });
+  } catch (error: any) {
+    console.error("Error fetching needs-review docs:", error);
+    res.status(500).json({ message: "Failed to fetch needs-review documents" });
+  }
+});
+
+// PATCH /api/admin/content/document-review/:versionId
+adminRouter.patch("/document-review/:versionId", async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    const bodySchema = z.object({
+      board: z.string().min(1).optional(),
+      meetingDate: z.string().nullable().optional(),
+    });
+    const { board, meetingDate } = bodySchema.parse(req.body);
+
+    // Fetch version + logical doc
+    const [version] = await db
+      .select()
+      .from(schema.documentVersions)
+      .where(eq(schema.documentVersions.id, versionId))
+      .limit(1);
+
+    if (!version) {
+      return res.status(404).json({ message: "Document version not found" });
+    }
+
+    // Update logical_documents if board provided
+    if (board) {
+      // Fetch current logical doc to preserve existing category unless it looks like minutes
+      const [logDoc] = await db
+        .select({ category: schema.logicalDocuments.category })
+        .from(schema.logicalDocuments)
+        .where(eq(schema.logicalDocuments.id, version.documentId))
+        .limit(1);
+
+      // Only set category to meeting_minutes if the doc is marked as minutes or if the
+      // existing category already indicates minutes (don't downgrade other categories)
+      const isMinutes = version.isMinutes === true;
+      const currentCategory = logDoc?.category || "meeting_minutes";
+      const newCategory = isMinutes ? "meeting_minutes" : currentCategory;
+
+      await db
+        .update(schema.logicalDocuments)
+        .set({ board, category: newCategory, updatedAt: new Date() })
+        .where(eq(schema.logicalDocuments.id, version.documentId));
+    }
+
+    // Update document_versions if meetingDate provided
+    if (meetingDate !== undefined) {
+      const parsedDate = meetingDate ? new Date(meetingDate) : null;
+      await db
+        .update(schema.documentVersions)
+        .set({ meetingDate: parsedDate })
+        .where(eq(schema.documentVersions.id, versionId));
+    }
+
+    // Fire-and-forget enrichment (feed item generation)
+    Promise.resolve().then(async () => {
+      try {
+        const { enrichDocumentMetadata } = await import("../services/enrichDocumentMetadata");
+        await enrichDocumentMetadata(versionId);
+      } catch (err: any) {
+        console.warn(`[document-review] enrichDocumentMetadata failed for ${versionId}: ${err.message}`);
+      }
+    });
+
+    res.json({ ok: true });
+  } catch (error: any) {
+    if (error?.issues) {
+      return res.status(400).json({ message: "Invalid input", errors: error.issues });
+    }
+    console.error("Error updating document review:", error);
+    res.status(500).json({ message: "Failed to update document review" });
   }
 });
 
