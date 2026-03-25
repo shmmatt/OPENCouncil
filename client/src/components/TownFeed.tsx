@@ -601,7 +601,9 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
 
     // Fire-and-forget server save for authenticated users (401 is silently ignored for guests)
     if (user) {
-      apiRequest("PUT", "/api/feed/user/preferences", { preferredTowns: towns }).catch(() => {});
+      apiRequest("PUT", "/api/feed/user/preferences", { preferredTowns: towns })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["/api/feed/user/preferences"] }))
+        .catch(() => {});
     }
   }, [user, setLocation]);
 
