@@ -464,6 +464,9 @@ adminRouter.post("/feed-items/:id/reject", async (req, res) => {
 
 adminRouter.post("/catchup-feed", async (req, res) => {
   try {
+    const rawLimit = parseInt(String(req.query.limit || "200"), 10);
+    const limit = Math.min(Math.max(1, isNaN(rawLimit) ? 200 : rawLimit), 500);
+
     // Query document versions: isMinutes=true, meetingDate >= 2026-02-01, no feed item yet
     const CUTOFF = new Date("2026-02-01");
     const rows = await db.execute(sql`
@@ -475,6 +478,7 @@ adminRouter.post("/catchup-feed", async (req, res) => {
           SELECT 1 FROM town_feed_items tfi
           WHERE tfi.automation_source_version_id = dv.id
         )
+      LIMIT ${limit}
     `);
 
     const versionIds: string[] = rows.rows.map((r: any) => r.id as string);
@@ -492,7 +496,7 @@ adminRouter.post("/catchup-feed", async (req, res) => {
       queued++;
     }
 
-    res.json({ queued, message: `Queued ${queued} document versions for feed generation (cutoff: 2026-02-01)` });
+    res.json({ queued, message: `Queued ${queued} document versions for feed generation (cutoff: 2026-02-01, limit: ${limit})` });
   } catch (error: any) {
     console.error("Error in catchup-feed:", error);
     res.status(500).json({ message: "Catch-up failed: " + error.message });

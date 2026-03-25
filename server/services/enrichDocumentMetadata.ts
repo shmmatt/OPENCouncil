@@ -108,24 +108,27 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
   }
 
   // 7. Patch document_versions (meeting_date + is_minutes) if needed
-  let finalMeetingDate: Date | null = null;
+  let llmMeetingDate: Date | null = null;
   if (suggested.meetingDate) {
     try {
       const parsed = new Date(suggested.meetingDate);
       if (!isNaN(parsed.getTime())) {
-        finalMeetingDate = parsed;
+        llmMeetingDate = parsed;
       }
     } catch {
       // ignore parse error
     }
   }
 
-  if (needsMeetingDate && finalMeetingDate) {
+  // Effective meeting date: LLM result takes priority, fall back to existing version.meetingDate
+  const effectiveMeetingDate: Date | null = llmMeetingDate ?? (version.meetingDate ? new Date(version.meetingDate as unknown as string) : null);
+
+  if (needsMeetingDate && llmMeetingDate) {
     await db
       .update(schema.documentVersions)
-      .set({ meetingDate: finalMeetingDate, isMinutes: suggested.isMinutes })
+      .set({ meetingDate: llmMeetingDate, isMinutes: suggested.isMinutes })
       .where(eq(schema.documentVersions.id, versionId));
-    logInfo(`[enrichMetadata] Updated version ${versionId}: meetingDate=${finalMeetingDate.toISOString()}, isMinutes=${suggested.isMinutes}`);
+    logInfo(`[enrichMetadata] Updated version ${versionId}: meetingDate=${llmMeetingDate.toISOString()}, isMinutes=${suggested.isMinutes}`);
   } else if (version.isMinutes !== suggested.isMinutes) {
     await db
       .update(schema.documentVersions)
@@ -134,8 +137,8 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
     logInfo(`[enrichMetadata] Updated version ${versionId}: isMinutes=${suggested.isMinutes}`);
   }
 
-  // 8. Attempt feed generation if meetingDate qualifies
-  await maybeGenerateFeedItem(versionId, finalMeetingDate);
+  // 8. Attempt feed generation using the effective meeting date (LLM or existing)
+  await maybeGenerateFeedItem(versionId, effectiveMeetingDate);
 }
 
 async function maybeGenerateFeedItem(
