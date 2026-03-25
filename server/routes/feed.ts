@@ -14,8 +14,8 @@ feedUserRouter.get("/user", async (req: IdentityRequest, res) => {
 
     let towns: string[] = [];
 
-    // Client-supplied filter (works for both authenticated and guest users)
-    const townsParam = req.query.towns as string | undefined;
+    // Client-supplied filter via ?town=Conway,Ossipee (works for guests and auth'd users alike)
+    const townsParam = (req.query.town as string | undefined) || (req.query.towns as string | undefined);
     if (townsParam && townsParam.trim()) {
       towns = townsParam.split(",").map((t) => t.trim()).filter(Boolean);
     } else if (req.actor?.userId && req.actor.user) {

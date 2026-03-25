@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useInfiniteQuery, useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -532,11 +533,20 @@ export interface TownFeedProps {
 export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const observerRef = useRef<HTMLDivElement | null>(null);
 
-  // Active town selection — initialized from localStorage so guests can filter too
+  // Active town selection — initialized from URL param first, then localStorage
   const [activeTowns, setActiveTowns] = useState<string[]>(() => {
     try {
+      // URL param takes priority (enables shareable/bookmarkable filtered URLs)
+      const params = new URLSearchParams(window.location.search);
+      const townParam = params.get("town");
+      if (townParam) {
+        const towns = townParam.split(",").map((t) => t.trim()).filter(Boolean);
+        if (towns.length > 0) return towns;
+      }
+      // Then localStorage (guest persistence across sessions)
       const stored = localStorage.getItem("oc_selected_towns");
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -548,36 +558,52 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
 
   const [showPicker, setShowPicker] = useState(false);
 
-  // Load server preferences for authenticated users; use as fallback when localStorage is empty
+  // Load server preferences for authenticated users; use as fallback when neither URL nor localStorage is set
   const { data: prefData, isLoading: prefLoading } = useQuery<{ preferredTowns: string[] }>({
     queryKey: ["/api/feed/user/preferences"],
   });
 
   const preferredTowns = prefData?.preferredTowns || [];
 
-  // Sync server preferences → activeTowns when no local preference is stored yet
+  // Sync server preferences → activeTowns/URL/localStorage when no local preference is stored yet
   useEffect(() => {
     if (!prefLoading && preferredTowns.length > 0 && activeTowns.length === 0) {
       setActiveTowns(preferredTowns);
       try {
         localStorage.setItem("oc_selected_towns", JSON.stringify(preferredTowns));
       } catch {}
+      const params = new URLSearchParams(window.location.search);
+      params.set("town", preferredTowns.join(","));
+      setLocation(`${window.location.pathname}?${params.toString()}`);
     }
   }, [prefLoading, preferredTowns.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save towns — updates local state + localStorage immediately; PUTs to server only if auth'd
+  // Save towns — updates URL + localStorage immediately; PUTs to server only if auth'd (no blocking 401)
   const handleSaveTowns = useCallback((towns: string[]) => {
     setActiveTowns(towns);
+
+    // Update URL query param (source of truth for guests, shareable link)
+    const params = new URLSearchParams(window.location.search);
+    if (towns.length > 0) {
+      params.set("town", towns.join(","));
+    } else {
+      params.delete("town");
+    }
+    setLocation(`${window.location.pathname}?${params.toString()}`);
+
+    // Also persist in localStorage for cross-session convenience
     try {
       localStorage.setItem("oc_selected_towns", JSON.stringify(towns));
     } catch {}
+
     setShowPicker(false);
     queryClient.invalidateQueries({ queryKey: ["/api/feed/user"] });
-    // Fire-and-forget server save for authenticated users
+
+    // Fire-and-forget server save for authenticated users (401 is silently ignored for guests)
     if (user) {
       apiRequest("PUT", "/api/feed/user/preferences", { preferredTowns: towns }).catch(() => {});
     }
-  }, [user]);
+  }, [user, setLocation]);
 
   const {
     data,
@@ -591,7 +617,7 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
       const params = new URLSearchParams();
       if (pageParam) params.set("cursor", pageParam as string);
       params.set("limit", "10");
-      if (activeTowns.length > 0) params.set("towns", activeTowns.join(","));
+      if (activeTowns.length > 0) params.set("town", activeTowns.join(","));
       const res = await fetch(`/api/feed/user?${params.toString()}`, {
         credentials: "include",
       });
