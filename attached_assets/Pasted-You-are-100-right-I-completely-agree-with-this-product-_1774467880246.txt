@@ -1,0 +1,40 @@
+You are 100% right. I completely agree with this product call. 
+
+A dashboard littered with one-off "Fix X" and "Backfill Y" buttons is the definition of technical debt. It makes the platform feel fragile and janky. We only needed those buttons to bridge the gap while we built the automation, but moving forward, the system should heal itself without you having to click ten different buttons every morning.
+
+To fix the existing broken titles *without* adding permanent bloat to your codebase, we are going to use a **"Burner Script" pattern**. 
+
+We will instruct the Replit agent to write a quick database update script, execute it directly in its terminal to fix your live data instantly, and then *delete the script*. No new buttons, no new API routes, no permanent clutter.
+
+Here is the revised, zero-bloat spec to paste to the agent:
+
+***
+
+### #28 - Feed Title Cleanup & Race Condition Fix (Zero UI Bloat)
+
+**What & Why**
+The newly implemented `enrichDocumentMetadata` pipeline has a race condition where `processDocumentForFeed` generates titles using stale database records before the enrichment `UPDATE` finishes. Additionally, an overly strict LLM is failing to extract obvious board names, causing internal flags ("Unknown", "Needs Review") to leak into public-facing feed titles. 
+**Crucial Constraint:** We must *not* add any new admin buttons, API routes, or permanent UI bloat to fix the existing bad data. The UI is getting too cluttered.
+
+**Done looks like**
+* **No Stale Data:** The `enrichDocumentMetadata` function fully `await`s the database `UPDATE` transaction, and passes the *fresh* `board` and `meetingDate` variables directly into `processDocumentForFeed` as arguments so it never uses stale data.
+* **Timid AI Fixed:** The `suggestMetadataFromPreview` prompt explicitly instructs the LLM to aggressively match text like "Conservation Commission", "Select Board", or "Planning Board" and strictly forbids returning "Unknown" if a board can be inferred.
+* **Hardcoded UI Safeguards:** In `feedAutomation.ts`, if the `board` evaluates to "Needs Review", "Unknown", or is null, it is intercepted and forced to the string `"Municipal"` before the title template is assembled (e.g., resulting in "Municipal Agenda — February 9, 2026").
+* **Zero-Bloat Retroactive Fix:** The existing bad titles in the `town_feed_items` table are fixed via a one-off burner script executed by the agent, leaving no permanent code behind.
+
+**Tasks**
+* **Task 1: Fix the Race Condition** — In `server/services/enrichDocumentMetadata.ts`, ensure `db.update` calls are properly `await`ed. Modify `processDocumentForFeed` to accept `board` and `meetingDate` as optional override arguments, and pass the freshly extracted variables from `enrichDocumentMetadata` directly into it.
+* **Task 2: Sanitize Public Titles** — In `server/services/feedAutomation.ts` (inside `generateAndPublishDigest` and `evaluateAndCreateFeatureArticle`), add a sanitization step right before title generation: `const cleanBoard = (board === 'Needs Review' || board === 'Unknown' || !board) ? 'Municipal' : board;`. Use `cleanBoard` to build the `canonicalTitle`.
+* **Task 3: Aggressive Board Extraction** — Update the system prompt in `server/services/metadataExtraction.ts` (`suggestMetadataFromPreview`). Add: "You must aggressively identify the board from the text. Look for Select Board, Planning Board, Zoning Board of Adjustment, Conservation Commission, Budget Committee, etc. Do not return 'Unknown' if you can reasonably infer the board from context."
+* **Task 4: The Burner Script (Execute & Delete)** — Create a temporary file `scripts/fix-titles.ts`. Write a Drizzle/SQL script that finds all `town_feed_items` where `title` contains "Unknown " or "Needs Review ". Use string replacement to change those prefixes to "Municipal ". Run the script in the terminal using `npx tsx scripts/fix-titles.ts`. Once it executes successfully, **delete the script file**. Do not add any API endpoints or UI buttons for this.
+
+**Relevant files**
+* `server/services/enrichDocumentMetadata.ts`
+* `server/services/feedAutomation.ts`
+* `server/services/metadataExtraction.ts`
+
+***
+
+This is how senior engineers handle data patches. The agent will fix the pipes, clean up the puddle on the floor, and throw away the mop when it's done. 
+
+Let me know once the agent runs this—your feed should instantly transform those "Unknown Agendas" into clean, professional "Municipal Agendas"!
