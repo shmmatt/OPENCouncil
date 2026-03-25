@@ -672,6 +672,8 @@ async function bridgeToLogicalDocument(fileBlobId: string, opts: {
     const year = opts.year || crawlerExtractYear(opts.filename, opts.s3Key);
     const canonicalTitle = opts.filename;
     const isMinutes = category === "minutes" || category === "meeting_minutes";
+    // Import here to avoid circular dependency at module load time
+    const { processDocumentForFeed } = await import("./feedAutomation");
 
     const existingVersion = await db.execute(sql`
       SELECT dv.id FROM document_versions dv WHERE dv.file_blob_id = ${fileBlobId} LIMIT 1
@@ -713,6 +715,17 @@ async function bridgeToLogicalDocument(fileBlobId: string, opts: {
       .update(schema.logicalDocuments)
       .set({ currentVersionId: version.id })
       .where(eq(schema.logicalDocuments.id, logicalDoc.id));
+
+    // Fire-and-forget feed automation for new versions — errors must never crash the crawler
+    if (version?.id) {
+      Promise.resolve().then(async () => {
+        try {
+          await processDocumentForFeed(version.id);
+        } catch (feedErr: any) {
+          console.warn(`[CrawlerEngine] Feed automation failed for version ${version.id}: ${feedErr.message}`);
+        }
+      });
+    }
   } catch (e: any) {
     console.warn(`[CrawlerEngine] bridgeToLogicalDocument failed for ${opts.s3Key}: ${e.message}`);
   }

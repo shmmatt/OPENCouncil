@@ -534,23 +534,50 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
   const { user } = useAuth();
   const observerRef = useRef<HTMLDivElement | null>(null);
 
+  // Active town selection — initialized from localStorage so guests can filter too
+  const [activeTowns, setActiveTowns] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem("oc_selected_towns");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const [showPicker, setShowPicker] = useState(false);
+
+  // Load server preferences for authenticated users; use as fallback when localStorage is empty
   const { data: prefData, isLoading: prefLoading } = useQuery<{ preferredTowns: string[] }>({
     queryKey: ["/api/feed/user/preferences"],
   });
 
   const preferredTowns = prefData?.preferredTowns || [];
-  const [showPicker, setShowPicker] = useState(false);
 
-  const savePreferencesMutation = useMutation({
-    mutationFn: async (towns: string[]) => {
-      await apiRequest("PUT", "/api/feed/user/preferences", { preferredTowns: towns });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/feed/user/preferences"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/feed/user"] });
-      setShowPicker(false);
-    },
-  });
+  // Sync server preferences → activeTowns when no local preference is stored yet
+  useEffect(() => {
+    if (!prefLoading && preferredTowns.length > 0 && activeTowns.length === 0) {
+      setActiveTowns(preferredTowns);
+      try {
+        localStorage.setItem("oc_selected_towns", JSON.stringify(preferredTowns));
+      } catch {}
+    }
+  }, [prefLoading, preferredTowns.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save towns — updates local state + localStorage immediately; PUTs to server only if auth'd
+  const handleSaveTowns = useCallback((towns: string[]) => {
+    setActiveTowns(towns);
+    try {
+      localStorage.setItem("oc_selected_towns", JSON.stringify(towns));
+    } catch {}
+    setShowPicker(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/feed/user"] });
+    // Fire-and-forget server save for authenticated users
+    if (user) {
+      apiRequest("PUT", "/api/feed/user/preferences", { preferredTowns: towns }).catch(() => {});
+    }
+  }, [user]);
 
   const {
     data,
@@ -559,11 +586,12 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery<FeedPage>({
-    queryKey: ["/api/feed/user"],
+    queryKey: ["/api/feed/user", activeTowns],
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("cursor", pageParam as string);
       params.set("limit", "10");
+      if (activeTowns.length > 0) params.set("towns", activeTowns.join(","));
       const res = await fetch(`/api/feed/user?${params.toString()}`, {
         credentials: "include",
       });
@@ -581,10 +609,11 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
       return res.json() as Promise<{ upvoteCount: number; hasUpvoted: boolean }>;
     },
     onMutate: async (feedItemId) => {
-      await queryClient.cancelQueries({ queryKey: ["/api/feed/user"] });
-      const prev = queryClient.getQueryData(["/api/feed/user"]);
+      const qKey = ["/api/feed/user", activeTowns];
+      await queryClient.cancelQueries({ queryKey: qKey });
+      const prev = queryClient.getQueryData(qKey);
       queryClient.setQueryData<{ pages: FeedPage[]; pageParams: unknown[] }>(
-        ["/api/feed/user"],
+        qKey,
         (old) => {
           if (!old) return old;
           return {
@@ -610,7 +639,7 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
     },
     onError: (_err, _feedItemId, context) => {
       if (context?.prev) {
-        queryClient.setQueryData(["/api/feed/user"], context.prev);
+        queryClient.setQueryData(["/api/feed/user", activeTowns], context.prev);
       }
       toast({ title: "Failed to update vote", variant: "destructive" });
     },
@@ -651,11 +680,12 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
     [allItems, templates]
   );
 
+  // Show picker automatically when no town is selected (guests + new auth'd users)
   useEffect(() => {
-    if (!prefLoading && user && preferredTowns.length === 0) {
+    if (!prefLoading && activeTowns.length === 0) {
       setShowPicker(true);
     }
-  }, [prefLoading, user, preferredTowns.length]);
+  }, [prefLoading, activeTowns.length]);
 
   if (prefLoading) {
     return (
@@ -671,8 +701,8 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
         <TownPreferencePicker
-          initialTowns={preferredTowns}
-          onSave={(towns) => savePreferencesMutation.mutate(towns)}
+          initialTowns={activeTowns}
+          onSave={handleSaveTowns}
         />
       </div>
     );
@@ -691,17 +721,19 @@ export default function TownFeedComponent({ onQuestionClick }: TownFeedProps) {
   return (
     <div className="space-y-6 pb-8" data-testid="town-feed">
       <div className="flex items-center justify-end gap-2 flex-wrap">
-        {user && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPicker(true)}
-            data-testid="button-edit-towns"
-          >
-            <MapPin className="w-3.5 h-3.5 mr-1" />
-            Edit Towns
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowPicker(true)}
+          data-testid="button-edit-towns"
+        >
+          <MapPin className="w-3.5 h-3.5 mr-1" />
+          {activeTowns.length === 0
+            ? "Choose Towns"
+            : activeTowns.length <= 2
+            ? activeTowns.join(", ")
+            : `${activeTowns.length} towns`}
+        </Button>
       </div>
 
       {isLoading && (

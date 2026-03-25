@@ -14,6 +14,8 @@ import {
 import { runContentGenerationPipeline, scoreArticleRelevancy, regenerateSummaryWithNews, generateCuriosityQuestions, generateFeedItemFromChat, generateFeedItemFromDocuments } from "../services/contentGeneration";
 import { searchNewsForTopic, getConfiguredNewsSources } from "../services/newsCrawler";
 import { getChatTemplateById, updateChatTemplate } from "../storage/chatTemplates";
+import { processDocumentForFeed } from "../services/feedAutomation";
+import { db, schema, sql } from "../storage/db";
 import type { TownFeedNewsArticle, TownFeedPayload, ScoredTopic } from "@shared/schema";
 
 const adminRouter = Router();
@@ -453,6 +455,47 @@ adminRouter.post("/feed-items/:id/reject", async (req, res) => {
   } catch (error) {
     console.error("Error rejecting feed item:", error);
     res.status(500).json({ message: "Failed to reject feed item" });
+  }
+});
+
+// ============================================================
+// CATCH-UP — Retroactively generate feed items for recent docs
+// ============================================================
+
+adminRouter.post("/catchup-feed", async (req, res) => {
+  try {
+    // Query document versions: isMinutes=true, meetingDate >= 2026-02-01, no feed item yet
+    const CUTOFF = new Date("2026-02-01");
+    const rows = await db.execute(sql`
+      SELECT dv.id
+      FROM document_versions dv
+      WHERE dv.is_minutes = true
+        AND dv.meeting_date >= ${CUTOFF}
+        AND NOT EXISTS (
+          SELECT 1 FROM town_feed_items tfi
+          WHERE tfi.automation_source_version_id = dv.id
+        )
+    `);
+
+    const versionIds: string[] = rows.rows.map((r: any) => r.id as string);
+
+    // Queue all as fire-and-forget so the HTTP response returns quickly
+    let queued = 0;
+    for (const versionId of versionIds) {
+      Promise.resolve().then(async () => {
+        try {
+          await processDocumentForFeed(versionId);
+        } catch (err: any) {
+          console.warn(`[catchup-feed] Failed for version ${versionId}: ${err.message}`);
+        }
+      });
+      queued++;
+    }
+
+    res.json({ queued, message: `Queued ${queued} document versions for feed generation (cutoff: 2026-02-01)` });
+  } catch (error: any) {
+    console.error("Error in catchup-feed:", error);
+    res.status(500).json({ message: "Catch-up failed: " + error.message });
   }
 });
 

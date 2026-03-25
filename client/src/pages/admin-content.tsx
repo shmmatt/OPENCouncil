@@ -1063,6 +1063,27 @@ export default function AdminContent() {
     },
   });
 
+  const catchupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/content/catchup-feed", { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Catch-up failed" }));
+        throw new Error(err.message || "Catch-up failed");
+      }
+      return res.json() as Promise<{ queued: number; message: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      toast({
+        title: "Feed catch-up queued",
+        description: `${data.queued} document${data.queued !== 1 ? "s" : ""} queued for feed generation (since Feb 2026).`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Catch-up failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     setLocation("/admin/login");
@@ -1475,7 +1496,16 @@ export default function AdminContent() {
                   {(feedItems || []).length} item{(feedItems || []).length !== 1 ? "s" : ""} generated
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => catchupMutation.mutate()}
+                  disabled={catchupMutation.isPending}
+                  data-testid="button-catchup-feed"
+                >
+                  {catchupMutation.isPending ? "Queuing..." : "Catch Up Feed"}
+                </Button>
                 <Button
                   variant={viewMode === "card" ? "default" : "outline"}
                   size="icon"

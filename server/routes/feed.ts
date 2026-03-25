@@ -14,7 +14,11 @@ feedUserRouter.get("/user", async (req: IdentityRequest, res) => {
 
     let towns: string[] = [];
 
-    if (req.actor?.userId && req.actor.user) {
+    // Client-supplied filter (works for both authenticated and guest users)
+    const townsParam = req.query.towns as string | undefined;
+    if (townsParam && townsParam.trim()) {
+      towns = townsParam.split(",").map((t) => t.trim()).filter(Boolean);
+    } else if (req.actor?.userId && req.actor.user) {
       const user = req.actor.user;
       if (user.preferredTowns && (user.preferredTowns as string[]).length > 0) {
         towns = user.preferredTowns as string[];
