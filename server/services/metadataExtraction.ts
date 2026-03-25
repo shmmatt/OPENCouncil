@@ -477,10 +477,16 @@ ${categoryList}
 - Do NOT leave town empty if hints.defaultTown exists and there is no conflicting town name in the text.
 - For NH towns, extract ONLY the town name (e.g., "Ossipee", "Conway", "Madison") - never include "Town of".
 
+**CRITICAL RULES FOR board:**
+- Scan the FULL document header, letterhead, and first paragraph to identify the board name.
+- Common NH board names: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Board of Education", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission", "Library Board of Trustees".
+- If the document text contains ANY reference to a board, committee, or commission name, you MUST use that name.
+- NEVER return "Unknown" for board — if you cannot determine the exact name, make the best inference possible from context clues in the document header or filename. Return null only as an absolute last resort when no evidence exists.
+- Do NOT return "Needs Review" — that is an internal placeholder, never a valid board name.
+
 Other rules:
 - Keep notes very short (under 100 characters)
 - Year should be a 4-digit year if detectable, otherwise ""
-- Board should be the name of the board/department (e.g., "Planning Board", "Board of Selectmen", "Zoning Board of Adjustment")
 
 SPECIAL RULES FOR MEETING MINUTES:
 - If this document appears to be official meeting minutes, set isMinutes: true AND category: "meeting_minutes"

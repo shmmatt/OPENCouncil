@@ -51,8 +51,10 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
 
   if (!needsBoard && !needsMeetingDate) {
     logInfo(`[enrichMetadata] Version ${versionId} already fully enriched — skipping LLM`);
-    // Still attempt feed generation if meetingDate qualifies
-    await maybeGenerateFeedItem(versionId, version.meetingDate as Date | null);
+    // Still attempt feed generation if meetingDate qualifies; pass known values as overrides
+    const storedMeetingDate = version.meetingDate ? new Date(version.meetingDate as unknown as string) : null;
+    const storedDocType = version.isMinutes ? "Minutes" : "Agenda";
+    await maybeGenerateFeedItem(versionId, storedMeetingDate, logDoc.board, storedDocType);
     return;
   }
 
@@ -138,12 +140,17 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
   }
 
   // 8. Attempt feed generation using the effective meeting date (LLM or existing)
-  await maybeGenerateFeedItem(versionId, effectiveMeetingDate);
+  // Pass freshly-extracted board and docType to avoid stale DB reads in processDocumentForFeed
+  const effectiveBoard = newBoard || logDoc.board;
+  const effectiveDocType = suggested.isMinutes ? "Minutes" : "Agenda";
+  await maybeGenerateFeedItem(versionId, effectiveMeetingDate, effectiveBoard, effectiveDocType);
 }
 
 async function maybeGenerateFeedItem(
   versionId: string,
-  meetingDate: Date | null
+  meetingDate: Date | null,
+  board?: string | null,
+  docType?: string
 ): Promise<void> {
   if (!meetingDate || meetingDate < FEED_CUTOFF) {
     logInfo(
@@ -156,7 +163,13 @@ async function maybeGenerateFeedItem(
   // Import dynamically to avoid circular deps
   const { processDocumentForFeed } = await import("./feedAutomation");
   try {
-    await processDocumentForFeed(versionId);
+    // Pass freshly-extracted values as overrides to avoid stale DB reads
+    const overrides: { board?: string; meetingDate?: Date; docType?: string } = {
+      meetingDate,
+    };
+    if (board) overrides.board = board;
+    if (docType) overrides.docType = docType;
+    await processDocumentForFeed(versionId, overrides);
   } catch (err: any) {
     logError(`[enrichMetadata] Feed generation failed for version ${versionId}: ${err.message}`);
   }

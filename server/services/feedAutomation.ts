@@ -30,11 +30,28 @@ const FAST_MODEL = "gemini-2.0-flash";
 const PRO_MODEL = "gemini-2.5-pro-preview-05-06";
 const FEED_IMAGES_DIR = "uploads/feed-images";
 
+/**
+ * Sanitize a raw board name before using it in public-facing feed titles.
+ * Replaces "Needs Review", "Unknown", or empty/null values with "Municipal".
+ */
+function cleanBoard(raw: string | null | undefined): string {
+  if (!raw) return "Municipal";
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "Needs Review" || trimmed === "Unknown") return "Municipal";
+  return trimmed;
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point — called fire-and-forget from ingestion.ts
 // ---------------------------------------------------------------------------
 
-export async function processDocumentForFeed(versionId: string): Promise<void> {
+export interface FeedOverrides {
+  board?: string;
+  meetingDate?: Date;
+  docType?: string;
+}
+
+export async function processDocumentForFeed(versionId: string, overrides?: FeedOverrides): Promise<void> {
   logInfo(`[feedAutomation] Starting pipeline for version ${versionId}`);
 
   // 1. Fetch version
@@ -49,8 +66,12 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
     return;
   }
 
+  // When called from enrichDocumentMetadata, overrides carry the freshly extracted meetingDate.
+  // Use override meetingDate if provided, otherwise fall back to stored value.
+  const effectiveMeetingDate = overrides?.meetingDate ?? (version.meetingDate ? new Date(version.meetingDate as unknown as string) : null);
+
   // Allow meeting documents: minutes (isMinutes=true) or any doc with a meetingDate (agendas)
-  const isMeetingDoc = version.isMinutes || !!version.meetingDate;
+  const isMeetingDoc = version.isMinutes || !!effectiveMeetingDate;
   if (!isMeetingDoc) {
     logInfo(`[feedAutomation] Skipping non-meeting document version ${versionId}`);
     return;
@@ -85,18 +106,18 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
   }
 
   const truncatedText = documentText.slice(0, 60000);
-  const meetingDateStr = version.meetingDate
-    ? new Date(version.meetingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+  const meetingDateStr = effectiveMeetingDate
+    ? effectiveMeetingDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     : null;
 
-  // Board label for title pattern — e.g. "Planning Board", "Select Board", "Budget Committee"
-  const boardLabel = logDoc.board || "Board";
-  // Doc type label — "Minutes" for minutes, "Agenda" for agendas
-  const docTypeLabel = version.isMinutes ? "Minutes" : "Agenda";
+  // Board label: use override if provided, else use stored value. Sanitization happens inside each tier.
+  const rawBoard = overrides?.board ?? logDoc.board ?? "";
+  // Doc type label — "Minutes" for minutes, "Agenda" for agendas (override takes priority)
+  const docTypeLabel = overrides?.docType ?? (version.isMinutes ? "Minutes" : "Agenda");
 
   // 4. Tier 1 — Generate and auto-publish factual digest
   try {
-    await generateAndPublishDigest(versionId, town, boardLabel, docTypeLabel, meetingDateStr, version.meetingDate ?? null, truncatedText);
+    await generateAndPublishDigest(versionId, town, rawBoard, docTypeLabel, meetingDateStr, effectiveMeetingDate, truncatedText);
   } catch (err) {
     logError(`[feedAutomation] Tier 1 digest failed for version ${versionId}`, { error: String(err) });
     // Do not rethrow — Tier 2 should still be attempted independently
@@ -104,7 +125,7 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
 
   // 5. Tier 2 — Score topics; create feature article draft if high-impact
   try {
-    await evaluateAndCreateFeatureArticle(versionId, town, boardLabel, meetingDateStr, version.meetingDate ?? null, truncatedText);
+    await evaluateAndCreateFeatureArticle(versionId, town, rawBoard, meetingDateStr, effectiveMeetingDate, truncatedText);
   } catch (err) {
     logError(`[feedAutomation] Tier 2 feature article failed for version ${versionId}`, { error: String(err) });
   }
@@ -125,10 +146,11 @@ async function generateAndPublishDigest(
   meetingDateTimestamp: Date | null,
   text: string
 ): Promise<void> {
-  // Dynamic title: "${board} Minutes — March 11, 2026" or fallback "${board} Minutes Published"
+  const boardLabel = cleanBoard(board);
+  // Dynamic title: "${boardLabel} Minutes — March 11, 2026" or fallback "${boardLabel} Minutes Published"
   const canonicalTitle = meetingDate
-    ? `${board} ${docType} — ${meetingDate}`
-    : `${board} ${docType} Published`;
+    ? `${boardLabel} ${docType} — ${meetingDate}`
+    : `${boardLabel} ${docType} Published`;
 
   const meetingDateLabel = meetingDate ? ` — ${meetingDate}` : "";
   const prompt = `You are a wire-service reporter for ${town}, New Hampshire. Read the following meeting minutes and produce a factual digest for the general public.
@@ -141,7 +163,7 @@ RULES:
 - Skip purely procedural items (roll call, approval of prior minutes, adjournment)
 - The title must exactly match this pattern: "${canonicalTitle}"
 
-MEETING MINUTES (${board}${meetingDateLabel}):
+MEETING MINUTES (${boardLabel}${meetingDateLabel}):
 ${text}
 
 Respond with JSON matching this schema exactly:
@@ -217,8 +239,9 @@ async function evaluateAndCreateFeatureArticle(
   meetingDateTimestamp: Date | null,
   text: string
 ): Promise<void> {
+  const boardLabel = cleanBoard(board);
   // 5a. Extract and score topics
-  const scoredTopics = await extractAndScoreTopics(text, town, board);
+  const scoredTopics = await extractAndScoreTopics(text, town, boardLabel);
 
   // Gate: publicFriction > 6 OR financialImpact > 6 (per spec)
   const highImpactTopics = scoredTopics.filter(
@@ -239,7 +262,7 @@ async function evaluateAndCreateFeatureArticle(
 
   // 5b. Generate full Smart Brevity article + headerImagePrompt from LLM
   const { title, summary, topics, routineTopics, payload, headerImagePrompt } =
-    await generateFeatureArticle(text, town, board, meetingDate, highImpactTopics, scoredTopics);
+    await generateFeatureArticle(text, town, boardLabel, meetingDate, highImpactTopics, scoredTopics);
 
   // 5c. INSERT the draft row IMMEDIATELY — image failure must never block this
   const feedItem = await createTownFeedItem({
