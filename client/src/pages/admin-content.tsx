@@ -1084,6 +1084,28 @@ export default function AdminContent() {
     },
   });
 
+  const enrichMutation = useMutation({
+    mutationFn: async (limit?: number) => {
+      const url = `/api/admin/content/enrich-metadata${limit ? `?limit=${limit}` : ""}`;
+      const res = await adminFetch(url, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Enrich metadata failed" }));
+        throw new Error(err.message || "Enrich metadata failed");
+      }
+      return res.json() as Promise<{ queued: number; message: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      toast({
+        title: "Metadata enrichment queued",
+        description: `${data.queued} document${data.queued !== 1 ? "s" : ""} queued for enrichment.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Enrich metadata failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
     setLocation("/admin/login");
@@ -1505,6 +1527,15 @@ export default function AdminContent() {
                   data-testid="button-catchup-feed"
                 >
                   {catchupMutation.isPending ? "Queuing..." : "Catch Up Feed"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => enrichMutation.mutate(undefined)}
+                  disabled={enrichMutation.isPending}
+                  data-testid="button-enrich-metadata"
+                >
+                  {enrichMutation.isPending ? "Enriching..." : "Enrich Metadata"}
                 </Button>
                 <Button
                   variant={viewMode === "card" ? "default" : "outline"}

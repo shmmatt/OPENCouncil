@@ -499,6 +499,45 @@ adminRouter.post("/catchup-feed", async (req, res) => {
   }
 });
 
+// POST /api/admin/content/enrich-metadata
+// Backfill: enriches metadata for docs with board="Needs Review"/null OR meeting_date=null
+// Includes both agendas and minutes. Optional ?limit=N (default 200, max 500).
+adminRouter.post("/enrich-metadata", async (req, res) => {
+  try {
+    const rawLimit = parseInt(String(req.query.limit || "200"), 10);
+    const limit = Math.min(Math.max(1, isNaN(rawLimit) ? 200 : rawLimit), 500);
+
+    const rows = await db.execute(sql`
+      SELECT dv.id
+      FROM document_versions dv
+      JOIN logical_documents ld ON ld.id = dv.document_id
+      WHERE (ld.board IS NULL OR ld.board = 'Needs Review' OR dv.meeting_date IS NULL)
+        AND dv.created_at >= '2026-02-01'
+      LIMIT ${limit}
+    `);
+
+    const versionIds: string[] = rows.rows.map((r: any) => r.id as string);
+
+    let queued = 0;
+    for (const versionId of versionIds) {
+      Promise.resolve().then(async () => {
+        try {
+          const { enrichDocumentMetadata } = await import("../services/enrichDocumentMetadata");
+          await enrichDocumentMetadata(versionId);
+        } catch (err: any) {
+          console.warn(`[enrich-metadata] Failed for version ${versionId}: ${err.message}`);
+        }
+      });
+      queued++;
+    }
+
+    res.json({ queued, message: `Queued ${queued} document versions for metadata enrichment (cutoff: 2026-02-01, limit: ${limit})` });
+  } catch (error: any) {
+    console.error("Error in enrich-metadata:", error);
+    res.status(500).json({ message: "Enrich metadata failed: " + error.message });
+  }
+});
+
 // ============================================================
 // FEED IMAGES — Serve AI-generated header images
 // ============================================================

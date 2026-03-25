@@ -193,6 +193,11 @@ function PostCard({
               {item.town}
             </span>
           </div>
+          {item.meetingDate && (
+            <span className="text-xs text-muted-foreground" data-testid={`text-meeting-date-${item.id}`}>
+              {new Date(item.meetingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </span>
+          )}
           {item.topicEmoji && (
             <span className="text-sm" data-testid={`text-emoji-${item.id}`}>
               {item.topicEmoji}

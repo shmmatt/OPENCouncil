@@ -1158,6 +1158,7 @@ export const townFeedItems = pgTable("town_feed_items", {
   feedType: text("feed_type").notNull().default("manual"), // 'manual' | 'automated_digest' | 'automated_feature'
   headerImageUrl: text("header_image_url"), // AI-generated header image for Tier-2 feature articles
   automationSourceVersionId: varchar("automation_source_version_id"), // DocumentVersion that triggered this item
+  meetingDate: timestamp("meeting_date"), // Meeting date from source document (Task #27)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

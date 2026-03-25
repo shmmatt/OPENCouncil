@@ -49,8 +49,10 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
     return;
   }
 
-  if (!version.isMinutes) {
-    logInfo(`[feedAutomation] Skipping non-minutes document version ${versionId}`);
+  // Allow meeting documents: minutes (isMinutes=true) or any doc with a meetingDate (agendas)
+  const isMeetingDoc = version.isMinutes || !!version.meetingDate;
+  if (!isMeetingDoc) {
+    logInfo(`[feedAutomation] Skipping non-meeting document version ${versionId}`);
     return;
   }
 
@@ -89,12 +91,12 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
 
   // Board label for title pattern — e.g. "Planning Board", "Select Board", "Budget Committee"
   const boardLabel = logDoc.board || "Board";
-  // Doc type label — always "Minutes" since we only process isMinutes=true
-  const docTypeLabel = "Minutes";
+  // Doc type label — "Minutes" for minutes, "Agenda" for agendas
+  const docTypeLabel = version.isMinutes ? "Minutes" : "Agenda";
 
   // 4. Tier 1 — Generate and auto-publish factual digest
   try {
-    await generateAndPublishDigest(versionId, town, boardLabel, docTypeLabel, meetingDateStr, truncatedText);
+    await generateAndPublishDigest(versionId, town, boardLabel, docTypeLabel, meetingDateStr, version.meetingDate ?? null, truncatedText);
   } catch (err) {
     logError(`[feedAutomation] Tier 1 digest failed for version ${versionId}`, { error: String(err) });
     // Do not rethrow — Tier 2 should still be attempted independently
@@ -102,7 +104,7 @@ export async function processDocumentForFeed(versionId: string): Promise<void> {
 
   // 5. Tier 2 — Score topics; create feature article draft if high-impact
   try {
-    await evaluateAndCreateFeatureArticle(versionId, town, boardLabel, meetingDateStr, truncatedText);
+    await evaluateAndCreateFeatureArticle(versionId, town, boardLabel, meetingDateStr, version.meetingDate ?? null, truncatedText);
   } catch (err) {
     logError(`[feedAutomation] Tier 2 feature article failed for version ${versionId}`, { error: String(err) });
   }
@@ -120,12 +122,15 @@ async function generateAndPublishDigest(
   board: string,
   docType: string,
   meetingDate: string | null,
+  meetingDateTimestamp: Date | null,
   text: string
 ): Promise<void> {
-  const dateLabel = meetingDate ? ` — ${meetingDate}` : "";
-  // Canonical title pattern as required by spec
-  const canonicalTitle = `${board} ${docType} Published`;
+  // Dynamic title: "${board} Minutes — March 11, 2026" or fallback "${board} Minutes Published"
+  const canonicalTitle = meetingDate
+    ? `${board} ${docType} — ${meetingDate}`
+    : `${board} ${docType} Published`;
 
+  const meetingDateLabel = meetingDate ? ` — ${meetingDate}` : "";
   const prompt = `You are a wire-service reporter for ${town}, New Hampshire. Read the following meeting minutes and produce a factual digest for the general public.
 
 RULES:
@@ -136,7 +141,7 @@ RULES:
 - Skip purely procedural items (roll call, approval of prior minutes, adjournment)
 - The title must exactly match this pattern: "${canonicalTitle}"
 
-MEETING MINUTES (${board}${dateLabel}):
+MEETING MINUTES (${board}${meetingDateLabel}):
 ${text}
 
 Respond with JSON matching this schema exactly:
@@ -193,6 +198,7 @@ Respond with JSON matching this schema exactly:
     publishedAt: new Date(),
     feedType: "automated_digest",
     automationSourceVersionId: versionId,
+    meetingDate: meetingDateTimestamp,
   } as any);
 
   logInfo(`[feedAutomation] Tier 1 digest published: ${feedItem.id} — "${title}"`);
@@ -208,6 +214,7 @@ async function evaluateAndCreateFeatureArticle(
   town: string,
   board: string,
   meetingDate: string | null,
+  meetingDateTimestamp: Date | null,
   text: string
 ): Promise<void> {
   // 5a. Extract and score topics
@@ -247,6 +254,7 @@ async function evaluateAndCreateFeatureArticle(
     generatedPayload: payload,
     feedType: "automated_feature",
     automationSourceVersionId: versionId,
+    meetingDate: meetingDateTimestamp,
   } as any);
 
   logInfo(`[feedAutomation] Tier 2 draft created: ${feedItem.id} — "${title}" (draft)`);
