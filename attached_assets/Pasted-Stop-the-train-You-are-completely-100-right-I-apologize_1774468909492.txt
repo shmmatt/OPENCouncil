@@ -1,0 +1,62 @@
+Stop the train. You are completely, 100% right. 
+
+I apologize for steering us into the weeds. We got so focused on fixing the immediate bugs that we started building a Rube Goldberg machine. We are patching a patch with a backfill, and then writing a script to fix the backfill. It is a terrible architectural pattern.
+
+You don't need five different endpoints and three different extraction steps. You need **one pipeline**.
+
+Here is the truth about your current architecture:
+1. The crawler guesses the date using cheap regex.
+2. The manual upload page uses an LLM.
+3. The new feed generator tries to use an LLM *after* the crawler already saved bad data. 
+4. The backfill script tries to clean up the mess left by the first three.
+
+Let's burn the bloat and consolidate. 
+
+### The "One True Pipeline" Architecture
+From now on, there is only one way a document gets processed:
+1. Crawler downloads the PDF and extracts the text.
+2. It passes that text to **The Extractor** (a single, aggressive LLM call).
+3. The Extractor returns the *final* `board`, `meetingDate`, and `docType`.
+4. The document is saved to the database perfectly clean.
+5. The Feed Generator looks at the clean database row and publishes.
+
+To fix the past, we write one script that runs the exact same "Extractor" on your messy historical data, fixes the database, fixes the feed, and then deletes itself. 
+
+Here is the exact, simplified "Atomic Bomb" spec to hand to the Replit agent to wipe out the technical debt and build a single cohesive system.
+
+***
+
+### #29 - The Great Consolidation: Single Extraction Pipeline
+
+**What & Why**
+Our ingestion architecture has become dangerously fragmented. We have multiple conflicting methods for extracting dates and boards (crawler regex, manual UI LLM, feed generation LLM, and backfill scripts). This is causing race conditions, bad data, and UI bloat. We are halting all backfills and consolidating into a single, synchronous pipeline: every document text is passed to one unified LLM extractor *before* it is saved to the database.
+
+**Done looks like**
+* **One True Extractor:** A single, highly aggressive LLM utility function (`extractCoreMetadata`) exists. It takes document text and strictly returns `{ board, meetingDate, category, isMinutes }`. It is instructed to aggressively infer boards (Select Board, Planning Board, etc.) and never return "Unknown".
+* **Synchronous Crawler Ingestion:** The crawler's `bridgeToLogicalDocument` (or equivalent final step) `await`s `extractCoreMetadata` *before* executing the `INSERT` to the database. Documents hit the database already perfectly clean.
+* **Dumb Feed Generator:** `processDocumentForFeed` no longer attempts to patch or enrich data. It trusts the database completely. It just reads the `board` and `meeting_date` from the DB and creates the feed item.
+* **Deleted Bloat:** The temporary `enrich-metadata` admin UI buttons and API endpoints are deleted. 
+* **The Universal Cleanup Script:** A single, temporary script (`scripts/universal-cleanup.ts`) runs `extractCoreMetadata` on all historical documents with "Needs Review", "Unknown", or `NULL` dates. It updates the DB rows, updates their corresponding `town_feed_items`, and exits.
+
+**Tasks**
+* **Task 1: Build `extractCoreMetadata`** — Refactor `suggestMetadataFromPreview` into a single, definitive extraction function. The prompt must explicitly forbid "Unknown" and command aggressive inference of the board name and meeting date from the text context.
+* **Task 2: Wire the Crawler Synchronously** — Modify the crawler engine. Right after OCR finishes and before the `logical_documents` and `document_versions` rows are inserted, call `extractCoreMetadata`. Use its outputs to populate the `INSERT` statements so the DB is accurate from millisecond zero. 
+* **Task 3: Simplify Feed Automation** — Strip all enrichment/patching logic out of `processDocumentForFeed`. It should simply read the database record, format the dynamic title (`"${board} ${docType} — ${meetingDate}"` with a "Municipal" fallback), and insert the `town_feed_items` row.
+* **Task 4: Delete the Bloat** — Remove the `enrich-metadata` API endpoint and the "Enrich Metadata" button from the admin UI. 
+* **Task 5: The Universal Cleanup Script** — Create `scripts/universal-cleanup.ts`. 
+    1. Query all `document_versions` joined with `logical_documents` where `board` is "Needs Review", "Unknown", or `meeting_date` is `NULL`.
+    2. Loop through them, run `extractCoreMetadata(text)`.
+    3. `UPDATE` the database rows.
+    4. If a `town_feed_items` row exists for that version, `UPDATE` its title and `meeting_date` to match the newly extracted data.
+    5. Execute via `npx tsx scripts/universal-cleanup.ts`, log the results, and then delete the file.
+
+**Relevant files**
+* `server/services/metadataExtraction.ts`
+* `server/services/crawlerEngine.ts`
+* `server/services/feedAutomation.ts`
+* `server/routes/contentGeneration.ts`
+* `client/src/pages/admin-content.tsx`
+
+***
+
+This rips out the messy plumbing and replaces it with a single, straight pipe. Do you want to pass this to the agent and finally get this architecture clean?
