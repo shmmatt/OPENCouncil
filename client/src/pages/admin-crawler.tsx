@@ -49,6 +49,7 @@ import {
   Newspaper,
   Inbox,
   LogOut,
+  Microscope,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FAILURE_LABELS, STATE_DOC_CATEGORY_LABELS, UPDATE_CADENCES } from "@shared/crawler-schema";
@@ -4041,6 +4042,12 @@ export default function AdminCrawler() {
                     {draftCount}
                   </Badge>
                 )}
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-research-chat">
+              <Link href="/admin/research-chat">
+                <Microscope className="w-4 h-4 mr-2" />
+                Research Chat
               </Link>
             </Button>
             <Button variant="outline" size="sm" onClick={handleLogout} data-testid="button-logout">

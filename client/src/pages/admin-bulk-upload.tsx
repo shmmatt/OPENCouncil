@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Upload, Loader2, FileText, CheckCircle2, XCircle, FolderUp, BarChart3,
-  GitBranch, ScanLine, Globe, FlaskConical, Megaphone, Newspaper, Inbox, LogOut,
+  GitBranch, ScanLine, Globe, FlaskConical, Megaphone, Newspaper, Inbox, LogOut, Microscope,
 } from "lucide-react";
 
 const CATEGORY_OPTIONS = [
@@ -324,6 +324,12 @@ export default function AdminBulkUpload() {
                     {draftCount}
                   </Badge>
                 )}
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-research-chat">
+              <Link href="/admin/research-chat">
+                <Microscope className="w-4 h-4 mr-2" />
+                Research Chat
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">

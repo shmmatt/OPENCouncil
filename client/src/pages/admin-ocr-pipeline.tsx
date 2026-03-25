@@ -41,6 +41,7 @@ import {
   Newspaper,
   Inbox,
   LogOut,
+  Microscope,
 } from "lucide-react";
 
 
@@ -1324,6 +1325,12 @@ export default function AdminOcrPipeline() {
                     {draftCount}
                   </Badge>
                 )}
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-research-chat">
+              <Link href="/admin/research-chat">
+                <Microscope className="w-4 h-4 mr-2" />
+                Research Chat
               </Link>
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
