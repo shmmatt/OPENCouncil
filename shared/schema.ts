@@ -16,6 +16,17 @@ const vector = customType<{ data: number[]; driverData: string; config: { dimens
   },
 });
 
+// Custom type for PostgreSQL tsvector (full-text search).
+// The column is populated automatically by a DB trigger — never written by app code.
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "tsvector";
+  },
+  fromDriver(value: string): string {
+    return value;
+  },
+});
+
 export const admins = pgTable("admins", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
@@ -779,6 +790,7 @@ export const documentChunks = pgTable("document_chunks", {
     contentHash?: string;
   }>(),
   createdAt: timestamp("created_at").defaultNow(),
+  searchVector: tsvector("search_vector"),
 });
 
 // Embedding generation jobs (tracks batch embedding runs)
@@ -800,6 +812,7 @@ export const embeddingJobs = pgTable("embedding_jobs", {
 export const insertDocumentChunkSchema = createInsertSchema(documentChunks).omit({
   id: true,
   createdAt: true,
+  searchVector: true,
 });
 
 export const insertEmbeddingJobSchema = createInsertSchema(embeddingJobs).omit({
