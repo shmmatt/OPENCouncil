@@ -252,6 +252,55 @@ adminRouter.delete("/feed-items/:id", async (req, res) => {
   }
 });
 
+adminRouter.post("/feed-items/:id/fix-source", async (req, res) => {
+  try {
+    const { board, meetingDate } = z.object({
+      board: z.string().min(1),
+      meetingDate: z.string().nullable(),
+    }).parse(req.body);
+
+    const item = await getTownFeedItemById(req.params.id);
+    if (!item) return res.status(404).json({ message: "Feed item not found" });
+
+    const versionId = item.automationSourceVersionId;
+    if (!versionId) return res.status(400).json({ message: "Feed item has no source document" });
+
+    const [version] = await db
+      .select({ documentId: schema.documentVersions.documentId })
+      .from(schema.documentVersions)
+      .where(eq(schema.documentVersions.id, versionId))
+      .limit(1);
+
+    if (!version) return res.status(404).json({ message: "Source document version not found" });
+
+    await db
+      .update(schema.logicalDocuments)
+      .set({ board })
+      .where(eq(schema.logicalDocuments.id, version.documentId));
+
+    await db
+      .update(schema.documentVersions)
+      .set({ meetingDate: meetingDate ? new Date(meetingDate) : null })
+      .where(eq(schema.documentVersions.id, versionId));
+
+    await deleteTownFeedItem(req.params.id);
+
+    (async () => {
+      try {
+        const { enrichDocumentMetadata } = await import("../services/enrichDocumentMetadata");
+        await enrichDocumentMetadata(versionId);
+      } catch (err: any) {
+        console.warn(`[fix-source] enrichDocumentMetadata failed for ${versionId}: ${err.message}`);
+      }
+    })();
+
+    res.json({ ok: true, versionId });
+  } catch (error) {
+    console.error("Error in fix-source:", error);
+    res.status(500).json({ message: "Failed to fix source" });
+  }
+});
+
 adminRouter.post("/feed-items/:id/publish", async (req, res) => {
   try {
     const item = await getTownFeedItemById(req.params.id);

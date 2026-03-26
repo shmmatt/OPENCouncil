@@ -79,6 +79,7 @@ import {
   Megaphone,
   Microscope,
   Inbox,
+  Wrench,
 } from "lucide-react";
 import { NH_TOWNS } from "@shared/schema";
 import type { TownFeedItem, ScoredTopic, RoutineTopic, TownFeedNewsArticle, TownFeedPayload, MinutesUpdateItem } from "@shared/schema";
@@ -786,6 +787,78 @@ const NH_BOARD_CHIPS = [
   "Recreation Commission",
 ];
 
+function FixSourcePanel({
+  item,
+  onSave,
+  onCancel,
+  isPending,
+}: {
+  item: TownFeedItem;
+  onSave: (board: string, meetingDate: string | null) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const initialDate = item.meetingDate
+    ? new Date(item.meetingDate).toISOString().slice(0, 10)
+    : "";
+  const [selectedBoard, setSelectedBoard] = useState<string>("");
+  const [meetingDate, setMeetingDate] = useState(initialDate);
+
+  return (
+    <div
+      className="mt-3 pt-3 border-t space-y-3"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        Fix source metadata &amp; regenerate
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {NH_BOARD_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => setSelectedBoard(chip === selectedBoard ? "" : chip)}
+            data-testid={`chip-board-fix-${chip.replace(/\s+/g, "-").toLowerCase()}`}
+            className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${
+              selectedBoard === chip
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-foreground border-border hover-elevate"
+            }`}
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={meetingDate}
+          onChange={(e) => setMeetingDate(e.target.value)}
+          data-testid="input-fix-meeting-date"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <Button
+          size="sm"
+          disabled={!selectedBoard || isPending}
+          onClick={() => onSave(selectedBoard, meetingDate || null)}
+          data-testid="button-fix-save"
+        >
+          {isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Wrench className="w-3 h-3 mr-1" />}
+          Fix &amp; Regenerate
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onCancel}
+          data-testid="button-fix-cancel"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface NeedsReviewDoc {
   versionId: string;
   logicalDocId: string;
@@ -1182,6 +1255,7 @@ export default function AdminContent() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
   const [editPayloadItem, setEditPayloadItem] = useState<TownFeedItem | null>(null);
+  const [fixingItemId, setFixingItemId] = useState<string | null>(null);
 
   const token = localStorage.getItem("adminToken");
   useEffect(() => {
@@ -1269,6 +1343,31 @@ export default function AdminContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
       toast({ title: "Feed item deleted" });
+    },
+  });
+
+  const fixSourceMutation = useMutation({
+    mutationFn: async ({ id, board, meetingDate }: { id: string; board: string; meetingDate: string | null }) => {
+      const res = await adminFetch(`/api/admin/content/feed-items/${id}/fix-source`, {
+        method: "POST",
+        body: JSON.stringify({ board, meetingDate }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Fix failed" }));
+        throw new Error(err.message || "Fix failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/content/feed-items"] });
+      setFixingItemId(null);
+      toast({
+        title: "Regeneration queued",
+        description: "The source metadata has been updated. A new feed item will appear shortly.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fix failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1372,7 +1471,7 @@ export default function AdminContent() {
           <Card
             key={item.id}
             className="hover-elevate cursor-pointer"
-            onClick={() => setViewingItemId(item.id)}
+            onClick={() => { if (fixingItemId !== item.id) setViewingItemId(item.id); }}
             data-testid={`card-feed-item-${item.id}`}
           >
             <CardContent className="p-4">
@@ -1442,6 +1541,18 @@ export default function AdminContent() {
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setFixingItemId(fixingItemId === item.id ? null : item.id);
+                    }}
+                    data-testid={`button-fix-source-${item.id}`}
+                    title="Fix source metadata & regenerate"
+                  >
+                    <Wrench className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       deleteMutation.mutate(item.id);
                     }}
                     data-testid={`button-delete-${item.id}`}
@@ -1450,6 +1561,16 @@ export default function AdminContent() {
                   </Button>
                 </div>
               </div>
+              {fixingItemId === item.id && (
+                <FixSourcePanel
+                  item={item}
+                  isPending={fixSourceMutation.isPending}
+                  onSave={(board, meetingDate) =>
+                    fixSourceMutation.mutate({ id: item.id, board, meetingDate })
+                  }
+                  onCancel={() => setFixingItemId(null)}
+                />
+              )}
             </CardContent>
           </Card>
         );
