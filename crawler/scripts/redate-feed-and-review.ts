@@ -99,23 +99,38 @@ async function main() {
   // ── Step 4: load version metadata + blob text for each target ─────────────
   const versionIdArray = [...allVersionIds];
 
-  const versionRows = await db.execute(sql`
-    SELECT
-      dv.id           AS "versionId",
-      dv.meeting_date AS "meetingDate",
-      ld.town         AS "town",
-      ld.canonical_title AS "docTitle",
-      COALESCE(fb.original_filename, ld.canonical_title) AS "filename",
-      LEFT(COALESCE(fb.ocr_text, fb.preview_text, ''), 1000) AS "rawText"
-    FROM document_versions dv
-    JOIN logical_documents ld ON ld.id = dv.document_id
-    JOIN file_blobs fb ON fb.id = dv.file_blob_id
-    WHERE dv.id = ANY(${sql.raw(`ARRAY[${versionIdArray.map(id => `'${id.replace(/'/g, "''")}'`).join(",")}]::varchar[]`)})
-      ${TOWN_FILTER ? sql`AND LOWER(ld.town) = ${TOWN_FILTER}` : sql``}
-    ORDER BY ld.town, dv.id
-  `);
+  // Use ORM query builder so IDs are passed as bind parameters (inArray),
+  // not interpolated into raw SQL.  Slice 3000 chars to match the heuristic
+  // detection window in detectMinutesHeuristics.
+  const versionRows = await db
+    .select({
+      versionId: schema.documentVersions.id,
+      meetingDate: schema.documentVersions.meetingDate,
+      town: schema.logicalDocuments.town,
+      docTitle: schema.logicalDocuments.canonicalTitle,
+      filename: sql<string>`COALESCE(${schema.fileBlobs.originalFilename}, ${schema.logicalDocuments.canonicalTitle})`,
+      rawText: sql<string>`LEFT(COALESCE(${schema.fileBlobs.ocrText}, ${schema.fileBlobs.previewText}, ''), 3000)`,
+    })
+    .from(schema.documentVersions)
+    .innerJoin(
+      schema.logicalDocuments,
+      eq(schema.logicalDocuments.id, schema.documentVersions.documentId),
+    )
+    .innerJoin(
+      schema.fileBlobs,
+      eq(schema.fileBlobs.id, schema.documentVersions.fileBlobId),
+    )
+    .where(
+      TOWN_FILTER
+        ? and(
+            inArray(schema.documentVersions.id, versionIdArray),
+            sql`LOWER(${schema.logicalDocuments.town}) = ${TOWN_FILTER}`,
+          )
+        : inArray(schema.documentVersions.id, versionIdArray),
+    )
+    .orderBy(schema.logicalDocuments.town, schema.documentVersions.id);
 
-  const versions = versionRows.rows as Array<{
+  const versions = versionRows as Array<{
     versionId: string;
     meetingDate: Date | null;
     town: string;
