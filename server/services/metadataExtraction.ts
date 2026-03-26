@@ -243,14 +243,32 @@ export function detectMinutesHeuristics(
     /\b\d{4}-\d{2}-\d{2}\b/,
   ];
 
-  // Search in first ~3000 chars (town clerks often bury dates under lengthy headers)
+  // Approval/acceptance context: if any of these appear in the ~120 chars
+  // immediately BEFORE a date match, the date is the approval date — not the
+  // meeting date.  Skip it and look for the next date in the document.
+  const APPROVAL_CONTEXT_RE = /approv|accept|ratif|adopt|minutes\s+were|at\s+the\s+following|at\s+a\s+subsequent/i;
+
+  // Search in first ~3000 chars, skipping dates that follow approval language
   const headerText = previewText.slice(0, 3000);
-  for (const pattern of datePatterns) {
-    const match = headerText.match(pattern);
-    if (match) {
+  let foundDate = false;
+  for (let pi = 0; pi < datePatterns.length && !foundDate; pi++) {
+    // Make pattern global so exec() iterates every occurrence, not just the first
+    const globalPattern = new RegExp(datePatterns[pi].source, "gi");
+    let match: RegExpExecArray | null;
+    while ((match = globalPattern.exec(headerText)) !== null) {
+      const matchStart = match.index;
+      const contextWindow = headerText.slice(Math.max(0, matchStart - 120), matchStart);
+      if (APPROVAL_CONTEXT_RE.test(contextWindow)) {
+        // This date is preceded by approval/acceptance language — skip it
+        continue;
+      }
       possibleDateText = match[0];
+      foundDate = true;
       break;
     }
+    // If all occurrences of this pattern were in approval context, try the
+    // next pattern.  If no pattern yields a clean date, possibleDateText
+    // stays undefined and the LLM handles it.
   }
 
   return {
@@ -473,7 +491,8 @@ ${categoryList}
 
 **MEETING DATE — identify the date the meeting actually took place:**
 - Look for the date immediately following the board title or "Meeting Minutes" heading.
-- A "Minutes Approved" date or "Approved:" date near the top is NOT the meeting date — it is the date a later meeting approved these minutes. Ignore it.
+- Any date that appears in an approval or acceptance context is NOT the meeting date. Common patterns to reject include: "Minutes Approved:", "Approved:", "Accepted:", "These minutes were approved at the [date] meeting", "approved/accepted at a subsequent meeting", "ratified at the [date] meeting", "at the following meeting", or "adopted at the [date] meeting". All of these indicate when a later meeting endorsed these minutes — ignore them entirely.
+- Look past any approval or acceptance language to find the date this specific meeting was convened.
 - Set rawDateText to the original date string you found (e.g., "March 3, 2026").
 - meetingType: "regular", "special", or "work_session" based on any label in the header.
 
