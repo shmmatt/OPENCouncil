@@ -10,7 +10,8 @@
  * Flags:
  *   --dry-run        Print what would change without writing to DB
  *   --town=<name>    Restrict to a specific town (case-insensitive)
- *   --limit=<n>      Cap how many documents to process
+ *   --limit=<n>      Cap how many documents to process (default: all)
+ *   --offset=<n>     Skip the first N documents (for chunked runs)
  */
 import "dotenv/config";
 import { db } from "../../server/storage/db";
@@ -24,6 +25,10 @@ const BATCH_LIMIT = parseInt(
   process.argv.find(a => a.startsWith("--limit="))?.split("=")[1] || "0",
   10
 ) || 999_999;
+const BATCH_OFFSET = parseInt(
+  process.argv.find(a => a.startsWith("--offset="))?.split("=")[1] || "0",
+  10
+) || 0;
 
 const FEED_CUTOFF = new Date("2026-02-01");
 const MIN_DELAY_MS = 200;
@@ -38,7 +43,7 @@ function normalizeBoard(b: string | null | undefined): string {
 
 async function main() {
   console.log(`\n=== reboard-all-minutes ===`);
-  console.log(`dry-run: ${DRY_RUN} | town: ${TOWN_FILTER || "all"} | limit: ${BATCH_LIMIT}`);
+  console.log(`dry-run: ${DRY_RUN} | town: ${TOWN_FILTER || "all"} | limit: ${BATCH_LIMIT} | offset: ${BATCH_OFFSET}`);
   console.log("");
 
   // Query all meeting_minutes logical documents with one version per doc.
@@ -63,7 +68,7 @@ async function main() {
     WHERE ld.category = 'meeting_minutes'
       ${TOWN_FILTER ? sql`AND LOWER(ld.town) = ${TOWN_FILTER}` : sql``}
     ORDER BY ld.id, dv.id DESC
-    LIMIT ${BATCH_LIMIT}
+    LIMIT ${BATCH_LIMIT} OFFSET ${BATCH_OFFSET}
   `);
 
   const docs = rows.rows as Array<{
