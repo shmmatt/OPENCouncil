@@ -8,6 +8,7 @@ import { getChatTemplateById } from "../storage/chatTemplates";
 import { getTownFeedItemById } from "../storage/townFeed";
 import { createDocumentGap, findSimilarOpenGap, incrementGapHitCount } from "../storage/documentGaps";
 import { getDocumentVersionContext } from "../storage/documents";
+import { detectPlatformQuery, OPENCOUNCIL_PLATFORM_MANUAL } from "../chatV2/platformManual";
 
 const sanitizeOptions: sanitizeHtml.IOptions = {
   allowedTags: [],
@@ -189,6 +190,7 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
 
     try {
       const townContext = req.body.townContext || session.townPreference || null;
+      const platformContext = detectPlatformQuery(content.trim()) ? OPENCOUNCIL_PLATFORM_MANUAL : null;
       const v3Result = await runChatV3Pipeline({
         userMessage: content.trim(),
         sessionHistory: chatHistory,
@@ -196,6 +198,7 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
         situationContext: null,
         sessionSources: [],
         templateContext,
+        platformContext,
       });
       answer = v3Result.answerText;
       citations = v3Result.sourceDocumentNames || [];

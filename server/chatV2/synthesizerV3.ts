@@ -87,6 +87,7 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     answerType = "QUICK_PROCESS",
     renderStyle = "PROSE",
     templateContext,
+    platformContext,
     sauId,
   } = options;
   
@@ -120,6 +121,10 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
 
   if (templateContext) {
     systemPrompt += `\n\n## Template Document Context\n${templateContext}\nWhen answering, keep the above template context in mind. The user is exploring a structured document and may ask follow-up questions about specific sections, budget items, or warrant articles. Search the full municipal database for historical context and related records, not just the template's target documents.`;
+  }
+
+  if (platformContext) {
+    systemPrompt += `\n\n## OPENCouncil Platform Reference\nThe following is authoritative information about the OPENCouncil platform itself. Use it to answer questions about how the system works, its geographic and document coverage, message quotas, subscription tiers, data freshness, and limitations. Do NOT surface the contact email (info@opencouncil.co) unless the user explicitly asks how to get in touch with the team.\n\n${platformContext}`;
   }
   const userPrompt = buildSynthesisUserPrompt(
     userMessage, 

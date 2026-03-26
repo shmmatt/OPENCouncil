@@ -77,6 +77,7 @@ export interface V3OrchestratorOptions {
   sessionSources?: SessionSource[];
   logContext?: PipelineLogContext;
   templateContext?: string | null;
+  platformContext?: string | null;
   onStageChange?: (stage: string) => void;
 }
 
@@ -91,6 +92,7 @@ export async function runChatV3Pipeline(
     sessionSources,
     logContext,
     templateContext,
+    platformContext,
     onStageChange,
   } = options;
 
@@ -246,6 +248,7 @@ export async function runChatV3Pipeline(
     answerType,
     renderStyle,
     templateContext,
+    platformContext,
     sauId: retrievalPlan.sauId,
   });
 
@@ -349,6 +352,7 @@ export async function runChatV3Pipeline(
           answerType,
           renderStyle,
           templateContext,
+          platformContext,
           sauId: retrievalPlan.sauId,
         });
 
@@ -368,6 +372,7 @@ export async function runChatV3Pipeline(
           answerType,
           renderStyle,
           templateContext,
+          platformContext,
           sauId: retrievalPlan.sauId,
         });
 
@@ -427,6 +432,7 @@ export async function runChatV3Pipeline(
         answerType,
         renderStyle,
         templateContext,
+        platformContext,
         sauId: retrievalPlan.sauId,
       });
 

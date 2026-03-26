@@ -16,6 +16,7 @@ import { detectSessionSource } from "./sessionSourceDetector";
 import { chatConfig } from "./chatConfig";
 import { getChatTemplateById } from "../storage/chatTemplates";
 import { chatConfigV3 } from "./chatConfigV3";
+import { detectPlatformQuery, OPENCOUNCIL_PLATFORM_MANUAL } from "./platformManual";
 import { chatMessageLimiter } from "../middleware/rateLimiter";
 import type { SituationContext, SessionSource } from "@shared/schema";
 import type {
@@ -251,6 +252,8 @@ export function registerChatV2Routes(app: Express): void {
         }
       }
 
+      const platformContext = detectPlatformQuery(trimmedContent) ? OPENCOUNCIL_PLATFORM_MANUAL : null;
+
       if (chatConfigV3.ENABLE_V3_PIPELINE) {
         // V3 PIPELINE: Plan → Retrieve → Synthesize → Audit
         const v3Result = await runChatV3Pipeline({
@@ -261,6 +264,7 @@ export function registerChatV2Routes(app: Express): void {
           sessionSources,
           logContext: logCtx,
           templateContext,
+          platformContext,
         });
 
         answerText = v3Result.answerText;
@@ -785,6 +789,8 @@ export function registerChatV2Routes(app: Express): void {
         }
       }
 
+      const platformContext = detectPlatformQuery(trimmedContent) ? OPENCOUNCIL_PLATFORM_MANUAL : null;
+
       let answerText: string;
       let sourceDocumentNames: string[];
       let docSourceType: DocSourceType;
@@ -803,6 +809,7 @@ export function registerChatV2Routes(app: Express): void {
           sessionSources,
           logContext: logCtx,
           templateContext,
+          platformContext,
           onStageChange: (stage: string) => {
             sendEvent("status", { stage });
           },

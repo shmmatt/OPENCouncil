@@ -357,6 +357,7 @@ export interface SynthesisInputV3 {
   recordStrength: RecordStrength;
   history: ChatHistoryMessage[];
   templateContext?: string | null;
+  platformContext?: string | null;
 }
 
 /**
