@@ -18,7 +18,7 @@
  */
 import "dotenv/config";
 import { db } from "../../server/storage/db";
-import { sql, eq, inArray, isNotNull } from "drizzle-orm";
+import { sql, eq, inArray, isNotNull, and } from "drizzle-orm";
 import * as schema from "../../shared/schema";
 import { suggestMetadataFromPreview } from "../../server/services/metadataExtraction";
 
@@ -43,7 +43,8 @@ async function main() {
   console.log(`town:   ${TOWN_FILTER || "all"}`);
   console.log("");
 
-  // ── Step 1: collect version IDs from published feed items ─────────────────
+  // ── Step 1: collect version IDs from published feed items only ───────────
+  // Only items with publishedAt set (i.e. status='published') are in scope.
   const feedRows = await db
     .select({
       versionId: schema.townFeedItems.automationSourceVersionId,
@@ -51,7 +52,12 @@ async function main() {
       feedItemDate: schema.townFeedItems.meetingDate,
     })
     .from(schema.townFeedItems)
-    .where(isNotNull(schema.townFeedItems.automationSourceVersionId));
+    .where(
+      and(
+        isNotNull(schema.townFeedItems.automationSourceVersionId),
+        isNotNull(schema.townFeedItems.publishedAt),
+      )
+    );
 
   const feedVersionIdSet = new Set<string>();
   // versionId → list of {feedItemId, feedItemDate}
@@ -149,8 +155,9 @@ async function main() {
       const elapsed = Date.now() - start;
       const remaining = MIN_DELAY_MS - elapsed;
       if (remaining > 0) await sleep(remaining);
-    } catch (err: any) {
-      console.error(`${prefix} ERROR   ${v.town}: ${v.filename}: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`${prefix} ERROR   ${v.town}: ${v.filename}: ${msg}`);
       errors++;
       continue;
     }

@@ -246,7 +246,7 @@ export function detectMinutesHeuristics(
   // Approval/acceptance context: if any of these appear in the ~120 chars
   // immediately BEFORE a date match, the date is the approval date — not the
   // meeting date.  Skip it and look for the next date in the document.
-  const APPROVAL_CONTEXT_RE = /approv|accept|ratif|adopt|minutes\s+were|at\s+the\s+following|at\s+a\s+subsequent/i;
+  const APPROVAL_CONTEXT_RE = /approv|accept|ratif|minutes\s+were\s+(approved|accepted|ratified|adopted)|at\s+the\s+following|at\s+a\s+subsequent/i;
 
   // Search in first ~3000 chars, skipping dates that follow approval language
   const headerText = previewText.slice(0, 3000);
