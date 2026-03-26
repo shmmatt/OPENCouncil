@@ -31,38 +31,62 @@ function containsTownName(question: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Platform-signal patterns.  Every pattern here is unambiguous on its own;
-// none requires a town-name exclusion because they are already specific enough.
-// Patterns that COULD appear in a research question (e.g. "what towns …") are
-// excluded — the town-name guard handles the few remaining edge cases.
+// Platform-signal patterns.
+//
+// DESIGN RULES:
+//  A) "Always trigger" patterns: unambiguous product-name or product-specific
+//     vocabulary that cannot appear in a municipal research question.
+//     → These bypass the town-name guard entirely.
+//  B) "Town-guarded" patterns: questions about system features that could
+//     theoretically mention a town. If a Carroll County town name is present,
+//     the guard suppresses injection so the RAG pipeline handles it alone.
 // ---------------------------------------------------------------------------
-const PLATFORM_PATTERNS: RegExp[] = [
-  // The product name — always safe
+const ALWAYS_TRIGGER_PATTERNS: RegExp[] = [
+  // The product name itself — always unambiguous
   /\bopencouncil\b/i,
 
-  // Message quota / limits
+  // Explicit email address
+  /\binfo@/i,
+
+  // Subscription / account tier — product vocabulary
+  /\bsubscri(?:ption|be)\b/i,
+  /\bpaid (?:plan|tier|subscription|account)\b/i,
+  /\bfree (?:tier|plan|trial|account)\b/i,
+  /\bpro (?:plan|tier|account|upgrade)\b/i,
+  /\bpricing\b/i,
+
+  // Authorship / operators — always refer to the platform
+  /\bwho (?:made|built|created|runs|manages|operates|is behind) (?:this|it|opencouncil)\b/i,
+];
+
+const TOWN_GUARDED_PATTERNS: RegExp[] = [
+  // Message quotas
   /\bhow many (?:messages?|queries|chats?)\b/i,
   /\bmessage(?:s)? (?:quota|limit|allowance|left|remaining|count)\b/i,
   /\bquery (?:quota|limit|allowance|left|remaining|count)\b/i,
   /\b(?:messages?|queries) (?:do i get|did i get|have i got|have i used|are left|remain(?:ing)?)\b/i,
 
-  // Subscription / pricing
-  /\bsubscri(?:ption|be)\b/i,
+  // Cost / fees
   /\bhow much does (?:this|it) cost\b/i,
   /\bhow much is (?:this|it|the (?:pro|premium|paid) (?:plan|tier))\b/i,
   /\bdo you charge\b/i,
-  /\bpaid (?:plan|tier|subscription|account)\b/i,
-  /\bfree (?:tier|plan|trial|account)\b/i,
-  /\bpro (?:plan|tier|account|upgrade)\b/i,
 
-  // Authorship / operators
-  /\bwho (?:made|built|created|runs|manages|operates|is behind) (?:this|it|opencouncil)\b/i,
-
-  // How the system works (closed question — no entity follows)
+  // How the system works
   /\bhow does (?:this(?: system| platform| tool| app)?|it|the system|the (?:chat|search|ai)) work\b/i,
   /\bhow (?:does|do) (?:the )?(?:search|retrieval|rag|ai|pipeline) work\b/i,
 
-  // Crawling / update frequency
+  // What towns / geographic coverage
+  /\bwhat towns (?:do you|does (?:opencouncil|it|the system)) (?:cover|have|support|index)\b/i,
+  /\bwhich towns (?:do you|does (?:opencouncil|it|the system)) (?:cover|have|support|index)\b/i,
+
+  // Data / document coverage (guarded: "what documents do you have on [town]" is suppressed)
+  /\bwhat (?:data|sources?|documents?|records?) (?:do|does) you? have\b/i,
+  /\bwhat (?:data|sources?|documents?|records?) (?:is|are) (?:available|indexed|in the (?:system|database))\b/i,
+
+  // "What can you do / tell me" — guarded so research questions aren't triggered
+  /\bwhat can you (?:do|tell me)\b(?!\s+about\s)/i,
+
+  // Crawling / data freshness
   /\bhow (?:often|frequently) (?:do you|does (?:opencouncil|it|the system)) (?:crawl|update|refresh|check)\b/i,
 
   // "About" the platform
@@ -70,9 +94,8 @@ const PLATFORM_PATTERNS: RegExp[] = [
 
   // Contact
   /\bcontact (?:you|support|opencouncil|the team|someone)\b/i,
-  /\binfo@/i,
 
-  // "What is this" — safe because it refers to "this" (the current tool)
+  // "What is this" — guarded against "what is this document" etc.
   /\bwhat (?:is|are) (?:this|opencouncil)\b/i,
 ];
 
@@ -80,29 +103,29 @@ const PLATFORM_PATTERNS: RegExp[] = [
  * Returns true when the question appears to be asking about the OPENCouncil
  * platform itself rather than a specific municipal topic.
  *
- * The check runs before the RAG pipeline — no LLM call needed.
+ * Two-tier detection:
+ *  1. ALWAYS_TRIGGER_PATTERNS — unambiguous product vocabulary; inject immediately.
+ *  2. TOWN_GUARDED_PATTERNS — if the question also names a Carroll County town,
+ *     suppress injection so the RAG pipeline handles the research question alone.
  *
- * False-positive prevention:
- *  - Patterns are tight and platform-specific.
- *  - If the question also mentions a Carroll County town name AND the matched
- *    pattern is one of the weaker "topic-agnostic" patterns, the town guard
- *    suppresses the result so the RAG pipeline handles it alone.
+ * No LLM call needed — runs before the pipeline at zero cost.
  */
 export function detectPlatformQuery(question: string): boolean {
-  for (const pattern of PLATFORM_PATTERNS) {
+  // Tier 1: always-safe patterns — no town-name check needed
+  for (const pattern of ALWAYS_TRIGGER_PATTERNS) {
+    if (pattern.test(question)) return true;
+  }
+
+  // Tier 2: town-guarded patterns
+  const hasTown = containsTownName(question);
+  for (const pattern of TOWN_GUARDED_PATTERNS) {
     if (pattern.test(question)) {
-      // "opencouncil" and contact patterns are unambiguous — always inject.
-      const alwaysTrigger = /\bopencouncil\b|info@|subscri(?:ption|be)|\bwho (?:made|built|created|runs|manages|operates|is behind)/i;
-      if (alwaysTrigger.test(question)) return true;
-
-      // For other patterns: suppress if the question also names a local town,
-      // because the user is probably asking about that town's process,
-      // not the platform architecture.
-      if (containsTownName(question)) return false;
-
-      return true;
+      // Suppress if the question also names a local town — the RAG pipeline
+      // should handle that as a research question.
+      return !hasTown;
     }
   }
+
   return false;
 }
 
