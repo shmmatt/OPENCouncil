@@ -147,10 +147,13 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
                 .select({
                   ocrText: schema.fileBlobs.ocrText,
                   previewText: schema.fileBlobs.previewText,
+                  board: schema.logicalDocuments.board,
                 })
                 .from(schema.documentVersions)
                 .leftJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+                .leftJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
                 .where(eq(schema.documentVersions.id, versionId));
+              if (docRow?.board) contextParts.splice(1, 0, `Board: ${docRow.board}`);
               const rawText = docRow?.ocrText || docRow?.previewText || null;
               if (rawText) {
                 contextParts.push(`\nSource document excerpt:\n${rawText.substring(0, 3000)}`);

@@ -724,7 +724,7 @@ export function registerChatV2Routes(app: Express): void {
             if (payloadSummary) contextParts.push(`\nSummary:\n${payloadSummary}`);
             if (payloadSections) contextParts.push(`Topics covered:\n${payloadSections}`);
 
-            // Fetch source document OCR text for rich grounding
+            // Fetch source document board + OCR text for rich grounding
             const versionId = feedItem.automationSourceVersionId;
             if (versionId) {
               try {
@@ -733,10 +733,13 @@ export function registerChatV2Routes(app: Express): void {
                   .select({
                     ocrText: schema.fileBlobs.ocrText,
                     previewText: schema.fileBlobs.previewText,
+                    board: schema.logicalDocuments.board,
                   })
                   .from(schema.documentVersions)
                   .leftJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+                  .leftJoin(schema.logicalDocuments, eq(schema.documentVersions.documentId, schema.logicalDocuments.id))
                   .where(eq(schema.documentVersions.id, versionId));
+                if (docRow?.board) contextParts.splice(1, 0, `Board: ${docRow.board}`);
                 const rawText = docRow?.ocrText || docRow?.previewText || null;
                 if (rawText) {
                   contextParts.push(`\nSource document excerpt:\n${rawText.substring(0, 3000)}`);
