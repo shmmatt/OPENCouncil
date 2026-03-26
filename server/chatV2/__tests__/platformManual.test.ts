@@ -157,6 +157,12 @@ describe("detectPlatformQuery — TRUE positives (should inject manual)", () => 
     it("detects 'about yourself'", () => {
       expect(detectPlatformQuery("Tell me about yourself")).toBe(true);
     });
+    it("detects 'what is this system'", () => {
+      expect(detectPlatformQuery("What is this system?")).toBe(true);
+    });
+    it("detects 'what is this tool'", () => {
+      expect(detectPlatformQuery("What is this tool?")).toBe(true);
+    });
   });
 
   describe("contact", () => {
@@ -232,6 +238,36 @@ describe("detectPlatformQuery — FALSE negatives (must not inject manual)", () 
     });
   });
 
+  describe("document follow-up questions must NOT trigger (over-trigger guard)", () => {
+    it("does not trigger for 'What is this document?'", () => {
+      expect(detectPlatformQuery("What is this document?")).toBe(false);
+    });
+    it("does not trigger for 'What is this ordinance?'", () => {
+      expect(detectPlatformQuery("What is this ordinance?")).toBe(false);
+    });
+    it("does not trigger for 'What is this article?'", () => {
+      expect(detectPlatformQuery("What is this article?")).toBe(false);
+    });
+    it("does not trigger for 'What is this warrant article?'", () => {
+      expect(detectPlatformQuery("What is this warrant article?")).toBe(false);
+    });
+    it("does not trigger for 'What is this bylaw?'", () => {
+      expect(detectPlatformQuery("What is this bylaw?")).toBe(false);
+    });
+    it("does not trigger for 'How does this bylaw work?'", () => {
+      expect(detectPlatformQuery("How does this bylaw work?")).toBe(false);
+    });
+    it("does not trigger for 'How does this ordinance apply?'", () => {
+      expect(detectPlatformQuery("How does this ordinance apply?")).toBe(false);
+    });
+    it("does not trigger for 'How does this zoning rule work?'", () => {
+      expect(detectPlatformQuery("How does this zoning rule work?")).toBe(false);
+    });
+    it("does not trigger for 'What are these articles about?'", () => {
+      expect(detectPlatformQuery("What are these articles about?")).toBe(false);
+    });
+  });
+
   describe("generic questions with no platform signal", () => {
     it("does not trigger for a generic budget question", () => {
       expect(detectPlatformQuery(
@@ -252,6 +288,9 @@ describe("detectPlatformQuery — FALSE negatives (must not inject manual)", () 
       expect(detectPlatformQuery(
         "What is the fee for a building permit in Conway?"
       )).toBe(false);
+    });
+    it("does not trigger for 'What is this?' (bare, no platform noun)", () => {
+      expect(detectPlatformQuery("What is this?")).toBe(false);
     });
   });
 });

@@ -95,8 +95,9 @@ const TOWN_GUARDED_PATTERNS: RegExp[] = [
   // Contact
   /\bcontact (?:you|support|opencouncil|the team|someone)\b/i,
 
-  // "What is this" — guarded against "what is this document" etc.
-  /\bwhat (?:is|are) (?:this|opencouncil)\b/i,
+  // "What is this [platform noun]" — requires explicit platform term, not bare "this"
+  // Bare "What is this?" would fire on document follow-ups like "What is this ordinance?"
+  /\bwhat (?:is|are) (?:this (?:system|platform|tool|app|website|service)|opencouncil)\b/i,
 ];
 
 /**
