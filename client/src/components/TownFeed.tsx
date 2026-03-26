@@ -361,7 +361,7 @@ function HeroFeedCard({
             onClick={() => onQuestionClick(firstQuestion, item.id)}
             data-testid={`hero-cta-${item.id}`}
           >
-            Read Full Directive
+            Ask about this.
           </Button>
           <span className="text-white/50 text-xs flex items-center gap-1">
             <Clock className="w-3 h-3" />
@@ -436,7 +436,7 @@ function BentoSideCard({
           onClick={() => onQuestionClick(firstQuestion, item.id)}
           data-testid={`bento-side-cta-${item.id}`}
         >
-          Ask a Question
+          Ask about this.
         </Button>
         {item.sourceFileBlobId && (
           <a
@@ -497,7 +497,7 @@ function SmallNewsCard({
           onClick={() => onQuestionClick(firstQuestion, item.id)}
           data-testid={`small-card-link-${item.id}`}
         >
-          Ask about this
+          Ask about this.
         </button>
         <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
           <Clock className="w-3 h-3" />
