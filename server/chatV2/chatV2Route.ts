@@ -700,11 +700,53 @@ export function registerChatV2Routes(app: Express): void {
         try {
           const { getTownFeedItemById } = await import("../storage/townFeed");
           const feedItem = await getTownFeedItemById((session as any).feedItemId);
-          if (feedItem?.status === "published" && feedItem?.generatedPayload) {
-            const payload = typeof feedItem.generatedPayload === "string"
-              ? JSON.parse(feedItem.generatedPayload as string)
-              : feedItem.generatedPayload;
-            templateContext = `This chat was launched from a town feed summary for ${feedItem.town}: "${feedItem.title}".\n\nSummary:\n${(payload as any).summary || feedItem.summary}\n\nTopics covered:\n${((payload as any).sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+          if (feedItem) {
+            const contextParts: string[] = [];
+
+            // Header line always present
+            const meetingDateStr = feedItem.meetingDate
+              ? new Date(feedItem.meetingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+              : null;
+            contextParts.push(`This chat was launched from a town feed item for ${feedItem.town}.`);
+            if (meetingDateStr) contextParts.push(`Meeting date: ${meetingDateStr}`);
+            contextParts.push(`Title: "${feedItem.title}"`);
+
+            // AI-generated payload (summary + sections) when available
+            const payload = feedItem.generatedPayload
+              ? (typeof feedItem.generatedPayload === "string"
+                  ? JSON.parse(feedItem.generatedPayload as string)
+                  : feedItem.generatedPayload)
+              : null;
+            const payloadSummary = (payload as any)?.summary || feedItem.summary || "";
+            const payloadSections = ((payload as any)?.sections || [])
+              .map((s: any) => `- ${s.title}: ${s.description || ""}`)
+              .join("\n");
+            if (payloadSummary) contextParts.push(`\nSummary:\n${payloadSummary}`);
+            if (payloadSections) contextParts.push(`Topics covered:\n${payloadSections}`);
+
+            // Fetch source document OCR text for rich grounding
+            const versionId = feedItem.automationSourceVersionId;
+            if (versionId) {
+              try {
+                const { db, schema, eq } = await import("../storage/db");
+                const [docRow] = await db
+                  .select({
+                    ocrText: schema.fileBlobs.ocrText,
+                    previewText: schema.fileBlobs.previewText,
+                  })
+                  .from(schema.documentVersions)
+                  .leftJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+                  .where(eq(schema.documentVersions.id, versionId));
+                const rawText = docRow?.ocrText || docRow?.previewText || null;
+                if (rawText) {
+                  contextParts.push(`\nSource document excerpt:\n${rawText.substring(0, 3000)}`);
+                }
+              } catch (ocrErr) {
+                logDebug("feed_context_ocr_error", { ...logCtx, stage: "ocr_lookup", error: String(ocrErr) });
+              }
+            }
+
+            templateContext = contextParts.join("\n");
           }
         } catch (err) {
           logDebug("feed_context_error", { ...logCtx, stage: "feed_lookup", error: String(err) });

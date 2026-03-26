@@ -39,6 +39,17 @@ router.post("/sessions", sessionCreationLimiter, async (req, res) => {
     if (!actor || (!actor.userId && !actor.anonId)) {
       return res.status(401).json({ message: "Authentication required to create chat sessions" });
     }
+
+    // When launched from a feed item, inherit its town so the AI searches the right documents
+    let townPreference: string | undefined;
+    if (feedItemId) {
+      try {
+        const feedItem = await getTownFeedItemById(feedItemId);
+        if (feedItem?.town) townPreference = feedItem.town;
+      } catch {
+        // Non-fatal — session still created, town resolution will fall through to actor default
+      }
+    }
     
     const session = await storage.createChatSession({
       title: title || "New conversation",
@@ -47,6 +58,7 @@ router.post("/sessions", sessionCreationLimiter, async (req, res) => {
       templateId: templateId || undefined,
       feedItemId: feedItemId || undefined,
       documentVersionId: documentVersionId || undefined,
+      townPreference: townPreference || undefined,
     });
 
     res.json(session);
@@ -105,13 +117,50 @@ router.post("/sessions/:id/messages", chatMessageLimiter, async (req, res) => {
     if ((session as any).feedItemId) {
       try {
         const feedItem = await getTownFeedItemById((session as any).feedItemId);
-        if (feedItem?.status !== "published") {
-          console.warn("Feed item context skipped: not published", (session as any).feedItemId);
-        } else if (feedItem?.generatedPayload) {
-          const payload = typeof feedItem.generatedPayload === "string"
-            ? JSON.parse(feedItem.generatedPayload as string)
-            : feedItem.generatedPayload;
-          templateContext = `This chat was launched from a town feed summary for ${feedItem.town}: "${feedItem.title}".\n\nSummary:\n${payload.summary || feedItem.summary}\n\nTopics covered:\n${(payload.sections || []).map((s: any) => `- ${s.title}: ${s.description || ""}`).join("\n")}`;
+        if (feedItem) {
+          const contextParts: string[] = [];
+
+          const meetingDateStr = feedItem.meetingDate
+            ? new Date(feedItem.meetingDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+            : null;
+          contextParts.push(`This chat was launched from a town feed item for ${feedItem.town}.`);
+          if (meetingDateStr) contextParts.push(`Meeting date: ${meetingDateStr}`);
+          contextParts.push(`Title: "${feedItem.title}"`);
+
+          const payload = feedItem.generatedPayload
+            ? (typeof feedItem.generatedPayload === "string"
+                ? JSON.parse(feedItem.generatedPayload as string)
+                : feedItem.generatedPayload)
+            : null;
+          const payloadSummary = (payload as any)?.summary || feedItem.summary || "";
+          const payloadSections = ((payload as any)?.sections || [])
+            .map((s: any) => `- ${s.title}: ${s.description || ""}`)
+            .join("\n");
+          if (payloadSummary) contextParts.push(`\nSummary:\n${payloadSummary}`);
+          if (payloadSections) contextParts.push(`Topics covered:\n${payloadSections}`);
+
+          const versionId = feedItem.automationSourceVersionId;
+          if (versionId) {
+            try {
+              const { db, schema, eq } = await import("../storage/db");
+              const [docRow] = await db
+                .select({
+                  ocrText: schema.fileBlobs.ocrText,
+                  previewText: schema.fileBlobs.previewText,
+                })
+                .from(schema.documentVersions)
+                .leftJoin(schema.fileBlobs, eq(schema.documentVersions.fileBlobId, schema.fileBlobs.id))
+                .where(eq(schema.documentVersions.id, versionId));
+              const rawText = docRow?.ocrText || docRow?.previewText || null;
+              if (rawText) {
+                contextParts.push(`\nSource document excerpt:\n${rawText.substring(0, 3000)}`);
+              }
+            } catch (ocrErr) {
+              console.error("Feed item OCR text lookup error:", ocrErr);
+            }
+          }
+
+          templateContext = contextParts.join("\n");
         }
       } catch (err) {
         console.error("Feed item context lookup error:", err);
