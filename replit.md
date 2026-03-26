@@ -88,6 +88,14 @@ The public-facing UI uses a "Civic Ledger" visual identity:
 - **Message bubbles**: User messages use sky-tinted background (`bg-sky-50`); assistant messages use `bg-card`. Timestamps show role labels: "RESIDENT • HH:MM" / "CIVIC LEDGER • HH:MM".
 - **Admin pages**: Completely unmodified — no Civic Ledger shell or color tokens applied.
 
+### Board Extraction Architecture (Task #31)
+
+Board identification uses a **header-only extraction** approach: `suggestMetadataFromPreview` sends only the first 1,000 characters of document text to the LLM. This is intentional — board names that appear in body text (ex-officio member listings, appeal notices like "The Selectmen have a right to appeal...", or references to other boards' meetings) are not reliable signals. The document letterhead/title in the first 1–3 lines is the only authoritative source.
+
+- **Fast path** (`canSkipLlm`): Documents with high-confidence heuristic results (board detected in header regex, meeting date found, `isMinutes=true`) skip the LLM entirely — no API cost.
+- **LLM path**: Only called when heuristics are incomplete. Uses `gemini-2.5-flash` with the 1,000-char prompt.
+- **Backfill script**: `crawler/scripts/reboard-all-minutes.ts` — re-runs header extraction on all historical `meeting_minutes` documents. Supports `--dry-run`, `--town=X`, `--limit=N`. Run after any future prompt changes to apply corrections to existing records. For docs with `meetingDate >= 2026-02-01`, the script deletes stale feed items (awaited) before calling `enrichDocumentMetadata` to regenerate — preventing the race condition where enrichment skips an item it thinks already exists.
+
 ## External Dependencies
 
 *   **Google Gemini API**: For core AI functionalities.

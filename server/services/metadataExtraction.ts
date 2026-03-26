@@ -444,13 +444,8 @@ export async function suggestMetadataFromPreview(
     hintsSection.push(`HINT: Possible meeting date detected: "${minutesHints.possibleDateText}"`);
   }
   
-  const prompt = `You are extracting canonical metadata for New Hampshire municipal documents.
-
-You are given:
-- filename
-- preview_text (first part of the document)
-- hints.possibleTown (town name heuristically detected from the text, if any)
-- hints.defaultTown (town chosen by the admin during upload, if any)
+  const prompt = `You are an expert in New Hampshire municipal government documents.
+Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a municipal document.
 
 Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
 
@@ -459,7 +454,7 @@ Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
   "town": "...",
   "board": "...",
   "year": "...",
-  "notes": "...",
+  "notes": "",
   "isMinutes": true/false,
   "meetingDate": "YYYY-MM-DD" or null,
   "meetingType": "regular" | "special" | "work_session" or null,
@@ -469,38 +464,31 @@ Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
 category MUST be one of:
 ${categoryList}
 
-**CRITICAL RULES FOR town:**
-- If the document text contains phrases like "TOWN OF OSSIPEE", "Town of Ossipee, NH", "Ossipee, New Hampshire", you MUST set town to exactly "Ossipee" (just the town name, no "Town of" prefix).
-- If hints.possibleTown is present (from heuristic detection), you MUST use that unless the document text clearly indicates a DIFFERENT town.
-- If hints.defaultTown is present (from admin), and the text does not clearly indicate a different town name, you MUST set town to hints.defaultTown.
-- Only use "statewide" if the document is clearly statewide (e.g., issued by the State of New Hampshire, NH RSA, state agency) and no specific town is indicated.
-- Do NOT leave town empty if hints.defaultTown exists and there is no conflicting town name in the text.
-- For NH towns, extract ONLY the town name (e.g., "Ossipee", "Conway", "Madison") - never include "Town of".
+**BOARD — read only the document's main title or letterhead (first 1-3 lines):**
+- The authoritative board name is whatever appears in the document title or letterhead at the very top.
+- Choose from this standard list if it matches the intent: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Library Board of Trustees", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission".
+- If the board is unlisted but clearly named, output that name cleanly.
+- IGNORE any other board names mentioned in the text — ex-officio members, appeal notices ("The Selectmen have a right to appeal..."), or references to other boards' meetings do NOT identify this document's board.
+- Do NOT return "Unknown", "Needs Review", or null if any board name appears in the title area.
 
-**CRITICAL RULES FOR board:**
-- Scan the FULL document header, letterhead, and first paragraph to identify the board name.
-- Common NH board names: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Board of Education", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission", "Library Board of Trustees".
-- If the document text contains ANY reference to a board, committee, or commission name, you MUST use that name.
-- NEVER return "Unknown" for board — if you cannot determine the exact name, make the best inference possible from context clues in the document header or filename. Return null only as an absolute last resort when no evidence exists.
-- Do NOT return "Needs Review" — that is an internal placeholder, never a valid board name.
+**MEETING DATE — identify the date the meeting actually took place:**
+- Look for the date immediately following the board title or "Meeting Minutes" heading.
+- A "Minutes Approved" date or "Approved:" date near the top is NOT the meeting date — it is the date a later meeting approved these minutes. Ignore it.
+- Set rawDateText to the original date string you found (e.g., "March 3, 2026").
+- meetingType: "regular", "special", or "work_session" based on any label in the header.
 
-Other rules:
-- Keep notes very short (under 100 characters)
-- Year should be a 4-digit year if detectable, otherwise ""
+**TOWN — extract from the document title or letterhead:**
+- Output only the town name (e.g., "Ossipee", "Conway") — never include "Town of".
+- If hints provide a town and the header does not contradict it, use the hint.
 
-SPECIAL RULES FOR MEETING MINUTES:
-- If this document appears to be official meeting minutes, set isMinutes: true AND category: "meeting_minutes"
-- Meeting minutes typically have: "Meeting Minutes" in header, "Call to Order", "Roll Call", "Members Present", dates in header
-- For minutes, extract the EXACT meeting date as meetingDate in ISO format (YYYY-MM-DD)
-- Set rawDateText to the original date text you found (e.g., "March 5, 2024")
-- meetingType: "regular" for regular meetings, "special" for special meetings, "work_session" for work sessions
+**isMinutes:** true if the header contains "Meeting Minutes", "Minutes of", "Call to Order", or similar meeting records language.
 
 ${hintsSection.join("\n")}
 
 Filename: ${filename}
 
-Document Preview Text:
-${previewText.slice(0, 10000)}`;
+Document Header Text (first ~1000 characters):
+${previewText.slice(0, 1000)}`;
 
   try {
     const response = await ai.models.generateContent({
