@@ -94,7 +94,7 @@ Board identification uses a **header-only extraction** approach: `suggestMetadat
 
 - **Fast path** (`canSkipLlm`): Documents with high-confidence heuristic results (board detected in header regex, meeting date found, `isMinutes=true`) skip the LLM entirely — no API cost.
 - **LLM path**: Only called when heuristics are incomplete. Uses `gemini-2.5-flash` with the 1,000-char prompt.
-- **Backfill script**: `crawler/scripts/reboard-all-minutes.ts` — re-runs header extraction on all historical `meeting_minutes` documents. Supports `--dry-run`, `--town=X`, `--limit=N`. Run after any future prompt changes to apply corrections to existing records. For docs with `meetingDate >= 2026-02-01`, the script deletes stale feed items (awaited) before calling `enrichDocumentMetadata` to regenerate — preventing the race condition where enrichment skips an item it thinks already exists.
+- **Backfill script**: `crawler/scripts/reboard-all-minutes.ts` — re-runs header extraction on all historical `meeting_minutes` documents using rate-limited sequential processing (~5 docs/sec). Supports `--dry-run`, `--town=X`, `--limit=N`. Run after any future prompt changes to apply corrections to existing records. For docs with `meetingDate >= 2026-02-01`, the script awaits deletion of stale feed items before calling `enrichDocumentMetadata` to regenerate — preventing the race condition where enrichment skips an item it thinks already exists.
 
 ## External Dependencies
 
