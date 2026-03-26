@@ -84,11 +84,13 @@ export async function getPublishedFeedItems(town: string): Promise<TownFeedItem[
     .orderBy(desc(schema.townFeedItems.updatedAt));
 }
 
+export type FeedItemWithSource = TownFeedItem & { sourceFileBlobId?: string | null };
+
 export async function getPublishedFeedItemsPaginated(
   towns: string[],
   cursor?: string,
   limit: number = 10
-): Promise<{ items: TownFeedItem[]; hasMore: boolean; nextCursor: string | null }> {
+): Promise<{ items: FeedItemWithSource[]; hasMore: boolean; nextCursor: string | null }> {
   const conditions = [
     eq(schema.townFeedItems.status, "published"),
     sql`${schema.townFeedItems.publishedAt} IS NOT NULL`,
@@ -106,23 +108,49 @@ export async function getPublishedFeedItemsPaginated(
     );
   }
 
-  const items = await db
+  const rawItems = await db
     .select()
     .from(schema.townFeedItems)
     .where(and(...conditions))
     .orderBy(desc(schema.townFeedItems.publishedAt), desc(schema.townFeedItems.id))
     .limit(limit + 1);
 
-  const hasMore = items.length > limit;
-  if (hasMore) items.pop();
+  const hasMore = rawItems.length > limit;
+  if (hasMore) rawItems.pop();
 
   let nextCursor: string | null = null;
-  if (hasMore && items.length > 0) {
-    const lastItem = items[items.length - 1];
+  if (hasMore && rawItems.length > 0) {
+    const lastItem = rawItems[rawItems.length - 1];
     if (lastItem.publishedAt) {
       nextCursor = `${lastItem.publishedAt.toISOString()}|${lastItem.id}`;
     }
   }
+
+  // Enrich items with sourceFileBlobId via a single batch join
+  const versionIds = rawItems
+    .map((i) => i.automationSourceVersionId)
+    .filter((id): id is string => !!id);
+
+  const versionToBlob = new Map<string, string>();
+  if (versionIds.length > 0) {
+    const rows = await db
+      .select({
+        versionId: schema.documentVersions.id,
+        fileBlobId: schema.documentVersions.fileBlobId,
+      })
+      .from(schema.documentVersions)
+      .where(inArray(schema.documentVersions.id, versionIds));
+    for (const row of rows) {
+      if (row.fileBlobId) versionToBlob.set(row.versionId, row.fileBlobId);
+    }
+  }
+
+  const items: FeedItemWithSource[] = rawItems.map((item) => ({
+    ...item,
+    sourceFileBlobId: item.automationSourceVersionId
+      ? (versionToBlob.get(item.automationSourceVersionId) ?? null)
+      : null,
+  }));
 
   return { items, hasMore, nextCursor };
 }

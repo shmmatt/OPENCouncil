@@ -17,6 +17,7 @@ import {
   ChevronUp,
   Sparkles,
   Check,
+  FileText,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -25,6 +26,7 @@ import type { TownFeedItem, TownFeedPayload, ChatTemplate } from "@shared/schema
 
 interface FeedItemWithUpvote extends TownFeedItem {
   hasUpvoted: boolean;
+  sourceFileBlobId?: string | null;
 }
 
 interface FeedPage {
@@ -241,7 +243,7 @@ function PostCard({
       </CardContent>
 
       <CardFooter className="flex-col items-start gap-3">
-        <div className="flex items-center gap-3 w-full">
+        <div className="flex items-center gap-3 w-full flex-wrap">
           <Button
             variant={item.hasUpvoted ? "default" : "outline"}
             size="sm"
@@ -255,6 +257,18 @@ function PostCard({
           </Button>
           {!user && (
             <span className="text-xs text-muted-foreground">Sign in to vote</span>
+          )}
+          {item.sourceFileBlobId && (
+            <a
+              href={`/api/documents/view/${item.sourceFileBlobId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto"
+              data-testid={`link-source-doc-${item.id}`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Source document
+            </a>
           )}
         </div>
 
@@ -353,6 +367,18 @@ function HeroFeedCard({
             <Clock className="w-3 h-3" />
             {formatRelativeTime(item.publishedAt)}
           </span>
+          {item.sourceFileBlobId && (
+            <a
+              href={`/api/documents/view/${item.sourceFileBlobId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-white/60 hover:text-white/90 transition-colors"
+              data-testid={`link-source-doc-hero-${item.id}`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Source document
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -402,7 +428,7 @@ function BentoSideCard({
           {plainSummary}
         </p>
       </CardContent>
-      <CardFooter className="flex-wrap gap-2">
+      <CardFooter className="flex-wrap gap-2 justify-between">
         <Button
           variant="outline"
           size="sm"
@@ -412,6 +438,18 @@ function BentoSideCard({
         >
           Ask a Question
         </Button>
+        {item.sourceFileBlobId && (
+          <a
+            href={`/api/documents/view/${item.sourceFileBlobId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            data-testid={`link-source-doc-bento-${item.id}`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Source document
+          </a>
+        )}
       </CardFooter>
     </Card>
   );
@@ -465,6 +503,18 @@ function SmallNewsCard({
           <Clock className="w-3 h-3" />
           {formatRelativeTime(item.publishedAt)}
         </span>
+        {item.sourceFileBlobId && (
+          <a
+            href={`/api/documents/view/${item.sourceFileBlobId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+            data-testid={`link-source-doc-small-${item.id}`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Source document
+          </a>
+        )}
       </CardFooter>
     </Card>
   );
