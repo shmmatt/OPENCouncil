@@ -1,0 +1,26 @@
+This is a solid, pragmatic plan for solving the "meta-query" problem without burning extra API tokens on a classification step. As a senior engineer reviewing this, I see a clear path to implementation, but there are several technical nuances and "gotchas" regarding regex fragility and context management that need to be addressed to prevent a degraded user experience.
+Here is my technical critique of Plan #34.
+## 1. Design Efficiency: The "Static vs. Dynamic" Trade-off
+The Agent’s decision to use a zero-cost keyword check is the correct move for a project scaling to 300k+ documents. Using an LLM to decide if a user is asking about the LLM is an unnecessary recursive cost.
+ * Strength: By placing the detection logic in a centralized platformManual.ts, the Agent is following DRY (Don't Repeat Yourself) principles, allowing both V1 and V2 routes to share the same "brain".
+ * The Pitfall: The plan ignores Context Window Bloat. The manual is comprehensive—covering mission, technical RAG limits, and pricing. Injecting this entire block alongside the standard RAG results for every "about" query could push the prompt toward the "Lost in the Middle" phenomenon, where the model ignores the middle of the prompt because the beginning (Manual) and end (Specific Question) are too far apart.
+## 2. Functionality & Bug Prevention: Regex Fragility
+The proposed detection patterns are a significant source of potential False Positives.
+ * The "Whole Phrase" Problem: The pattern "what can you (do|tell me)" is dangerous. A user asking "What can you tell me about the Ossipee zoning board?" is a research query, not a platform query.
+ * Refinement Needed: The detectPlatformQuery function must use Negative Lookahead or strict boundary checks.
+   * Bad: /\bwhat towns\b/ (Might trigger on "What towns are near Conway?").
+   * Better: The logic should check for the absence of a specific entity (like a town name) if a platform keyword is present. If the query contains a known town name from your database, the RAG pipeline should likely take precedence over the Platform Manual.
+## 3. Critique of the "Manual" Content
+The content of the manual is technically excellent, especially Section 7: Limitations & Power User Tips.
+ * Functionality: Explaining the "Too Broad" trap directly to the model is a brilliant way to handle the RAG bottleneck we identified earlier. It allows the model to "self-correct" and tell the user, "This is a broad topic; I’ve pulled what I can, but try asking about a specific year for better results".
+ * Critique: The manual includes Contact Info (info@opencouncil.co). Ensure the synthesizer prompt explicitly tells the AI to provide this email only when the user asks how to get in touch. We don't want the bot signing off every research answer with the support email.
+## 4. Technical Pitfalls: The "Worker Loop"
+The status report shows the worker container is in a restart loop.
+ * Pitfall: While the Agent claims this is "non-critical for chat," a flapping worker container can degrade host performance on a t3.medium due to CPU spikes during restart attempts.
+ * Action: Before deploying Plan #34, the Agent should fix the worker's entrypoint or environment variables to stabilize the instance's load.
+## Senior Engineer's Final Verdict
+The plan is Approved with the following Mandatory Refinements:
+ * Regex Boundaries: Ensure all patterns in platformManual.ts use ^ and $ or very strict word boundaries to avoid hijacking research queries.
+ * Priority Logic: In chatV2Route.ts, if the system detects a Town Name AND a Platform Signal, the Town (RAG) should take precedence, or both should be injected with a prompt instruction to "Prioritize the Town data".
+ * Manual Truncation: Consider splitting the manual. If the user asks about "quotas," only inject the "Quotas" section to save context space.
+Would you like me to rewrite the detectPlatformQuery function with these more robust regex patterns for the Agent to use?
