@@ -41,10 +41,12 @@ async function main() {
   console.log(`dry-run: ${DRY_RUN} | town: ${TOWN_FILTER || "all"} | limit: ${BATCH_LIMIT}`);
   console.log("");
 
-  // Query all meeting_minutes documents with their latest version + blob text
-  // We join to document_versions and file_blobs to get the preview text.
-  // Use DISTINCT ON (logical_document_id) to pick one version per doc
-  // (the one with the most recent meeting_date or highest id).
+  // Query all meeting_minutes logical documents with one version per doc.
+  // DISTINCT ON (ld.id) ORDER BY ld.id, dv.id DESC picks the latest version.
+  // LEFT() on OCR text ensures we fetch only the first 1,000 chars from DB —
+  // avoids pulling full OCR bodies (which can be 100k+ chars) over the wire.
+  // is_minutes predicate is intentionally omitted: category='meeting_minutes'
+  // is the authoritative signal; legacy docs may be miscategorised on is_minutes.
   const rows = await db.execute(sql`
     SELECT DISTINCT ON (ld.id)
       ld.id          AS "logDocId",
@@ -54,12 +56,11 @@ async function main() {
       dv.id          AS "versionId",
       dv.meeting_date AS "meetingDate",
       COALESCE(fb.original_filename, ld.canonical_title) AS "filename",
-      COALESCE(fb.ocr_text, fb.preview_text, '') AS "rawText"
+      LEFT(COALESCE(fb.ocr_text, fb.preview_text, ''), 1000) AS "rawText"
     FROM logical_documents ld
     JOIN document_versions dv ON dv.document_id = ld.id
     JOIN file_blobs fb ON fb.id = dv.file_blob_id
     WHERE ld.category = 'meeting_minutes'
-      AND dv.is_minutes = true
       ${TOWN_FILTER ? sql`AND LOWER(ld.town) = ${TOWN_FILTER}` : sql``}
     ORDER BY ld.id, dv.id DESC
     LIMIT ${BATCH_LIMIT}
