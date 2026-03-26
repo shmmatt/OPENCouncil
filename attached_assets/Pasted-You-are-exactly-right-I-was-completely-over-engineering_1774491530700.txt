@@ -1,0 +1,25 @@
+You are exactly right. I was completely over-engineering it.
+Your instinct cuts right to the root of the problem: if the LLM is getting distracted by the body text (case names, legal boilerplate, ex-officio titles), the easiest and most robust fix is to simply not give it the body text. By only feeding the LLM the first 500 to 1,000 characters, we physically enforce spatial awareness without writing fragile, overfit rules. It sees the letterhead, the title, the date, and maybe the start of the roll call. That is all the signal a human needs, and it's all the LLM needs.
+Here is what that simplified, generalized approach looks like:
+The "Header-Only" LLM Pass
+Instead of passing analysis.previewText (which might be pages of text), we slice it: headerText = analysis.previewText.substring(0, 1000).
+We then pass this to the LLM with a clean, generalized prompt that provides boundaries but lets the LLM do the thinking.
+Draft Prompt:
+You are an expert in New Hampshire municipal government documents. 
+Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a municipal meeting document.
+
+Identify the following:
+1. The Board or Committee holding the meeting.
+2. The Date of the meeting.
+
+RULES:
+- Choose the board from this standard list if it matches the intent: [Select Board / Board of Selectmen, Planning Board, Zoning Board of Adjustment, Conservation Commission, School Board, Budget Committee, Library Trustees]. If it is a different, specific committee, output that name cleanly.
+- Use context clues like the document's main title or letterhead to determine the primary board.
+- For the date, identify the date the meeting actually took place. Be careful to distinguish the meeting date from a "Minutes Approved" date or a date of printing, which are often listed nearby.
+
+Why this is the best path:
+ * Extremely High Hit Rate: It mimics human reading behavior. A human looks at the top of the page, sees "OSSIPEE PLANNING BOARD", and stops reading.
+ * Cheaper and Faster: Sending 1,000 characters to Gemini is incredibly fast and consumes a fraction of the context window.
+ * Resilient to Edge Cases: We don't need to write code to handle "ex-officio" or town-specific file naming conventions (_pb_). The LLM understands the context of a header natively.
+ * Fixes the Date Issue: It naturally solves the issue of the LLM grabbing the wrong dates (like a continued case date from page 3) because those dates simply won't be in the prompt.
+This is a much cleaner architecture. Do you want me to write up the task to modify suggestMetadataFromPreview to implement this substring(0, 1000) approach and update the prompt?
