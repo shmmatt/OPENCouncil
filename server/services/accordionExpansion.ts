@@ -9,8 +9,24 @@ const TRIGGER_WORDS = [
 const DOM_SETTLE_MS = 3000;
 
 const ACCORDION_SELECTORS = [
+  // HTML5 native — always correct
   'details:not([open]) summary',
+
+  // ARIA — framework-agnostic, works everywhere accessibility standards are followed
   '[aria-expanded="false"]',
+  '[role="tab"]:not([aria-expanded="true"])',
+  '[role="button"][aria-controls]',
+
+  // Bootstrap 4 / 5 data-attribute triggers (BS5 uses data-bs-*, BS4 uses data-*)
+  '[data-bs-toggle="collapse"]',
+  '[data-bs-toggle="tab"]',
+  '[data-toggle="collapse"]',
+  '[data-toggle="tab"]',
+
+  // Bootstrap 5 accordion button (added by the framework alongside aria-expanded)
+  '.accordion-button',
+
+  // Bootstrap 3 / legacy patterns kept for backward compatibility
   '.panel-heading',
   '.accordion-toggle',
   '.collapsed',

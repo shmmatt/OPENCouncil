@@ -1494,7 +1494,7 @@ async function executeCrawl(
           '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       });
       await accordionPage.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await accordionPage.waitForTimeout(1500);
+      await accordionPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
       const accordionUrls = await expandAccordionSections(accordionPage, baseHostname);
 
