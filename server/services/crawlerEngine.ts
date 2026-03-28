@@ -1478,7 +1478,7 @@ async function executeCrawl(
     addLog(progress, 'Incremental mode: Skipping Phases 2-3 (sitemap/known-path probing) — seed URLs already target high-value pages');
   }
 
-  if (!isResumeMode && !isIncrementalMode) {
+  if (!isResumeMode) {
     addLog(progress, '--- Phase 1.5: Accordion Expansion (Playwright) ---');
     let accordionBrowser = null;
     try {
