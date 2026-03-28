@@ -15,7 +15,7 @@ const ACCORDION_SELECTORS = [
   // ARIA — framework-agnostic, works everywhere accessibility standards are followed
   '[aria-expanded="false"]',
   '[role="tab"]:not([aria-expanded="true"])',
-  '[role="button"][aria-controls]',
+  '[role="button"][aria-controls]:not([aria-expanded="true"])',
 
   // Bootstrap 4 / 5 data-attribute triggers (BS5 uses data-bs-*, BS4 uses data-*)
   '[data-bs-toggle="collapse"]',
