@@ -137,7 +137,8 @@ export async function resolveRedirectViaAPI(
 
 export async function fetchDocumentViaAPI(
   url: string,
-  cookies?: string[]
+  cookies?: string[],
+  referer?: string
 ): Promise<ScrapingDocResult | null> {
   if (!isScrapingApiConfigured()) return null;
 
@@ -147,7 +148,8 @@ export async function fetchDocumentViaAPI(
       url,
     });
 
-    if (cookies && cookies.length > 0) {
+    const needsCustomHeaders = (cookies && cookies.length > 0) || !!referer;
+    if (needsCustomHeaders) {
       params.set('custom_headers', 'true');
     }
 
@@ -156,7 +158,14 @@ export async function fetchDocumentViaAPI(
 
     const headers: Record<string, string> = {
       'Accept': 'application/pdf,application/octet-stream,*/*',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     };
+    if (referer) {
+      headers['Referer'] = referer;
+      try {
+        headers['Origin'] = new URL(referer).origin;
+      } catch {}
+    }
     if (cookies && cookies.length > 0) {
       headers['Cookie'] = cookies.join('; ');
     }
@@ -178,8 +187,9 @@ export async function fetchDocumentViaAPI(
 
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
     return { buffer, contentType, size: buffer.length };
-  } catch (e: any) {
-    console.error(`[ScrapingAPI] Error fetching document ${url}: ${e.message}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[ScrapingAPI] Error fetching document ${url}: ${msg}`);
     return null;
   }
 }

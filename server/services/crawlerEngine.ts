@@ -2151,7 +2151,7 @@ async function executeCrawl(
           if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
             heavyLaneRequests++;
             addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
-            const apiDoc = await fetchDocumentViaAPI(docUrl);
+            const apiDoc = await fetchDocumentViaAPI(docUrl, undefined, docInfo.foundOnPage);
             if (apiDoc) return { ...apiDoc, isInterstitial: false };
           }
           throw e;
@@ -3309,7 +3309,7 @@ async function executeStateCrawl(
           if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
             heavyLaneRequests++;
             addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
-            const apiDoc = await fetchDocumentViaAPI(docUrl);
+            const apiDoc = await fetchDocumentViaAPI(docUrl, undefined, docInfo.foundOnPage);
             if (apiDoc) return { ...apiDoc, isInterstitial: false };
           }
           throw e;
@@ -4386,7 +4386,7 @@ async function executeSauCrawl(
           if (isHeavyLane(docUrl) && isScrapingApiConfigured() && (e.message?.includes('403') || e.message?.includes('429'))) {
             heavyLaneRequests++;
             addLog(progress, `HEAVY LANE fallback for doc: ${filename}`);
-            const apiDoc = await fetchDocumentViaAPI(docUrl);
+            const apiDoc = await fetchDocumentViaAPI(docUrl, undefined, docInfo.foundOnPage);
             if (apiDoc) return { ...apiDoc, isInterstitial: false };
           }
           throw e;
