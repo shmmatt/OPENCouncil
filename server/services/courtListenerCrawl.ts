@@ -72,7 +72,7 @@ export async function startCourtListenerCrawl(
     currentUrl: '',
     log: [],
     startedAt: new Date(),
-    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0, accordion: 0 },
   };
 
   const job: CrawlJob = { progress, abortController };

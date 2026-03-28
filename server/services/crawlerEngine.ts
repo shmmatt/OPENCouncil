@@ -17,6 +17,7 @@ import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDoc
 import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile, parseDriveFolderUrl } from './googleDriveClient';
 import { completeStateSourceRun } from '../storage/crawler';
 import { completeSauSourceRun } from '../storage/crawlerSau';
+import { expandAccordionSections } from './accordionExpansion';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -248,6 +249,7 @@ interface StrategyStats {
   external: number;
   iframe: number;
   googleDrive: number;
+  accordion: number;
 }
 
 interface FoundDocument {
@@ -1176,7 +1178,7 @@ export async function startCrawl(
     currentUrl: '',
     log: [],
     startedAt: new Date(),
-    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0, accordion: 0 },
   };
 
   const job: CrawlJob = { progress, abortController };
@@ -1473,6 +1475,36 @@ async function executeCrawl(
 
   if (isIncrementalMode) {
     addLog(progress, 'Incremental mode: Skipping Phases 2-3 (sitemap/known-path probing) — seed URLs already target high-value pages');
+  }
+
+  if (!isResumeMode && !isIncrementalMode) {
+    addLog(progress, '--- Phase 1.5: Accordion Expansion (Playwright) ---');
+    try {
+      const accordionUrls = await expandAccordionSections(baseUrl, baseHostname);
+      let accordionDocCount = 0;
+      let accordionNavCount = 0;
+      for (const href of accordionUrls) {
+        if (isDocumentUrl(href) && !docsSeen.has(href)) {
+          docsSeen.set(href, { foundOnPage: baseUrl, strategy: 'accordion' });
+          stats.accordion++;
+          accordionDocCount++;
+          progress.documentsDiscovered++;
+        } else if (isExternalDocumentLink(href) && !docsSeen.has(href)) {
+          docsSeen.set(href, { foundOnPage: baseUrl, strategy: 'accordion' });
+          externalDocs.push({ url: href, linkText: '', foundOnPage: baseUrl, strategy: 'accordion' });
+          stats.accordion++;
+          accordionDocCount++;
+          progress.documentsDiscovered++;
+        } else if (isNavigationLink(href, baseHostname) && !visited.has(href)) {
+          const prio = isHighPriorityUrl(href) ? 1 : 2;
+          queue.push({ url: href, depth: 1, priority: prio });
+          accordionNavCount++;
+        }
+      }
+      addLog(progress, `Accordion: ${accordionDocCount} docs, ${accordionNavCount} nav pages queued`);
+    } catch (e: any) {
+      addLog(progress, `Accordion pass error (non-fatal): ${e.message}`);
+    }
   }
 
   if (!isIncrementalMode) {
@@ -1889,7 +1921,7 @@ async function executeCrawl(
   } // end if (!isResumeMode)
 
   addLog(progress, `--- Phase 5: Download ${docsSeen.size} documents ---`);
-  addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}${stats.googleDrive ? ', GoogleDrive=' + stats.googleDrive : ''}`);
+  addLog(progress, `Strategy breakdown: Sitemap=${stats.sitemap}, KnownPaths=${stats.knownPaths}, BFS=${stats.breadthFirst}, External=${stats.external}, Iframe=${stats.iframe}${stats.googleDrive ? ', GoogleDrive=' + stats.googleDrive : ''}${stats.accordion ? ', Accordion=' + stats.accordion : ''}`);
 
   const docsToDownload = Array.from(docsSeen.entries());
   let downloadIndex = 0;
@@ -2688,7 +2720,7 @@ export async function startStateCrawl(
     currentUrl: '',
     log: [],
     startedAt: new Date(),
-    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0, accordion: 0 },
   };
 
   const job: CrawlJob = { progress, abortController };
@@ -3586,7 +3618,7 @@ export async function startSauCrawl(
     currentUrl: '',
     log: [],
     startedAt: new Date(),
-    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0 },
+    strategyStats: { sitemap: 0, knownPaths: 0, breadthFirst: 0, external: 0, iframe: 0, googleDrive: 0, accordion: 0 },
   };
 
   const job: CrawlJob = { progress, abortController };
