@@ -33,83 +33,91 @@ export function getSystemChromiumPath(): string | undefined {
   }
 }
 
-export interface AccordionResult {
-  urls: string[];
-  expandedCount: number;
-}
-
 /**
  * Given an already-loaded Playwright `page` (pointing at the town homepage),
  * finds collapsed accordion elements whose header text matches a
  * document-relevant trigger word, clicks each one, then returns all
- * same-hostname `<a href>` values that were NOT visible before expansion.
+ * same-hostname `<a href>` values that became visible after expansion.
  *
  * Visibility is checked via `offsetParent !== null` so that links already
- * present in the DOM but hidden by the collapsed state are correctly
- * included — not just links that are dynamically added to the DOM.
+ * present in the DOM but hidden by CSS (Bootstrap collapse pattern) are
+ * correctly captured — not only links dynamically inserted into the DOM.
  *
  * The browser lifecycle (open / close in `finally`) is the caller's
  * responsibility. This function only operates on the provided `page`.
+ *
+ * The entire body is wrapped in a top-level try/catch; any unexpected failure
+ * logs `[Accordion] pass failed: <message>` and returns an empty array so the
+ * caller's crawl is never aborted.
  */
 export async function expandAccordionSections(
   page: Page,
   baseHostname: string
-): Promise<AccordionResult> {
-  const visibleBefore = new Set<string>(
-    await page.$$eval('a[href]', (els) =>
+): Promise<string[]> {
+  try {
+    const visibleBefore = new Set<string>(
+      await page.$$eval('a[href]', (els) =>
+        (els as HTMLAnchorElement[])
+          .filter((a) => a.offsetParent !== null)
+          .map((a) => a.href)
+      )
+    );
+
+    const candidates = await page.$$(ACCORDION_SELECTORS);
+
+    let expandedCount = 0;
+    for (const candidate of candidates) {
+      let text = '';
+      try {
+        text = (await candidate.innerText()).trim();
+      } catch {
+        continue;
+      }
+      if (!containsTriggerWord(text)) continue;
+
+      try {
+        await candidate.click({ timeout: DOM_SETTLE_MS });
+        await page.waitForTimeout(DOM_SETTLE_MS);
+        expandedCount++;
+        console.log(`[Accordion] Expanded: "${text.substring(0, 80)}"`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[Accordion] timeout on "${text.substring(0, 80)}": ${msg}`);
+      }
+    }
+
+    if (expandedCount === 0) {
+      console.log('[Accordion] No matching accordion sections found');
+      return [];
+    }
+
+    const visibleAfter = await page.$$eval('a[href]', (els) =>
       (els as HTMLAnchorElement[])
         .filter((a) => a.offsetParent !== null)
         .map((a) => a.href)
-    )
-  );
+    );
 
-  const candidates = await page.$$(ACCORDION_SELECTORS);
-
-  let expandedCount = 0;
-  for (const candidate of candidates) {
-    let text = '';
-    try {
-      text = (await candidate.innerText()).trim();
-    } catch {
-      continue;
-    }
-    if (!containsTriggerWord(text)) continue;
-
-    try {
-      await candidate.click({ timeout: DOM_SETTLE_MS });
-      await page.waitForTimeout(DOM_SETTLE_MS);
-      expandedCount++;
-      console.log(`[Accordion] Expanded: "${text.substring(0, 80)}"`);
-    } catch (e: any) {
-      console.log(`[Accordion] timeout on "${text.substring(0, 80)}": ${e.message}`);
-    }
-  }
-
-  if (expandedCount === 0) {
-    console.log('[Accordion] No matching accordion sections found');
-    return { urls: [], expandedCount: 0 };
-  }
-
-  const visibleAfter = await page.$$eval('a[href]', (els) =>
-    (els as HTMLAnchorElement[])
-      .filter((a) => a.offsetParent !== null)
-      .map((a) => a.href)
-  );
-
-  const urls: string[] = [];
-  const seen = new Set<string>();
-  for (const href of visibleAfter) {
-    if (visibleBefore.has(href) || seen.has(href)) continue;
-    seen.add(href);
-    try {
-      const u = new URL(href);
-      if (u.hostname === baseHostname && u.protocol.startsWith('http')) {
-        urls.push(href);
+    const revealed: string[] = [];
+    const seen = new Set<string>();
+    for (const href of visibleAfter) {
+      if (visibleBefore.has(href) || seen.has(href)) continue;
+      seen.add(href);
+      try {
+        const u = new URL(href);
+        if (u.hostname === baseHostname && u.protocol.startsWith('http')) {
+          revealed.push(href);
+        }
+      } catch {
       }
-    } catch {
     }
-  }
 
-  console.log(`[Accordion] expanded ${expandedCount} section(s), revealed ${urls.length} new URL(s)`);
-  return { urls, expandedCount };
+    console.log(
+      `[Accordion] expanded ${expandedCount} section(s), revealed ${revealed.length} new URL(s)`
+    );
+    return revealed;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[Accordion] pass failed: ${msg}`);
+    return [];
+  }
 }

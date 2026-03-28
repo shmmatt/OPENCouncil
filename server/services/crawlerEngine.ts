@@ -1496,10 +1496,7 @@ async function executeCrawl(
       await accordionPage.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await accordionPage.waitForTimeout(1500);
 
-      const { urls: accordionUrls, expandedCount } = await expandAccordionSections(
-        accordionPage,
-        baseHostname
-      );
+      const accordionUrls = await expandAccordionSections(accordionPage, baseHostname);
 
       let accordionDocCount = 0;
       let accordionNavCount = 0;
@@ -1521,9 +1518,10 @@ async function executeCrawl(
           accordionNavCount++;
         }
       }
-      addLog(progress, `Accordion: expanded ${expandedCount} section(s), revealed ${accordionUrls.length} URL(s) → ${accordionDocCount} docs + ${accordionNavCount} nav pages queued`);
-    } catch (e: any) {
-      addLog(progress, `Accordion pass error (non-fatal): ${e.message}`);
+      addLog(progress, `Accordion: ${accordionUrls.length} URL(s) revealed → ${accordionDocCount} docs + ${accordionNavCount} nav pages queued`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addLog(progress, `Accordion pass error (non-fatal): ${msg}`);
     } finally {
       if (accordionBrowser) {
         try { await accordionBrowser.close(); } catch {}
