@@ -82,7 +82,7 @@ export async function expandAccordionSections(
         console.log(`[Accordion] Expanded: "${text.substring(0, 80)}"`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[Accordion] timeout on "${text.substring(0, 80)}": ${msg}`);
+        console.log(`[Accordion] timeout on ${text.substring(0, 80)}: ${msg}`);
       }
     }
 
