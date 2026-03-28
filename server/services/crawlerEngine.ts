@@ -17,7 +17,8 @@ import { isScrapingApiConfigured, fetchPageViaAPI, fetchDocumentViaAPI, fetchDoc
 import { isGoogleDriveConfigured, listFolderRecursive, downloadDriveFile, parseDriveFolderUrl } from './googleDriveClient';
 import { completeStateSourceRun } from '../storage/crawler';
 import { completeSauSourceRun } from '../storage/crawlerSau';
-import { expandAccordionSections } from './accordionExpansion';
+import { chromium } from 'playwright';
+import { expandAccordionSections, getSystemChromiumPath } from './accordionExpansion';
 
 const S3_BUCKET = process.env.S3_BUCKET || 'opencouncil-municipal-docs';
 const S3_REGION = process.env.AWS_REGION || 'us-east-1';
@@ -1479,8 +1480,27 @@ async function executeCrawl(
 
   if (!isResumeMode && !isIncrementalMode) {
     addLog(progress, '--- Phase 1.5: Accordion Expansion (Playwright) ---');
+    let accordionBrowser = null;
     try {
-      const accordionUrls = await expandAccordionSections(baseUrl, baseHostname);
+      const executablePath = getSystemChromiumPath();
+      accordionBrowser = await chromium.launch({
+        headless: true,
+        executablePath,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+      const accordionPage = await accordionBrowser.newPage({
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      });
+      await accordionPage.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await accordionPage.waitForTimeout(1500);
+
+      const { urls: accordionUrls, expandedCount } = await expandAccordionSections(
+        accordionPage,
+        baseHostname
+      );
+
       let accordionDocCount = 0;
       let accordionNavCount = 0;
       for (const href of accordionUrls) {
@@ -1501,9 +1521,13 @@ async function executeCrawl(
           accordionNavCount++;
         }
       }
-      addLog(progress, `Accordion: ${accordionDocCount} docs, ${accordionNavCount} nav pages queued`);
+      addLog(progress, `Accordion: expanded ${expandedCount} section(s), revealed ${accordionUrls.length} URL(s) → ${accordionDocCount} docs + ${accordionNavCount} nav pages queued`);
     } catch (e: any) {
       addLog(progress, `Accordion pass error (non-fatal): ${e.message}`);
+    } finally {
+      if (accordionBrowser) {
+        try { await accordionBrowser.close(); } catch {}
+      }
     }
   }
 

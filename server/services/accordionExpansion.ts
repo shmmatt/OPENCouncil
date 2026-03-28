@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import type { Page } from 'playwright';
 import { execSync } from 'child_process';
 
 const TRIGGER_WORDS = [
@@ -7,15 +7,21 @@ const TRIGGER_WORDS = [
 ];
 
 const DOM_SETTLE_MS = 3000;
-const PAGE_LOAD_TIMEOUT_MS = 15000;
-const INITIAL_SETTLE_MS = 1500;
+
+const ACCORDION_SELECTORS = [
+  'details:not([open]) summary',
+  '[aria-expanded="false"]',
+  '.panel-heading',
+  '.accordion-toggle',
+  '.collapsed',
+].join(', ');
 
 function containsTriggerWord(text: string): boolean {
   const lower = text.toLowerCase();
   return TRIGGER_WORDS.some(w => lower.includes(w));
 }
 
-function getSystemChromiumPath(): string | undefined {
+export function getSystemChromiumPath(): string | undefined {
   try {
     const result = execSync(
       'which chromium-browser 2>/dev/null || which chromium 2>/dev/null || echo ""',
@@ -27,116 +33,83 @@ function getSystemChromiumPath(): string | undefined {
   }
 }
 
-const ACCORDION_SELECTORS = [
-  'details:not([open]) summary',
-  '[aria-expanded="false"]',
-  '.panel-heading',
-  '.accordion-toggle',
-  '.collapsed',
-].join(', ');
+export interface AccordionResult {
+  urls: string[];
+  expandedCount: number;
+}
 
 /**
- * Loads `url` in a headless Playwright browser, finds collapsed accordion
- * elements whose visible header text matches a document-relevant trigger word,
- * clicks each one, then returns all same-hostname `<a href>` values that were
- * NOT present in the DOM before the expansion.
+ * Given an already-loaded Playwright `page` (pointing at the town homepage),
+ * finds collapsed accordion elements whose header text matches a
+ * document-relevant trigger word, clicks each one, then returns all
+ * same-hostname `<a href>` values that were NOT visible before expansion.
  *
- * Constraints enforced:
- * - Only called on seed URLs (caller's responsibility).
- * - 3-second DOM-settle timeout per accordion click.
- * - Entire function is wrapped in try/catch; any failure returns [].
- * - Browser is always closed in a finally block.
+ * Visibility is checked via `offsetParent !== null` so that links already
+ * present in the DOM but hidden by the collapsed state are correctly
+ * included — not just links that are dynamically added to the DOM.
+ *
+ * The browser lifecycle (open / close in `finally`) is the caller's
+ * responsibility. This function only operates on the provided `page`.
  */
 export async function expandAccordionSections(
-  url: string,
+  page: Page,
   baseHostname: string
-): Promise<string[]> {
-  const revealedUrls: string[] = [];
-  let browser = null;
+): Promise<AccordionResult> {
+  const visibleBefore = new Set<string>(
+    await page.$$eval('a[href]', (els) =>
+      (els as HTMLAnchorElement[])
+        .filter((a) => a.offsetParent !== null)
+        .map((a) => a.href)
+    )
+  );
 
-  try {
-    const executablePath = getSystemChromiumPath();
-    browser = await chromium.launch({
-      headless: true,
-      executablePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+  const candidates = await page.$$(ACCORDION_SELECTORS);
 
-    const page = await browser.newPage({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
+  let expandedCount = 0;
+  for (const candidate of candidates) {
+    let text = '';
+    try {
+      text = (await candidate.innerText()).trim();
+    } catch {
+      continue;
+    }
+    if (!containsTriggerWord(text)) continue;
 
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PAGE_LOAD_TIMEOUT_MS });
+      await candidate.click({ timeout: DOM_SETTLE_MS });
+      await page.waitForTimeout(DOM_SETTLE_MS);
+      expandedCount++;
+      console.log(`[Accordion] Expanded: "${text.substring(0, 80)}"`);
     } catch (e: any) {
-      console.log(`[Accordion] Page load failed for ${url}: ${e.message}`);
-      return revealedUrls;
-    }
-
-    await page.waitForTimeout(INITIAL_SETTLE_MS);
-
-    const linksBefore = new Set<string>(
-      await page.$$eval('a[href]', (els) =>
-        els.map((a) => (a as HTMLAnchorElement).href)
-      )
-    );
-
-    const candidates = await page.$$(ACCORDION_SELECTORS);
-
-    let expanded = 0;
-    for (const candidate of candidates) {
-      let text = '';
-      try {
-        text = (await candidate.innerText()).trim();
-      } catch {
-        continue;
-      }
-      if (!containsTriggerWord(text)) continue;
-
-      try {
-        await candidate.click({ timeout: DOM_SETTLE_MS });
-        await page.waitForTimeout(DOM_SETTLE_MS);
-        expanded++;
-        console.log(`[Accordion] Expanded: "${text.substring(0, 80)}"`);
-      } catch (e: any) {
-        console.log(`[Accordion] timeout on "${text.substring(0, 80)}": ${e.message}`);
-      }
-    }
-
-    if (expanded === 0) {
-      console.log(`[Accordion] No matching accordion sections found on ${url}`);
-      return revealedUrls;
-    }
-
-    const linksAfter = await page.$$eval('a[href]', (els) =>
-      els.map((a) => (a as HTMLAnchorElement).href)
-    );
-
-    for (const href of linksAfter) {
-      if (linksBefore.has(href)) continue;
-      try {
-        const u = new URL(href);
-        if (u.hostname === baseHostname && u.protocol.startsWith('http')) {
-          revealedUrls.push(href);
-        }
-      } catch {
-      }
-    }
-
-    console.log(
-      `[Accordion] ${url}: expanded ${expanded} section(s), revealed ${revealedUrls.length} new URL(s)`
-    );
-  } catch (e: any) {
-    console.log(`[Accordion] pass failed: ${e.message}`);
-    return [];
-  } finally {
-    if (browser) {
-      try {
-        await browser.close();
-      } catch {}
+      console.log(`[Accordion] timeout on "${text.substring(0, 80)}": ${e.message}`);
     }
   }
 
-  return revealedUrls;
+  if (expandedCount === 0) {
+    console.log('[Accordion] No matching accordion sections found');
+    return { urls: [], expandedCount: 0 };
+  }
+
+  const visibleAfter = await page.$$eval('a[href]', (els) =>
+    (els as HTMLAnchorElement[])
+      .filter((a) => a.offsetParent !== null)
+      .map((a) => a.href)
+  );
+
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const href of visibleAfter) {
+    if (visibleBefore.has(href) || seen.has(href)) continue;
+    seen.add(href);
+    try {
+      const u = new URL(href);
+      if (u.hostname === baseHostname && u.protocol.startsWith('http')) {
+        urls.push(href);
+      }
+    } catch {
+    }
+  }
+
+  console.log(`[Accordion] expanded ${expandedCount} section(s), revealed ${urls.length} new URL(s)`);
+  return { urls, expandedCount };
 }
