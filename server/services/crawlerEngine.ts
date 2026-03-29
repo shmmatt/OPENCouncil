@@ -1490,8 +1490,9 @@ async function executeCrawl(
       });
       const accordionPage = await accordionBrowser.newPage({
         userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 ' +
+          '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        viewport: { width: 390, height: 844 },
       });
       await accordionPage.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await accordionPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
