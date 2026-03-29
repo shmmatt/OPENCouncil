@@ -171,7 +171,7 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
           `documentType=${chunkPatch.documentType ?? "unchanged"}, board=${chunkPatch.board ?? "unchanged"}`
         );
       } catch (err: any) {
-        logWarn(`[enrichMetadata] Chunk metadata patch failed for blob ${version.fileBlobId}: ${err.message}`);
+        logError(`[enrichMetadata] Chunk metadata patch failed for blob ${version.fileBlobId}: ${err.message}`);
       }
     }
   }
