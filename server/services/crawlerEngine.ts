@@ -626,6 +626,18 @@ function crawlerExtractDateFromFilename(filename: string): Date | null {
     const d = new Date(`${y}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`);
     if (!isNaN(d.getTime()) && d.getFullYear() >= 1990 && d.getFullYear() <= 2030) return d;
   }
+  // MMDDYY — exactly 6 consecutive digits not adjacent to other digits (e.g. "031026" → 2026-03-10)
+  const m2b = filename.match(/(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)/);
+  if (m2b) {
+    const mm = parseInt(m2b[1], 10);
+    const dd = parseInt(m2b[2], 10);
+    const yy = parseInt(m2b[3], 10);
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const fullYear = yy < 50 ? 2000 + yy : 1900 + yy;
+      const d = new Date(`${fullYear}-${m2b[1]}-${m2b[2]}`);
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1990 && d.getFullYear() <= 2030) return d;
+    }
+  }
   const m3 = filename.match(/(\d{2})(\d{2})(\d{4})/);
   if (m3) {
     const d = new Date(`${m3[3]}-${m3[1]}-${m3[2]}`);

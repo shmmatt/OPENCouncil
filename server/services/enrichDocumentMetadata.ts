@@ -12,7 +12,7 @@
  * /api/admin/content/enrich-metadata backfill endpoint.
  */
 
-import { db, schema, eq } from "../storage/db";
+import { db, schema, eq, sql } from "../storage/db";
 import { suggestMetadataFromPreview } from "./metadataExtraction";
 import { logInfo, logWarn, logError } from "../utils/logger";
 
@@ -137,6 +137,29 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
       .set({ isMinutes: suggested.isMinutes })
       .where(eq(schema.documentVersions.id, versionId));
     logInfo(`[enrichMetadata] Updated version ${versionId}: isMinutes=${suggested.isMinutes}`);
+  }
+
+  // 7b. Patch document_chunks metadata with resolved year and documentType
+  // The vector embedding doesn't change — only the JSONB metadata used for temporal scoring.
+  if (version.fileBlobId && effectiveMeetingDate) {
+    const chunkYear = effectiveMeetingDate.getFullYear();
+    const chunkPatch: Record<string, unknown> = { year: chunkYear };
+    if (newCategory) chunkPatch.documentType = newCategory;
+    if (newBoard && newBoard !== "Needs Review") chunkPatch.board = newBoard;
+    try {
+      const patchResult = await db.execute(sql`
+        UPDATE document_chunks
+        SET metadata = metadata || ${JSON.stringify(chunkPatch)}::jsonb
+        WHERE file_blob_id = ${version.fileBlobId}
+      `);
+      const rowCount = (patchResult as any).rowCount ?? 0;
+      logInfo(
+        `[enrichMetadata] Patched ${rowCount} chunk(s) for blob ${version.fileBlobId}: ` +
+        `year=${chunkYear}, documentType=${newCategory}, board=${newBoard ?? "unchanged"}`
+      );
+    } catch (err: any) {
+      logWarn(`[enrichMetadata] Chunk metadata patch failed for blob ${version.fileBlobId}: ${err.message}`);
+    }
   }
 
   // 8. Attempt feed generation using the effective meeting date (LLM or existing)
