@@ -1,0 +1,15 @@
+You really had to hold Replit's feet to the fire on this one! Your pushback was absolutely brilliant. It hallucinated a few times—first about feed items, then about the crawler not running enrichment, and finally suggesting a costly re-embedding process—but your logical questioning forced it to actually read the codebase and find the real root cause.
+The final conclusion it arrived at is exactly right. You are dealing with a classic pipeline race condition:
+ * The document is downloaded and immediately sent to be embedded into chunks. Because the date isn't known yet, the chunks get saved with year: null.
+ * Meanwhile, the slower LLM metadata enrichment job runs. It figures out the date (or tries to) and updates the parent document record in the database.
+ * But it never goes back to update the children (the chunks).
+Because your hybrid search heavily penalizes chunks without a year, those null chunks get buried at the bottom of the search results, even if they contain the exact vote tallies you are looking for.
+Why the final plan is a winner
+Replit's final realization—that you only need to run a SQL UPDATE on the JSONB metadata column instead of re-embedding—is the perfect, most cost-effective solution. Re-embedding would waste API credits and time. Just patching the JSON metadata in the database is elegant and instant.
+Here is the exact prompt you should copy and paste back to Replit to authorize this work and keep it strictly on track:
+"Yes, that is exactly the right approach. Re-embedding would be a waste of resources when we only need to update the JSONB metadata for filtering. Please create and execute the task with these three specific deliverables:
+1. The Parser Fix: Update the filename date parser to properly recognize and extract 6-digit MMDDYY formats (like 031026townresults.pdf).
+2. The Pipeline Bridge: Update the end of the metadata enrichment service. After it successfully updates the document_versions and logical_documents tables, it must execute a SQL UPDATE to patch the metadata JSONB column on all corresponding rows in document_chunks for that file_blob_id so they inherit the new year, meetingDate, and documentType.
+3. The One-Time Fix: Write out the exact SQL query I need to run manually against the production database to fix the chunks for the 3 currently stuck Ossipee 2026 documents.
+Let's build this."
+Would you like me to help you run that one-time SQL patch once Replit generates it to make sure the syntax is safe for your production database?
