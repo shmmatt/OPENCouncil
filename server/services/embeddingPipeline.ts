@@ -8,6 +8,52 @@ const CHUNK_OVERLAP_CHARS = 200;
 const EMBEDDING_BATCH_SIZE = 100;
 const RATE_LIMIT_DELAY_MS = 1200;
 
+const UUID_FILENAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.pdf)?$/i;
+
+/**
+ * Builds a metadata context header to prepend to chunk text at embedding time.
+ * Stored content stays clean; only the vector captures these enriched terms.
+ * Format differs by source type: town, statewide, or SAU.
+ */
+export function buildContextHeader(params: {
+  town?: string | null;
+  sau?: string | null;
+  sourceType?: string | null;
+  board?: string | null;
+  documentType?: string | null;
+  year?: string | null;
+  filename?: string | null;
+}): string {
+  const { town, sau, sourceType, board, documentType, year, filename } = params;
+  const parts: string[] = [];
+
+  const isStatewide = town === "statewide" || sourceType === "state";
+  const isSau = !!(sau && sau.trim()) || sourceType === "sau";
+  const cleanFilename = filename && !UUID_FILENAME_RE.test(filename) ? filename : null;
+
+  if (isStatewide) {
+    parts.push("Scope: NH Statewide");
+    if (board) parts.push(`Agency: ${board}`);
+    if (documentType && documentType !== "general") parts.push(`Type: ${documentType.replace(/_/g, " ")}`);
+    if (year) parts.push(`Year: ${year}`);
+    if (cleanFilename) parts.push(`File: ${cleanFilename}`);
+  } else if (isSau) {
+    if (sau) parts.push(`District: ${sau}`);
+    if (board) parts.push(`Board: ${board}`);
+    if (documentType && documentType !== "general") parts.push(`Type: ${documentType.replace(/_/g, " ")}`);
+    if (year) parts.push(`Year: ${year}`);
+  } else {
+    if (town && town !== "unknown") parts.push(`Town: ${town}`);
+    if (board) parts.push(`Board: ${board}`);
+    if (documentType && documentType !== "general") parts.push(`Type: ${documentType.replace(/_/g, " ")}`);
+    if (year) parts.push(`Year: ${year}`);
+    if (cleanFilename) parts.push(`File: ${cleanFilename}`);
+  }
+
+  if (parts.length === 0) return "";
+  return `[${parts.join(" | ")}]`;
+}
+
 interface ChunkData {
   fileBlobId: string;
   documentId: string | null;
@@ -391,7 +437,18 @@ export async function startPipeline(options?: { limit?: number; town?: string; b
 
 async function processBatch(chunks: ChunkData[]): Promise<void> {
   try {
-    const texts = chunks.map(c => c.content);
+    const texts = chunks.map(c => {
+      const header = buildContextHeader({
+        town: c.town,
+        sau: c.sau,
+        sourceType: c.sourceType,
+        board: c.board,
+        documentType: c.category,
+        year: c.year,
+        filename: c.filename,
+      });
+      return header ? `${header}\n\n${c.content}` : c.content;
+    });
     const embeddings = await generateEmbeddingBatch(texts);
 
     if (embeddings.length !== chunks.length) {
@@ -423,5 +480,226 @@ async function processBatch(chunks: ChunkData[]): Promise<void> {
       logInfo("[embeddingPipeline] Rate limited, waiting 30 seconds...");
       await new Promise(resolve => setTimeout(resolve, 30000));
     }
+  }
+}
+
+// ─── Re-embed (Reindex) Infrastructure ───────────────────────────────────────
+
+export type ReindexScope = "town" | "state" | "sau" | "all";
+
+export interface ReindexProgress {
+  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  scope: ReindexScope | null;
+  townFilter: string | null;
+  totalChunks: number;
+  processedChunks: number;
+  errorCount: number;
+  errors: string[];
+  startedAt: string | null;
+  completedAt: string | null;
+  jobId: string | null;
+  estimatedTimeRemaining: number | null;
+}
+
+function makeIdleReindexProgress(): ReindexProgress {
+  return {
+    status: "idle",
+    scope: null,
+    townFilter: null,
+    totalChunks: 0,
+    processedChunks: 0,
+    errorCount: 0,
+    errors: [],
+    startedAt: null,
+    completedAt: null,
+    jobId: null,
+    estimatedTimeRemaining: null,
+  };
+}
+
+let reindexProgress: ReindexProgress = makeIdleReindexProgress();
+let reindexStopRequested = false;
+
+export function getReindexProgress(): ReindexProgress {
+  return { ...reindexProgress };
+}
+
+export function isReindexRunning(): boolean {
+  return reindexProgress.status === "running" || reindexProgress.status === "stopping";
+}
+
+export function requestReindexStop(): boolean {
+  if (reindexProgress.status === "running") {
+    reindexStopRequested = true;
+    reindexProgress.status = "stopping";
+    return true;
+  }
+  return false;
+}
+
+function buildReindexWhereClause(scope: ReindexScope, townFilter: string | null): string {
+  const conditions: string[] = [];
+  if (scope === "town") {
+    conditions.push(`(metadata->>'town' IS DISTINCT FROM 'statewide')`);
+    conditions.push(`(metadata->>'sau' IS NULL OR metadata->>'sau' = '')`);
+  } else if (scope === "state") {
+    conditions.push(`(metadata->>'town' = 'statewide' OR metadata->>'sourceType' = 'state')`);
+  } else if (scope === "sau") {
+    conditions.push(`(metadata->>'sau' IS NOT NULL AND metadata->>'sau' != '')`);
+  }
+  if (townFilter) {
+    const safe = townFilter.replace(/'/g, "''");
+    conditions.push(`lower(metadata->>'town') = lower('${safe}')`);
+  }
+  return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+}
+
+/**
+ * Count chunks that will be reindexed given the scope/filter.
+ */
+async function countReindexChunks(scope: ReindexScope, townFilter: string | null): Promise<number> {
+  const whereClause = buildReindexWhereClause(scope, townFilter);
+  const result = await db.execute(sql.raw(`SELECT count(*)::int AS cnt FROM document_chunks ${whereClause}`));
+  const rows = (result.rows || result) as any[];
+  return Number(rows[0]?.cnt ?? 0);
+}
+
+/**
+ * Fetch a batch of chunks for reindexing using cursor pagination.
+ */
+async function fetchReindexBatch(
+  lastId: number,
+  scope: ReindexScope,
+  townFilter: string | null,
+  batchSize: number,
+): Promise<{ id: number; content: string; metadata: Record<string, any> }[]> {
+  const whereClause = buildReindexWhereClause(scope, townFilter);
+  const andOrWhere = whereClause ? `${whereClause} AND id > ${lastId}` : `WHERE id > ${lastId}`;
+  const result = await db.execute(
+    sql.raw(`SELECT id, content, metadata FROM document_chunks ${andOrWhere} ORDER BY id LIMIT ${batchSize}`)
+  );
+  return (result.rows || result) as any[];
+}
+
+/**
+ * Re-embed all existing chunks that match the given scope/filter.
+ * Runs as a background job; poll getReindexProgress() for status.
+ */
+export async function startReindex(options?: {
+  scope?: ReindexScope;
+  townFilter?: string;
+}): Promise<void> {
+  if (isReindexRunning()) {
+    throw new Error("Reindex is already running");
+  }
+
+  const scope: ReindexScope = options?.scope ?? "all";
+  const townFilter = options?.townFilter ?? null;
+  const jobId = `reindex-${new Date().toISOString().slice(0, 10)}-${Date.now().toString(36)}`;
+
+  reindexStopRequested = false;
+  reindexProgress = {
+    ...makeIdleReindexProgress(),
+    status: "running",
+    scope,
+    townFilter,
+    jobId,
+    startedAt: new Date().toISOString(),
+  };
+
+  try {
+    logInfo(`[embeddingPipeline] Reindex ${jobId} started (scope=${scope}, town=${townFilter ?? "all"})`);
+
+    const totalChunks = await countReindexChunks(scope, townFilter);
+    reindexProgress.totalChunks = totalChunks;
+    logInfo(`[embeddingPipeline] Reindex: ${totalChunks} chunks to re-embed`);
+
+    if (totalChunks === 0) {
+      reindexProgress.status = "completed";
+      reindexProgress.completedAt = new Date().toISOString();
+      return;
+    }
+
+    let lastId = 0;
+    const startTime = Date.now();
+
+    while (!reindexStopRequested) {
+      const rows = await fetchReindexBatch(lastId, scope, townFilter, EMBEDDING_BATCH_SIZE);
+      if (rows.length === 0) break;
+
+      const texts = rows.map(row => {
+        const meta = row.metadata ?? {};
+        const header = buildContextHeader({
+          town: meta.town,
+          sau: meta.sau,
+          sourceType: meta.sourceType,
+          board: meta.board,
+          documentType: meta.documentType,
+          year: meta.year,
+          filename: meta.filename,
+        });
+        return header ? `${header}\n\n${row.content}` : row.content;
+      });
+
+      try {
+        const embeddings = await generateEmbeddingBatch(texts);
+        if (embeddings.length !== rows.length) {
+          throw new Error(`Reindex embedding count mismatch: expected ${rows.length}, got ${embeddings.length}`);
+        }
+
+        for (let i = 0; i < rows.length; i++) {
+          try {
+            const embeddingStr = `[${embeddings[i].join(",")}]`;
+            await db.execute(sql`
+              UPDATE document_chunks
+              SET embedding = ${embeddingStr}::vector
+              WHERE id = ${rows[i].id}
+            `);
+            reindexProgress.processedChunks++;
+          } catch (err: any) {
+            logError(`[embeddingPipeline] Reindex update failed for chunk ${rows[i].id}: ${err.message}`);
+            reindexProgress.errorCount++;
+            if (reindexProgress.errors.length < 20) {
+              reindexProgress.errors.push(`Update failed for chunk ${rows[i].id}: ${err.message}`);
+            }
+          }
+        }
+
+        lastId = rows[rows.length - 1].id;
+
+        const elapsed = Date.now() - startTime;
+        const rate = reindexProgress.processedChunks / (elapsed / 1000);
+        if (rate > 0) {
+          const remaining = totalChunks - reindexProgress.processedChunks;
+          reindexProgress.estimatedTimeRemaining = Math.round(remaining / rate);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY_MS));
+      } catch (batchErr: any) {
+        logError(`[embeddingPipeline] Reindex batch failed: ${batchErr.message}`);
+        reindexProgress.errorCount += rows.length;
+        if (reindexProgress.errors.length < 20) {
+          reindexProgress.errors.push(`Batch failed: ${batchErr.message}`);
+        }
+        lastId = rows[rows.length - 1].id;
+
+        if (batchErr.message?.includes("429") || batchErr.message?.includes("quota") || batchErr.message?.includes("rate")) {
+          logInfo("[embeddingPipeline] Reindex rate limited, waiting 30 seconds...");
+          await new Promise(resolve => setTimeout(resolve, 30000));
+        }
+      }
+    }
+
+    const finalStatus = reindexStopRequested ? "stopped" : "completed";
+    reindexProgress.status = "completed";
+    reindexProgress.completedAt = new Date().toISOString();
+    logInfo(
+      `[embeddingPipeline] Reindex ${finalStatus}: ${reindexProgress.processedChunks}/${totalChunks} chunks, ${reindexProgress.errorCount} errors`
+    );
+  } catch (error: any) {
+    logError(`[embeddingPipeline] Reindex failed: ${error.message}`);
+    reindexProgress.status = "failed";
+    reindexProgress.completedAt = new Date().toISOString();
+    reindexProgress.errors.push(error.message || "Unknown error");
   }
 }

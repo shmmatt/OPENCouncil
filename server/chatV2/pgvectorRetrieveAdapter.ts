@@ -12,6 +12,29 @@ import type { LabeledChunk, ChunkAuthority, PipelineLogContext } from "./types";
 import type { SituationContext } from "@shared/schema";
 import type { V3RetrievalResult } from "./twoLaneRetrieve";
 
+/**
+ * Semantic expansion terms appended to query text before embedding, keyed by QueryFocus.
+ * This widens the embedding vector to cover terminology common in each document focus type,
+ * especially critical for election/financial docs whose content uses tally-style language
+ * that doesn't naturally embed close to narrative queries.
+ */
+const FOCUS_EXPANSION: Record<QueryFocus, string> = {
+  financial_exact:
+    "budget appropriations tax rate warrant article town meeting election results ballot tally vote count passed failed approved fiscal year annual",
+  narrative_context:
+    "board discussion motion voted approved denied selectboard planning zoning minutes deliberation hearing testimony discussion agenda",
+  historical_trend:
+    "annual report trend comparison year over year growth change prior history budget increase decrease fiscal",
+  general: "",
+};
+
+function expandQueryWithFocus(query: string, focus: QueryFocus | undefined): string {
+  if (!focus || focus === "general") return query;
+  const expansion = FOCUS_EXPANSION[focus];
+  if (!expansion) return query;
+  return `${query} ${expansion}`;
+}
+
 export interface PgvectorLaneChunk {
   docId: string;
   title: string;
@@ -280,8 +303,24 @@ export async function pgvectorTwoLaneRetrieveWithPlan(
 
   const allQueryStrings = [...localQueries, ...stateQueries, ...sauQueries];
   const embeddingStartTime = Date.now();
-  const embeddingMap = await generateBatchQueryEmbeddings(allQueryStrings);
-  logInfo(`pgvector embeddings: ${embeddingMap.size} vectors for ${allQueryStrings.length} queries (${Date.now() - embeddingStartTime}ms)`, {
+
+  // Build expanded query strings for embedding (wider vector coverage by focus type).
+  // The stored map keys remain the ORIGINAL query strings so downstream look-ups work.
+  const queryFocus = plan.queryFocus;
+  const originalToExpanded = new Map<string, string>();
+  for (const q of allQueryStrings) {
+    originalToExpanded.set(q, expandQueryWithFocus(q, queryFocus));
+  }
+  const expandedStrings = Array.from(new Set(originalToExpanded.values()));
+  const expandedEmbeddingMap = await generateBatchQueryEmbeddings(expandedStrings);
+
+  const embeddingMap = new Map<string, number[]>();
+  for (const [original, expanded] of originalToExpanded.entries()) {
+    const vec = expandedEmbeddingMap.get(expanded);
+    if (vec) embeddingMap.set(original, vec);
+  }
+
+  logInfo(`pgvector embeddings: ${embeddingMap.size} vectors for ${allQueryStrings.length} queries (focus=${queryFocus ?? "none"}, ${Date.now() - embeddingStartTime}ms)`, {
     stage: "pgvectorRetrieve",
     requestId: logContext?.requestId,
     sessionId: logContext?.sessionId,

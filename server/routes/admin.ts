@@ -10,7 +10,9 @@ import { uploadDocumentToFileStore } from "../gemini-client";
 import { extractPreviewText, suggestMetadataFromContent } from "../bulk-upload-helper";
 import { documentMetadataSchema } from "@shared/schema";
 import type { DocumentMetadata } from "@shared/schema";
-import { startPipeline, getProgress, requestStop, isRunning } from "../services/embeddingPipeline";
+import { startPipeline, getProgress, requestStop, isRunning, startReindex, getReindexProgress, requestReindexStop, isReindexRunning } from "../services/embeddingPipeline";
+import { db, sql } from "../storage/db";
+import { logInfo, logError } from "../utils/logger";
 
 const router = Router();
 
@@ -617,6 +619,83 @@ router.post("/embedding/stop", authenticateAdmin, async (_req, res) => {
   } catch (error) {
     console.error("Error stopping embedding pipeline:", error);
     res.status(500).json({ message: "Failed to stop embedding pipeline" });
+  }
+});
+
+router.post("/embedding/reindex", authenticateAdmin, async (req, res) => {
+  try {
+    if (isReindexRunning()) {
+      return res.status(409).json({ message: "Reindex is already running" });
+    }
+    const { scope, townFilter } = req.body || {};
+    const validScopes = ["town", "state", "sau", "all"];
+    const resolvedScope = validScopes.includes(scope) ? scope : "all";
+
+    startReindex({ scope: resolvedScope, townFilter: townFilter || undefined }).catch(err => {
+      console.error("Reindex background error:", err);
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const progress = getReindexProgress();
+    res.json({ message: "Reindex started", jobId: progress.jobId, progress });
+  } catch (error: any) {
+    console.error("Error starting reindex:", error);
+    res.status(500).json({ message: error.message || "Failed to start reindex" });
+  }
+});
+
+router.get("/embedding/reindex/status", authenticateAdmin, async (_req, res) => {
+  try {
+    res.json(getReindexProgress());
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch reindex status" });
+  }
+});
+
+router.post("/embedding/reindex/stop", authenticateAdmin, async (_req, res) => {
+  try {
+    const stopped = requestReindexStop();
+    if (stopped) {
+      res.json({ message: "Reindex stop requested. Will finish current batch and stop." });
+    } else {
+      res.status(400).json({ message: "Reindex is not currently running" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to stop reindex" });
+  }
+});
+
+router.post("/embedding/rebuild-tsv", authenticateAdmin, async (_req, res) => {
+  try {
+    logInfo("[admin] Starting TSV search_vector rebuild for all document_chunks");
+    const countResult = await db.execute(sql`SELECT count(*)::int AS cnt FROM document_chunks`);
+    const totalRows = Number((countResult.rows as any[])[0]?.cnt ?? 0);
+
+    res.json({
+      message: "TSV rebuild started in background",
+      totalChunks: totalRows,
+      note: "search_vector will be regenerated to include filename, board, and documentType fields",
+    });
+
+    setImmediate(async () => {
+      try {
+        await db.execute(sql.raw(`
+          UPDATE document_chunks
+          SET search_vector = to_tsvector('english',
+            coalesce(content, '') || ' ' ||
+            coalesce(metadata->>'filename', '') || ' ' ||
+            coalesce(metadata->>'board', '') || ' ' ||
+            coalesce(metadata->>'documentType', '')
+          )
+        `));
+        logInfo(`[admin] TSV rebuild complete for ${totalRows} chunks`);
+      } catch (err: any) {
+        logError(`[admin] TSV rebuild failed: ${err.message}`);
+      }
+    });
+  } catch (error: any) {
+    console.error("Error starting TSV rebuild:", error);
+    res.status(500).json({ message: error.message || "Failed to start TSV rebuild" });
   }
 });
 

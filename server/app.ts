@@ -108,6 +108,29 @@ export default async function runApp(
 
   // Initialize admin account from environment variables
   await ensureAdminExists();
+
+  // Upgrade TSV trigger to include filename, board, documentType from chunk metadata JSONB
+  // CREATE OR REPLACE is idempotent and fast — safe to run on every startup
+  try {
+    const { db: _db, sql: _sql } = await import("./storage/db");
+    await _db.execute(_sql.raw(`
+      CREATE OR REPLACE FUNCTION public.document_chunks_search_vector_update()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        NEW.search_vector := to_tsvector('english',
+          coalesce(NEW.content, '') || ' ' ||
+          coalesce(NEW.metadata->>'filename', '') || ' ' ||
+          coalesce(NEW.metadata->>'board', '') || ' ' ||
+          coalesce(NEW.metadata->>'documentType', '')
+        );
+        RETURN NEW;
+      END;
+      $$;
+    `));
+    logInfo("TSV trigger updated to index filename/board/documentType", { source: "startup" });
+  } catch (err: any) {
+    logError("Failed to update TSV trigger", { source: "startup", error: err.message });
+  }
   
   // Start the OCR background workers
   startOcrWorker();

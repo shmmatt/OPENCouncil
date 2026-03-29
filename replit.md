@@ -90,6 +90,22 @@ The public-facing UI uses a "Civic Ledger" visual identity:
 - **Message bubbles**: User messages use sky-tinted background (`bg-sky-50`); assistant messages use `bg-card`. Timestamps show role labels: "RESIDENT • HH:MM" / "CIVIC LEDGER • HH:MM".
 - **Admin pages**: Completely unmodified — no Civic Ledger shell or color tokens applied.
 
+### RAG Retrieval Quality (Task #41)
+
+Several systemic improvements to embedding quality and retrieval accuracy targeting tabular/numeric documents (election tallies, warrant articles, budgets):
+
+**1. TSV Keyword Index Upgrade**: The `document_chunks_search_vector_update` trigger function now indexes `metadata->>'filename'`, `metadata->>'board'`, and `metadata->>'documentType'` in addition to `content`. This means filenames like `031026townresults.pdf` contribute stems ("result", "town") to the keyword search index even if those words never appear in the document body. The trigger is updated (CREATE OR REPLACE) idempotently on every server startup. Existing chunks need a one-time TSV rebuild via `POST /api/admin/embedding/rebuild-tsv`.
+
+**2. Metadata Context Headers**: The `buildContextHeader()` function (exported from `server/services/embeddingPipeline.ts`) prepends a structured header to chunk text **at embedding time only** — stored `content` stays clean for LLM consumption. Format differs by source type:
+- Town: `[Town: Ossipee | Board: Selectboard | Type: election results | Year: 2026 | File: 031026townresults.pdf]`
+- Statewide: `[Scope: NH Statewide | Agency: Dept of Revenue Administration | Type: tax form | Year: 2024]`
+- SAU: `[District: SAU 49 | Board: Governor Wentworth Regional School Board | Type: meeting minutes | Year: 2024]`
+UUID filenames (common in SAU docs) are excluded from the header. All new chunks processed through the pipeline automatically receive headers.
+
+**3. Re-embed Infrastructure**: `startReindex(options)` in `embeddingPipeline.ts` re-embeds all existing chunks with the new headers, using cursor-based pagination (no OFFSET on 250k+ rows). Scope options: `"town"`, `"state"`, `"sau"`, `"all"`. Admin endpoints: `POST /api/admin/embedding/reindex`, `GET /api/admin/embedding/reindex/status`, `POST /api/admin/embedding/reindex/stop`. The admin pipeline UI (v2 pipeline tab) has a "Re-embed Existing Chunks" card with scope selector, optional town filter, and progress tracking. Re-embedding all 253k town chunks costs ~$11.50 and takes ~2 hours.
+
+**4. Query-Side Semantic Expansion**: `expandQueryWithFocus()` in `pgvectorRetrieveAdapter.ts` appends domain-specific terms to queries before embedding, keyed by `QueryFocus`. Example: `financial_exact` focus appends `"budget appropriations tax rate warrant article town meeting election results ballot tally vote count passed failed..."`. Expansion happens only on the embedding text — original query strings remain as map keys for downstream lookups.
+
 ### Board Extraction Architecture (Task #31)
 
 Board identification uses a **header-only extraction** approach: `suggestMetadataFromPreview` sends only the first 1,000 characters of document text to the LLM. This is intentional — board names that appear in body text (ex-officio member listings, appeal notices like "The Selectmen have a right to appeal...", or references to other boards' meetings) are not reliable signals. The document letterhead/title in the first 1–3 lines is the only authoritative source.

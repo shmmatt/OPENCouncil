@@ -42,6 +42,8 @@ import {
   Inbox,
   LogOut,
   Microscope,
+  RotateCcw,
+  HardDrive,
 } from "lucide-react";
 
 
@@ -670,6 +672,201 @@ function EmbeddingPipelineControls() {
   );
 }
 
+interface ReindexProgressData {
+  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  scope: string | null;
+  townFilter: string | null;
+  totalChunks: number;
+  processedChunks: number;
+  errorCount: number;
+  errors: string[];
+  startedAt: string | null;
+  completedAt: string | null;
+  jobId: string | null;
+  estimatedTimeRemaining: number | null;
+}
+
+function ReindexControls() {
+  const { toast } = useToast();
+  const [scope, setScope] = useState<string>("town");
+  const [townFilter, setTownFilter] = useState("");
+
+  const { data: progress, refetch } = useQuery<ReindexProgressData>({
+    queryKey: ["/api/admin/embedding/reindex/status"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/reindex/status");
+      if (!res.ok) throw new Error("Failed to fetch reindex status");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "running" || status === "stopping" ? 2000 : 15000;
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/reindex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, townFilter: townFilter || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to start reindex");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Reindex started", description: `Re-embedding ${scope} chunks with metadata headers` });
+      refetch();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/reindex/stop", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to stop");
+      return data;
+    },
+    onSuccess: () => { toast({ title: "Stop requested" }); refetch(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const tsvMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/embedding/rebuild-tsv", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to start TSV rebuild");
+      return data;
+    },
+    onSuccess: (data) => toast({
+      title: "TSV rebuild started",
+      description: `Rebuilding search_vector for ${(data.totalChunks ?? 0).toLocaleString()} chunks in background`,
+    }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const isActive = progress?.status === "running" || progress?.status === "stopping";
+  const pct = progress && progress.totalChunks > 0
+    ? Math.round((progress.processedChunks / progress.totalChunks) * 100)
+    : 0;
+
+  return (
+    <Card data-testid="reindex-controls">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-5 h-5 text-blue-500" />
+            <CardTitle className="text-sm">Re-embed Existing Chunks</CardTitle>
+            {progress && progress.status !== "idle" && (
+              <Badge variant={isActive ? "default" : progress.status === "completed" ? "outline" : "destructive"}>
+                {progress.status}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isActive && (
+              <>
+                <select
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  data-testid="select-reindex-scope"
+                >
+                  <option value="town">Town docs</option>
+                  <option value="state">Statewide docs</option>
+                  <option value="sau">SAU docs</option>
+                  <option value="all">All chunks</option>
+                </select>
+                <Input
+                  placeholder="Town filter (optional)"
+                  className="w-40"
+                  value={townFilter}
+                  onChange={(e) => setTownFilter(e.target.value)}
+                  data-testid="input-reindex-town"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => startMutation.mutate()}
+                  disabled={startMutation.isPending}
+                  data-testid="button-start-reindex"
+                >
+                  {startMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-1" />}
+                  Re-embed
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => tsvMutation.mutate()}
+                  disabled={tsvMutation.isPending}
+                  data-testid="button-rebuild-tsv"
+                  title="Rebuild keyword search index to include filename/board/documentType"
+                >
+                  {tsvMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <HardDrive className="w-4 h-4 mr-1" />}
+                  Rebuild TSV
+                </Button>
+              </>
+            )}
+            {isActive && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => stopMutation.mutate()}
+                disabled={stopMutation.isPending || progress?.status === "stopping"}
+                data-testid="button-stop-reindex"
+              >
+                {stopMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Square className="w-4 h-4 mr-1" />}
+                Stop
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      {progress && progress.status !== "idle" && (
+        <CardContent>
+          <div className="space-y-3">
+            {isActive && (
+              <>
+                <Progress value={pct} data-testid="progress-reindex" />
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className="text-lg font-bold" data-testid="text-reindex-processed">{progress.processedChunks.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">of {progress.totalChunks.toLocaleString()} chunks</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold" data-testid="text-reindex-pct">{pct}%</div>
+                    <div className="text-xs text-muted-foreground">complete</div>
+                  </div>
+                  <div>
+                    <div className={`text-lg font-bold ${progress.errorCount > 0 ? "text-red-600" : ""}`} data-testid="text-reindex-errors">
+                      {progress.errorCount}
+                    </div>
+                    <div className="text-xs text-muted-foreground">errors</div>
+                  </div>
+                </div>
+              </>
+            )}
+            {progress.status === "completed" && (
+              <div className="text-sm text-muted-foreground text-center py-1" data-testid="text-reindex-complete">
+                Completed: {progress.processedChunks.toLocaleString()} chunks re-embedded
+                {progress.errorCount > 0 && ` (${progress.errorCount} errors)`}
+              </div>
+            )}
+            {progress.errors.length > 0 && (
+              <div className="max-h-24 overflow-y-auto space-y-1">
+                {progress.errors.slice(-3).map((err, i) => (
+                  <div key={i} className="text-xs text-red-500 font-mono bg-red-50 dark:bg-red-950/20 p-1 rounded">{err}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function PipelineStatusPanel() {
   const { data, isLoading, refetch } = useQuery<PipelineData>({
     queryKey: ['/api/admin/pipeline-status'],
@@ -797,6 +994,8 @@ function PipelineStatusPanel() {
       </div>
 
       <EmbeddingPipelineControls />
+
+      <ReindexControls />
 
       {data.recentJobs.length > 0 && (
         <Card>
