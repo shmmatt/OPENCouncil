@@ -139,26 +139,34 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
     logInfo(`[enrichMetadata] Updated version ${versionId}: isMinutes=${suggested.isMinutes}`);
   }
 
-  // 7b. Patch document_chunks metadata with resolved year and documentType
+  // 7b. Patch document_chunks metadata with resolved year, meetingDate, and documentType.
   // The vector embedding doesn't change — only the JSONB metadata used for temporal scoring.
-  if (version.fileBlobId && effectiveMeetingDate) {
-    const chunkYear = effectiveMeetingDate.getFullYear();
-    const chunkPatch: Record<string, unknown> = { year: chunkYear };
+  // Only patch with fields that were actually resolved by LLM enrichment (not fallback values).
+  if (version.fileBlobId) {
+    const chunkPatch: Record<string, unknown> = {};
+    if (llmMeetingDate) {
+      chunkPatch.year = llmMeetingDate.getFullYear();
+      chunkPatch.meetingDate = llmMeetingDate.toISOString();
+    }
     if (newCategory) chunkPatch.documentType = newCategory;
     if (newBoard && newBoard !== "Needs Review") chunkPatch.board = newBoard;
-    try {
-      const patchResult = await db.execute(sql`
-        UPDATE document_chunks
-        SET metadata = metadata || ${JSON.stringify(chunkPatch)}::jsonb
-        WHERE file_blob_id = ${version.fileBlobId}
-      `);
-      const rowCount = (patchResult as any).rowCount ?? 0;
-      logInfo(
-        `[enrichMetadata] Patched ${rowCount} chunk(s) for blob ${version.fileBlobId}: ` +
-        `year=${chunkYear}, documentType=${newCategory}, board=${newBoard ?? "unchanged"}`
-      );
-    } catch (err: any) {
-      logWarn(`[enrichMetadata] Chunk metadata patch failed for blob ${version.fileBlobId}: ${err.message}`);
+
+    if (Object.keys(chunkPatch).length > 0) {
+      try {
+        const patchResult = await db.execute(sql`
+          UPDATE document_chunks
+          SET metadata = metadata || ${JSON.stringify(chunkPatch)}::jsonb
+          WHERE file_blob_id = ${version.fileBlobId}
+        `);
+        const rowCount = (patchResult as any).rowCount ?? 0;
+        logInfo(
+          `[enrichMetadata] Patched ${rowCount} chunk(s) for blob ${version.fileBlobId}: ` +
+          `year=${chunkPatch.year ?? "unchanged"}, meetingDate=${chunkPatch.meetingDate ?? "unchanged"}, ` +
+          `documentType=${chunkPatch.documentType ?? "unchanged"}, board=${chunkPatch.board ?? "unchanged"}`
+        );
+      } catch (err: any) {
+        logWarn(`[enrichMetadata] Chunk metadata patch failed for blob ${version.fileBlobId}: ${err.message}`);
+      }
     }
   }
 
