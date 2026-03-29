@@ -95,18 +95,21 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
   const newBoard = suggested.board || logDoc.board || null;
   const newCategory = suggested.isMinutes ? "meeting_minutes" : (suggested.category || logDoc.category);
 
+  let didUpdateLogDoc = false;
   if (needsBoard && newBoard && newBoard !== logDoc.board) {
     await db
       .update(schema.logicalDocuments)
       .set({ board: newBoard, category: newCategory, updatedAt: new Date() })
       .where(eq(schema.logicalDocuments.id, logDoc.id));
     logInfo(`[enrichMetadata] Updated logDoc ${logDoc.id}: board="${newBoard}", category="${newCategory}"`);
+    didUpdateLogDoc = true;
   } else if (newCategory !== logDoc.category) {
     await db
       .update(schema.logicalDocuments)
       .set({ category: newCategory, updatedAt: new Date() })
       .where(eq(schema.logicalDocuments.id, logDoc.id));
     logInfo(`[enrichMetadata] Updated logDoc ${logDoc.id}: category="${newCategory}"`);
+    didUpdateLogDoc = true;
   }
 
   // 7. Patch document_versions (meeting_date + is_minutes) if needed
@@ -125,28 +128,32 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
   // Effective meeting date: LLM result takes priority, fall back to existing version.meetingDate
   const effectiveMeetingDate: Date | null = llmMeetingDate ?? (version.meetingDate ? new Date(version.meetingDate as unknown as string) : null);
 
+  let didUpdateVersion = false;
   if (needsMeetingDate && llmMeetingDate) {
     await db
       .update(schema.documentVersions)
       .set({ meetingDate: llmMeetingDate, isMinutes: suggested.isMinutes })
       .where(eq(schema.documentVersions.id, versionId));
     logInfo(`[enrichMetadata] Updated version ${versionId}: meetingDate=${llmMeetingDate.toISOString()}, isMinutes=${suggested.isMinutes}`);
+    didUpdateVersion = true;
   } else if (version.isMinutes !== suggested.isMinutes) {
     await db
       .update(schema.documentVersions)
       .set({ isMinutes: suggested.isMinutes })
       .where(eq(schema.documentVersions.id, versionId));
     logInfo(`[enrichMetadata] Updated version ${versionId}: isMinutes=${suggested.isMinutes}`);
+    didUpdateVersion = true;
   }
 
-  // 7b. Patch document_chunks metadata with resolved year, meetingDate, and documentType.
+  // 7b. Patch document_chunks metadata when at least one DB row was updated.
+  // Uses effectiveMeetingDate (LLM-resolved or already-known) so that board-only enrichments
+  // still sync year/meetingDate from an existing document_versions.meeting_date into chunks.
   // The vector embedding doesn't change — only the JSONB metadata used for temporal scoring.
-  // Only patch with fields that were actually resolved by LLM enrichment (not fallback values).
-  if (version.fileBlobId) {
+  if ((didUpdateLogDoc || didUpdateVersion) && version.fileBlobId) {
     const chunkPatch: Record<string, unknown> = {};
-    if (llmMeetingDate) {
-      chunkPatch.year = llmMeetingDate.getFullYear();
-      chunkPatch.meetingDate = llmMeetingDate.toISOString();
+    if (effectiveMeetingDate) {
+      chunkPatch.year = effectiveMeetingDate.getFullYear();
+      chunkPatch.meetingDate = effectiveMeetingDate.toISOString();
     }
     if (newCategory) chunkPatch.documentType = newCategory;
     if (newBoard && newBoard !== "Needs Review") chunkPatch.board = newBoard;
@@ -158,9 +165,8 @@ export async function enrichDocumentMetadata(versionId: string): Promise<void> {
           SET metadata = metadata || ${JSON.stringify(chunkPatch)}::jsonb
           WHERE file_blob_id = ${version.fileBlobId}
         `);
-        const rowCount = (patchResult as any).rowCount ?? 0;
         logInfo(
-          `[enrichMetadata] Patched ${rowCount} chunk(s) for blob ${version.fileBlobId}: ` +
+          `[enrichMetadata] Patched ${patchResult.rowCount ?? 0} chunk(s) for blob ${version.fileBlobId}: ` +
           `year=${chunkPatch.year ?? "unchanged"}, meetingDate=${chunkPatch.meetingDate ?? "unchanged"}, ` +
           `documentType=${chunkPatch.documentType ?? "unchanged"}, board=${chunkPatch.board ?? "unchanged"}`
         );
