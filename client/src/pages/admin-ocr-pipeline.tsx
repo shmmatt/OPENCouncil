@@ -673,7 +673,7 @@ function EmbeddingPipelineControls() {
 }
 
 interface ReindexProgressData {
-  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  status: "idle" | "running" | "stopping" | "completed" | "stopped" | "failed";
   scope: string | null;
   townFilter: string | null;
   totalChunks: number;
