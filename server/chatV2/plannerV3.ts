@@ -121,10 +121,11 @@ interface PlannerV3Options {
   townHint?: string;
   templateContext?: string | null;
   logContext?: PipelineLogContext;
+  sessionAnchor?: { town?: string; year?: number };
 }
 
 export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOutput> {
-  const { userMessage, sessionSources, situationContext, townHint, templateContext, logContext } = options;
+  const { userMessage, sessionSources, situationContext, townHint, templateContext, logContext, sessionAnchor } = options;
   const { model: modelName } = getModelForStage('retrievalPlanner');
 
   const sessionSourceText = sessionSources?.length 
@@ -141,12 +142,21 @@ export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOu
     ? `TEMPLATE CONTEXT: ${templateContext}`
     : '';
 
+  // Session anchor: soft hints for town/year carried from prior context even when situation gate fired
+  const anchorParts: string[] = [];
+  if (sessionAnchor?.town) anchorParts.push(`town=${sessionAnchor.town}`);
+  if (sessionAnchor?.year) anchorParts.push(`year=${sessionAnchor.year}`);
+  const sessionAnchorHint = anchorParts.length > 0
+    ? `Session anchor (soft hint — use if no other town/year signal in the question): ${anchorParts.join(', ')}`
+    : '';
+
   const userPrompt = `Analyze this question and create a retrieval plan:
 
 USER QUESTION: "${userMessage}"
 
 ${sessionSourceText ? `USER-PROVIDED DOCUMENT:\n${sessionSourceText}\n` : ''}
 ${situationHint ? `${situationHint}\n` : ''}
+${sessionAnchorHint ? `${sessionAnchorHint}\n` : ''}
 ${templateHint ? `${templateHint}\n` : ''}
 ${townHint ? `Town hint: ${townHint}` : 'No specific town mentioned'}
 

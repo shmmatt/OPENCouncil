@@ -623,3 +623,119 @@ export function computeQuestionSituationMatch(
     reason,
   };
 }
+
+// ---------------------------------------------------------------------------
+// LLM-based follow-up classifier
+// ---------------------------------------------------------------------------
+
+export interface FollowUpClassification {
+  isContinuation: boolean;
+  confidence: number;
+  reason: string;
+  method: "llm" | "heuristic";
+}
+
+const FOLLOWUP_CLASSIFIER_PROMPT = `You are a conversation continuity classifier for a municipal government AI assistant.
+
+Your sole job: determine if a new question is a follow-up to the same topic as the prior conversation, or a completely new/unrelated topic.
+
+Rules:
+- isContinuation = true: the new question asks for more detail, clarification, or a related fact about the SAME subject matter. This includes questions that use pronouns ("it", "they", "that"), partial entity references, or implicit topic continuity.
+- isContinuation = false: the new question is about a genuinely different subject with no meaningful connection to the prior topic.
+- confidence: how certain you are (0.0–1.0). Use 0.5–0.7 for ambiguous cases.
+
+Reply with JSON only — no explanation outside the JSON:
+{"isContinuation": true, "confidence": 0.85, "reason": "one sentence explaining the decision"}`;
+
+/**
+ * LLM-based classifier that determines if a question is a follow-up to the prior topic.
+ * Falls back to the keyword heuristic if the LLM call fails or times out.
+ *
+ * @param question        The new user question
+ * @param situationContext The stored situation context from the prior turn
+ * @param lastUserMessage  The prior user question (optional, adds signal)
+ */
+export async function classifyFollowUp(
+  question: string,
+  situationContext: SituationContext | null,
+  lastUserMessage?: string
+): Promise<FollowUpClassification> {
+  if (!situationContext || situationContext.entities.length === 0) {
+    return {
+      isContinuation: false,
+      confidence: 1.0,
+      reason: "No prior situation context established",
+      method: "heuristic",
+    };
+  }
+
+  const LLM_TIMEOUT_MS = 1500;
+
+  const entityList = situationContext.entities.slice(0, 6).join(", ");
+  const priorQ = lastUserMessage
+    ? `Prior question: "${lastUserMessage.slice(0, 200)}"\n`
+    : "";
+
+  const userPrompt =
+    `${priorQ}Prior topic: "${situationContext.title}"\n` +
+    `Key entities: ${entityList}\n\n` +
+    `New question: "${question.slice(0, 300)}"\n\n` +
+    `Is this a continuation of the same topic? Reply with JSON only.`;
+
+  const { model: modelName } = getModelForStage("router");
+
+  try {
+    const llmCall = ai.models.generateContent({
+      model: modelName,
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: FOLLOWUP_CLASSIFIER_PROMPT,
+        temperature: 0.0,
+        maxOutputTokens: 80,
+      },
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("classifyFollowUp timeout")), LLM_TIMEOUT_MS)
+    );
+
+    const response = await Promise.race([llmCall, timeoutPromise]);
+    const raw = (response as Awaited<typeof llmCall>).text || "";
+
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON in classifier response");
+
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      isContinuation?: unknown;
+      confidence?: unknown;
+      reason?: unknown;
+    };
+
+    const isContinuation = parsed.isContinuation === true;
+    const confidence =
+      typeof parsed.confidence === "number"
+        ? Math.min(1, Math.max(0, parsed.confidence))
+        : 0.5;
+    const reason =
+      typeof parsed.reason === "string"
+        ? parsed.reason
+        : isContinuation
+        ? "LLM determined continuation"
+        : "LLM determined new topic";
+
+    return { isContinuation, confidence, reason, method: "llm" };
+  } catch (err: any) {
+    logDebug("classifyFollowUp_fallback", {
+      error: err?.message,
+      question: question.slice(0, 100),
+    });
+
+    const heuristic = computeQuestionSituationMatch(question, situationContext);
+    return {
+      isContinuation: heuristic.useSituationContext,
+      confidence: heuristic.score / 4,
+      reason: `[heuristic fallback] ${heuristic.reason}`,
+      method: "heuristic",
+    };
+  }
+}

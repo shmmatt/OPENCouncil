@@ -17,7 +17,7 @@ import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, stripInvalidCitationMarkers, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
-import { computeQuestionSituationMatch } from "./situationExtractor";
+import { classifyFollowUp } from "./situationExtractor";
 import type {
   IssueMap,
   RecordStrength,
@@ -100,18 +100,57 @@ export async function runChatV3Pipeline(
   const notifyStage = (stage: string) => { if (onStageChange) onStageChange(stage); };
 
   // =====================================================
-  // STAGE 0: SITUATION RELEVANCE GATE
+  // STAGE 0: SITUATION RELEVANCE GATE (LLM-based)
   // =====================================================
-  // Determine if stored situation context should be applied to this question
-  // This prevents "sticky context" leakage (e.g., boardwalk vote appearing in budget questions)
-  const situationRelevance = computeQuestionSituationMatch(userMessage, situationContext || null);
-  const effectiveSituationContext = situationRelevance.useSituationContext ? situationContext : null;
+  // Determine if stored situation context should be applied to this question.
+  // Uses a fast LLM classifier (with heuristic fallback) instead of fragile keyword scoring.
+  // This prevents "sticky context" leakage while correctly recognising implicit follow-ups.
+
+  // Extract the last user question from history to give the classifier extra signal
+  const lastHistoryItem = sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;
+  const lastUserMessage = lastHistoryItem?.role === "user" ? lastHistoryItem.content : undefined;
+
+  const followUpResult = await classifyFollowUp(
+    userMessage,
+    situationContext || null,
+    lastUserMessage
+  );
+
+  const effectiveSituationContext = followUpResult.isContinuation ? situationContext : null;
 
   // Also filter history when situation context is gated
   // This prevents prior Q&A from leaking into unrelated domain questions
-  const historyForSynthesis = situationRelevance.useSituationContext 
-    ? sessionHistory 
-    : []; // Clear history when domain switch detected
+  const historyForSynthesis = followUpResult.isContinuation
+    ? sessionHistory
+    : []; // Clear history when topic switch detected
+
+  // ---------------------------------------------------------------------------
+  // Session anchor: always carry forward town + year from prior context, even
+  // when the situation gate fires. This keeps retrieval temporally and
+  // geographically anchored without forcing false situational context.
+  // ---------------------------------------------------------------------------
+  const sessionAnchorTown: string | undefined =
+    townPreference ||
+    (situationContext?.entities ?? []).find(e => /^[A-Z][a-z]+$/.test(e)) ||
+    undefined;
+
+  // Extract year from situation context time range or entity list
+  let sessionAnchorYear: number | undefined;
+  if (situationContext?.timeRange?.start) {
+    const y = parseInt(situationContext.timeRange.start.slice(0, 4), 10);
+    if (!isNaN(y)) sessionAnchorYear = y;
+  }
+  if (!sessionAnchorYear) {
+    const yearFromEntities = (situationContext?.entities ?? [])
+      .map(e => parseInt(e, 10))
+      .find(n => n >= 2015 && n <= 2035);
+    if (yearFromEntities) sessionAnchorYear = yearFromEntities;
+  }
+
+  const sessionAnchor =
+    sessionAnchorTown || sessionAnchorYear
+      ? { town: sessionAnchorTown, year: sessionAnchorYear }
+      : undefined;
 
   logInfo("v3_pipeline_start", {
     requestId: logContext?.requestId,
@@ -120,11 +159,14 @@ export async function runChatV3Pipeline(
     messageLength: userMessage.length,
     townPreference,
     hasSituationContext: !!situationContext,
-    situationGated: !situationRelevance.useSituationContext,
-    situationScore: situationRelevance.score,
-    situationReason: situationRelevance.reason,
+    situationGated: !followUpResult.isContinuation,
+    classifierMethod: followUpResult.method,
+    classifierConfidence: followUpResult.confidence,
+    situationReason: followUpResult.reason,
     sessionSourceCount: (sessionSources || []).length,
-    historyCleared: !situationRelevance.useSituationContext && sessionHistory.length > 0,
+    historyCleared: !followUpResult.isContinuation && sessionHistory.length > 0,
+    sessionAnchorTown: sessionAnchorTown ?? null,
+    sessionAnchorYear: sessionAnchorYear ?? null,
   });
 
   // =====================================================
@@ -138,6 +180,7 @@ export async function runChatV3Pipeline(
     townHint: townPreference || undefined,
     templateContext,
     logContext,
+    sessionAnchor,
   });
 
   const { issueMap, retrievalPlan, validationWarnings } = plannerResult;
