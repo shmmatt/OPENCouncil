@@ -878,69 +878,73 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
 
     const idList = ghostIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
 
-    // Capture the logical_document IDs that will become orphaned by this ghost set only
-    const affectedLogDocsResult = await db.execute(sql.raw(`
-      SELECT DISTINCT dv.document_id
-      FROM document_versions dv
-      WHERE dv.file_blob_id IN (${idList})
-    `));
-    const affectedLogDocIds = (affectedLogDocsResult.rows as any[]).map((r: any) => r.document_id as string);
+    // Wrap the entire multi-step deletion in a transaction so a mid-sequence failure
+    // cannot leave the database in a partially cleaned state.
+    const deletedCount = await db.transaction(async (tx) => {
+      // Capture logical_document IDs affected by this ghost set only
+      const affectedLogDocsResult = await tx.execute(sql.raw(`
+        SELECT DISTINCT dv.document_id
+        FROM document_versions dv
+        WHERE dv.file_blob_id IN (${idList})
+      `));
+      const affectedLogDocIds = (affectedLogDocsResult.rows as any[]).map((r: any) => r.document_id as string);
 
-    // Delete document_chunks (no FK constraint)
-    await db.execute(sql.raw(`DELETE FROM document_chunks WHERE file_blob_id IN (${idList})`));
+      // 1. Delete document_chunks (varchar FK, no constraint)
+      await tx.execute(sql.raw(`DELETE FROM document_chunks WHERE file_blob_id IN (${idList})`));
 
-    // Clear current_version_id pointers that reference ghost versions
-    await db.execute(sql.raw(`
-      UPDATE logical_documents
-      SET current_version_id = NULL
-      WHERE current_version_id IN (
-        SELECT id FROM document_versions WHERE file_blob_id IN (${idList})
-      )
-    `));
-
-    // Delete the ghost document_versions
-    await db.execute(sql.raw(`DELETE FROM document_versions WHERE file_blob_id IN (${idList})`));
-
-    if (affectedLogDocIds.length > 0) {
-      const logDocIdList = affectedLogDocIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
-
-      // For affected logical docs that still have other versions, restore current_version_id
-      // to their most recent remaining version (avoids leaving valid docs pointer-less)
-      await db.execute(sql.raw(`
-        UPDATE logical_documents ld
-        SET current_version_id = (
-          SELECT dv2.id FROM document_versions dv2
-          WHERE dv2.document_id = ld.id
-          ORDER BY dv2.created_at DESC
-          LIMIT 1
+      // 2. Clear current_version_id pointers that reference ghost versions
+      await tx.execute(sql.raw(`
+        UPDATE logical_documents
+        SET current_version_id = NULL
+        WHERE current_version_id IN (
+          SELECT id FROM document_versions WHERE file_blob_id IN (${idList})
         )
-        WHERE ld.id IN (${logDocIdList})
-          AND ld.current_version_id IS NULL
-          AND EXISTS (
-            SELECT 1 FROM document_versions dv3 WHERE dv3.document_id = ld.id
-          )
       `));
 
-      // Delete only logical_documents that are part of the ghost set AND have no remaining versions
-      await db.execute(sql.raw(`
-        DELETE FROM logical_documents
-        WHERE id IN (${logDocIdList})
-          AND current_version_id IS NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM document_versions dv2 WHERE dv2.document_id = logical_documents.id
+      // 3. Delete the ghost document_versions (FK → file_blobs)
+      await tx.execute(sql.raw(`DELETE FROM document_versions WHERE file_blob_id IN (${idList})`));
+
+      if (affectedLogDocIds.length > 0) {
+        const logDocIdList = affectedLogDocIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+        // 4a. Restore current_version_id for logical docs that still have other versions
+        //     (prevents leaving valid docs with a null pointer)
+        await tx.execute(sql.raw(`
+          UPDATE logical_documents ld
+          SET current_version_id = (
+            SELECT dv2.id FROM document_versions dv2
+            WHERE dv2.document_id = ld.id
+            ORDER BY dv2.created_at DESC
+            LIMIT 1
           )
-      `));
-    }
+          WHERE ld.id IN (${logDocIdList})
+            AND ld.current_version_id IS NULL
+            AND EXISTS (
+              SELECT 1 FROM document_versions dv3 WHERE dv3.document_id = ld.id
+            )
+        `));
 
-    // Null out ocr_jobs references (FK constraint, no cascade)
-    await db.execute(sql.raw(`UPDATE ocr_jobs SET file_blob_id = NULL WHERE file_blob_id IN (${idList})`));
+        // 4b. Delete logical_documents from ghost set with no remaining versions
+        await tx.execute(sql.raw(`
+          DELETE FROM logical_documents
+          WHERE id IN (${logDocIdList})
+            AND current_version_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM document_versions dv2 WHERE dv2.document_id = logical_documents.id
+            )
+        `));
+      }
 
-    // Delete ingestion_jobs (FK constraint, no cascade)
-    await db.execute(sql.raw(`DELETE FROM ingestion_jobs WHERE file_blob_id IN (${idList})`));
+      // 5. Null out ocr_jobs references (FK constraint, no cascade)
+      await tx.execute(sql.raw(`UPDATE ocr_jobs SET file_blob_id = NULL WHERE file_blob_id IN (${idList})`));
 
-    // Finally delete the ghost file_blobs
-    const deleteResult = await db.execute(sql.raw(`DELETE FROM file_blobs WHERE id IN (${idList}) RETURNING id`));
-    const deletedCount = (deleteResult.rows as any[]).length;
+      // 6. Delete ingestion_jobs (FK constraint, no cascade)
+      await tx.execute(sql.raw(`DELETE FROM ingestion_jobs WHERE file_blob_id IN (${idList})`));
+
+      // 7. Finally delete the ghost file_blobs themselves
+      const deleteResult = await tx.execute(sql.raw(`DELETE FROM file_blobs WHERE id IN (${idList}) RETURNING id`));
+      return (deleteResult.rows as any[]).length;
+    });
 
     logInfo(`[admin] Corpus cleanup: deleted ${deletedCount} S3 ghost file blob records (Albany/Bartlett/Ossipee)`);
     res.json({ deleted: deletedCount, dryRun: false, message: `Deleted ${deletedCount} S3 ghost records` });
