@@ -1053,6 +1053,7 @@ interface StatewideEnrichProgressData {
   skippedDocs: number;
   errorDocs: number;
   currentDoc: string | null;
+  currentBatch: number;
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
@@ -1170,6 +1171,11 @@ function StatewideEnrichControls() {
                     <div className="text-xs text-muted-foreground">errors</div>
                   </div>
                 </div>
+                {progress.currentBatch > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Batch {progress.currentBatch} of ~{Math.ceil(progress.totalDocs / 50)}
+                  </div>
+                )}
                 {progress.currentDoc && (
                   <div className="text-xs text-muted-foreground truncate">
                     Processing: <span className="font-mono">{progress.currentDoc}</span>

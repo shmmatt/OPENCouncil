@@ -35,6 +35,7 @@ export interface StatewideEnrichProgress {
   skippedDocs: number;
   errorDocs: number;
   currentDoc: string | null;
+  currentBatch: number;
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
@@ -50,6 +51,7 @@ let statewideEnrichProgress: StatewideEnrichProgress = {
   skippedDocs: 0,
   errorDocs: 0,
   currentDoc: null,
+  currentBatch: 0,
   startedAt: null,
   completedAt: null,
   errorMessage: null,
@@ -114,6 +116,7 @@ export async function startStatewideEnrich(): Promise<void> {
     skippedDocs: 0,
     errorDocs: 0,
     currentDoc: null,
+    currentBatch: 0,
     startedAt: new Date().toISOString(),
     completedAt: null,
     errorMessage: null,
@@ -122,71 +125,108 @@ export async function startStatewideEnrich(): Promise<void> {
 
   logInfo(`[StatewideEnrich] Starting job ${jobId}`);
 
+  const BATCH_SIZE = 50;
+
   try {
-    // Fetch statewide logical_documents needing enrichment:
-    // board IS NULL OR board = 'Needs Review' OR category = 'general' OR category = 'misc_other'
-    // Joined with their current_version → file_blob for text
-    const result = await db.execute(sql`
-      SELECT
-        ld.id AS logical_doc_id,
-        ld.canonical_title,
-        ld.board AS current_board,
-        ld.category AS current_category,
-        dv.id AS version_id,
-        dv.file_blob_id,
-        dv.year AS version_year,
-        fb.original_filename,
-        fb.ocr_text,
-        fb.preview_text
-      FROM logical_documents ld
-      LEFT JOIN document_versions dv ON dv.id = ld.current_version_id
-      LEFT JOIN file_blobs fb ON fb.id = dv.file_blob_id
-      WHERE ld.town = 'statewide'
+    // Get total count first for progress reporting
+    const countResult = await db.execute(sql`
+      SELECT COUNT(*) AS cnt
+      FROM logical_documents
+      WHERE town = 'statewide'
         AND (
-          ld.board IS NULL
-          OR ld.board = 'Needs Review'
-          OR ld.board = ''
-          OR ld.category = 'general'
-          OR ld.category = 'misc_other'
+          board IS NULL
+          OR board = 'Needs Review'
+          OR board = ''
+          OR category = 'general'
+          OR category = 'misc_other'
         )
-      ORDER BY ld.created_at
     `);
+    statewideEnrichProgress.totalDocs = parseInt(
+      (countResult.rows as any[])[0]?.cnt ?? "0"
+    );
+    logInfo(`[StatewideEnrich] Found ${statewideEnrichProgress.totalDocs} statewide docs to process`);
 
-    const docs = result.rows as unknown as StatewideDocRow[];
-    statewideEnrichProgress.totalDocs = docs.length;
-    logInfo(`[StatewideEnrich] Found ${docs.length} statewide docs to process`);
+    // Process in batches of 50 using OFFSET pagination
+    let batchNum = 0;
+    let offset = 0;
+    let batchHadDocs = true;
 
-    for (const doc of docs) {
-      if (stopRequested) {
-        logInfo(`[StatewideEnrich] Stop requested at doc ${doc.logical_doc_id}`);
+    while (batchHadDocs && !stopRequested) {
+      batchNum++;
+      statewideEnrichProgress.currentBatch = batchNum;
+
+      const result = await db.execute(sql`
+        SELECT
+          ld.id AS logical_doc_id,
+          ld.canonical_title,
+          ld.board AS current_board,
+          ld.category AS current_category,
+          dv.id AS version_id,
+          dv.file_blob_id,
+          dv.year AS version_year,
+          fb.original_filename,
+          fb.ocr_text,
+          fb.preview_text
+        FROM logical_documents ld
+        LEFT JOIN document_versions dv ON dv.id = ld.current_version_id
+        LEFT JOIN file_blobs fb ON fb.id = dv.file_blob_id
+        WHERE ld.town = 'statewide'
+          AND (
+            ld.board IS NULL
+            OR ld.board = 'Needs Review'
+            OR ld.board = ''
+            OR ld.category = 'general'
+            OR ld.category = 'misc_other'
+          )
+        ORDER BY ld.created_at, ld.id
+        LIMIT ${BATCH_SIZE} OFFSET ${offset}
+      `);
+
+      const docs = result.rows as unknown as StatewideDocRow[];
+      batchHadDocs = docs.length > 0;
+
+      if (!batchHadDocs) {
+        logInfo(`[StatewideEnrich] No more docs in batch ${batchNum}, done.`);
         break;
       }
 
-      statewideEnrichProgress.currentDoc = doc.logical_doc_id;
-      statewideEnrichProgress.processedDocs++;
+      logInfo(
+        `[StatewideEnrich] Batch ${batchNum}: ${docs.length} docs (offset=${offset})`
+      );
+      offset += docs.length;
 
-      const textLength =
-        (doc.ocr_text?.length ?? 0) + (doc.preview_text?.length ?? 0);
+      for (const doc of docs) {
+        if (stopRequested) {
+          logInfo(`[StatewideEnrich] Stop requested at doc ${doc.logical_doc_id}`);
+          break;
+        }
 
-      if (textLength < MIN_TEXT_LENGTH) {
-        statewideEnrichProgress.skippedDocs++;
-        logWarn(
-          `[StatewideEnrich] Skipped doc=${doc.logical_doc_id} (text=${textLength} chars < ${MIN_TEXT_LENGTH})`
-        );
-        continue;
+        statewideEnrichProgress.currentDoc = doc.logical_doc_id;
+        statewideEnrichProgress.processedDocs++;
+
+        const textLength =
+          (doc.ocr_text?.length ?? 0) + (doc.preview_text?.length ?? 0);
+
+        if (textLength < MIN_TEXT_LENGTH) {
+          statewideEnrichProgress.skippedDocs++;
+          logWarn(
+            `[StatewideEnrich] Skipped doc=${doc.logical_doc_id} (text=${textLength} chars < ${MIN_TEXT_LENGTH})`
+          );
+          continue;
+        }
+
+        try {
+          await processStatewideDoc(doc);
+          statewideEnrichProgress.enrichedDocs++;
+        } catch (err: any) {
+          logError(
+            `[StatewideEnrich] Failed doc ${doc.logical_doc_id}: ${err.message}`
+          );
+          statewideEnrichProgress.errorDocs++;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_MS));
       }
-
-      try {
-        await processStatewideDoc(doc);
-        statewideEnrichProgress.enrichedDocs++;
-      } catch (err: any) {
-        logError(
-          `[StatewideEnrich] Failed doc ${doc.logical_doc_id}: ${err.message}`
-        );
-        statewideEnrichProgress.errorDocs++;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_MS));
     }
 
     const finalStatus = stopRequested ? "stopped" : "completed";
@@ -302,11 +342,11 @@ async function processStatewideDoc(doc: StatewideDocRow): Promise<void> {
     `);
   }
 
-  // Sync chunk metadata JSONB
-  if (didUpdateLogDoc && doc.file_blob_id) {
+  // Sync chunk metadata JSONB — always patch year if extracted, even when logDoc unchanged
+  if (doc.file_blob_id) {
     const chunkPatch: Record<string, unknown> = {};
-    if (newBoard) chunkPatch.board = newBoard;
-    if (newCategory) chunkPatch.documentType = newCategory;
+    if (didUpdateLogDoc && newBoard) chunkPatch.board = newBoard;
+    if (didUpdateLogDoc && newCategory) chunkPatch.documentType = newCategory;
     if (suggested.year) {
       const yr = parseInt(suggested.year);
       if (!isNaN(yr)) chunkPatch.year = yr;
@@ -321,7 +361,8 @@ async function processStatewideDoc(doc: StatewideDocRow): Promise<void> {
         `);
         logInfo(
           `[StatewideEnrich] Patched ${patchResult.rowCount ?? 0} chunks for blob=${doc.file_blob_id} ` +
-          `[board="${chunkPatch.board ?? "unchanged"}", type="${chunkPatch.documentType ?? "unchanged"}"]`
+          `[board="${chunkPatch.board ?? "unchanged"}", type="${chunkPatch.documentType ?? "unchanged"}", ` +
+          `year="${chunkPatch.year ?? "unchanged"}"]`
         );
       } catch (err: any) {
         logError(
