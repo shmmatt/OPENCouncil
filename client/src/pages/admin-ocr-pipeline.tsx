@@ -46,6 +46,8 @@ import {
   HardDrive,
   GraduationCap,
   Building2,
+  Trash2,
+  RotateCw,
 } from "lucide-react";
 
 
@@ -1225,6 +1227,265 @@ function StatewideEnrichControls() {
   );
 }
 
+interface S3GhostCount {
+  total: number;
+  byTown: Array<{ town: string; count: number }>;
+}
+
+function CorpusCleanupControls() {
+  const { toast } = useToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { data: ghostCount, refetch: refetchGhosts, isLoading: ghostLoading } = useQuery<S3GhostCount>({
+    queryKey: ["/api/admin/cleanup/s3-ghosts/count"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/s3-ghosts/count");
+      if (!res.ok) throw new Error("Failed to fetch ghost count");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const { data: needsOcrCount, refetch: refetchNeedsOcr, isLoading: needsOcrLoading } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/cleanup/needs-ocr-reset/count"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/needs-ocr-reset/count");
+      if (!res.ok) throw new Error("Failed to fetch needs_ocr count");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const dryRunMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/s3-ghosts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Dry run failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Dry Run Complete", description: data.message });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/s3-ghosts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Deletion failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Ghost Records Deleted", description: data.message });
+      setConfirmDelete(false);
+      refetchGhosts();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
+      setConfirmDelete(false);
+    },
+  });
+
+  const resetNeedsOcrMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/needs-ocr-reset", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Reset failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "needs_ocr Reset", description: data.message });
+      refetchNeedsOcr();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { data: requireErrorCount, refetch: refetchRequireError, isLoading: requireErrorLoading } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/cleanup/require-error-blobs/count"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/require-error-blobs/count");
+      if (!res.ok) throw new Error("Failed to fetch require-error count");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  const resetRequireErrorMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/cleanup/require-error-blobs/reset", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Reset failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({ title: "OCR Re-queued", description: data.message });
+      refetchRequireError();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Card data-testid="corpus-cleanup-controls">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Trash2 className="w-5 h-5 text-orange-600" />
+          <CardTitle className="text-sm">Corpus Cleanup</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="rounded-md border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="text-sm font-medium">S3 Ghost Records</div>
+                <div className="text-xs text-muted-foreground">
+                  File blobs with S3 "File not found" OCR failures — source file missing, safe to delete
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {ghostLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Badge variant={ghostCount && ghostCount.total > 0 ? "destructive" : "outline"} data-testid="badge-ghost-count">
+                    {ghostCount?.total ?? 0} blobs
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => dryRunMutation.mutate()}
+                  disabled={dryRunMutation.isPending || !ghostCount || ghostCount.total === 0}
+                  data-testid="button-ghost-dry-run"
+                >
+                  {dryRunMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  <span className="ml-1">Dry Run</span>
+                </Button>
+                {!confirmDelete ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={!ghostCount || ghostCount.total === 0}
+                    data-testid="button-ghost-delete-init"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Ghosts
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteMutation.mutate()}
+                      disabled={deleteMutation.isPending}
+                      data-testid="button-ghost-delete-confirm"
+                    >
+                      {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      <span className="ml-1">Confirm Delete</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setConfirmDelete(false)}
+                      data-testid="button-ghost-delete-cancel"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {ghostCount && ghostCount.byTown.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {ghostCount.byTown.map((t) => (
+                  <Badge key={t.town} variant="outline" className="text-orange-600 border-orange-300 dark:border-orange-800" data-testid={`badge-ghost-town-${t.town}`}>
+                    {t.town}: {t.count}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="text-sm font-medium">Stuck needs_ocr Flags</div>
+                <div className="text-xs text-muted-foreground">
+                  Blobs with ocr_status=completed but needs_ocr still true — clear flags and trigger re-embed
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {needsOcrLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Badge variant={needsOcrCount && needsOcrCount.count > 0 ? "destructive" : "outline"} data-testid="badge-needs-ocr-count">
+                    {needsOcrCount?.count ?? 0} blobs
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => resetNeedsOcrMutation.mutate()}
+                  disabled={resetNeedsOcrMutation.isPending || !needsOcrCount || needsOcrCount.count === 0}
+                  data-testid="button-needs-ocr-reset"
+                >
+                  {resetNeedsOcrMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="w-4 h-4" />
+                  )}
+                  <span className="ml-1">Reset & Re-embed</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="text-sm font-medium">OCR Require-Error Blobs</div>
+                <div className="text-xs text-muted-foreground">
+                  Blobs that failed OCR with "require is not defined" — re-queue now that the import is fixed
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {requireErrorLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Badge variant={requireErrorCount && requireErrorCount.count > 0 ? "destructive" : "outline"} data-testid="badge-require-error-count">
+                    {requireErrorCount?.count ?? 0} blobs
+                  </Badge>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => resetRequireErrorMutation.mutate()}
+                  disabled={resetRequireErrorMutation.isPending || !requireErrorCount || requireErrorCount.count === 0}
+                  data-testid="button-require-error-reset"
+                >
+                  {resetRequireErrorMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  <span className="ml-1">Re-queue for OCR</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PipelineStatusPanel() {
   const { data, isLoading, refetch } = useQuery<PipelineData>({
     queryKey: ['/api/admin/pipeline-status'],
@@ -1358,6 +1619,8 @@ function PipelineStatusPanel() {
       <SauEnrichControls />
 
       <StatewideEnrichControls />
+
+      <CorpusCleanupControls />
 
       {data.recentJobs.length > 0 && (
         <Card>

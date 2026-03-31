@@ -9,7 +9,10 @@ let mammothModule: { extractRawText: (options: { path: string }) => Promise<{ va
 async function getPdfParser(): Promise<(buffer: Buffer, options?: any) => Promise<{ text: string }>> {
   if (!pdfParseModule) {
     try {
-      const mod = await import("pdf-parse");
+      // Use direct path to avoid pdf-parse test bootstrapper which uses require()
+      // and causes "require is not defined" in ESM contexts (same pattern as bulk-upload-helper.ts)
+      // @ts-ignore - pdf-parse types don't include this path but it works at runtime
+      const mod = await import("pdf-parse/lib/pdf-parse.js");
       const pdfParse = (mod as any).default || mod;
       
       if (typeof pdfParse === "function") {

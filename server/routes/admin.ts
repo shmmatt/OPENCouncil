@@ -808,4 +808,180 @@ router.post("/statewide/enrich-missing/stop", authenticateAdmin, async (_req, re
   }
 });
 
+// ---------------------------------------------------------------------------
+// Corpus Cleanup endpoints (Task #45)
+// ---------------------------------------------------------------------------
+
+router.get("/cleanup/s3-ghosts/count", authenticateAdmin, async (_req, res) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        COALESCE(ct.name, ld.town, 'unknown') as town,
+        COUNT(DISTINCT fb.id) as count
+      FROM file_blobs fb
+      LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id AND dv.is_current = true
+      LEFT JOIN logical_documents ld ON ld.id = dv.document_id
+      LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+      LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
+      WHERE fb.ocr_status = 'failed'
+        AND fb.ocr_failure_reason LIKE 'File not found: s3://opencouncil-municipal-docs/%'
+      GROUP BY 1
+      ORDER BY count DESC
+    `);
+    const rows = result.rows as any[];
+    const total = rows.reduce((sum: number, r: any) => sum + Number(r.count), 0);
+    res.json({ total, byTown: rows.map((r: any) => ({ town: r.town, count: Number(r.count) })) });
+  } catch (error: any) {
+    logError(`[admin] S3 ghost count error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to count S3 ghosts" });
+  }
+});
+
+router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
+  try {
+    const { dryRun = true } = req.body || {};
+
+    const ghostResult = await db.execute(sql`
+      SELECT fb.id
+      FROM file_blobs fb
+      WHERE fb.ocr_status = 'failed'
+        AND fb.ocr_failure_reason LIKE 'File not found: s3://opencouncil-municipal-docs/%'
+    `);
+    const ghostIds = (ghostResult.rows as any[]).map((r: any) => r.id as string);
+
+    if (ghostIds.length === 0) {
+      return res.json({ deleted: 0, dryRun, message: "No S3 ghost records found" });
+    }
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        wouldDelete: ghostIds.length,
+        message: `Dry run: would delete ${ghostIds.length} ghost file blob records`,
+      });
+    }
+
+    const idList = ghostIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+    await db.execute(sql.raw(`DELETE FROM document_chunks WHERE file_blob_id IN (${idList})`));
+
+    await db.execute(sql.raw(`
+      UPDATE logical_documents
+      SET current_version_id = NULL
+      WHERE current_version_id IN (
+        SELECT id FROM document_versions WHERE file_blob_id IN (${idList})
+      )
+    `));
+
+    await db.execute(sql.raw(`DELETE FROM document_versions WHERE file_blob_id IN (${idList})`));
+
+    await db.execute(sql.raw(`
+      DELETE FROM logical_documents
+      WHERE current_version_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM document_versions dv2 WHERE dv2.document_id = logical_documents.id
+        )
+    `));
+
+    await db.execute(sql.raw(`UPDATE ocr_jobs SET file_blob_id = NULL WHERE file_blob_id IN (${idList})`));
+
+    await db.execute(sql.raw(`DELETE FROM ingestion_jobs WHERE file_blob_id IN (${idList})`));
+
+    const deleteResult = await db.execute(sql.raw(`DELETE FROM file_blobs WHERE id IN (${idList}) RETURNING id`));
+    const deletedCount = (deleteResult.rows as any[]).length;
+
+    logInfo(`[admin] Corpus cleanup: deleted ${deletedCount} S3 ghost file blob records`);
+    res.json({ deleted: deletedCount, dryRun: false, message: `Deleted ${deletedCount} S3 ghost records` });
+  } catch (error: any) {
+    logError(`[admin] S3 ghost cleanup error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to clean S3 ghosts" });
+  }
+});
+
+router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT COUNT(*) as count
+      FROM file_blobs
+      WHERE needs_ocr = true AND ocr_status = 'completed'
+    `);
+    const count = Number((result.rows as any[])[0]?.count || 0);
+    res.json({ count });
+  } catch (error: any) {
+    logError(`[admin] needs-ocr-reset count error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to count stuck blobs" });
+  }
+});
+
+router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => {
+  try {
+    const resetResult = await db.execute(sql`
+      UPDATE file_blobs
+      SET needs_ocr = false
+      WHERE needs_ocr = true AND ocr_status = 'completed'
+      RETURNING id
+    `);
+    const resetCount = (resetResult.rows as any[]).length;
+
+    const embeddingTriggered = !isRunning();
+    if (embeddingTriggered) {
+      startPipeline({}).catch((err: Error) => {
+        logError(`[admin] needs-ocr-reset embed trigger error: ${err.message}`);
+      });
+    }
+
+    logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, embedding triggered=${embeddingTriggered}`);
+    res.json({
+      reset: resetCount,
+      embeddingTriggered,
+      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; embedding pipeline started" : "; embedding already running"}`,
+    });
+  } catch (error: any) {
+    logError(`[admin] needs-ocr-reset error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to reset needs_ocr flags" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// OCR require-error reset (Task #46) — re-queues blobs that failed with
+// "require is not defined" (caused by unsafe pdf-parse import, now fixed)
+// ---------------------------------------------------------------------------
+
+router.get("/cleanup/require-error-blobs/count", authenticateAdmin, async (_req, res) => {
+  try {
+    const result = await db.execute(sql`
+      SELECT COUNT(*) as count
+      FROM file_blobs
+      WHERE ocr_status = 'failed'
+        AND ocr_failure_reason LIKE '%require is not defined%'
+    `);
+    const count = Number((result.rows as any[])[0]?.count || 0);
+    res.json({ count });
+  } catch (error: any) {
+    logError(`[admin] require-error-blobs count error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to count require-error blobs" });
+  }
+});
+
+router.post("/cleanup/require-error-blobs/reset", authenticateAdmin, async (_req, res) => {
+  try {
+    const resetResult = await db.execute(sql`
+      UPDATE file_blobs
+      SET ocr_status = 'queued',
+          ocr_queued_at = NOW(),
+          ocr_failure_reason = NULL,
+          needs_ocr = true
+      WHERE ocr_status = 'failed'
+        AND ocr_failure_reason LIKE '%require is not defined%'
+      RETURNING id
+    `);
+    const resetCount = (resetResult.rows as any[]).length;
+    logInfo(`[admin] require-error-blobs reset: re-queued ${resetCount} blobs for OCR`);
+    res.json({ reset: resetCount, message: `Re-queued ${resetCount} blobs for OCR retry` });
+  } catch (error: any) {
+    logError(`[admin] require-error-blobs reset error: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to reset require-error blobs" });
+  }
+});
+
 export default router;
