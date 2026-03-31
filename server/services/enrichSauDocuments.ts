@@ -84,6 +84,8 @@ interface SauBlobRow {
   sau_doc_id: string;
   has_logical_doc: boolean;
   existing_logical_doc_id: string | null;
+  /** true when the blob already has a logical doc AND at least one chunk with sourceType='sau' in metadata */
+  is_already_enriched: boolean;
 }
 
 export async function startSauEnrich(): Promise<void> {
@@ -132,7 +134,15 @@ export async function startSauEnrich(): Promise<void> {
           JOIN logical_documents ld ON ld.id = dv2.document_id
           WHERE dv2.file_blob_id = fb.id
           LIMIT 1
-        ) AS existing_logical_doc_id
+        ) AS existing_logical_doc_id,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM document_versions dv3
+          WHERE dv3.file_blob_id = fb.id
+        ) AND EXISTS (
+          SELECT 1 FROM document_chunks dc
+          WHERE dc.file_blob_id = fb.id
+            AND dc.metadata->>'sourceType' = 'sau'
+        ) THEN true ELSE false END AS is_already_enriched
       FROM crawler_sau_documents csd
       JOIN crawler_sau_sources css ON csd.source_id = css.id
       JOIN file_blobs fb ON csd.file_blob_id = fb.id
@@ -154,6 +164,12 @@ export async function startSauEnrich(): Promise<void> {
 
       sauEnrichProgress.currentBlob = blob.file_blob_id;
       sauEnrichProgress.processedBlobs++;
+
+      // Idempotency: skip blobs already fully enriched (has logical doc + sau chunk metadata)
+      if (blob.is_already_enriched) {
+        sauEnrichProgress.skippedBlobs++;
+        continue;
+      }
 
       const textLength =
         (blob.ocr_text?.length ?? 0) + (blob.preview_text?.length ?? 0);
@@ -402,14 +418,25 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
       try {
         const d = new Date(suggested.meetingDate);
         if (!isNaN(d.getTime())) {
+          const yearStr = String(d.getFullYear());
           await db.execute(sql`
             UPDATE document_versions
-            SET meeting_date = ${d}, is_minutes = ${Boolean(suggested.isMinutes)}
+            SET meeting_date = ${d},
+                year = COALESCE(year, ${yearStr}),
+                is_minutes = ${Boolean(suggested.isMinutes)}
             WHERE file_blob_id = ${blob.file_blob_id}
               AND meeting_date IS NULL
           `);
         }
       } catch { /* ignore */ }
+    } else if (suggested.year) {
+      // Persist year even without a full meeting date
+      await db.execute(sql`
+        UPDATE document_versions
+        SET year = COALESCE(year, ${suggested.year})
+        WHERE file_blob_id = ${blob.file_blob_id}
+          AND year IS NULL
+      `);
     }
   }
 
