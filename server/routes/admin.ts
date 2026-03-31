@@ -12,6 +12,7 @@ import { documentMetadataSchema } from "@shared/schema";
 import type { DocumentMetadata } from "@shared/schema";
 import { startPipeline, getProgress, requestStop, isRunning, startReindex, getReindexProgress, requestReindexStop, isReindexRunning } from "../services/embeddingPipeline";
 import { startSauEnrich, getSauEnrichProgress, isSauEnrichRunning, requestSauEnrichStop } from "../services/enrichSauDocuments";
+import { startStatewideEnrich, getStatewideEnrichProgress, isStatewideEnrichRunning, requestStatewideEnrichStop } from "../services/enrichStatewideDocuments";
 import { db, sql } from "../storage/db";
 import { logInfo, logError } from "../utils/logger";
 
@@ -760,6 +761,50 @@ router.post("/sau/enrich-all/stop", authenticateAdmin, async (_req, res) => {
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to stop SAU enrichment" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Statewide Enrichment endpoints (Task #43)
+// ---------------------------------------------------------------------------
+
+router.post("/statewide/enrich-missing", authenticateAdmin, async (_req, res) => {
+  try {
+    if (isStatewideEnrichRunning()) {
+      return res.status(409).json({ message: "Statewide enrichment is already running" });
+    }
+
+    startStatewideEnrich().catch(err => {
+      logError(`[admin] Statewide enrich background error: ${err.message}`);
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const progress = getStatewideEnrichProgress();
+    res.json({ message: "Statewide enrichment started", jobId: progress.jobId, progress });
+  } catch (error: any) {
+    logError(`[admin] Error starting statewide enrichment: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to start statewide enrichment" });
+  }
+});
+
+router.get("/statewide/enrich-missing/status", authenticateAdmin, async (_req, res) => {
+  try {
+    res.json(getStatewideEnrichProgress());
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch statewide enrichment status" });
+  }
+});
+
+router.post("/statewide/enrich-missing/stop", authenticateAdmin, async (_req, res) => {
+  try {
+    const stopped = requestStatewideEnrichStop();
+    if (stopped) {
+      res.json({ message: "Statewide enrichment stop requested. Will finish current doc and stop." });
+    } else {
+      res.status(400).json({ message: "Statewide enrichment is not currently running" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to stop statewide enrichment" });
   }
 });
 

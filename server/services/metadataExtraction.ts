@@ -432,63 +432,110 @@ export interface SauMetadataHints extends MetadataHints {
   sauName?: string;
 }
 
+export interface StatewideMetadataHints extends MetadataHints {
+  isStatewideDocument?: boolean;
+  /** Optional: the existing canonical_title of the logical_document for extra context */
+  documentTitle?: string;
+}
+
 export async function suggestMetadataFromPreview(
   filename: string,
   previewText: string,
-  metadataHints?: SauMetadataHints
+  metadataHints?: SauMetadataHints | StatewideMetadataHints
 ): Promise<SuggestedMetadata> {
   const categoryList = ALLOWED_CATEGORIES.join(", ");
   
   // Run heuristic pre-pass for minutes detection
   const minutesHints = detectMinutesHeuristics(filename, previewText);
   
-  // Fast path: skip LLM if heuristics are confident enough
-  if (canSkipLlm(minutesHints, metadataHints, filename)) {
+  const isSau = (metadataHints as SauMetadataHints)?.isSauDocument === true;
+  const isStatewide = (metadataHints as StatewideMetadataHints)?.isStatewideDocument === true;
+
+  // Fast path: skip LLM if heuristics are confident enough (not for statewide/SAU)
+  if (!isStatewide && !isSau && canSkipLlm(minutesHints, metadataHints, filename)) {
     return buildMetadataFromHeuristics(filename, minutesHints, metadataHints);
   }
   
   // Build hints section for the LLM prompt
   const hintsSection = [];
-  if (minutesHints.likelyMinutes) {
+  if (!isStatewide && !isSau && minutesHints.likelyMinutes) {
     hintsSection.push(`HINT: This document appears to be meeting minutes based on filename/text patterns.`);
   }
-  if (minutesHints.possibleTown) {
+  if (!isStatewide && !isSau && minutesHints.possibleTown) {
     hintsSection.push(`HINT: Heuristic town detected from document text: "${minutesHints.possibleTown}" - USE THIS UNLESS TEXT CLEARLY CONTRADICTS IT.`);
   }
-  if (metadataHints?.defaultTown) {
+  if (!isStatewide && !isSau && metadataHints?.defaultTown) {
     hintsSection.push(`HINT: Admin-provided default town: "${metadataHints.defaultTown}" - USE THIS IF NO OTHER TOWN IS CLEARLY INDICATED IN THE DOCUMENT.`);
   }
-  if (minutesHints.possibleBoard) {
+  if (!isStatewide && !isSau && minutesHints.possibleBoard) {
     hintsSection.push(`HINT: Possible board detected: "${minutesHints.possibleBoard}"`);
   }
-  if (metadataHints?.defaultBoard) {
+  if (!isStatewide && !isSau && metadataHints?.defaultBoard) {
     hintsSection.push(`HINT: Admin-provided default board: "${metadataHints.defaultBoard}" - USE THIS IF NO OTHER BOARD IS CLEARLY INDICATED.`);
   }
-  if (minutesHints.possibleDateText) {
+  if (!isStatewide && !isSau && minutesHints.possibleDateText) {
     hintsSection.push(`HINT: Possible meeting date detected: "${minutesHints.possibleDateText}"`);
   }
-  if ((metadataHints as SauMetadataHints)?.isSauDocument) {
+  if (isSau) {
     const h = metadataHints as SauMetadataHints;
     hintsSection.push(`HINT: This is a SAU (School Administrative Unit) document, NOT a town document. The "town" field should be left empty (""). The SAU is: ${h.sauId} — ${h.sauName}.`);
     hintsSection.push(`HINT: For SAU documents, the "board" field should be the full school board name (e.g., "Governor Wentworth Regional School Board", "Conway School Board", "Kingswood Regional School Board"). Extract it from the document header. If not clearly stated, use the SAU name hint.`);
     hintsSection.push(`HINT: The filename is a UUID (not human-readable) — ignore it for metadata inference and rely entirely on the document text.`);
   }
+  if (isStatewide) {
+    const h = metadataHints as StatewideMetadataHints;
+    hintsSection.push(`HINT: This is a New Hampshire STATEWIDE document (not a town document). Set town to "statewide".`);
+    hintsSection.push(`HINT: The "board" field must be the issuing NH state agency, department, court, or legislative body. Use these exact names when they match:
+- NH laws/statutes (RSA) → "NH Legislature"
+- Court decisions/opinions → "NH Supreme Court" or "NH Superior Court"
+- Tax and revenue documents → "Department of Revenue Administration"
+- Environmental, water, or conservation documents → "Department of Environmental Services"
+- Planning, zoning handbooks, land use guidance → "NH Office of Planning and Development" or "NH Municipal Association"
+- Education funding, school law, education policy → "NH Department of Education"
+- Transportation, highway documents → "NH Department of Transportation"
+- Public utilities, energy regulations → "NH Public Utilities Commission"
+- Attorney General opinions, legal guidance → "NH Office of Attorney General"
+- If none of the above apply, extract the full agency name from the document header.`);
+    if (h.documentTitle) {
+      hintsSection.push(`HINT: The document's title is: "${h.documentTitle}" — use this to help identify the issuing agency.`);
+    }
+    hintsSection.push(`HINT: Statewide category guidance:
+- RSA statutes, session laws → "policy" or "misc_other"
+- Court rulings, decisions → "misc_other"
+- Tax forms, instructions → "misc_other"
+- Environmental regulations, permits → "policy" or "misc_other"
+- Planning/land use handbooks → "planning_board_docs" or "policy"
+- Budget/appropriations documents → "budget"
+- Election/ballot materials → "elections"
+- Ordinances, codes → "ordinance"
+Never use "meeting_minutes" for statewide documents unless the text is clearly a meeting transcript.`);
+  }
 
-  // For SAU documents, use the SAU-specialized prompt; for town documents use standard prompt
-  const isSau = (metadataHints as SauMetadataHints)?.isSauDocument === true;
+  // Prompt specialization by document type
+  const docTypeLabel = isSau
+    ? "school district (SAU)"
+    : isStatewide
+    ? "New Hampshire state agency"
+    : "municipal";
+
   const boardStandardList = isSau
     ? `- Common SAU school board names follow the pattern: "[District Name] School Board", "[District Name] Regional School Board", "[School Name] Board of Education", or "[SAU Name] School Board". Output the full official name as it appears in the document.`
+    : isStatewide
+    ? `- Output the full official name of the NH state agency, court, or legislative body that issued this document (see HINTS above for standard names to use).`
     : `- Choose from this standard list if it matches the intent: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Library Board of Trustees", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission".`;
 
   const townInstruction = isSau
     ? `**TOWN — leave empty for SAU documents:**
 - SAU documents are school district documents that span multiple towns. Output "" (empty string) for town.`
+    : isStatewide
+    ? `**TOWN — always "statewide" for state-level documents:**
+- This document was issued by a NH state agency, not a specific town. Output "statewide" for town.`
     : `**TOWN — extract from the document title or letterhead:**
 - Output only the town name (e.g., "Ossipee", "Conway") — never include "Town of".
 - If hints provide a town and the header does not contradict it, use the hint.`;
 
-  const prompt = `You are an expert in New Hampshire ${isSau ? "school district (SAU)" : "municipal"} government documents.
-Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a ${isSau ? "school district" : "municipal"} document.
+  const prompt = `You are an expert in New Hampshire ${docTypeLabel} government documents.
+Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a ${docTypeLabel} document.
 
 Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
 
