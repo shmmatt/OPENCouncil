@@ -711,11 +711,14 @@ export async function classifyFollowUp(
       reason?: unknown;
     };
 
-    const isContinuation = parsed.isContinuation === true;
     const confidence =
       typeof parsed.confidence === "number"
         ? Math.min(1, Math.max(0, parsed.confidence))
         : 0.5;
+
+    // Apply confidence threshold: model must be ≥ 60% sure to treat as continuation
+    const isContinuation = parsed.isContinuation === true && confidence >= 0.6;
+
     const reason =
       typeof parsed.reason === "string"
         ? parsed.reason
@@ -724,9 +727,10 @@ export async function classifyFollowUp(
         : "LLM determined new topic";
 
     return { isContinuation, confidence, reason, method: "llm" };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     logDebug("classifyFollowUp_fallback", {
-      error: err?.message,
+      error: message,
       question: question.slice(0, 100),
     });
 

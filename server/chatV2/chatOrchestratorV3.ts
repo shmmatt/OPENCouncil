@@ -128,23 +128,42 @@ export async function runChatV3Pipeline(
   // Session anchor: always carry forward town + year from prior context, even
   // when the situation gate fires. This keeps retrieval temporally and
   // geographically anchored without forcing false situational context.
+  // Priority: townPreference > situationContext entities > sessionHistory text
   // ---------------------------------------------------------------------------
+
+  // Helper: scan text for a 4-digit year in the recent-history range
+  function extractYearFromText(text: string): number | undefined {
+    const match = text.match(/\b(20(?:1[5-9]|2[0-9]|3[0-5]))\b/);
+    return match ? parseInt(match[1], 10) : undefined;
+  }
+
   const sessionAnchorTown: string | undefined =
     townPreference ||
-    (situationContext?.entities ?? []).find(e => /^[A-Z][a-z]+$/.test(e)) ||
+    (situationContext?.entities ?? []).find(e => /^[A-Z][a-z]{2,}$/.test(e)) ||
     undefined;
 
-  // Extract year from situation context time range or entity list
+  // Extract year: prefer situationContext time range, then entity list, then recent history
   let sessionAnchorYear: number | undefined;
+
   if (situationContext?.timeRange?.start) {
     const y = parseInt(situationContext.timeRange.start.slice(0, 4), 10);
-    if (!isNaN(y)) sessionAnchorYear = y;
+    if (!isNaN(y) && y >= 2015 && y <= 2035) sessionAnchorYear = y;
   }
+
   if (!sessionAnchorYear) {
     const yearFromEntities = (situationContext?.entities ?? [])
       .map(e => parseInt(e, 10))
       .find(n => n >= 2015 && n <= 2035);
     if (yearFromEntities) sessionAnchorYear = yearFromEntities;
+  }
+
+  if (!sessionAnchorYear) {
+    // Scan recent history (last 4 turns) for a year reference
+    const recentHistory = sessionHistory.slice(-4);
+    for (let i = recentHistory.length - 1; i >= 0; i--) {
+      const yr = extractYearFromText(recentHistory[i].content);
+      if (yr) { sessionAnchorYear = yr; break; }
+    }
   }
 
   const sessionAnchor =
