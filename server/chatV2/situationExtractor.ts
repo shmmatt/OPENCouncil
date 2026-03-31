@@ -735,9 +735,10 @@ export async function classifyFollowUp(
     });
 
     const heuristic = computeQuestionSituationMatch(question, situationContext);
+    const rawConfidence = heuristic.score / 4;
     return {
       isContinuation: heuristic.useSituationContext,
-      confidence: heuristic.score / 4,
+      confidence: Math.min(1, Math.max(0, rawConfidence)),
       reason: `[heuristic fallback] ${heuristic.reason}`,
       method: "heuristic",
     };

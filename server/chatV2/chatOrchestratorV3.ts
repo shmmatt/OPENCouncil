@@ -106,9 +106,29 @@ export async function runChatV3Pipeline(
   // Uses a fast LLM classifier (with heuristic fallback) instead of fragile keyword scoring.
   // This prevents "sticky context" leakage while correctly recognising implicit follow-ups.
 
-  // Extract the last user question from history to give the classifier extra signal
-  const lastHistoryItem = sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;
-  const lastUserMessage = lastHistoryItem?.role === "user" ? lastHistoryItem.content : undefined;
+  // ---------------------------------------------------------------------------
+  // Helper utilities for session anchor extraction
+  // ---------------------------------------------------------------------------
+
+  function extractYearFromText(text: string): number | undefined {
+    const match = text.match(/\b(20(?:1[5-9]|2[0-9]|3[0-5]))\b/);
+    return match ? parseInt(match[1], 10) : undefined;
+  }
+
+  function extractTownFromText(text: string): string | undefined {
+    // Look for "in <Town>" / "<Town> town" / "<Town> town meeting" patterns
+    const m = text.match(/\bin\s+([A-Z][a-z]{2,})\b|\b([A-Z][a-z]{2,})\s+(?:town|meeting|meeting|warrant)\b/);
+    return m ? (m[1] ?? m[2]) : undefined;
+  }
+
+  // Back-scan history for most recent user turn (history may end with assistant)
+  let lastUserMessage: string | undefined;
+  for (let i = sessionHistory.length - 1; i >= 0; i--) {
+    if (sessionHistory[i].role === "user") {
+      lastUserMessage = sessionHistory[i].content;
+      break;
+    }
+  }
 
   const followUpResult = await classifyFollowUp(
     userMessage,
@@ -125,24 +145,27 @@ export async function runChatV3Pipeline(
     : []; // Clear history when topic switch detected
 
   // ---------------------------------------------------------------------------
-  // Session anchor: always carry forward town + year from prior context, even
-  // when the situation gate fires. This keeps retrieval temporally and
-  // geographically anchored without forcing false situational context.
-  // Priority: townPreference > situationContext entities > sessionHistory text
+  // Session anchor: carry forward town + year even when situation gate fires.
+  // Priority: townPreference > situationContext > sessionHistory text
   // ---------------------------------------------------------------------------
 
-  // Helper: scan text for a 4-digit year in the recent-history range
-  function extractYearFromText(text: string): number | undefined {
-    const match = text.match(/\b(20(?:1[5-9]|2[0-9]|3[0-5]))\b/);
-    return match ? parseInt(match[1], 10) : undefined;
+  // Town: prefer explicit townPreference, then situationContext proper-noun entities,
+  //       then a lightweight scan of recent history turns
+  let sessionAnchorTown: string | undefined = townPreference || undefined;
+
+  if (!sessionAnchorTown) {
+    sessionAnchorTown = (situationContext?.entities ?? []).find(e => /^[A-Z][a-z]{2,}$/.test(e));
   }
 
-  const sessionAnchorTown: string | undefined =
-    townPreference ||
-    (situationContext?.entities ?? []).find(e => /^[A-Z][a-z]{2,}$/.test(e)) ||
-    undefined;
+  if (!sessionAnchorTown) {
+    const recentHistory = sessionHistory.slice(-6);
+    for (let i = recentHistory.length - 1; i >= 0; i--) {
+      const t = extractTownFromText(recentHistory[i].content);
+      if (t) { sessionAnchorTown = t; break; }
+    }
+  }
 
-  // Extract year: prefer situationContext time range, then entity list, then recent history
+  // Year: prefer situationContext time range, then entity list, then recent history
   let sessionAnchorYear: number | undefined;
 
   if (situationContext?.timeRange?.start) {
@@ -158,8 +181,7 @@ export async function runChatV3Pipeline(
   }
 
   if (!sessionAnchorYear) {
-    // Scan recent history (last 4 turns) for a year reference
-    const recentHistory = sessionHistory.slice(-4);
+    const recentHistory = sessionHistory.slice(-6);
     for (let i = recentHistory.length - 1; i >= 0; i--) {
       const yr = extractYearFromText(recentHistory[i].content);
       if (yr) { sessionAnchorYear = yr; break; }
