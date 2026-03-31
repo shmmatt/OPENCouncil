@@ -901,9 +901,27 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
     // Delete the ghost document_versions
     await db.execute(sql.raw(`DELETE FROM document_versions WHERE file_blob_id IN (${idList})`));
 
-    // Delete only logical_documents that are part of the ghost set AND have no remaining versions
     if (affectedLogDocIds.length > 0) {
       const logDocIdList = affectedLogDocIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+      // For affected logical docs that still have other versions, restore current_version_id
+      // to their most recent remaining version (avoids leaving valid docs pointer-less)
+      await db.execute(sql.raw(`
+        UPDATE logical_documents ld
+        SET current_version_id = (
+          SELECT dv2.id FROM document_versions dv2
+          WHERE dv2.document_id = ld.id
+          ORDER BY dv2.created_at DESC
+          LIMIT 1
+        )
+        WHERE ld.id IN (${logDocIdList})
+          AND ld.current_version_id IS NULL
+          AND EXISTS (
+            SELECT 1 FROM document_versions dv3 WHERE dv3.document_id = ld.id
+          )
+      `));
+
+      // Delete only logical_documents that are part of the ghost set AND have no remaining versions
       await db.execute(sql.raw(`
         DELETE FROM logical_documents
         WHERE id IN (${logDocIdList})
@@ -1011,11 +1029,15 @@ router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => 
       });
     }
 
+    const pipelineMsg = embeddingTriggered
+      ? `; embedding pipeline started for ${resetCount} affected blobs`
+      : `; embedding pipeline is currently running — re-trigger embedding manually after it finishes to index the ${resetCount} reset blobs`;
+
     logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, embedding pipeline triggered=${embeddingTriggered}`);
     res.json({
       reset: resetCount,
       embeddingTriggered,
-      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; embedding pipeline started for affected blobs" : "; embedding pipeline already running"}`,
+      message: `Reset needs_ocr on ${resetCount} blobs${pipelineMsg}`,
     });
   } catch (error: any) {
     logError(`[admin] needs-ocr-reset error: ${error.message}`);
