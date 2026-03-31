@@ -22,14 +22,16 @@ export function buildContextHeader(params: {
   board?: string | null;
   documentType?: string | null;
   year?: string | null;
+  date?: string | null;
   filename?: string | null;
 }): string {
-  const { town, sau, sourceType, board, documentType, year, filename } = params;
+  const { town, sau, sourceType, board, documentType, year, date, filename } = params;
   const parts: string[] = [];
 
   const isStatewide = town === "statewide" || sourceType === "state";
   const isSau = !!(sau && sau.trim()) || sourceType === "sau";
   const cleanFilename = filename && !UUID_FILENAME_RE.test(filename) ? filename : null;
+  const dateOrYear = date || (year ? `${year}` : null);
 
   if (isStatewide) {
     parts.push("Scope: NH Statewide");
@@ -41,12 +43,12 @@ export function buildContextHeader(params: {
     if (sau) parts.push(`District: ${sau}`);
     if (board) parts.push(`Board: ${board}`);
     if (documentType && documentType !== "general") parts.push(`Type: ${documentType.replace(/_/g, " ")}`);
-    if (year) parts.push(`Year: ${year}`);
+    if (dateOrYear) parts.push(`Date: ${dateOrYear}`);
   } else {
     if (town && town !== "unknown") parts.push(`Town: ${town}`);
     if (board) parts.push(`Board: ${board}`);
     if (documentType && documentType !== "general") parts.push(`Type: ${documentType.replace(/_/g, " ")}`);
-    if (year) parts.push(`Year: ${year}`);
+    if (dateOrYear) parts.push(`Date: ${dateOrYear}`);
     if (cleanFilename) parts.push(`File: ${cleanFilename}`);
   }
 
@@ -63,6 +65,7 @@ interface ChunkData {
   category: string;
   board: string | null;
   year: string | null;
+  meetingDate: string | null;
   contentHash: string;
   filename: string | null;
   sau: string | null;
@@ -172,6 +175,7 @@ interface FileBlobRow {
   board: string | null;
   category: string | null;
   year: string | null;
+  meeting_date: string | null;
   document_id: string | null;
   sau: string | null;
   source_type: string | null;
@@ -189,6 +193,7 @@ async function fetchReadyBlobs(limit: number | null, town: string | null): Promi
       COALESCE(ld.board, cd.board) as board,
       ld.category,
       dv.year,
+      to_char(dv.meeting_date, 'Month DD, YYYY') as meeting_date,
       dv.document_id,
       css.sau_id as sau,
       CASE
@@ -236,6 +241,7 @@ async function fetchBlobsByIds(blobIds: string[]): Promise<FileBlobRow[]> {
       COALESCE(ld.board, cd.board) as board,
       ld.category,
       dv.year,
+      to_char(dv.meeting_date, 'Month DD, YYYY') as meeting_date,
       dv.document_id,
       css.sau_id as sau,
       CASE
@@ -265,6 +271,7 @@ async function insertChunk(c: ChunkData & { embedding: number[] }): Promise<void
     town: c.town || undefined,
     board: c.board || undefined,
     year: c.year || undefined,
+    meetingDate: c.meetingDate || undefined,
     documentType: c.category || undefined,
     filename: c.filename || undefined,
     fileBlobId: c.fileBlobId,
@@ -364,6 +371,7 @@ export async function startPipeline(options?: { limit?: number; town?: string; b
           category: blob.category || "general",
           board: blob.board || null,
           year: blob.year || null,
+          meetingDate: blob.meeting_date || null,
           contentHash,
           filename: blob.original_filename || null,
           sau: blob.sau || null,
@@ -445,6 +453,7 @@ async function processBatch(chunks: ChunkData[]): Promise<void> {
         board: c.board,
         documentType: c.category,
         year: c.year,
+        date: c.meetingDate,
         filename: c.filename,
       });
       return header ? `${header}\n\n${c.content}` : c.content;
@@ -548,8 +557,16 @@ function buildReindexWhereClause(
   }
   const conditions: string[] = [];
   if (scope === "town") {
-    conditions.push(`(metadata->>'town' IS DISTINCT FROM 'statewide')`);
-    conditions.push(`(metadata->>'sau' IS NULL OR metadata->>'sau' = '')`);
+    // Explicitly match town-source chunks: either tagged sourceType='town',
+    // or (for older chunks without sourceType) not statewide/sau/state.
+    conditions.push(`(
+      metadata->>'sourceType' = 'town'
+      OR (
+        (metadata->>'sourceType' IS NULL OR metadata->>'sourceType' NOT IN ('state', 'sau'))
+        AND (metadata->>'town' IS DISTINCT FROM 'statewide')
+        AND (metadata->>'sau' IS NULL OR metadata->>'sau' = '')
+      )
+    )`);
   } else if (scope === "state") {
     conditions.push(`(metadata->>'town' = 'statewide' OR metadata->>'sourceType' = 'state')`);
   } else if (scope === "sau") {
@@ -659,6 +676,7 @@ export async function startReindex(options?: {
           board: meta.board,
           documentType: meta.documentType,
           year: meta.year,
+          date: meta.meetingDate ?? meta.date,
           filename: meta.filename,
         });
         return header ? `${header}\n\n${row.content}` : row.content;
