@@ -488,7 +488,7 @@ async function processBatch(chunks: ChunkData[]): Promise<void> {
 export type ReindexScope = "town" | "state" | "sau" | "all";
 
 export interface ReindexProgress {
-  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  status: "idle" | "running" | "stopping" | "completed" | "stopped" | "failed";
   scope: ReindexScope | null;
   townFilter: string | null;
   totalChunks: number;
@@ -537,7 +537,15 @@ export function requestReindexStop(): boolean {
   return false;
 }
 
-function buildReindexWhereClause(scope: ReindexScope, townFilter: string | null): string {
+function buildReindexWhereClause(
+  scope: ReindexScope,
+  townFilter: string | null,
+  blobIds?: string[] | null,
+): string {
+  if (blobIds && blobIds.length > 0) {
+    const safeIds = blobIds.map(id => `'${id.replace(/'/g, "''")}'`).join(", ");
+    return `WHERE file_blob_id IN (${safeIds})`;
+  }
   const conditions: string[] = [];
   if (scope === "town") {
     conditions.push(`(metadata->>'town' IS DISTINCT FROM 'statewide')`);
@@ -557,8 +565,12 @@ function buildReindexWhereClause(scope: ReindexScope, townFilter: string | null)
 /**
  * Count chunks that will be reindexed given the scope/filter.
  */
-async function countReindexChunks(scope: ReindexScope, townFilter: string | null): Promise<number> {
-  const whereClause = buildReindexWhereClause(scope, townFilter);
+async function countReindexChunks(
+  scope: ReindexScope,
+  townFilter: string | null,
+  blobIds?: string[] | null,
+): Promise<number> {
+  const whereClause = buildReindexWhereClause(scope, townFilter, blobIds);
   const result = await db.execute(sql.raw(`SELECT count(*)::int AS cnt FROM document_chunks ${whereClause}`));
   const rows = (result.rows || result) as any[];
   return Number(rows[0]?.cnt ?? 0);
@@ -572,8 +584,9 @@ async function fetchReindexBatch(
   scope: ReindexScope,
   townFilter: string | null,
   batchSize: number,
+  blobIds?: string[] | null,
 ): Promise<{ id: number; content: string; metadata: Record<string, any> }[]> {
-  const whereClause = buildReindexWhereClause(scope, townFilter);
+  const whereClause = buildReindexWhereClause(scope, townFilter, blobIds);
   const andOrWhere = whereClause ? `${whereClause} AND id > ${lastId}` : `WHERE id > ${lastId}`;
   const result = await db.execute(
     sql.raw(`SELECT id, content, metadata FROM document_chunks ${andOrWhere} ORDER BY id LIMIT ${batchSize}`)
@@ -582,35 +595,45 @@ async function fetchReindexBatch(
 }
 
 /**
- * Re-embed all existing chunks that match the given scope/filter.
+ * Re-embed all existing chunks that match the given scope/filter or explicit blobIds.
+ * Accepts: scope, town (alias for townFilter), sourceType (maps to scope), blobIds.
  * Runs as a background job; poll getReindexProgress() for status.
  */
 export async function startReindex(options?: {
   scope?: ReindexScope;
   townFilter?: string;
+  town?: string;
+  sourceType?: string;
+  blobIds?: string[];
 }): Promise<void> {
   if (isReindexRunning()) {
     throw new Error("Reindex is already running");
   }
 
-  const scope: ReindexScope = options?.scope ?? "all";
-  const townFilter = options?.townFilter ?? null;
+  const sourceTypeToScope: Record<string, ReindexScope> = {
+    town: "town", state: "state", sau: "sau",
+  };
+  const resolvedScope: ReindexScope =
+    options?.scope ??
+    (options?.sourceType ? sourceTypeToScope[options.sourceType] ?? "all" : "all");
+  const townFilter = options?.town ?? options?.townFilter ?? null;
+  const blobIds = options?.blobIds && options.blobIds.length > 0 ? options.blobIds : null;
   const jobId = `reindex-${new Date().toISOString().slice(0, 10)}-${Date.now().toString(36)}`;
 
   reindexStopRequested = false;
   reindexProgress = {
     ...makeIdleReindexProgress(),
     status: "running",
-    scope,
+    scope: resolvedScope,
     townFilter,
     jobId,
     startedAt: new Date().toISOString(),
   };
 
   try {
-    logInfo(`[embeddingPipeline] Reindex ${jobId} started (scope=${scope}, town=${townFilter ?? "all"})`);
+    logInfo(`[embeddingPipeline] Reindex ${jobId} started (scope=${resolvedScope}, town=${townFilter ?? "all"}${blobIds ? `, blobIds=${blobIds.length}` : ""})`);
 
-    const totalChunks = await countReindexChunks(scope, townFilter);
+    const totalChunks = await countReindexChunks(resolvedScope, townFilter, blobIds);
     reindexProgress.totalChunks = totalChunks;
     logInfo(`[embeddingPipeline] Reindex: ${totalChunks} chunks to re-embed`);
 
@@ -624,7 +647,7 @@ export async function startReindex(options?: {
     const startTime = Date.now();
 
     while (!reindexStopRequested) {
-      const rows = await fetchReindexBatch(lastId, scope, townFilter, EMBEDDING_BATCH_SIZE);
+      const rows = await fetchReindexBatch(lastId, resolvedScope, townFilter, EMBEDDING_BATCH_SIZE, blobIds);
       if (rows.length === 0) break;
 
       const texts = rows.map(row => {
@@ -691,7 +714,7 @@ export async function startReindex(options?: {
     }
 
     const finalStatus = reindexStopRequested ? "stopped" : "completed";
-    reindexProgress.status = "completed";
+    reindexProgress.status = finalStatus as ReindexProgress["status"];
     reindexProgress.completedAt = new Date().toISOString();
     logInfo(
       `[embeddingPipeline] Reindex ${finalStatus}: ${reindexProgress.processedChunks}/${totalChunks} chunks, ${reindexProgress.errorCount} errors`

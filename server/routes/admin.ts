@@ -622,16 +622,22 @@ router.post("/embedding/stop", authenticateAdmin, async (_req, res) => {
   }
 });
 
-router.post("/embedding/reindex", authenticateAdmin, async (req, res) => {
+const handleReindexStart = async (req: any, res: any) => {
   try {
     if (isReindexRunning()) {
       return res.status(409).json({ message: "Reindex is already running" });
     }
-    const { scope, townFilter } = req.body || {};
+    const { scope, townFilter, town, sourceType, blobIds } = req.body || {};
     const validScopes = ["town", "state", "sau", "all"];
-    const resolvedScope = validScopes.includes(scope) ? scope : "all";
+    const resolvedScope = validScopes.includes(scope) ? scope : undefined;
 
-    startReindex({ scope: resolvedScope, townFilter: townFilter || undefined }).catch(err => {
+    startReindex({
+      scope: resolvedScope,
+      townFilter: townFilter || undefined,
+      town: town || undefined,
+      sourceType: sourceType || undefined,
+      blobIds: Array.isArray(blobIds) && blobIds.length > 0 ? blobIds : undefined,
+    }).catch(err => {
       console.error("Reindex background error:", err);
     });
 
@@ -642,17 +648,17 @@ router.post("/embedding/reindex", authenticateAdmin, async (req, res) => {
     console.error("Error starting reindex:", error);
     res.status(500).json({ message: error.message || "Failed to start reindex" });
   }
-});
+};
 
-router.get("/embedding/reindex/status", authenticateAdmin, async (_req, res) => {
+const handleReindexStatus = async (_req: any, res: any) => {
   try {
     res.json(getReindexProgress());
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch reindex status" });
   }
-});
+};
 
-router.post("/embedding/reindex/stop", authenticateAdmin, async (_req, res) => {
+const handleReindexStop = async (_req: any, res: any) => {
   try {
     const stopped = requestReindexStop();
     if (stopped) {
@@ -663,9 +669,19 @@ router.post("/embedding/reindex/stop", authenticateAdmin, async (_req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Failed to stop reindex" });
   }
-});
+};
 
-router.post("/embedding/rebuild-tsv", authenticateAdmin, async (_req, res) => {
+// Singular paths (legacy)
+router.post("/embedding/reindex", authenticateAdmin, handleReindexStart);
+router.get("/embedding/reindex/status", authenticateAdmin, handleReindexStatus);
+router.post("/embedding/reindex/stop", authenticateAdmin, handleReindexStop);
+
+// Plural paths (spec-aligned)
+router.post("/embeddings/reindex", authenticateAdmin, handleReindexStart);
+router.get("/embeddings/reindex/status", authenticateAdmin, handleReindexStatus);
+router.post("/embeddings/reindex/stop", authenticateAdmin, handleReindexStop);
+
+const handleRebuildTsv = async (_req: any, res: any) => {
   try {
     logInfo("[admin] Starting TSV search_vector rebuild for all document_chunks");
     const countResult = await db.execute(sql`SELECT count(*)::int AS cnt FROM document_chunks`);
@@ -697,6 +713,9 @@ router.post("/embedding/rebuild-tsv", authenticateAdmin, async (_req, res) => {
     console.error("Error starting TSV rebuild:", error);
     res.status(500).json({ message: error.message || "Failed to start TSV rebuild" });
   }
-});
+};
+
+router.post("/embedding/rebuild-tsv", authenticateAdmin, handleRebuildTsv);
+router.post("/embeddings/rebuild-tsv", authenticateAdmin, handleRebuildTsv);
 
 export default router;
