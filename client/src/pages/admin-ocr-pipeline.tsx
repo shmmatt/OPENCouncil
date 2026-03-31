@@ -44,6 +44,7 @@ import {
   Microscope,
   RotateCcw,
   HardDrive,
+  GraduationCap,
 } from "lucide-react";
 
 
@@ -867,6 +868,170 @@ function ReindexControls() {
   );
 }
 
+interface SauEnrichProgressData {
+  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  jobId: string | null;
+  totalBlobs: number;
+  processedBlobs: number;
+  enrichedBlobs: number;
+  skippedBlobs: number;
+  errorBlobs: number;
+  currentBlob: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+}
+
+function SauEnrichControls() {
+  const { toast } = useToast();
+
+  const { data: progress, refetch } = useQuery<SauEnrichProgressData>({
+    queryKey: ["/api/admin/sau/enrich-all/status"],
+    queryFn: async () => {
+      const res = await adminFetch("/api/admin/sau/enrich-all/status");
+      if (!res.ok) throw new Error("Failed to fetch SAU enrich status");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "running" || status === "stopping" ? 2000 : 30000;
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/sau/enrich-all", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to start SAU enrichment");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "SAU enrichment started", description: "Extracting metadata for ~250 SAU documents" });
+      refetch();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const stopMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch("/api/admin/sau/enrich-all/stop", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to stop");
+      return data;
+    },
+    onSuccess: () => { toast({ title: "Stop requested" }); refetch(); },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const isActive = progress?.status === "running" || progress?.status === "stopping";
+  const pct = progress && progress.totalBlobs > 0
+    ? Math.round((progress.processedBlobs / progress.totalBlobs) * 100)
+    : 0;
+
+  return (
+    <Card data-testid="sau-enrich-controls">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-emerald-600" />
+            <CardTitle className="text-sm">SAU Document Enrichment</CardTitle>
+            {progress && progress.status !== "idle" && (
+              <Badge variant={isActive ? "default" : progress.status === "completed" ? "outline" : "destructive"}>
+                {progress.status}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!isActive ? (
+              <Button
+                size="sm"
+                onClick={() => startMutation.mutate()}
+                disabled={startMutation.isPending}
+                data-testid="button-sau-enrich-start"
+              >
+                {startMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Play className="w-4 h-4 mr-1" />}
+                Enrich SAU Docs
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => stopMutation.mutate()}
+                disabled={stopMutation.isPending || progress?.status === "stopping"}
+                data-testid="button-sau-enrich-stop"
+              >
+                <Square className="w-4 h-4 mr-1" />
+                Stop
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      {progress && progress.status !== "idle" && (
+        <CardContent>
+          <div className="space-y-3">
+            {isActive && progress.totalBlobs > 0 && (
+              <>
+                <Progress value={pct} data-testid="progress-sau-enrich" />
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  <div>
+                    <div className="text-lg font-bold" data-testid="text-sau-enrich-processed">{progress.processedBlobs.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">of {progress.totalBlobs.toLocaleString()} blobs</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-emerald-600">{progress.enrichedBlobs.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">enriched</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold">{pct}%</div>
+                    <div className="text-xs text-muted-foreground">complete</div>
+                  </div>
+                  <div>
+                    <div className={`text-lg font-bold ${progress.errorBlobs > 0 ? "text-red-600" : ""}`} data-testid="text-sau-enrich-errors">
+                      {progress.errorBlobs}
+                    </div>
+                    <div className="text-xs text-muted-foreground">errors</div>
+                  </div>
+                </div>
+                {progress.currentBlob && (
+                  <div className="text-xs text-muted-foreground truncate">
+                    Processing: <span className="font-mono">{progress.currentBlob}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {progress.status === "completed" && (
+              <div className="text-sm text-muted-foreground text-center py-1" data-testid="text-sau-enrich-complete">
+                Completed: {progress.enrichedBlobs.toLocaleString()} blobs enriched
+                {progress.errorBlobs > 0 && ` (${progress.errorBlobs} errors)`}
+                {progress.completedAt && ` — finished ${new Date(progress.completedAt).toLocaleString()}`}
+              </div>
+            )}
+            {progress.errorMessage && (
+              <div className="text-xs text-red-500 font-mono bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                {progress.errorMessage}
+              </div>
+            )}
+            {progress.startedAt && (
+              <div className="text-xs text-muted-foreground">
+                Started: {new Date(progress.startedAt).toLocaleString()}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      )}
+      {(!progress || progress.status === "idle") && (
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Enriches ~250 SAU file blobs with LLM-extracted metadata (school board name, document type, meeting date).
+            Creates logical document + version records, patches chunk metadata, then re-embeds all SAU chunks with context headers.
+          </p>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function PipelineStatusPanel() {
   const { data, isLoading, refetch } = useQuery<PipelineData>({
     queryKey: ['/api/admin/pipeline-status'],
@@ -996,6 +1161,8 @@ function PipelineStatusPanel() {
       <EmbeddingPipelineControls />
 
       <ReindexControls />
+
+      <SauEnrichControls />
 
       {data.recentJobs.length > 0 && (
         <Card>

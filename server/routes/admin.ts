@@ -11,6 +11,7 @@ import { extractPreviewText, suggestMetadataFromContent } from "../bulk-upload-h
 import { documentMetadataSchema } from "@shared/schema";
 import type { DocumentMetadata } from "@shared/schema";
 import { startPipeline, getProgress, requestStop, isRunning, startReindex, getReindexProgress, requestReindexStop, isReindexRunning } from "../services/embeddingPipeline";
+import { startSauEnrich, getSauEnrichProgress, isSauEnrichRunning, requestSauEnrichStop } from "../services/enrichSauDocuments";
 import { db, sql } from "../storage/db";
 import { logInfo, logError } from "../utils/logger";
 
@@ -717,5 +718,49 @@ const handleRebuildTsv = async (_req: any, res: any) => {
 
 router.post("/embedding/rebuild-tsv", authenticateAdmin, handleRebuildTsv);
 router.post("/embeddings/rebuild-tsv", authenticateAdmin, handleRebuildTsv);
+
+// ---------------------------------------------------------------------------
+// SAU Enrichment endpoints (Task #42)
+// ---------------------------------------------------------------------------
+
+router.post("/sau/enrich-all", authenticateAdmin, async (_req, res) => {
+  try {
+    if (isSauEnrichRunning()) {
+      return res.status(409).json({ message: "SAU enrichment is already running" });
+    }
+
+    startSauEnrich().catch(err => {
+      logError(`[admin] SAU enrich-all background error: ${err.message}`);
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const progress = getSauEnrichProgress();
+    res.json({ message: "SAU enrichment started", jobId: progress.jobId, progress });
+  } catch (error: any) {
+    logError(`[admin] Error starting SAU enrichment: ${error.message}`);
+    res.status(500).json({ message: error.message || "Failed to start SAU enrichment" });
+  }
+});
+
+router.get("/sau/enrich-all/status", authenticateAdmin, async (_req, res) => {
+  try {
+    res.json(getSauEnrichProgress());
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch SAU enrichment status" });
+  }
+});
+
+router.post("/sau/enrich-all/stop", authenticateAdmin, async (_req, res) => {
+  try {
+    const stopped = requestSauEnrichStop();
+    if (stopped) {
+      res.json({ message: "SAU enrichment stop requested. Will finish current blob and stop." });
+    } else {
+      res.status(400).json({ message: "SAU enrichment is not currently running" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to stop SAU enrichment" });
+  }
+});
 
 export default router;

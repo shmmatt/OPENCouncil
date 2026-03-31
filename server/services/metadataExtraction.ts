@@ -426,10 +426,16 @@ function buildMetadataFromHeuristics(
   };
 }
 
+export interface SauMetadataHints extends MetadataHints {
+  isSauDocument?: boolean;
+  sauId?: string;
+  sauName?: string;
+}
+
 export async function suggestMetadataFromPreview(
   filename: string,
   previewText: string,
-  metadataHints?: MetadataHints
+  metadataHints?: SauMetadataHints
 ): Promise<SuggestedMetadata> {
   const categoryList = ALLOWED_CATEGORIES.join(", ");
   
@@ -461,9 +467,28 @@ export async function suggestMetadataFromPreview(
   if (minutesHints.possibleDateText) {
     hintsSection.push(`HINT: Possible meeting date detected: "${minutesHints.possibleDateText}"`);
   }
-  
-  const prompt = `You are an expert in New Hampshire municipal government documents.
-Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a municipal document.
+  if ((metadataHints as SauMetadataHints)?.isSauDocument) {
+    const h = metadataHints as SauMetadataHints;
+    hintsSection.push(`HINT: This is a SAU (School Administrative Unit) document, NOT a town document. The "town" field should be left empty (""). The SAU is: ${h.sauId} — ${h.sauName}.`);
+    hintsSection.push(`HINT: For SAU documents, the "board" field should be the full school board name (e.g., "Governor Wentworth Regional School Board", "Conway School Board", "Kingswood Regional School Board"). Extract it from the document header. If not clearly stated, use the SAU name hint.`);
+    hintsSection.push(`HINT: The filename is a UUID (not human-readable) — ignore it for metadata inference and rely entirely on the document text.`);
+  }
+
+  // For SAU documents, use the SAU-specialized prompt; for town documents use standard prompt
+  const isSau = (metadataHints as SauMetadataHints)?.isSauDocument === true;
+  const boardStandardList = isSau
+    ? `- Common SAU school board names follow the pattern: "[District Name] School Board", "[District Name] Regional School Board", "[School Name] Board of Education", or "[SAU Name] School Board". Output the full official name as it appears in the document.`
+    : `- Choose from this standard list if it matches the intent: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Library Board of Trustees", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission".`;
+
+  const townInstruction = isSau
+    ? `**TOWN — leave empty for SAU documents:**
+- SAU documents are school district documents that span multiple towns. Output "" (empty string) for town.`
+    : `**TOWN — extract from the document title or letterhead:**
+- Output only the town name (e.g., "Ossipee", "Conway") — never include "Town of".
+- If hints provide a town and the header does not contradict it, use the hint.`;
+
+  const prompt = `You are an expert in New Hampshire ${isSau ? "school district (SAU)" : "municipal"} government documents.
+Analyze the provided text, which represents the first ~1000 characters (the header and title area) of a ${isSau ? "school district" : "municipal"} document.
 
 Respond with ONLY valid JSON (no markdown, no code blocks, just pure JSON):
 
@@ -484,9 +509,9 @@ ${categoryList}
 
 **BOARD — read only the document's main title or letterhead (first 1-3 lines):**
 - The authoritative board name is whatever appears in the document title or letterhead at the very top.
-- Choose from this standard list if it matches the intent: "Select Board", "Board of Selectmen", "Planning Board", "Zoning Board of Adjustment", "Conservation Commission", "Budget Committee", "School Board", "Library Board of Trustees", "Historic District Commission", "Recreation Commission", "Water & Sewer Commission".
+${boardStandardList}
 - If the board is unlisted but clearly named, output that name cleanly.
-- IGNORE any other board names mentioned in the text — ex-officio members, appeal notices ("The Selectmen have a right to appeal..."), or references to other boards' meetings do NOT identify this document's board.
+- IGNORE any other board names mentioned in the text — ex-officio members, appeal notices, or references to other boards' meetings do NOT identify this document's board.
 - Do NOT return "Unknown", "Needs Review", or null if any board name appears in the title area.
 
 **MEETING DATE — identify the date the meeting actually took place:**
@@ -496,9 +521,7 @@ ${categoryList}
 - Set rawDateText to the original date string you found (e.g., "March 3, 2026").
 - meetingType: "regular", "special", or "work_session" based on any label in the header.
 
-**TOWN — extract from the document title or letterhead:**
-- Output only the town name (e.g., "Ossipee", "Conway") — never include "Town of".
-- If hints provide a town and the header does not contradict it, use the hint.
+${townInstruction}
 
 **isMinutes:** true if the header contains "Meeting Minutes", "Minutes of", "Call to Order", or similar meeting records language.
 
