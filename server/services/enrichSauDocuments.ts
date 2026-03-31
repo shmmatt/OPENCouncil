@@ -2,24 +2,28 @@
  * enrichSauDocuments — Task #42
  *
  * Enrichment pipeline for SAU (School Administrative Unit) documents:
- * 1. Fetches all SAU file_blobs via crawler_sau_documents join
- * 2. Calls suggestMetadataFromPreview with SAU-aware hints (no town field needed)
- * 3. Creates logical_document + document_version records if missing
+ * 1. Fetches ALL SAU file_blobs via crawler_sau_documents join (including low-text blobs)
+ * 2. Creates logical_document + document_version records for blobs that lack them
+ * 3. For blobs with sufficient text: calls suggestMetadataFromPreview with SAU-aware hints
  * 4. Patches chunk metadata JSONB (year, meetingDate, documentType, board, sau, sourceType)
+ * 5. After enrichment completes, triggers SAU re-embed via startReindex({ sourceType: 'sau' })
  *
- * Runs in batches with rate limiting. Progress is tracked via sauEnrichProgress.
+ * Runs with rate limiting. Progress is tracked via sauEnrichProgress.
  */
 
 import { db, sql } from "../storage/db";
 import { suggestMetadataFromPreview } from "./metadataExtraction";
+import { startReindex, isReindexRunning } from "./embeddingPipeline";
 import { logInfo, logWarn, logError } from "../utils/logger";
+
+const MIN_TEXT_LENGTH = 100; // Below this, skip LLM but still create logical records
 
 // ---------------------------------------------------------------------------
 // Progress state
 // ---------------------------------------------------------------------------
 
 export interface SauEnrichProgress {
-  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  status: "idle" | "running" | "stopping" | "stopped" | "completed" | "failed";
   jobId: string | null;
   totalBlobs: number;
   processedBlobs: number;
@@ -30,6 +34,7 @@ export interface SauEnrichProgress {
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
+  reembedTriggered: boolean;
 }
 
 let sauEnrichProgress: SauEnrichProgress = {
@@ -44,6 +49,7 @@ let sauEnrichProgress: SauEnrichProgress = {
   startedAt: null,
   completedAt: null,
   errorMessage: null,
+  reembedTriggered: false,
 };
 
 let stopRequested = false;
@@ -100,12 +106,13 @@ export async function startSauEnrich(): Promise<void> {
     startedAt: new Date().toISOString(),
     completedAt: null,
     errorMessage: null,
+    reembedTriggered: false,
   };
 
   logInfo(`[SauEnrich] Starting job ${jobId}`);
 
   try {
-    // Fetch all SAU file_blobs with their SAU source info
+    // Fetch ALL SAU file_blobs (including low-text blobs — we still create logical records)
     const result = await db.execute(sql`
       SELECT
         fb.id AS file_blob_id,
@@ -130,11 +137,6 @@ export async function startSauEnrich(): Promise<void> {
       JOIN crawler_sau_sources css ON csd.source_id = css.id
       JOIN file_blobs fb ON csd.file_blob_id = fb.id
       WHERE csd.file_blob_id IS NOT NULL
-        AND (fb.ocr_text IS NOT NULL OR fb.preview_text IS NOT NULL)
-        AND (
-          COALESCE(char_length(fb.ocr_text), 0) +
-          COALESCE(char_length(fb.preview_text), 0)
-        ) > 100
       ORDER BY css.sau_id, fb.id
     `);
 
@@ -147,34 +149,67 @@ export async function startSauEnrich(): Promise<void> {
     for (const blob of blobs) {
       if (stopRequested) {
         logInfo(`[SauEnrich] Stop requested at blob ${blob.file_blob_id}`);
-        sauEnrichProgress.status = "stopping";
         break;
       }
 
       sauEnrichProgress.currentBlob = blob.file_blob_id;
       sauEnrichProgress.processedBlobs++;
 
+      const textLength =
+        (blob.ocr_text?.length ?? 0) + (blob.preview_text?.length ?? 0);
+      const hasText = textLength >= MIN_TEXT_LENGTH;
+
       try {
-        await processSauBlob(blob);
-        sauEnrichProgress.enrichedBlobs++;
+        if (hasText) {
+          await processSauBlob(blob);
+          sauEnrichProgress.enrichedBlobs++;
+        } else {
+          // Insufficient text: still create logical record linkage but skip LLM
+          await createLogicalRecordsOnly(blob);
+          sauEnrichProgress.skippedBlobs++;
+          logWarn(
+            `[SauEnrich] Skipped LLM for blob ${blob.file_blob_id} (text=${textLength} chars < ${MIN_TEXT_LENGTH}), created stub logical records`
+          );
+        }
       } catch (err: any) {
         logError(`[SauEnrich] Failed blob ${blob.file_blob_id}: ${err.message}`);
         sauEnrichProgress.errorBlobs++;
       }
 
-      // Rate limit
-      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      // Rate limit only for blobs that call the LLM
+      if (hasText) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
     }
 
-    sauEnrichProgress.status = stopRequested ? "completed" : "completed";
+    const finalStatus = stopRequested ? "stopped" : "completed";
+    sauEnrichProgress.status = finalStatus;
     sauEnrichProgress.completedAt = new Date().toISOString();
     sauEnrichProgress.currentBlob = null;
     logInfo(
-      `[SauEnrich] Job ${jobId} completed: ` +
+      `[SauEnrich] Job ${jobId} ${finalStatus}: ` +
       `${sauEnrichProgress.enrichedBlobs} enriched, ` +
       `${sauEnrichProgress.skippedBlobs} skipped, ` +
       `${sauEnrichProgress.errorBlobs} errors`
     );
+
+    // Step 5: Trigger SAU re-embed after full enrichment (not when stopped early)
+    if (!stopRequested) {
+      try {
+        if (isReindexRunning()) {
+          logWarn(`[SauEnrich] Reindex already running — skipping auto SAU re-embed trigger`);
+        } else {
+          logInfo(`[SauEnrich] Triggering SAU chunk re-embed (sourceType='sau')...`);
+          startReindex({ sourceType: "sau" }).catch(err => {
+            logError(`[SauEnrich] SAU re-embed background error: ${err.message}`);
+          });
+          sauEnrichProgress.reembedTriggered = true;
+          logInfo(`[SauEnrich] SAU re-embed triggered successfully`);
+        }
+      } catch (err: any) {
+        logError(`[SauEnrich] Failed to trigger SAU re-embed: ${err.message}`);
+      }
+    }
   } catch (err: any) {
     logError(`[SauEnrich] Job ${jobId} failed: ${err.message}`);
     sauEnrichProgress.status = "failed";
@@ -184,22 +219,82 @@ export async function startSauEnrich(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Per-blob processing
+// Create logical records only (no LLM) for blobs without sufficient text
+// ---------------------------------------------------------------------------
+
+async function createLogicalRecordsOnly(blob: SauBlobRow): Promise<void> {
+  if (blob.existing_logical_doc_id) {
+    // Ensure chunk metadata has sourceType / sau set even for stub blobs
+    await db.execute(sql`
+      UPDATE document_chunks
+      SET metadata = metadata || ${JSON.stringify({
+        sourceType: "sau",
+        sau: blob.sau_id,
+        documentId: blob.existing_logical_doc_id,
+      })}::jsonb,
+          document_id = ${blob.existing_logical_doc_id}
+      WHERE file_blob_id = ${blob.file_blob_id}
+    `);
+    return;
+  }
+
+  // Create stub logical_document
+  const ldResult = await db.execute(sql`
+    INSERT INTO logical_documents (canonical_title, town, board, category, created_at, updated_at)
+    VALUES (
+      ${blob.sau_name + " — Document"},
+      'unknown',
+      ${blob.sau_name},
+      'misc_other',
+      NOW(),
+      NOW()
+    )
+    RETURNING id
+  `);
+  const logicalDocId = (ldResult.rows as any[])[0]?.id as string;
+  if (!logicalDocId) return;
+
+  const dvResult = await db.execute(sql`
+    INSERT INTO document_versions (document_id, file_blob_id, is_current, is_minutes, created_at)
+    VALUES (${logicalDocId}, ${blob.file_blob_id}, true, false, NOW())
+    RETURNING id
+  `);
+  const versionId = (dvResult.rows as any[])[0]?.id ?? null;
+
+  if (versionId) {
+    await db.execute(sql`
+      UPDATE logical_documents SET current_version_id = ${versionId}, updated_at = NOW()
+      WHERE id = ${logicalDocId}
+    `);
+  }
+
+  await db.execute(sql`
+    UPDATE document_chunks
+    SET metadata = metadata || ${JSON.stringify({
+      sourceType: "sau",
+      sau: blob.sau_id,
+      documentId: logicalDocId,
+    })}::jsonb,
+        document_id = ${logicalDocId}
+    WHERE file_blob_id = ${blob.file_blob_id}
+  `);
+}
+
+// ---------------------------------------------------------------------------
+// Full per-blob processing with LLM enrichment
 // ---------------------------------------------------------------------------
 
 async function processSauBlob(blob: SauBlobRow): Promise<void> {
   const previewText = blob.ocr_text || blob.preview_text || "";
 
-  // SAU-aware metadata hints: pass the SAU name as defaultBoard hint so LLM
-  // can fall back to it; no town field needed for SAU docs.
   let suggested: Awaited<ReturnType<typeof suggestMetadataFromPreview>>;
   try {
     suggested = await suggestMetadataFromPreview(
       blob.original_filename,
       previewText,
       {
-        defaultTown: undefined, // SAU docs don't have a town
-        defaultBoard: blob.sau_name, // e.g. "SAU 9 – Governor Wentworth"
+        defaultTown: undefined,
+        defaultBoard: blob.sau_name,
         isSauDocument: true,
         sauId: blob.sau_id,
         sauName: blob.sau_name,
@@ -220,34 +315,27 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
   // Determine logical_doc_id: create one if missing
   // ------------------------------------------------------------------
   let logicalDocId = blob.existing_logical_doc_id;
-  let versionId: string | null = null;
 
   if (!logicalDocId) {
-    // Build a canonical title from extracted metadata
     const titleParts: string[] = [];
-    if (suggested.board && suggested.board.length > 0) {
-      titleParts.push(suggested.board);
-    } else {
-      titleParts.push(blob.sau_name);
-    }
+    const board = (suggested.board && suggested.board.length > 0)
+      ? suggested.board
+      : blob.sau_name;
+    titleParts.push(board);
+
     if (suggested.meetingDate) {
-      // Format as "Month YYYY" or just use raw date text
       try {
         const d = new Date(suggested.meetingDate);
         if (!isNaN(d.getTime())) {
           titleParts.push(d.toLocaleDateString("en-US", { month: "long", year: "numeric" }));
         }
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     } else if (suggested.year) {
       titleParts.push(suggested.year);
     }
     const canonicalTitle = titleParts.join(" — ");
-    const board = (suggested.board && suggested.board.length > 0) ? suggested.board : blob.sau_name;
     const category = suggested.isMinutes ? "meeting_minutes" : (suggested.category || "misc_other");
 
-    // Insert logical_document — town = 'unknown' for SAU docs
     const ldResult = await db.execute(sql`
       INSERT INTO logical_documents (canonical_title, town, board, category, created_at, updated_at)
       VALUES (
@@ -261,12 +349,8 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
       RETURNING id
     `);
     logicalDocId = (ldResult.rows as any[])[0]?.id as string;
+    if (!logicalDocId) throw new Error(`Failed to create logical_document for blob ${blob.file_blob_id}`);
 
-    if (!logicalDocId) {
-      throw new Error(`Failed to create logical_document for blob ${blob.file_blob_id}`);
-    }
-
-    // Parse meeting date
     let meetingDate: Date | null = null;
     if (suggested.meetingDate) {
       try {
@@ -274,10 +358,8 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
         if (!isNaN(d.getTime())) meetingDate = d;
       } catch { /* ignore */ }
     }
-
     const yearStr = suggested.year || (meetingDate ? String(meetingDate.getFullYear()) : null);
 
-    // Insert document_version
     const dvResult = await db.execute(sql`
       INSERT INTO document_versions (document_id, file_blob_id, year, is_current, is_minutes, meeting_date, created_at)
       VALUES (
@@ -291,9 +373,8 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
       )
       RETURNING id
     `);
-    versionId = (dvResult.rows as any[])[0]?.id as string;
+    const versionId = (dvResult.rows as any[])[0]?.id ?? null;
 
-    // Set current_version_id on logical_document
     if (versionId) {
       await db.execute(sql`
         UPDATE logical_documents
@@ -304,14 +385,6 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
 
     logInfo(`[SauEnrich] Created logDoc=${logicalDocId} version=${versionId} for blob=${blob.file_blob_id}`);
   } else {
-    // Get existing version id for chunk document_id update
-    const dvResult = await db.execute(sql`
-      SELECT id FROM document_versions
-      WHERE file_blob_id = ${blob.file_blob_id}
-      LIMIT 1
-    `);
-    versionId = (dvResult.rows as any[])[0]?.id ?? null;
-
     // Update existing logical_doc board/category if enrichment improved them
     const board = suggested.board && suggested.board.length > 0 ? suggested.board : null;
     if (board) {
@@ -325,7 +398,6 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
       `);
     }
 
-    // Update version meeting_date if missing
     if (suggested.meetingDate) {
       try {
         const d = new Date(suggested.meetingDate);
@@ -347,13 +419,13 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
   const chunkPatch: Record<string, unknown> = {
     sourceType: "sau",
     sau: blob.sau_id,
+    documentId: logicalDocId,
   };
 
-  if (suggested.board && suggested.board.length > 0) {
-    chunkPatch.board = suggested.board;
-  } else if (blob.sau_name) {
-    chunkPatch.board = blob.sau_name;
-  }
+  const resolvedBoard = (suggested.board && suggested.board.length > 0)
+    ? suggested.board
+    : blob.sau_name;
+  chunkPatch.board = resolvedBoard;
 
   const category = suggested.isMinutes ? "meeting_minutes" : (suggested.category || "misc_other");
   chunkPatch.documentType = category;
@@ -371,11 +443,6 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
     if (!isNaN(yr)) chunkPatch.year = yr;
   }
 
-  if (logicalDocId) {
-    chunkPatch.documentId = logicalDocId;
-  }
-
-  // Update chunk metadata + document_id
   const patchResult = await db.execute(sql`
     UPDATE document_chunks
     SET metadata = metadata || ${JSON.stringify(chunkPatch)}::jsonb,
@@ -385,6 +452,6 @@ async function processSauBlob(blob: SauBlobRow): Promise<void> {
 
   logInfo(
     `[SauEnrich] Patched ${patchResult.rowCount ?? 0} chunks for blob=${blob.file_blob_id} ` +
-    `[board="${chunkPatch.board ?? ''}", type="${category}", date="${chunkPatch.meetingDate ?? ''}"]`
+    `[board="${resolvedBoard}", type="${category}", date="${chunkPatch.meetingDate ?? ''}"]`
   );
 }

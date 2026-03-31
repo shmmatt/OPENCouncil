@@ -869,7 +869,7 @@ function ReindexControls() {
 }
 
 interface SauEnrichProgressData {
-  status: "idle" | "running" | "stopping" | "completed" | "failed";
+  status: "idle" | "running" | "stopping" | "stopped" | "completed" | "failed";
   jobId: string | null;
   totalBlobs: number;
   processedBlobs: number;
@@ -880,6 +880,7 @@ interface SauEnrichProgressData {
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
+  reembedTriggered: boolean;
 }
 
 function SauEnrichControls() {
@@ -936,7 +937,7 @@ function SauEnrichControls() {
             <GraduationCap className="w-5 h-5 text-emerald-600" />
             <CardTitle className="text-sm">SAU Document Enrichment</CardTitle>
             {progress && progress.status !== "idle" && (
-              <Badge variant={isActive ? "default" : progress.status === "completed" ? "outline" : "destructive"}>
+              <Badge variant={isActive ? "default" : (progress.status === "completed" || progress.status === "stopped") ? "outline" : "destructive"}>
                 {progress.status}
               </Badge>
             )}
@@ -1000,11 +1001,21 @@ function SauEnrichControls() {
                 )}
               </>
             )}
-            {progress.status === "completed" && (
-              <div className="text-sm text-muted-foreground text-center py-1" data-testid="text-sau-enrich-complete">
-                Completed: {progress.enrichedBlobs.toLocaleString()} blobs enriched
-                {progress.errorBlobs > 0 && ` (${progress.errorBlobs} errors)`}
-                {progress.completedAt && ` — finished ${new Date(progress.completedAt).toLocaleString()}`}
+            {(progress.status === "completed" || progress.status === "stopped") && (
+              <div className="text-sm text-muted-foreground text-center py-1 space-y-1" data-testid="text-sau-enrich-complete">
+                <div>
+                  {progress.status === "stopped" ? "Stopped" : "Completed"}: {progress.enrichedBlobs.toLocaleString()} enriched,{" "}
+                  {progress.skippedBlobs.toLocaleString()} skipped
+                  {progress.errorBlobs > 0 && `, ${progress.errorBlobs} errors`}
+                </div>
+                {progress.reembedTriggered && (
+                  <div className="text-emerald-600 dark:text-emerald-400 text-xs">
+                    SAU re-embed triggered automatically
+                  </div>
+                )}
+                {progress.completedAt && (
+                  <div className="text-xs">Finished: {new Date(progress.completedAt).toLocaleString()}</div>
+                )}
               </div>
             )}
             {progress.errorMessage && (
