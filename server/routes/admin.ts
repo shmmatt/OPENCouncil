@@ -812,22 +812,31 @@ router.post("/statewide/enrich-missing/stop", authenticateAdmin, async (_req, re
 // Corpus Cleanup endpoints (Task #45)
 // ---------------------------------------------------------------------------
 
+// S3 ghost blobs are scoped strictly to Albany, Bartlett, Ossipee (uppercase)
+// — the three towns whose crawler corpora have blobs with missing S3 source files.
+const S3_GHOST_TOWNS = `'Albany','Bartlett','Ossipee'`;
+
+// needs_ocr=true stuck blobs are scoped to the lowercase-named crawler towns
+// that ran OCR but did not clear the flag.
+const NEEDS_OCR_TOWNS = `'albany','bartlett','ossipee','conway','effingham','chatham','eaton','freedom','brookfield','tamworth'`;
+
 router.get("/cleanup/s3-ghosts/count", authenticateAdmin, async (_req, res) => {
   try {
-    const result = await db.execute(sql`
+    const result = await db.execute(sql.raw(`
       SELECT
         COALESCE(ct.name, ld.town, 'unknown') as town,
         COUNT(DISTINCT fb.id) as count
       FROM file_blobs fb
-      LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id AND dv.is_current = true
+      LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id
       LEFT JOIN logical_documents ld ON ld.id = dv.document_id
       LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
       LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
       WHERE fb.ocr_status = 'failed'
         AND fb.ocr_failure_reason LIKE 'File not found: s3://opencouncil-municipal-docs/%'
+        AND COALESCE(ct.name, ld.town, '') IN (${S3_GHOST_TOWNS})
       GROUP BY 1
       ORDER BY count DESC
-    `);
+    `));
     const rows = result.rows as any[];
     const total = rows.reduce((sum: number, r: any) => sum + Number(r.count), 0);
     res.json({ total, byTown: rows.map((r: any) => ({ town: r.town, count: Number(r.count) })) });
@@ -841,30 +850,46 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
   try {
     const { dryRun = true } = req.body || {};
 
-    const ghostResult = await db.execute(sql`
-      SELECT fb.id
+    // Find ghost blob IDs scoped to Albany/Bartlett/Ossipee only
+    const ghostResult = await db.execute(sql.raw(`
+      SELECT DISTINCT fb.id
       FROM file_blobs fb
+      LEFT JOIN document_versions dv ON dv.file_blob_id = fb.id
+      LEFT JOIN logical_documents ld ON ld.id = dv.document_id
+      LEFT JOIN crawler_documents cd ON cd.file_blob_id = fb.id
+      LEFT JOIN crawler_towns ct ON cd.town_id = ct.id
       WHERE fb.ocr_status = 'failed'
         AND fb.ocr_failure_reason LIKE 'File not found: s3://opencouncil-municipal-docs/%'
-    `);
+        AND COALESCE(ct.name, ld.town, '') IN (${S3_GHOST_TOWNS})
+    `));
     const ghostIds = (ghostResult.rows as any[]).map((r: any) => r.id as string);
 
     if (ghostIds.length === 0) {
-      return res.json({ deleted: 0, dryRun, message: "No S3 ghost records found" });
+      return res.json({ deleted: 0, dryRun, message: "No S3 ghost records found in scope (Albany/Bartlett/Ossipee)" });
     }
 
     if (dryRun) {
       return res.json({
         dryRun: true,
         wouldDelete: ghostIds.length,
-        message: `Dry run: would delete ${ghostIds.length} ghost file blob records`,
+        message: `Dry run: would delete ${ghostIds.length} ghost file blob records (Albany/Bartlett/Ossipee)`,
       });
     }
 
     const idList = ghostIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
 
+    // Capture the logical_document IDs that will become orphaned by this ghost set only
+    const affectedLogDocsResult = await db.execute(sql.raw(`
+      SELECT DISTINCT dv.document_id
+      FROM document_versions dv
+      WHERE dv.file_blob_id IN (${idList})
+    `));
+    const affectedLogDocIds = (affectedLogDocsResult.rows as any[]).map((r: any) => r.document_id as string);
+
+    // Delete document_chunks (no FK constraint)
     await db.execute(sql.raw(`DELETE FROM document_chunks WHERE file_blob_id IN (${idList})`));
 
+    // Clear current_version_id pointers that reference ghost versions
     await db.execute(sql.raw(`
       UPDATE logical_documents
       SET current_version_id = NULL
@@ -873,24 +898,33 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
       )
     `));
 
+    // Delete the ghost document_versions
     await db.execute(sql.raw(`DELETE FROM document_versions WHERE file_blob_id IN (${idList})`));
 
-    await db.execute(sql.raw(`
-      DELETE FROM logical_documents
-      WHERE current_version_id IS NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM document_versions dv2 WHERE dv2.document_id = logical_documents.id
-        )
-    `));
+    // Delete only logical_documents that are part of the ghost set AND have no remaining versions
+    if (affectedLogDocIds.length > 0) {
+      const logDocIdList = affectedLogDocIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+      await db.execute(sql.raw(`
+        DELETE FROM logical_documents
+        WHERE id IN (${logDocIdList})
+          AND current_version_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM document_versions dv2 WHERE dv2.document_id = logical_documents.id
+          )
+      `));
+    }
 
+    // Null out ocr_jobs references (FK constraint, no cascade)
     await db.execute(sql.raw(`UPDATE ocr_jobs SET file_blob_id = NULL WHERE file_blob_id IN (${idList})`));
 
+    // Delete ingestion_jobs (FK constraint, no cascade)
     await db.execute(sql.raw(`DELETE FROM ingestion_jobs WHERE file_blob_id IN (${idList})`));
 
+    // Finally delete the ghost file_blobs
     const deleteResult = await db.execute(sql.raw(`DELETE FROM file_blobs WHERE id IN (${idList}) RETURNING id`));
     const deletedCount = (deleteResult.rows as any[]).length;
 
-    logInfo(`[admin] Corpus cleanup: deleted ${deletedCount} S3 ghost file blob records`);
+    logInfo(`[admin] Corpus cleanup: deleted ${deletedCount} S3 ghost file blob records (Albany/Bartlett/Ossipee)`);
     res.json({ deleted: deletedCount, dryRun: false, message: `Deleted ${deletedCount} S3 ghost records` });
   } catch (error: any) {
     logError(`[admin] S3 ghost cleanup error: ${error.message}`);
@@ -900,11 +934,26 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
 
 router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res) => {
   try {
-    const result = await db.execute(sql`
-      SELECT COUNT(*) as count
-      FROM file_blobs
-      WHERE needs_ocr = true AND ocr_status = 'completed'
-    `);
+    // Scoped to lowercase crawler towns that ran OCR but left needs_ocr=true stuck
+    const result = await db.execute(sql.raw(`
+      SELECT COUNT(DISTINCT fb.id) as count
+      FROM file_blobs fb
+      WHERE fb.needs_ocr = true AND fb.ocr_status = 'completed'
+        AND (
+          EXISTS (
+            SELECT 1 FROM document_versions dv
+            JOIN logical_documents ld ON ld.id = dv.document_id
+            WHERE dv.file_blob_id = fb.id
+              AND LOWER(ld.town) IN (${NEEDS_OCR_TOWNS})
+          )
+          OR EXISTS (
+            SELECT 1 FROM crawler_documents cd
+            JOIN crawler_towns ct ON ct.id = cd.town_id
+            WHERE cd.file_blob_id = fb.id
+              AND LOWER(ct.name) IN (${NEEDS_OCR_TOWNS})
+          )
+        )
+    `));
     const count = Number((result.rows as any[])[0]?.count || 0);
     res.json({ count });
   } catch (error: any) {
@@ -915,26 +964,55 @@ router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res
 
 router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => {
   try {
-    const resetResult = await db.execute(sql`
+    // Collect scoped blob IDs first (lowercase crawler towns only)
+    const scopedResult = await db.execute(sql.raw(`
+      SELECT DISTINCT fb.id
+      FROM file_blobs fb
+      WHERE fb.needs_ocr = true AND fb.ocr_status = 'completed'
+        AND (
+          EXISTS (
+            SELECT 1 FROM document_versions dv
+            JOIN logical_documents ld ON ld.id = dv.document_id
+            WHERE dv.file_blob_id = fb.id
+              AND LOWER(ld.town) IN (${NEEDS_OCR_TOWNS})
+          )
+          OR EXISTS (
+            SELECT 1 FROM crawler_documents cd
+            JOIN crawler_towns ct ON ct.id = cd.town_id
+            WHERE cd.file_blob_id = fb.id
+              AND LOWER(ct.name) IN (${NEEDS_OCR_TOWNS})
+          )
+        )
+    `));
+    const scopedIds = (scopedResult.rows as any[]).map((r: any) => r.id as string);
+
+    if (scopedIds.length === 0) {
+      return res.json({ reset: 0, embeddingTriggered: false, message: "No stuck blobs found in scope" });
+    }
+
+    const idList = scopedIds.map((id: string) => `'${id.replace(/'/g, "''")}'`).join(",");
+
+    // Clear the stuck flag for scoped blobs only
+    await db.execute(sql.raw(`
       UPDATE file_blobs
       SET needs_ocr = false
-      WHERE needs_ocr = true AND ocr_status = 'completed'
-      RETURNING id
-    `);
-    const resetCount = (resetResult.rows as any[]).length;
+      WHERE id IN (${idList})
+    `));
+    const resetCount = scopedIds.length;
 
-    const embeddingTriggered = !isRunning();
+    // Trigger re-embed for exact set of affected blobs (scoped, not global pipeline)
+    const embeddingTriggered = !isReindexRunning();
     if (embeddingTriggered) {
-      startPipeline({}).catch((err: Error) => {
-        logError(`[admin] needs-ocr-reset embed trigger error: ${err.message}`);
+      startReindex({ blobIds: scopedIds }).catch((err: Error) => {
+        logError(`[admin] needs-ocr-reset reindex trigger error: ${err.message}`);
       });
     }
 
-    logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, embedding triggered=${embeddingTriggered}`);
+    logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, reindex triggered=${embeddingTriggered}`);
     res.json({
       reset: resetCount,
       embeddingTriggered,
-      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; embedding pipeline started" : "; embedding already running"}`,
+      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; re-embed started for affected blobs" : "; reindex already running"}`,
     });
   } catch (error: any) {
     logError(`[admin] needs-ocr-reset error: ${error.message}`);

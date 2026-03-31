@@ -1235,6 +1235,7 @@ interface S3GhostCount {
 function CorpusCleanupControls() {
   const { toast } = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmNeedsOcr, setConfirmNeedsOcr] = useState(false);
 
   const { data: ghostCount, refetch: refetchGhosts, isLoading: ghostLoading } = useQuery<S3GhostCount>({
     queryKey: ["/api/admin/cleanup/s3-ghosts/count"],
@@ -1304,9 +1305,13 @@ function CorpusCleanupControls() {
     },
     onSuccess: (data) => {
       toast({ title: "needs_ocr Reset", description: data.message });
+      setConfirmNeedsOcr(false);
       refetchNeedsOcr();
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      setConfirmNeedsOcr(false);
+    },
   });
 
   const { data: requireErrorCount, refetch: refetchRequireError, isLoading: requireErrorLoading } = useQuery<{ count: number }>({
@@ -1431,19 +1436,37 @@ function CorpusCleanupControls() {
                     {needsOcrCount?.count ?? 0} blobs
                   </Badge>
                 )}
-                <Button
-                  size="sm"
-                  onClick={() => resetNeedsOcrMutation.mutate()}
-                  disabled={resetNeedsOcrMutation.isPending || !needsOcrCount || needsOcrCount.count === 0}
-                  data-testid="button-needs-ocr-reset"
-                >
-                  {resetNeedsOcrMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RotateCw className="w-4 h-4" />
-                  )}
-                  <span className="ml-1">Reset & Re-embed</span>
-                </Button>
+                {!confirmNeedsOcr ? (
+                  <Button
+                    size="sm"
+                    onClick={() => setConfirmNeedsOcr(true)}
+                    disabled={!needsOcrCount || needsOcrCount.count === 0}
+                    data-testid="button-needs-ocr-reset-init"
+                  >
+                    <RotateCw className="w-4 h-4 mr-1" />
+                    Reset & Re-embed
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      onClick={() => resetNeedsOcrMutation.mutate()}
+                      disabled={resetNeedsOcrMutation.isPending}
+                      data-testid="button-needs-ocr-reset-confirm"
+                    >
+                      {resetNeedsOcrMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCw className="w-4 h-4" />}
+                      <span className="ml-1">Confirm Reset</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setConfirmNeedsOcr(false)}
+                      data-testid="button-needs-ocr-reset-cancel"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
