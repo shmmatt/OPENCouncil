@@ -952,7 +952,8 @@ router.post("/cleanup/s3-ghosts", authenticateAdmin, async (req, res) => {
 
 router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res) => {
   try {
-    // Scoped to lowercase crawler towns that ran OCR but left needs_ocr=true stuck
+    // Scoped to exact-case lowercase crawler towns only (not LOWER() — must match
+    // lowercase corpus names exactly so uppercase-named towns like 'Albany' are excluded)
     const result = await db.execute(sql.raw(`
       SELECT COUNT(DISTINCT fb.id) as count
       FROM file_blobs fb
@@ -962,13 +963,13 @@ router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res
             SELECT 1 FROM document_versions dv
             JOIN logical_documents ld ON ld.id = dv.document_id
             WHERE dv.file_blob_id = fb.id
-              AND LOWER(ld.town) IN (${NEEDS_OCR_TOWNS})
+              AND ld.town IN (${NEEDS_OCR_TOWNS})
           )
           OR EXISTS (
             SELECT 1 FROM crawler_documents cd
             JOIN crawler_towns ct ON ct.id = cd.town_id
             WHERE cd.file_blob_id = fb.id
-              AND LOWER(ct.name) IN (${NEEDS_OCR_TOWNS})
+              AND ct.name IN (${NEEDS_OCR_TOWNS})
           )
         )
     `));
@@ -982,7 +983,8 @@ router.get("/cleanup/needs-ocr-reset/count", authenticateAdmin, async (_req, res
 
 router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => {
   try {
-    // Collect scoped blob IDs first (lowercase crawler towns only)
+    // Collect scoped blob IDs — exact-case match on lowercase town names only.
+    // NOT using LOWER() so uppercase-named towns (Albany, Bartlett, Ossipee) are excluded.
     const scopedResult = await db.execute(sql.raw(`
       SELECT DISTINCT fb.id
       FROM file_blobs fb
@@ -992,13 +994,13 @@ router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => 
             SELECT 1 FROM document_versions dv
             JOIN logical_documents ld ON ld.id = dv.document_id
             WHERE dv.file_blob_id = fb.id
-              AND LOWER(ld.town) IN (${NEEDS_OCR_TOWNS})
+              AND ld.town IN (${NEEDS_OCR_TOWNS})
           )
           OR EXISTS (
             SELECT 1 FROM crawler_documents cd
             JOIN crawler_towns ct ON ct.id = cd.town_id
             WHERE cd.file_blob_id = fb.id
-              AND LOWER(ct.name) IN (${NEEDS_OCR_TOWNS})
+              AND ct.name IN (${NEEDS_OCR_TOWNS})
           )
         )
     `));
@@ -1018,25 +1020,50 @@ router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => 
     `));
     const resetCount = scopedIds.length;
 
-    // Trigger the embedding pipeline for the exact set of affected blobs only.
+    // Trigger the embedding pipeline for the exact set of affected blobs.
     // startPipeline fetches blobs by ID, chunks them, and sets embedding_status='indexed'.
-    // startReindex would be wrong here — it only re-embeds existing chunks, but these
-    // blobs have not been chunked yet (embedding_status='none').
+    // startReindex is wrong here — it only re-embeds existing chunks, but these blobs
+    // have not been chunked yet (embedding_status='none').
+    //
+    // If the pipeline is currently running, start a background waiter so the targeted
+    // run is guaranteed to fire once the active run completes (no manual retrigger needed).
     const embeddingTriggered = !isRunning();
     if (embeddingTriggered) {
       startPipeline({ blobIds: scopedIds }).catch((err: Error) => {
         logError(`[admin] needs-ocr-reset embedding trigger error: ${err.message}`);
       });
+    } else {
+      // Background waiter: poll until idle then trigger targeted embedding run
+      const deferredRun = async () => {
+        const maxWaitMs = 30 * 60 * 1000; // 30 min ceiling
+        const pollMs = 10_000;
+        const start = Date.now();
+        while (isRunning() && Date.now() - start < maxWaitMs) {
+          await new Promise((r) => setTimeout(r, pollMs));
+        }
+        if (!isRunning()) {
+          startPipeline({ blobIds: scopedIds }).catch((err: Error) => {
+            logError(`[admin] needs-ocr-reset deferred embedding trigger error: ${err.message}`);
+          });
+          logInfo(`[admin] needs_ocr reset: deferred embedding pipeline started for ${resetCount} blobs`);
+        } else {
+          logError(`[admin] needs_ocr reset: deferred embedding waiter timed out — blobs will be processed on next pipeline run`);
+        }
+      };
+      deferredRun().catch((err: Error) => {
+        logError(`[admin] needs-ocr-reset deferred waiter error: ${err.message}`);
+      });
     }
 
     const pipelineMsg = embeddingTriggered
       ? `; embedding pipeline started for ${resetCount} affected blobs`
-      : `; embedding pipeline is currently running — re-trigger embedding manually after it finishes to index the ${resetCount} reset blobs`;
+      : `; embedding pipeline is running — a deferred targeted run will start automatically when it finishes`;
 
     logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, embedding pipeline triggered=${embeddingTriggered}`);
     res.json({
       reset: resetCount,
       embeddingTriggered,
+      embeddingDeferred: !embeddingTriggered,
       message: `Reset needs_ocr on ${resetCount} blobs${pipelineMsg}`,
     });
   } catch (error: any) {
