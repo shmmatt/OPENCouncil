@@ -1000,19 +1000,22 @@ router.post("/cleanup/needs-ocr-reset", authenticateAdmin, async (_req, res) => 
     `));
     const resetCount = scopedIds.length;
 
-    // Trigger re-embed for exact set of affected blobs (scoped, not global pipeline)
-    const embeddingTriggered = !isReindexRunning();
+    // Trigger the embedding pipeline for the exact set of affected blobs only.
+    // startPipeline fetches blobs by ID, chunks them, and sets embedding_status='indexed'.
+    // startReindex would be wrong here — it only re-embeds existing chunks, but these
+    // blobs have not been chunked yet (embedding_status='none').
+    const embeddingTriggered = !isRunning();
     if (embeddingTriggered) {
-      startReindex({ blobIds: scopedIds }).catch((err: Error) => {
-        logError(`[admin] needs-ocr-reset reindex trigger error: ${err.message}`);
+      startPipeline({ blobIds: scopedIds }).catch((err: Error) => {
+        logError(`[admin] needs-ocr-reset embedding trigger error: ${err.message}`);
       });
     }
 
-    logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, reindex triggered=${embeddingTriggered}`);
+    logInfo(`[admin] needs_ocr reset: cleared flag on ${resetCount} blobs, embedding pipeline triggered=${embeddingTriggered}`);
     res.json({
       reset: resetCount,
       embeddingTriggered,
-      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; re-embed started for affected blobs" : "; reindex already running"}`,
+      message: `Reset needs_ocr on ${resetCount} blobs${embeddingTriggered ? "; embedding pipeline started for affected blobs" : "; embedding pipeline already running"}`,
     });
   } catch (error: any) {
     logError(`[admin] needs-ocr-reset error: ${error.message}`);
