@@ -9,6 +9,10 @@
  *
  * To extend: add a new entry to CONCEPT_GROUPS. No code changes needed anywhere else.
  * To support a new state: add state-specific synonyms as additional entries.
+ *
+ * Initial seed covers NH core concepts. Additional entries (warrant_article,
+ * zoning, right_to_know) are included deliberately as foundational concepts
+ * that appear frequently across all NH municipalities — not scope creep.
  */
 
 export interface ConceptGroup {
@@ -21,9 +25,9 @@ export interface ConceptGroup {
  * The concept dictionary.
  *
  * Each entry defines:
+ * - label: stable key used in logs and tests (snake_case)
  * - triggers: patterns matched against the user's query (case-insensitive)
  * - expansions: bureaucratic synonym terms to inject into the retrieval plan
- * - label: human-readable name for logging
  *
  * Order matters only for logging — all matching groups are returned.
  */
@@ -46,7 +50,7 @@ export const CONCEPT_GROUPS: ConceptGroup[] = [
     ],
   },
   {
-    label: "town_election",
+    label: "election",
     triggers: [
       /\btown\s+election\b/i,
       /\bofficial\s+ballot\b/i,
@@ -148,10 +152,11 @@ export const CONCEPT_GROUPS: ConceptGroup[] = [
 
 /**
  * Scan the user's query against all concept groups.
- * Returns the combined expansion terms from every matched group,
- * deduplicated, along with the labels of matched groups (for logging).
+ * Returns matched expansion terms AND matched group labels (for logging).
+ *
+ * Use this in the orchestrator where you need both pieces of information.
  */
-export function expandConceptsFromQuery(query: string): {
+export function detectConceptMatches(query: string): {
   expansions: string[];
   matchedGroups: string[];
 } {
@@ -172,4 +177,14 @@ export function expandConceptsFromQuery(query: string): {
     expansions: Array.from(expansions),
     matchedGroups,
   };
+}
+
+/**
+ * Scan the user's query against all concept groups.
+ * Returns only the deduplicated expansion terms.
+ *
+ * Public API — use when you only need the expanded terms (e.g. direct injection).
+ */
+export function expandConceptsFromQuery(query: string): string[] {
+  return detectConceptMatches(query).expansions;
 }
