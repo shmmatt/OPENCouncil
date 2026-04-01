@@ -14,7 +14,7 @@ import { runPlannerV3 } from "./plannerV3";
 import { detectConceptMatches } from "./municipalOntology";
 import { type V3RetrievalResult } from "./twoLaneRetrieve";
 import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane } from "./pgvectorRetrieveAdapter";
-import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
+import { synthesizeV3, computeRecordStrength, SynthesisTimeoutError } from "./synthesizerV3";
 import { auditAnswer, shouldAttemptRepair, selectBetterAnswer, normalizeAnswerFormat, stripInvalidCitationMarkers, type AnswerScore } from "./audit";
 import { chatConfigV3 } from "./chatConfigV3";
 import { getSessionSourceTextForContext } from "./sessionSourceDetector";
@@ -546,12 +546,17 @@ export async function runChatV3Pipeline(
           ),
         ]);
       } catch (repairErr: unknown) {
-        const isTimeout = repairErr instanceof Error && repairErr.message === "repair_timeout";
+        const isTimeout =
+          repairErr instanceof SynthesisTimeoutError ||
+          (repairErr instanceof Error && repairErr.message === "repair_timeout");
         logInfo("v3_repair_timeout", {
           requestId: logContext?.requestId,
           sessionId: logContext?.sessionId,
           stage: "v3_audit",
-          reason: isTimeout ? "Repair LLM call timed out after 40s" : "Repair LLM call failed",
+          isTimeout,
+          reason: isTimeout
+            ? "Repair synthesizer timed out — falling back to original answer"
+            : "Repair synthesizer failed — falling back to original answer",
           error: isTimeout ? undefined : String(repairErr),
         });
       }

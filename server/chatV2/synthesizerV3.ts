@@ -28,6 +28,18 @@ import type {
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEM_API_KEY || "" });
 
+/**
+ * Thrown when the synthesizer LLM call exceeds the per-call timeout.
+ * Callers (e.g. the repair-pass in chatOrchestratorV3) can catch this
+ * specifically to distinguish a timeout from other errors.
+ */
+export class SynthesisTimeoutError extends Error {
+  constructor(message = "Synthesis LLM call timed out") {
+    super(message);
+    this.name = "SynthesisTimeoutError";
+  }
+}
+
 export interface SynthesisV3Options extends SynthesisInputV3 {
   logContext?: PipelineLogContext;
   isRepairAttempt?: boolean;
@@ -156,27 +168,23 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
   });
 
   const SYNTHESIS_TIMEOUT_MS = 45_000;
+  const abortController = new AbortController();
+  const timeoutHandle = setTimeout(() => abortController.abort(), SYNTHESIS_TIMEOUT_MS);
 
   try {
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model: modelName,
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: synthesisTemperature,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-          responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
-        },
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("synthesis_timeout")),
-          SYNTHESIS_TIMEOUT_MS
-        )
-      ),
-    ]);
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: synthesisTemperature,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
+        abortSignal: abortController.signal,
+      },
+    });
+    clearTimeout(timeoutHandle);
 
     const finishReason = response.candidates?.[0]?.finishReason;
     if (finishReason === 'MAX_TOKENS') {
@@ -228,6 +236,14 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     };
 
   } catch (error) {
+    clearTimeout(timeoutHandle);
+
+    if (abortController.signal.aborted) {
+      throw new SynthesisTimeoutError(
+        `Synthesis timed out after ${SYNTHESIS_TIMEOUT_MS}ms (requestId: ${logContext?.requestId})`
+      );
+    }
+
     if (isQuotaError(error)) {
       const errMessage = error instanceof Error ? error.message : String(error);
       throw new GeminiQuotaExceededError(errMessage || "Gemini quota exceeded in synthesizerV3");
