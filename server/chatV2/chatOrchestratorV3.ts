@@ -520,6 +520,7 @@ export async function runChatV3Pipeline(
 
       const REPAIR_TIMEOUT_MS = 40_000;
       let repairSynthesisResult: Awaited<ReturnType<typeof synthesizeV3>> | null = null;
+      let repairTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
       try {
         repairSynthesisResult = await Promise.race([
@@ -541,24 +542,35 @@ export async function runChatV3Pipeline(
             platformContext,
             sauId: retrievalPlan.sauId,
           }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("repair_timeout")), REPAIR_TIMEOUT_MS)
-          ),
+          new Promise<never>((_, reject) => {
+            repairTimeoutHandle = setTimeout(
+              () => reject(new Error("repair_timeout")),
+              REPAIR_TIMEOUT_MS
+            );
+          }),
         ]);
+        if (repairTimeoutHandle !== null) clearTimeout(repairTimeoutHandle);
       } catch (repairErr: unknown) {
         const isTimeout =
           repairErr instanceof SynthesisTimeoutError ||
           (repairErr instanceof Error && repairErr.message === "repair_timeout");
-        logInfo("v3_repair_timeout", {
-          requestId: logContext?.requestId,
-          sessionId: logContext?.sessionId,
-          stage: "v3_audit",
-          isTimeout,
-          reason: isTimeout
-            ? "Repair synthesizer timed out — falling back to original answer"
-            : "Repair synthesizer failed — falling back to original answer",
-          error: isTimeout ? undefined : String(repairErr),
-        });
+
+        if (isTimeout) {
+          logInfo("v3_repair_timeout", {
+            requestId: logContext?.requestId,
+            sessionId: logContext?.sessionId,
+            stage: "v3_audit",
+            reason: "Repair synthesizer timed out — falling back to original answer",
+          });
+        } else {
+          logInfo("v3_repair_failed", {
+            requestId: logContext?.requestId,
+            sessionId: logContext?.sessionId,
+            stage: "v3_audit",
+            reason: "Repair synthesizer threw — falling back to original answer",
+            error: String(repairErr),
+          });
+        }
       }
 
       if (repairSynthesisResult === null) {
