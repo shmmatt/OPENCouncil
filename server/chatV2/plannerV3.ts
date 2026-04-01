@@ -122,10 +122,11 @@ interface PlannerV3Options {
   templateContext?: string | null;
   logContext?: PipelineLogContext;
   sessionAnchor?: { town?: string; year?: number };
+  domainHints?: string[];
 }
 
 export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOutput> {
-  const { userMessage, sessionSources, situationContext, townHint, templateContext, logContext, sessionAnchor } = options;
+  const { userMessage, sessionSources, situationContext, townHint, templateContext, logContext, sessionAnchor, domainHints } = options;
   const { model: modelName } = getModelForStage('retrievalPlanner');
 
   const sessionSourceText = sessionSources?.length 
@@ -150,6 +151,10 @@ export async function runPlannerV3(options: PlannerV3Options): Promise<PlannerOu
     ? `Session anchor (soft hint — use if no other town/year signal in the question): ${anchorParts.join(', ')}`
     : '';
 
+  const domainHintBlock = domainHints && domainHints.length > 0
+    ? `DOMAIN EXPANSION HINTS: The user's question maps to known municipal concept groups. Your retrieval plan MUST include local queries that cover ALL of the following bureaucratic term clusters:\n${domainHints.map(h => `  - ${h}`).join('\n')}\nGenerate separate local queries for each cluster where it makes sense — do not collapse them into one query.`
+    : '';
+
   const userPrompt = `Analyze this question and create a retrieval plan:
 
 USER QUESTION: "${userMessage}"
@@ -158,6 +163,7 @@ ${sessionSourceText ? `USER-PROVIDED DOCUMENT:\n${sessionSourceText}\n` : ''}
 ${situationHint ? `${situationHint}\n` : ''}
 ${sessionAnchorHint ? `${sessionAnchorHint}\n` : ''}
 ${templateHint ? `${templateHint}\n` : ''}
+${domainHintBlock ? `${domainHintBlock}\n` : ''}
 ${townHint ? `Town hint: ${townHint}` : 'No specific town mentioned'}
 
 Return valid JSON only.`;

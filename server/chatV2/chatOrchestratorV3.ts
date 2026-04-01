@@ -11,6 +11,7 @@
 
 import { logDebug, logInfo } from "../utils/logger";
 import { runPlannerV3 } from "./plannerV3";
+import { expandConceptsFromQuery } from "./municipalOntology";
 import { type V3RetrievalResult } from "./twoLaneRetrieve";
 import { pgvectorTwoLaneRetrieveWithPlan, executeQueryOnLane } from "./pgvectorRetrieveAdapter";
 import { synthesizeV3, computeRecordStrength } from "./synthesizerV3";
@@ -211,6 +212,21 @@ export async function runChatV3Pipeline(
   });
 
   // =====================================================
+  // CONCEPT EXPANSION: scan query against municipal ontology
+  // =====================================================
+  const { expansions: conceptExpansions, matchedGroups } = expandConceptsFromQuery(userMessage);
+
+  if (matchedGroups.length > 0) {
+    logInfo("v3_concept_expansion", {
+      requestId: logContext?.requestId,
+      sessionId: logContext?.sessionId,
+      stage: "v3_orchestrator",
+      matchedGroups,
+      conceptExpansions,
+    });
+  }
+
+  // =====================================================
   // STAGE 1: PLAN
   // =====================================================
   notifyStage("planning");
@@ -222,6 +238,7 @@ export async function runChatV3Pipeline(
     templateContext,
     logContext,
     sessionAnchor,
+    domainHints: conceptExpansions.length > 0 ? conceptExpansions : undefined,
   });
 
   const { issueMap, retrievalPlan, validationWarnings } = plannerResult;
