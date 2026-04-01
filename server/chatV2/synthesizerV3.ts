@@ -155,18 +155,28 @@ export async function synthesizeV3(options: SynthesisV3Options): Promise<Synthes
     },
   });
 
+  const SYNTHESIS_TIMEOUT_MS = 45_000;
+
   try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: synthesisTemperature,
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json",
-        responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
-      },
-    });
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: modelName,
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: synthesisTemperature,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: SYNTHESIS_RESPONSE_SCHEMA,
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("synthesis_timeout")),
+          SYNTHESIS_TIMEOUT_MS
+        )
+      ),
+    ]);
 
     const finishReason = response.candidates?.[0]?.finishReason;
     if (finishReason === 'MAX_TOKENS') {

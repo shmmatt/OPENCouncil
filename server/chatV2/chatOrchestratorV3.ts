@@ -518,25 +518,47 @@ export async function runChatV3Pipeline(
         repairHint: auditResult.repairHint,
       });
 
-      const repairSynthesisResult = await synthesizeV3({
-        userMessage,
-        issueMap,
-        sessionSourceText,
-        localChunks: effectiveLocalChunks,
-        stateChunks: effectiveStateChunks,
-        sauChunks: effectiveSauChunks,
-        recordStrength: effectiveRecordStrength,
-        history: historyForSynthesis,
-        logContext,
-        isRepairAttempt: true,
-        isFinalAttempt: true,
-        answerType,
-        renderStyle,
-        templateContext,
-        platformContext,
-        sauId: retrievalPlan.sauId,
-      });
+      const REPAIR_TIMEOUT_MS = 40_000;
+      let repairSynthesisResult: Awaited<ReturnType<typeof synthesizeV3>> | null = null;
 
+      try {
+        repairSynthesisResult = await Promise.race([
+          synthesizeV3({
+            userMessage,
+            issueMap,
+            sessionSourceText,
+            localChunks: effectiveLocalChunks,
+            stateChunks: effectiveStateChunks,
+            sauChunks: effectiveSauChunks,
+            recordStrength: effectiveRecordStrength,
+            history: historyForSynthesis,
+            logContext,
+            isRepairAttempt: true,
+            isFinalAttempt: true,
+            answerType,
+            renderStyle,
+            templateContext,
+            platformContext,
+            sauId: retrievalPlan.sauId,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("repair_timeout")), REPAIR_TIMEOUT_MS)
+          ),
+        ]);
+      } catch (repairErr: unknown) {
+        const isTimeout = repairErr instanceof Error && repairErr.message === "repair_timeout";
+        logInfo("v3_repair_timeout", {
+          requestId: logContext?.requestId,
+          sessionId: logContext?.sessionId,
+          stage: "v3_audit",
+          reason: isTimeout ? "Repair LLM call timed out after 40s" : "Repair LLM call failed",
+          error: isTimeout ? undefined : String(repairErr),
+        });
+      }
+
+      if (repairSynthesisResult === null) {
+        // Repair timed out or errored — keep the original answer
+      } else {
       repairRan = true;
 
       // Use the new scoring system to pick better answer
@@ -630,6 +652,7 @@ export async function runChatV3Pipeline(
           });
         }
       }
+      } // end else (repairSynthesisResult !== null)
     }
   }
 
