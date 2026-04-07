@@ -559,6 +559,7 @@ adminRouter.get("/needs-review", async (req, res) => {
       SELECT
         dv.id AS "versionId",
         ld.id AS "logicalDocId",
+        fb.id AS "fileBlobId",
         fb.original_filename AS filename,
         ld.town,
         ld.board,
@@ -589,6 +590,7 @@ adminRouter.get("/needs-review", async (req, res) => {
         storedMeetingDate: row.storedMeetingDate ? new Date(row.storedMeetingDate).toISOString().split("T")[0] : null,
         suggestedDate: suggestedDate ? suggestedDate.toISOString().split("T")[0] : null,
         previewText: row.previewText || "",
+        viewUrl: row.fileBlobId ? `/api/documents/view/${row.fileBlobId}` : null,
       };
     });
 

@@ -868,6 +868,7 @@ interface NeedsReviewDoc {
   storedMeetingDate: string | null;
   suggestedDate: string | null;
   previewText: string;
+  viewUrl: string | null;
 }
 
 function NeedsReviewCard({
@@ -893,7 +894,19 @@ function NeedsReviewCard({
       <CardContent className="pt-4 space-y-4">
         <div className="flex items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate" data-testid={`text-filename-${doc.versionId}`}>{doc.filename}</p>
+            {doc.viewUrl ? (
+              <a
+                href={doc.viewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-sm truncate block hover:underline text-foreground"
+                data-testid={`link-filename-${doc.versionId}`}
+              >
+                {doc.filename}
+              </a>
+            ) : (
+              <p className="font-semibold text-sm truncate" data-testid={`text-filename-${doc.versionId}`}>{doc.filename}</p>
+            )}
             <Badge variant="outline" className="mt-1 text-xs" data-testid={`badge-town-${doc.versionId}`}>{doc.town}</Badge>
           </div>
         </div>
