@@ -133,7 +133,7 @@ export function UserStatusBar({ signInOpen, onSignInOpenChange }: UserStatusBarP
 
   return (
     <div className="flex items-center gap-3">
-      <div className="flex flex-col gap-1 min-w-[120px]">
+      <div className="hidden sm:flex flex-col gap-1 min-w-[120px]">
         <div className="flex items-center justify-between text-xs gap-2">
           <span className="text-muted-foreground">{tierLabel}</span>
           <span className="text-muted-foreground tabular-nums">{used} / {max}</span>

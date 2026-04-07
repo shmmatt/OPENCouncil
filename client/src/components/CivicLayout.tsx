@@ -47,7 +47,6 @@ function CivicAppSidebar() {
     <Sidebar>
       <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border md:flex hidden">
         <h2 className="text-sm font-bold font-headline text-primary tracking-tight">OPENCouncil</h2>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mt-0.5">Official Ledger</p>
       </SidebarHeader>
       <SidebarContent className="pt-2">
         {isChatPage ? (
@@ -98,7 +97,7 @@ export function CivicLayout({ children }: { children: React.ReactNode }) {
         <div className="flex h-screen w-full">
           <CivicAppSidebar />
           <div className="flex flex-col flex-1 min-w-0">
-            <header className="flex items-center justify-between gap-2 px-4 h-14 border-b bg-card sticky top-0 z-[999] flex-wrap">
+            <header className="flex items-center justify-between gap-2 px-4 h-14 border-b bg-card sticky top-0 z-[999]">
               <div className="flex items-center gap-3">
                 <SidebarTrigger data-testid="button-sidebar-trigger" />
                 <Link href="/" className="text-base font-black font-headline uppercase tracking-widest text-primary block sm:hidden select-none hover:opacity-80 transition-opacity">

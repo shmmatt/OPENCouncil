@@ -403,7 +403,7 @@ export function ChatMessageBubble({ message, onFollowUpClick, onFeedbackSubmit, 
 
         <div className="flex items-center gap-2 flex-wrap px-1">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground font-headline">
-            {isUser ? "RESIDENT" : isDeepDiveMessage ? "DEEP DIVE" : "CIVIC LEDGER"}
+            {isUser ? "RESIDENT" : isDeepDiveMessage ? "DEEP DIVE" : "OPENCOUNCIL"}
             {" \u2022 "}
             {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </p>

@@ -5,9 +5,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Send, Loader2, Menu, Sparkles, Paperclip, X, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
+import { Plus, Send, Loader2, Sparkles, Paperclip, X, User, FileText, Link2, Landmark, BookOpen } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { ChatSession, ChatMessage, TemplatePayload } from "@shared/schema";
 import { TemplateBanner } from "@/components/TemplateBanner";
@@ -16,7 +15,6 @@ import { useToast } from "@/hooks/use-toast";
 import { parseSSEStream } from "@/lib/sseParser";
 import { ChatMessageBubble } from "@/components/ChatMessageBubble";
 import { TypingIndicator } from "@/components/TypingIndicator";
-import { ChatSidebarPanel } from "@/components/ChatSidebarPanel";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function Chat() {
@@ -485,47 +483,10 @@ export default function Chat() {
     }
   };
 
-  const mobileSidebarContent = <ChatSidebarPanel />;
-
-  const sessionLabel = activeSession
-    ? `ACTIVE SESSION: ${activeSession.title?.slice(0, 36).toUpperCase()}${(activeSession.title?.length ?? 0) > 36 ? "..." : ""}`
-    : "CIVIC LEDGER ASSISTANT";
-
   return (
     <div className="flex h-full bg-background">
       <div className="flex-1 flex flex-col min-w-0 relative">
         <TemplateBanner onLaunch={handleTemplateLaunch} isLoading={createSessionMutation.isPending} selectedTown={selectedTown} />
-
-        <div className="border-b bg-card px-5 md:px-8 py-5 flex-shrink-0">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <Sheet>
-                <SheetTrigger asChild className="md:hidden">
-                  <Button variant="ghost" size="icon" data-testid="button-menu">
-                    <Menu className="w-5 h-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="p-0 w-72">
-                  {mobileSidebarContent}
-                </SheetContent>
-              </Sheet>
-              <div>
-                <span
-                  className="inline-block text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-muted border border-border rounded-md px-2 py-0.5 mb-2"
-                  data-testid="badge-active-session"
-                >
-                  {sessionLabel}
-                </span>
-                <h1 className="text-2xl md:text-3xl font-black font-headline text-foreground leading-tight">
-                  Civic Ledger Assistant
-                </h1>
-                <p className="text-muted-foreground text-sm mt-1 max-w-xl leading-relaxed">
-                  Access real-time information from official town records, meeting minutes, and municipal bylaws. Every response is cited directly from the archive.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <ScrollArea className="flex-1 px-4 md:px-6 lg:px-8" style={{ paddingBottom: "8rem" }}>
           <div className="max-w-3xl mx-auto py-6 space-y-6">

@@ -170,7 +170,7 @@ export function ChatDrawer({ state, onClose }: ChatDrawerProps) {
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-primary" />
             <span className="font-semibold font-headline text-sm" data-testid="text-drawer-title">
-              Civic Ledger Assistant
+              OPENCouncil
             </span>
           </div>
           <Button
