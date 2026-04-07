@@ -45,7 +45,7 @@ function CivicAppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border md:flex hidden">
+      <SidebarHeader className="px-4 pt-5 pb-3 border-b border-sidebar-border">
         <h2 className="text-sm font-bold font-headline text-primary tracking-tight">OPENCouncil</h2>
       </SidebarHeader>
       <SidebarContent className="pt-2">
